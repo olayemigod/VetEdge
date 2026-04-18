@@ -28,6 +28,7 @@ DEFAULT_FEATURE_FLAGS = {
 	"enforce_cost_center_on_billing": 1,
 	"enable_consultations": 0,
 	"enable_vitals": 0,
+	"require_vitals_before_completion": 0,
 	"enable_appointments": 0,
 	"enable_owner_portal": 0,
 	"enable_guest_booking": 0,

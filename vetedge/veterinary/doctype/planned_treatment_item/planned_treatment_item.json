@@ -1,0 +1,23 @@
+{
+ "actions": [],
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["item", "qty", "uom", "service_type", "treatment_type", "notes"],
+ "fields": [
+  {"fieldname": "item", "fieldtype": "Link", "in_list_view": 1, "label": "Item", "options": "Item", "reqd": 1},
+  {"default": "1", "fieldname": "qty", "fieldtype": "Float", "in_list_view": 1, "label": "Qty", "reqd": 1},
+  {"fieldname": "uom", "fieldtype": "Link", "label": "UOM", "options": "UOM"},
+  {"fieldname": "service_type", "fieldtype": "Link", "label": "Service Type", "options": "Veterinary Service Type"},
+  {"fieldname": "treatment_type", "fieldtype": "Link", "label": "Treatment Type", "options": "Veterinary Treatment Type"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Planned Treatment Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

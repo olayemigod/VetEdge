@@ -11,6 +11,7 @@ class VeterinarySettings(Document):
 			self.enable_registration_billing = 0
 			self.enable_consultations = 0
 			self.enable_vitals = 0
+			self.require_vitals_before_completion = 0
 			self.enable_appointments = 0
 			self.enable_owner_portal = 0
 			self.enable_guest_booking = 0
@@ -21,5 +22,8 @@ class VeterinarySettings(Document):
 			self.enable_boarding = 0
 			self.enable_demo_tools = 0
 			self.enable_advanced_reports = 0
+
+		if not self.enable_vitals:
+			self.require_vitals_before_completion = 0
 
 		validate_registration_settings(self)

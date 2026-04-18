@@ -1,0 +1,19 @@
+{
+ "actions": [],
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["symptom", "notes"],
+ "fields": [
+  {"fieldname": "symptom", "fieldtype": "Link", "in_list_view": 1, "label": "Symptom", "options": "Veterinary Symptom", "reqd": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Consultation Symptom",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
