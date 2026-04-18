@@ -7,6 +7,7 @@ SETTINGS_DOCTYPE = "Veterinary Settings"
 
 FEATURE_FLAG_FIELDS = {
 	"vetedge": "enable_vetedge",
+	"registration_billing": "enable_registration_billing",
 	"consultations": "enable_consultations",
 	"vitals": "enable_vitals",
 	"appointments": "enable_appointments",
@@ -23,6 +24,8 @@ FEATURE_FLAG_FIELDS = {
 
 DEFAULT_FEATURE_FLAGS = {
 	"enable_vetedge": 0,
+	"enable_registration_billing": 0,
+	"enforce_cost_center_on_billing": 1,
 	"enable_consultations": 0,
 	"enable_vitals": 0,
 	"enable_appointments": 0,

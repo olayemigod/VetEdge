@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "autoname": "field:service_type_name",
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": ["service_type_name", "service_category", "default_item", "standard_rate", "description", "disabled"],
+ "fields": [
+  {"fieldname": "service_type_name", "fieldtype": "Data", "in_list_view": 1, "label": "Service Type Name", "reqd": 1, "unique": 1},
+  {"fieldname": "service_category", "fieldtype": "Select", "in_list_view": 1, "label": "Service Category", "options": "\nClinical\nPreventive\nDiagnostics\nWellness\nBoarding\nOther"},
+  {"fieldname": "default_item", "fieldtype": "Link", "label": "Default ERPNext Item", "options": "Item"},
+  {"fieldname": "standard_rate", "fieldtype": "Currency", "label": "Standard Rate"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Service Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"export": 1, "read": 1, "report": 1, "role": "Desk User"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "service_type_name"
+}

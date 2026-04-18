@@ -4,6 +4,8 @@ app_publisher = "ProcessEdge Solutions"
 app_description = "VetEdge is a veterinary operations system built as a custom Frappe/ERPNext app."
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
+app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
+app_home = "/desk/veterinary-financial-dashboard"
 
 # Apps
 # ------------------
@@ -11,15 +13,14 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "vetedge",
-# 		"logo": "/assets/vetedge/logo.png",
-# 		"title": "vetedge",
-# 		"route": "/vetedge",
-# 		"has_permission": "vetedge.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": app_name,
+		"logo": app_logo_url,
+		"title": app_title,
+		"route": app_home,
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -133,13 +134,13 @@ after_migrate = "vetedge.install.after_migrate"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Sales Invoice": {
+		"on_update": "vetedge.services.registration_billing.update_registration_status_from_invoice",
+		"on_submit": "vetedge.services.registration_billing.update_registration_status_from_invoice",
+		"on_cancel": "vetedge.services.registration_billing.update_registration_status_from_invoice",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

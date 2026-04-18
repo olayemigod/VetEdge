@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "autoname": "field:treatment_type_name",
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": ["treatment_type_name", "treatment_category", "default_item", "requires_dispensary", "description", "disabled"],
+ "fields": [
+  {"fieldname": "treatment_type_name", "fieldtype": "Data", "in_list_view": 1, "label": "Treatment Type Name", "reqd": 1, "unique": 1},
+  {"fieldname": "treatment_category", "fieldtype": "Select", "in_list_view": 1, "label": "Treatment Category", "options": "\nMedication\nProcedure\nConsumable\nDiet\nOther"},
+  {"fieldname": "default_item", "fieldtype": "Link", "label": "Default ERPNext Item", "options": "Item"},
+  {"default": "0", "fieldname": "requires_dispensary", "fieldtype": "Check", "label": "Requires Dispensary Confirmation"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Treatment Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"export": 1, "read": 1, "report": 1, "role": "Desk User"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "treatment_type_name"
+}

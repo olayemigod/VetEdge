@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import os
+
+import frappe
+from frappe.modules.import_file import import_file_by_path
+
+
+FINANCIAL_DASHBOARD_FILES = (
+	("veterinary", "report", "branch_performance_summary", "branch_performance_summary.json"),
+	("veterinary", "number_card", "today_revenue", "today_revenue.json"),
+	("veterinary", "number_card", "week_revenue", "week_revenue.json"),
+	("veterinary", "number_card", "month_revenue", "month_revenue.json"),
+	("veterinary", "number_card", "outstanding_receivables", "outstanding_receivables.json"),
+	("veterinary", "number_card", "payments_today", "payments_today.json"),
+	("veterinary", "dashboard_chart", "daily_revenue_trend", "daily_revenue_trend.json"),
+	("veterinary", "dashboard_chart", "revenue_by_cost_center", "revenue_by_cost_center.json"),
+	("veterinary", "dashboard_chart", "revenue_by_service_type", "revenue_by_service_type.json"),
+	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
+	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
+	("veterinary", "workspace", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("workspace_sidebar", "vetedge.json"),
+	("desktop_icon", "vetedge.json"),
+)
+
+
+def ensure_financial_dashboard() -> None:
+	for file_parts in FINANCIAL_DASHBOARD_FILES:
+		file_path = frappe.get_app_path("vetedge", *file_parts)
+		if os.path.exists(file_path):
+			import_file_by_path(file_path, force=True, ignore_version=True)
+
+	ensure_vetedge_desktop_icon()
+
+
+def ensure_vetedge_desktop_icon() -> None:
+	if not frappe.db.exists("Desktop Icon", "VetEdge"):
+		return
+
+	frappe.db.set_value(
+		"Desktop Icon",
+		"VetEdge",
+		{
+			"app": "vetedge",
+			"hidden": 0,
+			"icon_type": "Link",
+			"link_type": "Workspace Sidebar",
+			"link_to": "VetEdge",
+			"link": "",
+			"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
+			"standard": 1,
+		},
+		update_modified=False,
+	)
+	frappe.cache.delete_key("desktop_icons")
+	frappe.cache.delete_key("bootinfo")

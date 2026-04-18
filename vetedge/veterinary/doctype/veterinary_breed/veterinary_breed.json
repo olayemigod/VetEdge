@@ -1,0 +1,27 @@
+{
+ "actions": [],
+ "autoname": "format:{species}-{breed_name}",
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": ["breed_name", "species", "description", "disabled"],
+ "fields": [
+  {"fieldname": "breed_name", "fieldtype": "Data", "in_list_view": 1, "label": "Breed Name", "reqd": 1},
+  {"fieldname": "species", "fieldtype": "Link", "in_list_view": 1, "label": "Species", "options": "Veterinary Species", "reqd": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Breed",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"export": 1, "read": 1, "report": 1, "role": "Desk User"}
+ ],
+ "search_fields": "breed_name,species",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "breed_name"
+}

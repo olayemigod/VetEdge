@@ -1,0 +1,136 @@
+{
+ "app": "vetedge",
+ "charts": [
+  {
+   "chart_name": "Daily Revenue Trend",
+   "label": "Daily Revenue Trend"
+  },
+  {
+   "chart_name": "Revenue by Cost Center",
+   "label": "Revenue by Cost Center"
+  },
+  {
+   "chart_name": "Revenue by Service Type",
+   "label": "Revenue by Service Type"
+  },
+  {
+   "chart_name": "Paid vs Outstanding",
+   "label": "Paid vs Outstanding"
+  },
+  {
+   "chart_name": "Payment Method Breakdown",
+   "label": "Payment Method Breakdown"
+  }
+ ],
+ "content": "[{\"id\":\"vetedge_fin_card_today\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Today Revenue\",\"col\":2}},{\"id\":\"vetedge_fin_card_week\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Week Revenue\",\"col\":2}},{\"id\":\"vetedge_fin_card_month\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Month Revenue\",\"col\":2}},{\"id\":\"vetedge_fin_card_outstanding\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Outstanding Receivables\",\"col\":3}},{\"id\":\"vetedge_fin_card_payments\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Payments Today\",\"col\":3}},{\"id\":\"vetedge_fin_chart_daily\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Daily Revenue Trend\",\"col\":12}},{\"id\":\"vetedge_fin_chart_cost_center\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Revenue by Cost Center\",\"col\":6}},{\"id\":\"vetedge_fin_chart_service_type\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Revenue by Service Type\",\"col\":6}},{\"id\":\"vetedge_fin_chart_paid\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Paid vs Outstanding\",\"col\":6}},{\"id\":\"vetedge_fin_chart_payment_method\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Payment Method Breakdown\",\"col\":6}},{\"id\":\"vetedge_fin_spacer_one\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"vetedge_fin_header_shortcuts\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Financial Workbench</b></span>\",\"col\":12}},{\"id\":\"vetedge_fin_shortcut_report\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Branch Performance Summary\",\"col\":3}},{\"id\":\"vetedge_fin_shortcut_invoice\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"vetedge_fin_shortcut_payment\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payment Entry\",\"col\":3}},{\"id\":\"vetedge_fin_shortcut_cost_center\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Cost Center\",\"col\":3}}]",
+ "creation": "2026-04-18 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "accounting",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Veterinary Financial Dashboard",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Branch Performance Summary",
+   "link_count": 0,
+   "link_to": "Branch Performance Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounting",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Invoice",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Entry",
+   "link_count": 0,
+   "link_to": "Payment Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Cost Center",
+   "link_count": 0,
+   "link_to": "Cost Center",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-04-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Veterinary",
+ "name": "Veterinary Financial Dashboard",
+ "number_cards": [
+  {
+   "label": "Today Revenue",
+   "number_card_name": "Today Revenue"
+  },
+  {
+   "label": "Week Revenue",
+   "number_card_name": "Week Revenue"
+  },
+  {
+   "label": "Month Revenue",
+   "number_card_name": "Month Revenue"
+  },
+  {
+   "label": "Outstanding Receivables",
+   "number_card_name": "Outstanding Receivables"
+  },
+  {
+   "label": "Payments Today",
+   "number_card_name": "Payments Today"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [],
+ "title": "Veterinary Financial Dashboard",
+ "type": "Workspace"
+}

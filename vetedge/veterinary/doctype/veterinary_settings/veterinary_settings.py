@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
+from vetedge.services.registration_billing import validate_registration_settings
+
 
 class VeterinarySettings(Document):
 	def validate(self) -> None:
 		if not self.enable_vetedge:
+			self.enable_registration_billing = 0
 			self.enable_consultations = 0
 			self.enable_vitals = 0
 			self.enable_appointments = 0
@@ -18,3 +21,5 @@ class VeterinarySettings(Document):
 			self.enable_boarding = 0
 			self.enable_demo_tools = 0
 			self.enable_advanced_reports = 0
+
+		validate_registration_settings(self)

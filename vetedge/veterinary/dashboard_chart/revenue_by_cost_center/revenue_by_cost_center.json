@@ -1,0 +1,23 @@
+{
+ "chart_name": "Revenue by Cost Center",
+ "chart_type": "Report",
+ "creation": "2026-04-18 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\":\"revenue_by_cost_center\"}",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "modified": "2026-04-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Veterinary",
+ "name": "Revenue by Cost Center",
+ "owner": "Administrator",
+ "report_name": "Branch Performance Summary",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 1,
+ "y_axis": []
+}

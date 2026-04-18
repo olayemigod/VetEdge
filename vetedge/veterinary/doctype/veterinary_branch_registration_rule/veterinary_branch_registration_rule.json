@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "branch",
+  "registration_item",
+  "registration_fee",
+  "auto_create_invoice_on_registration",
+  "require_payment_before_first_consultation",
+  "is_active"
+ ],
+ "fields": [
+  {"fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "label": "Branch", "options": "Branch", "reqd": 1},
+  {"fieldname": "registration_item", "fieldtype": "Link", "in_list_view": 1, "label": "Registration Item", "options": "Item"},
+  {"fieldname": "registration_fee", "fieldtype": "Currency", "in_list_view": 1, "label": "Registration Fee"},
+  {"default": "0", "fieldname": "auto_create_invoice_on_registration", "fieldtype": "Check", "in_list_view": 1, "label": "Auto Create Invoice on Registration"},
+  {"default": "0", "fieldname": "require_payment_before_first_consultation", "fieldtype": "Check", "label": "Require Payment Before First Consultation"},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Branch Registration Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

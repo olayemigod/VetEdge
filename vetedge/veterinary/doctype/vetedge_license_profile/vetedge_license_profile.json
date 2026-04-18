@@ -1,0 +1,44 @@
+{
+ "actions": [],
+ "creation": "2026-04-18 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "profile_section",
+  "plan_name",
+  "subscription_status",
+  "white_label_enabled",
+  "dates_section",
+  "start_date",
+  "expiry_date",
+  "limits_section",
+  "max_branches",
+  "max_users",
+  "modules_section",
+  "enabled_modules"
+ ],
+ "fields": [
+  {"fieldname": "profile_section", "fieldtype": "Section Break", "label": "Profile"},
+  {"fieldname": "plan_name", "fieldtype": "Data", "label": "Plan Name"},
+  {"default": "Trial", "fieldname": "subscription_status", "fieldtype": "Select", "label": "Subscription Status", "options": "Trial\nActive\nPast Due\nSuspended\nExpired\nCancelled"},
+  {"default": "0", "fieldname": "white_label_enabled", "fieldtype": "Check", "label": "White Label Enabled"},
+  {"fieldname": "dates_section", "fieldtype": "Section Break", "label": "Dates"},
+  {"fieldname": "start_date", "fieldtype": "Date", "label": "Start Date"},
+  {"fieldname": "expiry_date", "fieldtype": "Date", "label": "Expiry Date"},
+  {"fieldname": "limits_section", "fieldtype": "Section Break", "label": "Limits"},
+  {"fieldname": "max_branches", "fieldtype": "Int", "label": "Max Branches"},
+  {"fieldname": "max_users", "fieldtype": "Int", "label": "Max Users"},
+  {"fieldname": "modules_section", "fieldtype": "Section Break", "label": "Enabled Modules"},
+  {"default": "[]", "description": "Future SaaS module entitlements. Stored as a JSON array; not enforced yet.", "fieldname": "enabled_modules", "fieldtype": "Code", "label": "Enabled Modules", "options": "JSON"}
+ ],
+ "issingle": 1,
+ "module": "Veterinary",
+ "name": "VetEdge License Profile",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
