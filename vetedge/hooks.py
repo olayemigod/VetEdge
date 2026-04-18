@@ -1,5 +1,5 @@
 app_name = "vetedge"
-app_title = "vetedge"
+app_title = "VetEdge"
 app_publisher = "ProcessEdge Solutions"
 app_description = "VetEdge is a veterinary operations system built as a custom Frappe/ERPNext app."
 app_email = "processedgeng@gmail.com"
@@ -86,7 +86,8 @@ app_license = "mit"
 # ------------
 
 # before_install = "vetedge.install.before_install"
-# after_install = "vetedge.install.after_install"
+after_install = "vetedge.install.after_install"
+after_migrate = "vetedge.install.after_migrate"
 
 # Uninstallation
 # ------------
@@ -249,4 +250,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

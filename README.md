@@ -1,40 +1,7 @@
-### vetedge
+# VetEdge Codex Docs Pack
 
-VetEdge is a veterinary operations system built as a custom Frappe/ERPNext app.
+This package contains the core repo instructions for Codex:
 
-### Installation
-
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
-
-```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch version-16
-bench install-app vetedge
-```
-
-### Contributing
-
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
-
-```bash
-cd apps/vetedge
-pre-commit install
-```
-
-Pre-commit is configured to use the following tools for checking and formatting your code:
-
-- ruff
-- eslint
-- prettier
-- pyupgrade
-### CI
-
-This app can use GitHub Actions for CI. The following workflows are configured:
-
-- CI: Installs this app and runs unit tests on every push to `develop` branch.
-- Linters: Runs [Frappe Semgrep Rules](https://github.com/frappe/semgrep-rules) and [pip-audit](https://pypi.org/project/pip-audit/) on every pull request.
-
-
-### License
-
-mit
+- `AGENTS.md` — primary project instructions that Codex should read before work
+- `docs/vetedge_master_brief.md` — authoritative product and architecture brief
+- `docs/codex_usage_notes.md` — quick usage notes for running Codex effectively in this repo
