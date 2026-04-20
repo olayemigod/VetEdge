@@ -27,13 +27,19 @@ frappe.ui.form.on("Veterinary Consultation", {
 
 	refresh(frm) {
 		if (!frm.is_new() && frm.doc.patient && frm.doc.service_branch) {
+			add_status_actions(frm);
+
 			frm.add_custom_button(__("New Vitals"), () => {
 				show_vitals_entry_dialog(frm);
-			});
+			}, __("Clinical"));
 
 			frm.add_custom_button(__("Latest Vitals"), () => {
 				show_latest_vitals_dialog(frm);
-			});
+			}, __("Clinical"));
+
+			frm.add_custom_button(__("Create Follow-up Appointment"), () => {
+				show_follow_up_appointment_dialog(frm);
+			}, __("Clinical"));
 		}
 	},
 
@@ -72,6 +78,59 @@ frappe.ui.form.on("Veterinary Consultation", {
 			});
 	},
 });
+
+function add_status_actions(frm) {
+	if (["Completed", "Cancelled"].includes(frm.doc.status)) {
+		return;
+	}
+
+	const transitions = {
+		Draft: [
+			[__("Start Consultation"), "In Progress"],
+			[__("Cancel Consultation"), "Cancelled"],
+		],
+		"In Progress": [
+			[__("Send to Billing"), "Awaiting Payment"],
+			[__("Mark Ready for Treatment"), "Ready for Treatment"],
+			[__("Complete Consultation"), "Completed"],
+			[__("Cancel Consultation"), "Cancelled"],
+		],
+		"Awaiting Payment": [
+			[__("Mark Ready for Treatment"), "Ready for Treatment"],
+			[__("Complete Consultation"), "Completed"],
+			[__("Cancel Consultation"), "Cancelled"],
+		],
+		"Ready for Treatment": [
+			[__("Complete Consultation"), "Completed"],
+			[__("Cancel Consultation"), "Cancelled"],
+		],
+	};
+
+	(transitions[frm.doc.status] || []).forEach(([label, status]) => {
+		frm.add_custom_button(label, () => {
+			transition_consultation(frm, status);
+		}, __("Status"));
+	});
+}
+
+function transition_consultation(frm, status) {
+	frappe.call({
+		method: "vetedge.services.consultation_flow.transition_consultation_status",
+		args: {
+			consultation: frm.doc.name,
+			status,
+		},
+		freeze: true,
+		freeze_message: __("Updating consultation..."),
+		callback() {
+			frappe.show_alert({
+				message: __("Consultation updated"),
+				indicator: "green",
+			});
+			frm.reload_doc();
+		},
+	});
+}
 
 function show_vitals_entry_dialog(frm) {
 	const dialog = new frappe.ui.Dialog({
@@ -145,6 +204,58 @@ function show_vitals_entry_dialog(frm) {
 							indicator: "green",
 						});
 					}
+				},
+			});
+		},
+	});
+
+	dialog.show();
+}
+
+function show_follow_up_appointment_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Create Follow-up Appointment"),
+		fields: [
+			{
+				fieldname: "appointment_datetime",
+				fieldtype: "Datetime",
+				label: __("Appointment Date/Time"),
+				default: frm.doc.follow_up_date
+					? `${frm.doc.follow_up_date} 09:00:00`
+					: frappe.datetime.now_datetime(),
+				reqd: 1,
+			},
+			{
+				fieldname: "notes",
+				fieldtype: "Small Text",
+				label: __("Notes"),
+				default: frm.doc.treatment_plan_summary || "",
+			},
+		],
+		primary_action_label: __("Create Appointment"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.appointment_flow.create_follow_up_from_consultation",
+				args: {
+					consultation: frm.doc.name,
+					appointment_datetime: values.appointment_datetime,
+					notes: values.notes,
+				},
+				freeze: true,
+				freeze_message: __("Creating follow-up appointment..."),
+				callback(result) {
+					const appointment = result.message;
+					if (!appointment?.name) {
+						return;
+					}
+
+					dialog.hide();
+					frm.set_value("linked_appointment", appointment.name);
+					frm.save_or_update();
+					frappe.show_alert({
+						message: __("Follow-up appointment created"),
+						indicator: "green",
+					});
 				},
 			});
 		},

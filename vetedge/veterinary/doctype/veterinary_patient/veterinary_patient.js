@@ -12,6 +12,12 @@ frappe.ui.form.on("Veterinary Patient", {
 	refresh(frm) {
 		set_registration_status_read_only(frm);
 		set_approximate_age(frm);
+		if (!frm.is_new()) {
+			frm.add_custom_button(__("Medical History"), () => {
+				frappe.route_options = { patient: frm.doc.name };
+				frappe.set_route("veterinary-medical-history");
+			});
+		}
 	},
 
 	species(frm) {

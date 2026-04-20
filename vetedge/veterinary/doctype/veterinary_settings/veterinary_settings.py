@@ -16,6 +16,10 @@ class VeterinarySettings(Document):
 			self.enable_owner_portal = 0
 			self.enable_guest_booking = 0
 			self.enable_notifications = 0
+			self.notify_on_appointment_create = 0
+			self.notify_on_appointment_reminder = 0
+			self.notify_on_reschedule = 0
+			self.notify_on_cancellation = 0
 			self.enable_treatment_billing = 0
 			self.enable_dispensary_flow = 0
 			self.enable_vaccination = 0
@@ -25,5 +29,12 @@ class VeterinarySettings(Document):
 
 		if not self.enable_vitals:
 			self.require_vitals_before_completion = 0
+
+		if not self.enable_notifications:
+			self.notify_on_appointment_create = 0
+			self.notify_on_appointment_reminder = 0
+			self.notify_on_reschedule = 0
+			self.notify_on_cancellation = 0
+			self.notification_channels = None
 
 		validate_registration_settings(self)

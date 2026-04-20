@@ -8,10 +8,12 @@ import frappe
 
 from vetedge.services.consultation_flow import (
 	get_next_daily_consultation_number,
+	transition_consultation_status,
 	validate_consultation,
 	validate_consultation_children,
 	validate_completion_requirements,
 	validate_service_branch_access,
+	validate_consultation_status_transition,
 )
 
 
@@ -203,6 +205,32 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
 		):
 			self.assertRaises(frappe.ValidationError, validate_completion_requirements, doc)
+
+	def test_consultation_status_transition_allows_in_progress_to_billing(self):
+		validate_consultation_status_transition("In Progress", "Awaiting Payment")
+
+	def test_consultation_status_transition_rejects_completed_reopen(self):
+		frappe_stub = make_frappe_stub()
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_consultation_status_transition,
+				"Completed",
+				"In Progress",
+			)
+
+	def test_transition_consultation_status_saves_document(self):
+		saved = []
+		doc = frappe._dict(name="VCON-001", status="In Progress")
+		doc.save = lambda: saved.append(doc)
+		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: doc)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			result = transition_consultation_status("VCON-001", "Ready for Treatment")
+
+		self.assertEqual(result["status"], "Ready for Treatment")
+		self.assertEqual(saved, [doc])
 
 	def test_branch_assignment_is_enforced_when_assignment_doctype_exists(self):
 		frappe_stub = make_frappe_stub(

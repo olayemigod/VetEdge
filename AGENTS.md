@@ -1,305 +1,213 @@
-# AGENTS.md
+# VetEdge – AGENTS.md
 
-## Project identity
+## 1. Agent Role
 
-- App name: `vetedge`
-- Module label: `Veterinary`
-- Company/brand: `ProcessEdge Solutions`
-- Stack: Frappe / ERPNext custom app
-- Phase target: GitHub-installable app first, future SaaS-ready architecture later
+You are a **senior ERPNext/Frappe architect and backend engineer** building VetEdge.
 
-## Product intent
+You must:
+- follow ERPNext standards strictly
+- avoid breaking accounting integrity
+- build modular, production-safe systems
+- implement only the requested phase (no speculative features)
 
-VetEdge is an independent veterinary domain app.
-It is **inspired by Marley patterns where useful**, but it must **not depend on Marley core doctypes or deep Marley overrides for its core business logic**.
+---
 
-ERPNext standard infrastructure must be used for:
-- accounting
-- invoicing
-- payment entry
+## 2. Core Architecture Principles
+
+### VetEdge owns:
+- veterinary domain logic
+- consultation, vitals, appointments, history
+- portal and notifications
+
+### ERPNext owns:
+- accounting (Sales Invoice, Payment Entry)
 - stock/inventory
-- users
-- permissions
-- branches/companies where applicable
+- customer and company
 
-VetEdge owns veterinary workflows and veterinary data models.
+### NEVER:
+- modify ERPNext core
+- modify Marley core
+- bypass ERPNext accounting flows
+- create parallel accounting systems
 
-## Non-negotiable architecture rules
+---
 
-1. Do **not** modify ERPNext core.
-2. Do **not** modify Marley core.
-3. Do **not** model the app as a fragile overlay on Marley.
-4. Prefer **new VetEdge-owned doctypes** over patching unrelated healthcare doctypes.
-5. Keep veterinary domain logic inside VetEdge services and doctypes.
-6. Use ERPNext standard accounting and stock flows; do not invent parallel posting logic.
-7. Every major feature must be modular and future feature-gatable for SaaS/subscription use.
-8. All permission-sensitive logic must be enforced server-side.
+## 3. Key System Decisions (MANDATORY)
 
-## Core design principle
+### Branch vs Cost Center
+- Branch = operational
+- Cost Center = accounting
+- ALWAYS map Branch → Cost Center for billing
 
-Build VetEdge as a deployable single-tenant app now, but architect each major module so it can later be:
-- enabled or disabled by plan
-- limited by subscription/license rules
-- used in white-label deployments
-- used in future SaaS hosting
+### Registration Model
+- Pet registration = Veterinary Patient
+- No separate registration doctype
+- Registration billing is:
+  - settings-driven
+  - branch-aware
+  - invoice-based (ERPNext)
 
-Do **not** build full subscription enforcement now unless explicitly requested.
-Do build:
-- feature flags
-- modular services
-- license/profile shell
-- clean boundaries between modules
+### Branch Rules
+- Patient has **default branch**
+- Consultation uses **service branch**
+- Cross-branch treatment is allowed
+- History must remain patient-centric
 
-## Primary modules
+### Vitals
+- MUST be separate doctype
+- NEVER merge vitals into consultation table
 
-The app should be structured around these domains:
+---
 
-- Settings & Feature Control
-- Licensing/Profile Shell
-- Veterinary Patient
-- Consultation
-- Veterinary Vital Signs
-- Appointments
-- Consultation Billing & Payment Routing
-- Treatment & Dispensary
-- Vaccination
-- Boarding
-- Owner Portal
-- Guest Booking
-- Notifications
-- Branch Security
-- Demo Data
-- Reports & Dashboards
+## 4. Current System State
 
-## Current business decisions already locked
+Completed:
+- Phase 0: foundation, settings, feature flags
+- Phase 1: masters + veterinary patient
+- Phase 1.5: registration billing + cost center logic
+- Phase 2: consultation + vitals
+- Phase 2.5: medical history + trend charts
 
-### Consultation payment model
-Support both flows:
-- small clinics may allow doctor/front desk to collect payment directly from consultation
-- other clinics may route payment to accounts before treatment
+Next:
+- Phase 3: appointments + queue + notifications
+- Phase 3.5: portal + payments
+- Phase 4: consultation billing
+- Phase 5: dispensary/stock
+- Phase 6: boarding
+- Phase 7: vaccination
 
-This must be settings-driven and role-controlled.
+---
 
-### Treatment stock posting
-Do **not** deduct stock at consultation planning time.
-Deduct stock only on **dispensary confirmation**.
+## 5. Data Model Rules
 
-### Vitals architecture
-Use a **separate VetEdge doctype** for vitals.
-Vitals may be entered from the consultation page, but the data model remains separate.
+### Always use:
+- Link fields for relationships
+- Child tables for multi-values
+- Proper timestamps on all records
 
-### Demo data
-Support:
-- seeded master data
-- demo transactions
-Both must be tagged by batch and removable safely by batch only.
+### Never use:
+- free text for relational data
+- duplicate branch fields
+- hidden logic in client scripts only
 
-### Boarding vs inpatient
-Implement **boarding first**.
-Do not implement full inpatient hospitalization unless asked in a later phase.
+---
 
-### Diagnosis and symptoms model
-Use:
-- seeded master doctypes for diagnosis and symptoms
-- child tables inside consultations for transactional capture
+## 6. Billing Rules
 
-## Repo conventions
+- All billing MUST use:
+  - Sales Invoice
+  - Payment Entry
 
-### Suggested top-level layout
-- `vetedge/veterinary/doctype/` for VetEdge doctypes
-- `vetedge/services/` for orchestration/business logic
-- `vetedge/api/` for whitelisted/server endpoints
-- `vetedge/portal/` for owner/guest portal logic
-- `vetedge/notifications/` for channel/event routing
-- `vetedge/reports/` for reports
-- `vetedge/dashboard/` for workspaces/chart sources
-- `vetedge/seed/` for install seed data and demo files
-- `vetedge/install/` for setup/install hooks
-- `docs/` for build docs and architecture notes
+- NEVER:
+  - mark invoices paid manually
+  - bypass ERPNext GL
+  - create custom accounting tables
 
-### Implementation preference
-Prefer:
-- thin doctypes
-- reusable service functions
-- explicit validation
-- settings/feature checks
-- idempotent setup scripts
-- clean file names that match doctypes
+- Cost Center must always be applied via branch mapping
 
-Avoid:
-- fat client scripts driving critical logic
-- hidden business rules in JS only
-- deep monkey patches
-- unrelated workspace clutter
-- duplicate billing or stock logic
+---
 
-## Expected core doctypes
+## 7. Services Layer
 
-Minimum domain doctypes likely include:
-- Veterinary Settings
-- VetEdge License Profile
-- Veterinary Species
-- Veterinary Breed
-- Veterinary Symptom
-- Veterinary Diagnosis
-- Veterinary Service Type
-- Veterinary Treatment Type
-- Veterinary Vaccine
-- Veterinary Patient
-- Veterinary Consultation
-- Consultation Symptom
-- Consultation Diagnosis
-- Planned Treatment Item
-- Dispensed Treatment Item
-- Veterinary Vital Signs
-- Veterinary Appointment
-- Veterinary Vaccination Record
-- Veterinary Boarding
-- Veterinary Service Unit
-- Veterinary Cage Room
-- Owner Complaint
-- Demo Data Batch
-- Branch User Assignment
-- Branch Practitioner Assignment
+Business logic must live in:
+- services/
 
-Do not create all doctypes blindly in one task unless explicitly asked.
-Implement only what is needed for the current phase.
+Examples:
+- billing.py
+- consultation_flow.py
+- appointment_flow.py
+- medical_history.py
+- notifications.py
 
-## ERPNext integration rules
+Doctypes must remain thin.
 
-### Billing
-Must use standard ERPNext:
-- Sales Invoice
-- Payment Entry
+---
 
-Consultation should create or link invoice records and use standard payment flow.
-Never bypass ERPNext accounting integrity.
+## 8. Notifications
 
-### Inventory
-Must use standard ERPNext item and stock behavior.
-Treatment consumables may be planned in consultation, but stock posting occurs only on dispensary confirmation.
+- Must be pluggable:
+  - Email
+  - SMS
+  - WhatsApp
 
-### Customers / owners
-Pet owners should be linked to ERPNext `Customer` records for commercial/billing integrity.
+- Do NOT hardcode providers
+- Build event-based triggers only
 
-## Portal rules
+---
 
-There are two portal audiences:
-- authenticated owners
-- guest/new clients
+## 9. Portal & Payments (IMPORTANT)
 
-### Owner portal scope
-Owners may:
-- view pets
-- book appointments
-- view and manage appointments where allowed
-- make payments
-- view receipts
-- view consultation summary/history without exposing sensitive internal clinical details
-- raise complaints/support requests
+- Portal does NOT own billing logic
+- Portal interacts via API only
 
-### Guest portal scope
-Guests may:
-- request/book appointments
-- submit pet and owner details
-- receive confirmation notifications
+Flow:
+Portal → VetEdge API → Service Layer → ERPNext
 
-Do not expose internal-only consultation details, staff notes, audit trails, or dispensary internals in the portal.
+Payments:
+- always tied to Sales Invoice
+- must create Payment Entry
 
-## Notification rules
+---
 
-Notification channels should be abstracted:
-- email
-- SMS
-- WhatsApp
+## 10. Medical History Rules
 
-Do not hardwire a single vendor.
-Use a service layer that can route by channel and event.
+- Must be VetEdge-owned
+- Must not depend on Marley
+- Must be patient-centric
+- Must include:
+  - consultation timeline
+  - vitals history
+  - diagnosis history
+  - trend charts
 
-Settings should support event toggles and future pluggable providers.
+---
 
-## Branch and security rules
+## 11. Branch Awareness
 
-- Branch-sensitive access must be validated server-side.
-- Client-side filters are convenience only, never the real security model.
-- Payment actions, demo-data deletion, dispensary confirmation, and portal access must be role-validated and auditable.
-- Design all critical actions with future auditability in mind.
+- All transactions must carry branch
+- Branch validation must be server-side
+- Do NOT rely on UI filtering
 
-## Demo data rules
+---
 
-All demo data must be tagged with:
-- `is_demo_data`
-- `demo_batch_id`
+## 12. Implementation Rules
 
-Deletion must:
-- preview affected counts
-- remove only tagged records
-- never remove client-created real data
-- require explicit confirmation
+Always:
+- build phase-by-phase
+- validate before moving forward
+- keep logic simple and predictable
+- document assumptions
 
-## SaaS-readiness rules
+When unsure:
+- ask for clarification
+- propose a plan
 
-Design all major modules so they can later be controlled by:
-- feature flags
-- plan/license checks
-- enabled module lists
-- max users/max branches rules
+---
 
-For now, create structure and service hooks for this.
-Do not overbuild enforcement until requested.
+## 13. Constraints
 
-## Testing and verification
+Do NOT:
+- overbuild UI
+- implement future phases early
+- refactor unrelated modules
+- introduce breaking changes
 
-For each implementation phase:
-- add or update focused tests where practical
-- verify model validation
-- verify service behavior
-- verify branch/security logic for sensitive actions
-- keep tests targeted, not sprawling
+---
 
-When finishing a task, always report:
+## 14. Output Requirement
+
+Every task must return:
 1. files created
 2. files modified
-3. assumptions made
-4. risks or open issues
-5. suggested next phase
+3. assumptions
+4. risks
+5. next recommended step
 
-## Codex work mode
+---
 
-Always work phase-by-phase.
+## 15. Development Mindset
 
-Before coding:
-- inspect the current repo
-- read this `AGENTS.md`
-- read relevant docs under `docs/`
-- propose or follow the requested phase only
-
-Unless explicitly asked, do not:
-- scaffold the whole product at once
-- add speculative modules
-- refactor unrelated code
-- change naming conventions already decided
-
-## Priority implementation order
-
-Preferred build order:
-1. settings / feature flags / repo foundations
-2. patient + owners + masters
-3. consultation + vitals + child tables
-4. appointments + queue + portal booking + notifications
-5. billing + payment flow
-6. dispensary + stock posting
-7. boarding
-8. vaccination
-9. demo data tools
-10. advanced dashboards and reports
-
-## Done means
-
-A phase is considered done only when:
-- the requested scope is implemented
-- files are placed in the agreed repo structure
-- validations exist
-- major assumptions are documented
-- code does not break ERPNext accounting/inventory rules
-- output summary is provided
+- Build systems, not features
+- Prefer correctness over speed
+- Keep flows simple for clinics
+- Ensure SaaS readiness without overengineering

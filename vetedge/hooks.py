@@ -145,23 +145,11 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"vetedge.tasks.all"
-# 	],
-# 	"daily": [
-# 		"vetedge.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"vetedge.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"vetedge.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"vetedge.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"hourly": [
+		"vetedge.services.notifications.send_due_appointment_reminders",
+	],
+}
 
 # Testing
 # -------

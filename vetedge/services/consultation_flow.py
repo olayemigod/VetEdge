@@ -13,6 +13,15 @@ CONSULTATION_STATUSES = {
 	"Cancelled",
 }
 
+VALID_CONSULTATION_STATUS_TRANSITIONS = {
+	"Draft": {"In Progress", "Cancelled"},
+	"In Progress": {"Awaiting Payment", "Ready for Treatment", "Completed", "Cancelled"},
+	"Awaiting Payment": {"Ready for Treatment", "Completed", "Cancelled"},
+	"Ready for Treatment": {"Completed", "Cancelled"},
+	"Completed": set(),
+	"Cancelled": set(),
+}
+
 
 def validate_consultation(doc) -> None:
 	validate_consultation_status(doc)
@@ -36,6 +45,31 @@ def validate_consultation_status(doc) -> None:
 			f"Consultation status cannot be changed after it is {previous.status}.",
 			frappe.ValidationError,
 		)
+
+	if previous and previous.status != doc.status:
+		validate_consultation_status_transition(previous.status, doc.status)
+
+
+def validate_consultation_status_transition(current_status: str, target_status: str) -> None:
+	allowed = VALID_CONSULTATION_STATUS_TRANSITIONS.get(current_status, set())
+	if target_status not in allowed:
+		frappe.throw(
+			f"Consultation status cannot move from {current_status} to {target_status}.",
+			frappe.ValidationError,
+		)
+
+
+@frappe.whitelist()
+def transition_consultation_status(consultation: str, status: str) -> dict:
+	doc = frappe.get_doc("Veterinary Consultation", consultation)
+	validate_consultation_status_transition(doc.status, status)
+	doc.status = status
+	doc.save()
+
+	return {
+		"name": doc.name,
+		"status": doc.status,
+	}
 
 
 def resolve_consultation_context(doc) -> None:
