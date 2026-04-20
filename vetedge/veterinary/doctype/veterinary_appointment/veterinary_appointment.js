@@ -21,6 +21,30 @@ frappe.ui.form.on("Veterinary Appointment", {
 			return;
 		}
 
+		if (frm.doc.status === "Awaiting Registration") {
+			frm.dashboard.add_comment(
+				__("Complete the linked guest registration request before this appointment can be approved."),
+				"yellow",
+				true
+			);
+			if (frm.doc.guest_booking_request) {
+				frm.add_custom_button(__("Open Registration Request"), () => {
+					frappe.set_route("Form", "Veterinary Guest Booking Request", frm.doc.guest_booking_request);
+				}, __("Appointment"));
+			}
+			return;
+		}
+
+		if (frm.doc.status === "Owner Requested") {
+			frm.add_custom_button(__("Approve Appointment"), () => {
+				transition_appointment(frm, "Scheduled");
+			}, __("Appointment"));
+			frm.add_custom_button(__("Cancel Request"), () => {
+				transition_appointment(frm, "Cancelled");
+			}, __("Appointment"));
+			return;
+		}
+
 		if (frm.doc.status === "Scheduled") {
 			frm.add_custom_button(__("Confirm Appointment"), () => {
 				transition_appointment(frm, "Confirmed");

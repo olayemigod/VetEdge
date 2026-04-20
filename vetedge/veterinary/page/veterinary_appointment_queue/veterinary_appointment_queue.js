@@ -34,6 +34,25 @@ class VetEdgeAppointmentQueue {
 			options: "User",
 			change: () => this.refresh(),
 		});
+		this.status = this.page.add_field({
+			fieldname: "status",
+			label: __("Status"),
+			fieldtype: "Select",
+			options: [
+				"",
+				"Owner Requested",
+				"Awaiting Registration",
+				"Scheduled",
+				"Confirmed",
+				"Checked In",
+				"In Consultation",
+				"Completed",
+				"Rescheduled",
+				"Cancelled",
+				"No Show",
+			].join("\n"),
+			change: () => this.refresh(),
+		});
 		this.page.set_primary_action(__("Refresh"), () => this.refresh());
 		this.refresh();
 	}
@@ -44,6 +63,7 @@ class VetEdgeAppointmentQueue {
 			args: {
 				branch: this.branch.get_value(),
 				practitioner: this.practitioner.get_value(),
+				status: this.status.get_value(),
 			},
 			freeze: true,
 			freeze_message: __("Loading appointment queue..."),
@@ -85,7 +105,7 @@ class VetEdgeAppointmentQueue {
 						<td>${escape_html(format_datetime(row.appointment_datetime))}</td>
 						<td>${escape_html(row.practitioner_name || row.practitioner || "")}</td>
 						<td>${escape_html(row.branch)}</td>
-						<td>${escape_html(row.status)}</td>
+						<td>${status_badge(row.status)}</td>
 					</tr>
 				`;
 			})
@@ -117,4 +137,27 @@ function escape_html(value) {
 		return "";
 	}
 	return frappe.utils.escape_html(String(value));
+}
+
+function status_badge(status) {
+	const value = escape_html(status || "");
+	const color = appointment_status_color(status);
+	return `<span class="indicator-pill ${color}">${value}</span>`;
+}
+
+function appointment_status_color(status) {
+	return (
+		{
+			"Awaiting Registration": "gray",
+			"Owner Requested": "orange",
+			Scheduled: "blue",
+			Confirmed: "green",
+			"Checked In": "yellow",
+			"In Consultation": "purple",
+			Completed: "green",
+			Rescheduled: "orange",
+			Cancelled: "red",
+			"No Show": "gray",
+		}[status] || "gray"
+	);
 }

@@ -10,6 +10,7 @@
   "appointment_title",
   "patient_section",
   "patient",
+  "guest_booking_request",
   "status",
   "appointment_datetime",
   "primary_owner",
@@ -32,8 +33,9 @@
   {"default": "VAPT-.YYYY.-.#####", "fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "VAPT-.YYYY.-.#####", "reqd": 1},
   {"fieldname": "appointment_title", "fieldtype": "Data", "hidden": 1, "label": "Appointment Title", "read_only": 1},
   {"fieldname": "patient_section", "fieldtype": "Section Break", "label": "Appointment"},
-  {"fieldname": "patient", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "reqd": 1, "search_index": 1},
-  {"default": "Scheduled", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Scheduled\nConfirmed\nChecked In\nIn Consultation\nCompleted\nRescheduled\nCancelled\nNo Show", "reqd": 1},
+  {"fieldname": "patient", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "search_index": 1},
+  {"fieldname": "guest_booking_request", "fieldtype": "Link", "label": "Guest Registration Request", "options": "Veterinary Guest Booking Request", "read_only": 1},
+  {"default": "Scheduled", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Awaiting Registration\nOwner Requested\nScheduled\nConfirmed\nChecked In\nIn Consultation\nCompleted\nRescheduled\nCancelled\nNo Show", "reqd": 1},
   {"fieldname": "appointment_datetime", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Appointment Date/Time", "reqd": 1, "search_index": 1},
   {"fieldname": "primary_owner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Primary Owner", "options": "Customer", "read_only": 1},
   {"fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Branch", "options": "Branch", "reqd": 1},
@@ -57,7 +59,9 @@
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Desk User", "share": 1, "write": 1}
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1, "write": 1}
  ],
  "search_fields": "patient,primary_owner,branch,practitioner,status,appointment_type",
  "show_title_field_in_link": 1,

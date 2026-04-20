@@ -22,6 +22,11 @@ add_to_apps_screen = [
 	}
 ]
 
+portal_menu_items = [
+	{"title": "VetEdge Owner Portal", "route": "/vetedge_portal", "role": "Customer"},
+	{"title": "Book Veterinary Appointment", "route": "/vetedge_guest_booking"},
+]
+
 # Includes in <head>
 # ------------------
 
@@ -64,6 +69,7 @@ add_to_apps_screen = [
 # role_home_page = {
 # 	"Role": "home_page"
 # }
+get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website_user_home_page"
 
 # Generators
 # ----------

@@ -15,6 +15,10 @@ class VeterinarySettings(Document):
 			self.enable_appointments = 0
 			self.enable_owner_portal = 0
 			self.enable_guest_booking = 0
+			self.allow_owner_cancel_appointment = 0
+			self.allow_owner_reschedule_appointment = 0
+			self.enable_portal_payments = 0
+			self.portal_show_consultation_summary_only = 1
 			self.enable_notifications = 0
 			self.notify_on_appointment_create = 0
 			self.notify_on_appointment_reminder = 0
@@ -36,5 +40,11 @@ class VeterinarySettings(Document):
 			self.notify_on_reschedule = 0
 			self.notify_on_cancellation = 0
 			self.notification_channels = None
+
+		if not self.enable_owner_portal:
+			self.allow_owner_cancel_appointment = 0
+			self.allow_owner_reschedule_appointment = 0
+			self.enable_portal_payments = 0
+			self.portal_show_consultation_summary_only = 1
 
 		validate_registration_settings(self)

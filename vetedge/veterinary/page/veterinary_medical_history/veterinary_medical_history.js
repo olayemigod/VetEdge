@@ -123,17 +123,41 @@ class VetEdgeMedicalHistory {
 			["respiratory_rate", __("Respiratory Rate Trend")],
 		];
 
-		const row = $('<div class="row"></div>').appendTo(chart_area);
-		chart_specs.forEach(([fieldname, label]) => {
-			const wrapper = $(`
-				<div class="col-md-6 mb-4">
-					<div class="frappe-card p-3">
-						<h5>${label}</h5>
-						<div class="vetedge-chart" data-fieldname="${fieldname}"></div>
-					</div>
+		const tabs = $(`
+			<div class="frappe-card p-3 mb-4">
+				<h5>${__("Vitals Trends")}</h5>
+				<ul class="nav nav-tabs vetedge-chart-tabs" role="tablist"></ul>
+				<div class="tab-content pt-3 vetedge-chart-tab-content"></div>
+			</div>
+		`).appendTo(chart_area);
+
+		const nav = tabs.find(".vetedge-chart-tabs");
+		const content = tabs.find(".vetedge-chart-tab-content");
+
+		chart_specs.forEach(([fieldname, label], index) => {
+			const is_active = index === 0;
+			const tab_id = `vetedge-chart-${fieldname}`;
+			$(`
+				<li class="nav-item">
+					<a
+						class="nav-link ${is_active ? "active" : ""}"
+						data-toggle="tab"
+						href="#${tab_id}"
+						role="tab"
+					>${label}</a>
+				</li>
+			`).appendTo(nav);
+
+			const pane = $(`
+				<div
+					class="tab-pane fade ${is_active ? "show active" : ""}"
+					id="${tab_id}"
+					role="tabpanel"
+				>
+					<div class="vetedge-chart" data-fieldname="${fieldname}"></div>
 				</div>
-			`).appendTo(row);
-			this.render_chart(wrapper.find(".vetedge-chart")[0], label, trends[fieldname] || []);
+			`).appendTo(content);
+			this.render_chart(pane.find(".vetedge-chart")[0], label, trends[fieldname] || []);
 		});
 	}
 

@@ -1,0 +1,155 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div class="container my-5 vetedge-guest-booking">
+	<div class="row">
+		<aside class="col-md-3 mb-4">
+			<div class="list-group">
+				<a class="list-group-item list-group-item-action active" href="/vetedge_guest_booking">Pet Registration</a>
+				<a class="list-group-item list-group-item-action" href="/vetedge_portal">Owner Portal</a>
+			</div>
+		</aside>
+		<main class="col-md-9">
+	<h1>Register Your Pet</h1>
+	<p class="text-muted">Send your owner and pet details. You may also request an appointment, and the clinic team will confirm registration before scheduling.</p>
+
+	<form id="vetedge-guest-booking-form" class="my-4">
+		<h3>Owner Details</h3>
+		<div class="row">
+			<div class="col-md-6 mb-3">
+				<label class="form-label">Your Name</label>
+				<input class="form-control" name="guest_name" required>
+			</div>
+			<div class="col-md-3 mb-3">
+				<label class="form-label">Email</label>
+				<input class="form-control" name="guest_email" type="email">
+			</div>
+			<div class="col-md-3 mb-3">
+				<label class="form-label">Phone</label>
+				<input class="form-control" name="guest_phone">
+			</div>
+		</div>
+
+		<h3>Pet Details</h3>
+		<div class="row">
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Pet Name</label>
+				<input class="form-control" name="pet_name" required>
+			</div>
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Species</label>
+				<select class="form-control" name="species" required>
+					<option value=""></option>
+					{% for row in species %}
+					<option value="{{ row.name }}">{{ row.species_name or row.name }}</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Preferred Branch</label>
+				<select class="form-control" name="preferred_branch" required>
+					<option value=""></option>
+					{% for row in branches %}
+					<option value="{{ row.name }}">{{ row.name }}</option>
+					{% endfor %}
+				</select>
+			</div>
+		</div>
+
+		<h3>Appointment Request</h3>
+		<div class="row">
+			<div class="col-md-12 mb-3">
+				<div class="form-check">
+					<input class="form-check-input" id="appointment-requested" name="appointment_requested" type="checkbox" value="1">
+					<label class="form-check-label" for="appointment-requested">I also want to request an appointment</label>
+				</div>
+			</div>
+			<div class="col-md-6 mb-3 vetedge-appointment-field" style="display: none;">
+				<label class="form-label">Preferred Date/Time</label>
+				<input class="form-control" name="preferred_datetime" type="datetime-local">
+			</div>
+			<div class="col-md-6 mb-3">
+				<label class="form-label">Reason for Visit</label>
+				<textarea class="form-control" name="reason_for_visit" rows="3"></textarea>
+			</div>
+		</div>
+		<button class="btn btn-primary" type="submit">Submit Registration Request</button>
+	</form>
+
+	<section class="border-top pt-4 mt-4">
+		<h3>Registration Payment</h3>
+		<p class="text-muted">After the clinic confirms your registration and prepares the invoice, use your request number and email or phone to initiate registration payment.</p>
+		<div class="row">
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Registration Request Number</label>
+				<input class="form-control" id="registration-payment-request">
+			</div>
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Email</label>
+				<input class="form-control" id="registration-payment-email" type="email">
+			</div>
+			<div class="col-md-4 mb-3">
+				<label class="form-label">Phone</label>
+				<input class="form-control" id="registration-payment-phone">
+			</div>
+		</div>
+		<button class="btn btn-outline-primary" id="registration-payment-button" type="button">Initiate Registration Payment</button>
+	</section>
+		</main>
+	</div>
+</div>
+
+<script>
+const appointmentRequested = document.getElementById("appointment-requested");
+const appointmentFields = document.querySelectorAll(".vetedge-appointment-field");
+appointmentRequested.addEventListener("change", () => {
+	appointmentFields.forEach((field) => {
+		field.style.display = appointmentRequested.checked ? "" : "none";
+	});
+});
+
+document.getElementById("vetedge-guest-booking-form").addEventListener("submit", (event) => {
+	event.preventDefault();
+	const form = event.currentTarget;
+	const values = Object.fromEntries(new FormData(form).entries());
+	if (values.preferred_datetime) {
+		values.preferred_datetime = values.preferred_datetime.replace("T", " ");
+	}
+
+	frappe.call({
+		method: "vetedge.services.guest_booking.create_guest_booking_request",
+		args: values,
+		callback(result) {
+			const response = result.message || {};
+			frappe.msgprint(response.message || "Registration request received.");
+			if (response.name) {
+				document.getElementById("registration-payment-request").value = response.name;
+			}
+			form.reset();
+			appointmentFields.forEach((field) => {
+				field.style.display = "none";
+			});
+		},
+	});
+});
+
+document.getElementById("registration-payment-button").addEventListener("click", () => {
+	frappe.call({
+		method: "vetedge.services.guest_booking.initiate_guest_registration_payment",
+		args: {
+			booking_request: document.getElementById("registration-payment-request").value,
+			guest_email: document.getElementById("registration-payment-email").value,
+			guest_phone: document.getElementById("registration-payment-phone").value,
+		},
+		callback(result) {
+			const response = result.message || {};
+			frappe.msgprint(response.message || "Registration payment initiation prepared.");
+		},
+	});
+});
+</script>
+{% endblock %}
+
+{% block footer %}
+{% include "vetedge/templates/includes/vetedge_footer.html" %}
+{% endblock %}

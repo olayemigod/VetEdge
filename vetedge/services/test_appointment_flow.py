@@ -80,6 +80,26 @@ class TestAppointmentFlow(TestCase):
 		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
 			validate_status(doc)
 
+	def test_owner_requested_appointment_can_be_approved_to_scheduled(self):
+		doc = make_appointment_doc(status="Scheduled", created_from="Portal")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Owner Requested")
+
+		frappe_stub = make_frappe_stub()
+		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+			validate_status(doc)
+
+	def test_owner_requested_portal_appointment_skips_staff_branch_access(self):
+		doc = make_appointment_doc(status="Owner Requested", created_from="Portal", branch="Branch B")
+
+		with (
+			patch("vetedge.services.appointment_flow.validate_user_branch_access") as user_validator,
+			patch("vetedge.services.appointment_flow.validate_practitioner_branch_access") as practitioner_validator,
+		):
+			validate_branch_access(doc)
+
+		user_validator.assert_not_called()
+		practitioner_validator.assert_not_called()
+
 	def test_duplicate_practitioner_exact_slot_is_rejected(self):
 		doc = make_appointment_doc(name="VAPT-001")
 		frappe_stub = make_frappe_stub(get_all=lambda *args, **kwargs: ["VAPT-002"])
@@ -115,6 +135,31 @@ class TestAppointmentFlow(TestCase):
 		self.assertIn("future", queue)
 		self.assertEqual(len(calls), 3)
 		self.assertTrue(any("appointment_datetime" in filters for filters in calls))
+
+	def test_queue_status_filter_limits_status(self):
+		calls = []
+
+		def get_all(doctype, filters=None, **kwargs):
+			calls.append(filters)
+			return []
+
+		frappe_stub = make_frappe_stub(get_all=get_all)
+		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+			get_appointment_queue(status="Owner Requested", reference_date="2026-04-19")
+
+		self.assertEqual(len(calls), 3)
+		self.assertTrue(all(filters["status"] == "Owner Requested" for filters in calls))
+
+	def test_queue_rejects_invalid_status_filter(self):
+		frappe_stub = make_frappe_stub()
+
+		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+			self.assertRaises(
+				frappe.ValidationError,
+				get_appointment_queue,
+				status="Bad Status",
+				reference_date="2026-04-19",
+			)
 
 	def test_follow_up_creation_from_consultation_links_consultation(self):
 		inserted = []

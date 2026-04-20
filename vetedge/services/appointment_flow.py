@@ -14,6 +14,8 @@ from vetedge.services.consultation_flow import (
 
 
 APPOINTMENT_STATUSES = {
+	"Awaiting Registration",
+	"Owner Requested",
 	"Scheduled",
 	"Confirmed",
 	"Checked In",
@@ -25,6 +27,8 @@ APPOINTMENT_STATUSES = {
 }
 
 VALID_STATUS_TRANSITIONS = {
+	"Awaiting Registration": {"Owner Requested", "Cancelled"},
+	"Owner Requested": {"Scheduled", "Cancelled"},
 	"Scheduled": {"Confirmed", "Rescheduled", "Cancelled", "No Show"},
 	"Confirmed": {"Checked In", "In Consultation", "Rescheduled", "Cancelled", "No Show"},
 	"Checked In": {"In Consultation"},
@@ -35,7 +39,15 @@ VALID_STATUS_TRANSITIONS = {
 	"No Show": set(),
 }
 
-ACTIVE_QUEUE_STATUSES = ("Scheduled", "Confirmed", "Checked In", "In Consultation", "Rescheduled")
+ACTIVE_QUEUE_STATUSES = (
+	"Awaiting Registration",
+	"Owner Requested",
+	"Scheduled",
+	"Confirmed",
+	"Checked In",
+	"In Consultation",
+	"Rescheduled",
+)
 
 
 def validate_appointment(doc) -> None:
@@ -85,6 +97,11 @@ def validate_status(doc) -> None:
 
 def resolve_appointment_context(doc) -> None:
 	if not doc.patient:
+		if doc.status == "Awaiting Registration" and doc.guest_booking_request:
+			doc.created_from = doc.created_from or "Guest"
+			doc.appointment_title = make_guest_appointment_title(doc)
+			return
+
 		frappe.throw("Patient is required for Veterinary Appointment.", frappe.ValidationError)
 
 	patient = frappe.db.get_value(
@@ -125,6 +142,12 @@ def validate_appointment_datetime(doc) -> None:
 
 def validate_branch_access(doc) -> None:
 	if not doc.branch:
+		return
+
+	if doc.created_from == "Guest" and doc.status == "Awaiting Registration":
+		return
+
+	if doc.created_from == "Portal" and doc.status == "Owner Requested":
 		return
 
 	validate_user_branch_access(doc.branch)
@@ -180,6 +203,10 @@ def validate_duplicate_practitioner_slot(doc) -> None:
 
 
 def set_appointment_title(doc) -> None:
+	if not doc.patient and doc.status == "Awaiting Registration":
+		doc.appointment_title = make_guest_appointment_title(doc)
+		return
+
 	patient_title = get_document_title("Veterinary Patient", doc.patient) or doc.patient
 	parts = [patient_title]
 	if doc.appointment_datetime:
@@ -190,6 +217,25 @@ def set_appointment_title(doc) -> None:
 		parts.append(doc.branch)
 
 	doc.appointment_title = " - ".join(part for part in parts if part)
+
+
+def make_guest_appointment_title(doc) -> str:
+	guest_label = "Guest Registration"
+	if doc.guest_booking_request:
+		guest_name, pet_name = frappe.db.get_value(
+			"Veterinary Guest Booking Request",
+			doc.guest_booking_request,
+			["guest_name", "pet_name"],
+		) or (None, None)
+		guest_label = " / ".join(part for part in (guest_name, pet_name) if part) or guest_label
+
+	parts = [guest_label]
+	if doc.appointment_datetime:
+		parts.append(str(get_datetime(doc.appointment_datetime).strftime("%Y-%m-%d %H:%M")))
+	if doc.branch:
+		parts.append(doc.branch)
+
+	return " - ".join(part for part in parts if part)
 
 
 @frappe.whitelist()
@@ -296,6 +342,7 @@ def validate_start_consultation_from_appointment(appointment_doc) -> None:
 def get_appointment_queue(
 	branch: str | None = None,
 	practitioner: str | None = None,
+	status: str | None = None,
 	reference_date: str | None = None,
 ) -> dict[str, list[dict]]:
 	today = getdate(reference_date or now_datetime())
@@ -303,9 +350,15 @@ def get_appointment_queue(
 	future_start = add_days(today, 2)
 
 	return {
-		"today": get_appointments_between(today, today, branch=branch, practitioner=practitioner),
-		"tomorrow": get_appointments_between(tomorrow, tomorrow, branch=branch, practitioner=practitioner),
-		"future": get_future_appointments(future_start, branch=branch, practitioner=practitioner),
+		"today": get_appointments_between(today, today, branch=branch, practitioner=practitioner, status=status),
+		"tomorrow": get_appointments_between(
+			tomorrow,
+			tomorrow,
+			branch=branch,
+			practitioner=practitioner,
+			status=status,
+		),
+		"future": get_future_appointments(future_start, branch=branch, practitioner=practitioner, status=status),
 	}
 
 
@@ -314,15 +367,15 @@ def get_appointments_between(
 	end_date,
 	branch: str | None = None,
 	practitioner: str | None = None,
+	status: str | None = None,
 ) -> list[dict]:
 	filters = {
 		"appointment_datetime": [
 			"between",
 			[f"{getdate(start_date)} 00:00:00", f"{getdate(end_date)} 23:59:59"],
 		],
-		"status": ["in", ACTIVE_QUEUE_STATUSES],
 	}
-	add_optional_queue_filters(filters, branch=branch, practitioner=practitioner)
+	add_optional_queue_filters(filters, branch=branch, practitioner=practitioner, status=status)
 	return fetch_queue_rows(filters)
 
 
@@ -330,16 +383,28 @@ def get_future_appointments(
 	start_date,
 	branch: str | None = None,
 	practitioner: str | None = None,
+	status: str | None = None,
 ) -> list[dict]:
 	filters = {
 		"appointment_datetime": [">=", f"{getdate(start_date)} 00:00:00"],
-		"status": ["in", ACTIVE_QUEUE_STATUSES],
 	}
-	add_optional_queue_filters(filters, branch=branch, practitioner=practitioner)
+	add_optional_queue_filters(filters, branch=branch, practitioner=practitioner, status=status)
 	return fetch_queue_rows(filters)
 
 
-def add_optional_queue_filters(filters: dict, branch: str | None = None, practitioner: str | None = None) -> None:
+def add_optional_queue_filters(
+	filters: dict,
+	branch: str | None = None,
+	practitioner: str | None = None,
+	status: str | None = None,
+) -> None:
+	if status:
+		if status not in APPOINTMENT_STATUSES:
+			frappe.throw(f"Invalid appointment status: {status}", frappe.ValidationError)
+		filters["status"] = status
+	else:
+		filters["status"] = ["in", ACTIVE_QUEUE_STATUSES]
+
 	if branch:
 		filters["branch"] = branch
 	if practitioner:

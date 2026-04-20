@@ -17,6 +17,12 @@ frappe.ui.form.on("Veterinary Patient", {
 				frappe.route_options = { patient: frm.doc.name };
 				frappe.set_route("veterinary-medical-history");
 			});
+
+			if (frm.doc.primary_owner) {
+				frm.add_custom_button(__("Create Owner Portal User"), () => {
+					create_owner_portal_user(frm);
+				}, __("Owner Portal"));
+			}
 		}
 	},
 
@@ -85,4 +91,62 @@ function set_approximate_age(frm) {
 function format_age_unit(value, unit) {
 	const plural = value === 1 ? unit : `${unit}s`;
 	return `${value} ${plural}`;
+}
+
+function create_owner_portal_user(frm) {
+	frappe.db
+		.get_value("Customer", frm.doc.primary_owner, ["customer_name", "email_id"])
+		.then((result) => {
+			const customer = result?.message || {};
+			const dialog = new frappe.ui.Dialog({
+				title: __("Create Owner Portal User"),
+				fields: [
+					{
+						fieldname: "full_name",
+						fieldtype: "Data",
+						label: __("Owner Name"),
+						default: customer.customer_name || frm.doc.primary_owner,
+						reqd: 1,
+					},
+					{
+						fieldname: "email",
+						fieldtype: "Data",
+						options: "Email",
+						label: __("Owner Email"),
+						default: customer.email_id || "",
+						reqd: 1,
+					},
+					{
+						fieldname: "send_welcome_email",
+						fieldtype: "Check",
+						label: __("Send Welcome Email"),
+						default: 1,
+					},
+				],
+				primary_action_label: __("Create / Link User"),
+				primary_action(values) {
+					frappe.call({
+						method: "vetedge.services.portal_access.ensure_owner_portal_user_for_patient",
+						args: {
+							patient: frm.doc.name,
+							email: values.email,
+							full_name: values.full_name,
+							send_welcome_email: values.send_welcome_email ? 1 : 0,
+						},
+						freeze: true,
+						freeze_message: __("Preparing owner portal user..."),
+						callback(response) {
+							const message = response.message?.message || __("Owner portal user is ready.");
+							frappe.msgprint({
+								title: __("Owner Portal"),
+								message,
+								indicator: "green",
+							});
+							dialog.hide();
+						},
+					});
+				},
+			});
+			dialog.show();
+		});
 }
