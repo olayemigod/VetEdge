@@ -1,0 +1,133 @@
+.vetedge-owner-portal {
+	background: var(--ve-page-bg);
+	border-radius: calc(var(--ve-radius) + 4px);
+	padding: 2rem;
+}
+
+.vetedge-owner-portal .vetedge-portal-brand-panel {
+	background: linear-gradient(135deg, var(--ve-nav-bg), var(--ve-primary));
+	border-radius: var(--ve-radius);
+	color: var(--ve-nav-text);
+	margin-bottom: 1rem;
+	padding: 1.25rem;
+	text-align: center;
+}
+
+.vetedge-owner-portal .vetedge-portal-logo {
+	display: block;
+	height: 72px;
+	margin: 0 auto 0.75rem;
+	max-width: 100%;
+	object-fit: contain;
+}
+
+.vetedge-owner-portal .vetedge-portal-brand-name {
+	font-size: 1.1rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.vetedge-owner-portal .vetedge-portal-nav {
+	border: none;
+	gap: 0.55rem;
+}
+
+.vetedge-owner-portal .vetedge-portal-nav .list-group-item {
+	background: var(--ve-nav-bg);
+	border: none;
+	border-radius: calc(var(--ve-radius) - 4px);
+	color: var(--ve-nav-text);
+	margin-bottom: 0.4rem;
+}
+
+.vetedge-owner-portal .vetedge-portal-nav .list-group-item.active,
+.vetedge-owner-portal .vetedge-portal-nav .list-group-item:hover,
+.vetedge-owner-portal .vetedge-portal-nav .list-group-item:focus {
+	background: var(--ve-primary);
+	color: var(--ve-primary-text);
+}
+
+.vetedge-owner-portal .vetedge-portal-main {
+	background: transparent;
+}
+
+.vetedge-owner-portal h1,
+.vetedge-owner-portal h2,
+.vetedge-owner-portal h3,
+.vetedge-owner-portal h4,
+.vetedge-owner-portal h5 {
+	color: var(--ve-heading);
+}
+
+.vetedge-owner-portal .vetedge-portal-subtitle,
+.vetedge-owner-portal .text-muted {
+	color: var(--ve-muted) !important;
+}
+
+.vetedge-owner-portal .vetedge-portal-card {
+	background: var(--ve-surface);
+	border: 1px solid color-mix(in srgb, var(--ve-primary) 10%, #dbe4ee) !important;
+	border-radius: var(--ve-radius);
+	box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.45);
+}
+
+.vetedge-owner-portal .vetedge-portal-table {
+	background: var(--ve-surface);
+	border-radius: var(--ve-radius);
+	overflow: hidden;
+}
+
+.vetedge-owner-portal .vetedge-portal-table thead th {
+	background: var(--ve-accent);
+	border-bottom-color: color-mix(in srgb, var(--ve-primary) 16%, #dbe4ee);
+	color: var(--ve-heading);
+}
+
+.vetedge-owner-portal .vetedge-portal-table td,
+.vetedge-owner-portal .vetedge-portal-table th {
+	vertical-align: middle;
+}
+
+.vetedge-owner-portal .vetedge-portal-input {
+	background: var(--ve-surface);
+	border: 1px solid color-mix(in srgb, var(--ve-primary) 18%, #cbd5e1);
+	border-radius: calc(var(--ve-radius) - 6px);
+}
+
+.vetedge-owner-portal .vetedge-portal-input:focus {
+	border-color: var(--ve-primary);
+	box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--ve-primary) 18%, transparent);
+}
+
+.vetedge-owner-portal .vetedge-portal-button {
+	background: var(--ve-primary);
+	border-color: var(--ve-primary);
+	border-radius: calc(var(--ve-radius) - 6px);
+	color: var(--ve-primary-text);
+}
+
+.vetedge-owner-portal .vetedge-portal-button:hover,
+.vetedge-owner-portal .vetedge-portal-button:focus {
+	background: color-mix(in srgb, var(--ve-primary) 90%, #000000 10%);
+	border-color: color-mix(in srgb, var(--ve-primary) 90%, #000000 10%);
+	color: var(--ve-primary-text);
+}
+
+.vetedge-owner-portal .vetedge-portal-outline-button {
+	border-color: var(--ve-primary);
+	border-radius: calc(var(--ve-radius) - 6px);
+	color: var(--ve-primary);
+}
+
+.vetedge-owner-portal .vetedge-portal-outline-button:hover,
+.vetedge-owner-portal .vetedge-portal-outline-button:focus {
+	background: var(--ve-primary);
+	border-color: var(--ve-primary);
+	color: var(--ve-primary-text);
+}
+
+@media (max-width: 767px) {
+	.vetedge-owner-portal {
+		padding: 1rem;
+	}
+}

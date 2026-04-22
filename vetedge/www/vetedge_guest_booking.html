@@ -143,6 +143,10 @@ document.getElementById("registration-payment-button").addEventListener("click",
 		},
 		callback(result) {
 			const response = result.message || {};
+			if (response.redirect_url) {
+				window.location.href = response.redirect_url;
+				return;
+			}
 			frappe.msgprint(response.message || "Registration payment initiation prepared.");
 		},
 	});

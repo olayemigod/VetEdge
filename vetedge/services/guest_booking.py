@@ -4,7 +4,7 @@ import frappe
 from frappe.utils import cint, flt, get_datetime
 
 from vetedge.services.notifications import emit_notification_event
-from vetedge.services.payment_service import SUPPORTED_PAYMENT_PROVIDERS, build_payment_initiation_payload
+from vetedge.services.payment_service import initiate_payment
 from vetedge.services.portal_access import get_portal_settings
 
 
@@ -92,16 +92,34 @@ def create_guest_booking_request(**values) -> dict:
 		doc.db_set("linked_appointment", appointment.name, update_modified=False)
 
 	emit_notification_event(
-		event="appointment_request_received" if doc.appointment_requested else "registration_request_received",
+		event="registration_request_received",
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
 		payload={
 			"guest_name": doc.guest_name,
+			"guest_email": doc.guest_email,
+			"guest_phone": doc.guest_phone,
+			"pet_name": doc.pet_name,
 			"preferred_branch": doc.preferred_branch,
 			"preferred_datetime": doc.preferred_datetime,
 			"appointment_requested": doc.appointment_requested,
 		},
 	)
+	if doc.appointment_requested:
+		emit_notification_event(
+			event="guest_appointment_request_received",
+			reference_doctype=doc.doctype,
+			reference_name=doc.name,
+			payload={
+				"guest_name": doc.guest_name,
+				"guest_email": doc.guest_email,
+				"guest_phone": doc.guest_phone,
+				"pet_name": doc.pet_name,
+				"preferred_branch": doc.preferred_branch,
+				"preferred_datetime": doc.preferred_datetime,
+				"linked_appointment": doc.linked_appointment,
+			},
+		)
 
 	return {
 		"name": doc.name,
@@ -240,6 +258,19 @@ def move_awaiting_registration_appointment_to_owner_requested(request) -> object
 	appointment.primary_owner = request.linked_customer
 	appointment.status = "Owner Requested"
 	appointment.save()
+	emit_notification_event(
+		event="guest_appointment_ready_for_approval",
+		reference_doctype=appointment.doctype,
+		reference_name=appointment.name,
+		payload={
+			"booking_request": request.name,
+			"customer": request.linked_customer,
+			"patient": request.linked_patient,
+			"branch": appointment.branch,
+			"appointment_datetime": appointment.appointment_datetime,
+			"status": appointment.status,
+		},
+	)
 	return appointment
 
 
@@ -325,6 +356,7 @@ def initiate_guest_registration_payment(
 	booking_request: str,
 	guest_email: str | None = None,
 	guest_phone: str | None = None,
+	backend_mode: str | None = None,
 	provider: str | None = None,
 ) -> dict:
 	settings = get_portal_settings()
@@ -345,11 +377,20 @@ def initiate_guest_registration_payment(
 	if flt(invoice.outstanding_amount) <= 0:
 		frappe.throw("This registration invoice has no outstanding amount.")
 
-	provider = provider or settings.get("portal_payment_provider_mode") or "Stub"
-	if provider not in SUPPORTED_PAYMENT_PROVIDERS:
-		frappe.throw(f"Unsupported payment provider mode: {provider}", frappe.ValidationError)
-
-	return build_payment_initiation_payload(invoice, provider)
+	return initiate_payment(
+		invoice_name=invoice.name,
+		access_context={
+			"mode": "guest_registration",
+			"allowed_invoice": request.registration_invoice,
+		},
+		source_context={
+			"source": "guest_registration",
+			"booking_request": request.name,
+			"guest_email": request.guest_email,
+			"guest_phone": request.guest_phone,
+		},
+		backend_mode=backend_mode or provider,
+	)
 
 
 def validate_guest_registration_payment_access(

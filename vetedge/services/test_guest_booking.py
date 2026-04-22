@@ -9,6 +9,7 @@ import frappe
 from vetedge.services.guest_booking import (
 	create_appointment_from_booking_request,
 	create_guest_booking_request,
+	initiate_guest_registration_payment,
 	validate_guest_booking_request,
 )
 
@@ -134,6 +135,36 @@ class TestGuestBooking(TestCase):
 				create_appointment_from_booking_request,
 				"VGBR-001",
 			)
+
+	def test_guest_registration_payment_routes_through_payment_service(self):
+		request = frappe._dict(
+			name="VGBR-001",
+			guest_email="jane@example.com",
+			guest_phone="2348000000000",
+			linked_patient="VP-001",
+			registration_invoice="SINV-001",
+		)
+		invoice = frappe._dict(name="SINV-001", docstatus=1, outstanding_amount=150)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				exists=lambda *args, **kwargs: True,
+				get_value=lambda *args, **kwargs: "SINV-001",
+			),
+			get_doc=lambda doctype, name=None, *args, **kwargs: invoice if doctype == "Sales Invoice" else request,
+		)
+
+		with (
+			patch("vetedge.services.guest_booking.frappe", frappe_stub),
+			patch("vetedge.services.guest_booking.get_portal_settings", return_value={"enable_portal_payments": True}),
+			patch("vetedge.services.guest_booking.validate_guest_registration_payment_access", return_value=request),
+			patch("vetedge.services.guest_booking.initiate_payment", return_value={"success": True}) as initiate_payment_mock,
+		):
+			result = initiate_guest_registration_payment("VGBR-001", guest_email="jane@example.com")
+
+		self.assertEqual(result, {"success": True})
+		self.assertEqual(initiate_payment_mock.call_args.kwargs["invoice_name"], "SINV-001")
+		self.assertEqual(initiate_payment_mock.call_args.kwargs["access_context"]["mode"], "guest_registration")
+		self.assertEqual(initiate_payment_mock.call_args.kwargs["source_context"]["booking_request"], "VGBR-001")
 
 
 def make_frappe_stub(**overrides):

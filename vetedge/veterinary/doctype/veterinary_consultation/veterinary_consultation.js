@@ -6,6 +6,13 @@ frappe.ui.form.on("Veterinary Consultation", {
 			},
 		}));
 
+		frm.set_query("linked_appointment", () => ({
+			query: "vetedge.services.consultation_flow.get_pending_appointments_for_patient",
+			filters: {
+				patient: frm.doc.patient,
+			},
+		}));
+
 		frm.set_query("symptom", "symptoms", () => ({
 			filters: {
 				disabled: 0,
@@ -27,6 +34,7 @@ frappe.ui.form.on("Veterinary Consultation", {
 
 	refresh(frm) {
 		if (!frm.is_new() && frm.doc.patient && frm.doc.service_branch) {
+			add_appointment_link_actions(frm);
 			add_status_actions(frm);
 
 			frm.add_custom_button(__("New Vitals"), () => {
@@ -40,11 +48,14 @@ frappe.ui.form.on("Veterinary Consultation", {
 			frm.add_custom_button(__("Create Follow-up Appointment"), () => {
 				show_follow_up_appointment_dialog(frm);
 			}, __("Clinical"));
+
+			add_billing_actions(frm);
 		}
 	},
 
 	patient(frm) {
 		if (!frm.doc.patient) {
+			frm.set_value("linked_appointment", "");
 			return;
 		}
 
@@ -57,6 +68,40 @@ frappe.ui.form.on("Veterinary Consultation", {
 				}
 				if (!frm.doc.service_branch && patient.default_branch) {
 					frm.set_value("service_branch", patient.default_branch);
+				}
+			});
+	},
+
+	linked_appointment(frm) {
+		if (!frm.doc.linked_appointment) {
+			return;
+		}
+
+		frappe.db
+			.get_value("Veterinary Appointment", frm.doc.linked_appointment, [
+				"patient",
+				"branch",
+				"practitioner",
+				"notes",
+			])
+			.then((result) => {
+				const appointment = result?.message || {};
+				if (appointment.patient && frm.doc.patient && appointment.patient !== frm.doc.patient) {
+					frm.set_value("linked_appointment", "");
+					frappe.msgprint(__("Selected appointment does not belong to this patient."));
+					return;
+				}
+				if (appointment.patient && !frm.doc.patient) {
+					frm.set_value("patient", appointment.patient);
+				}
+				if (appointment.branch && !frm.doc.service_branch) {
+					frm.set_value("service_branch", appointment.branch);
+				}
+				if (appointment.practitioner && !frm.doc.consulting_practitioner) {
+					frm.set_value("consulting_practitioner", appointment.practitioner);
+				}
+				if (appointment.notes && !frm.doc.presenting_complaint) {
+					frm.set_value("presenting_complaint", appointment.notes);
 				}
 			});
 	},
@@ -78,6 +123,90 @@ frappe.ui.form.on("Veterinary Consultation", {
 			});
 	},
 });
+
+function add_appointment_link_actions(frm) {
+	if (frm.doc.linked_appointment) {
+		frm.add_custom_button(__("Open Service Appointment"), () => {
+			frappe.set_route("Form", "Veterinary Appointment", frm.doc.linked_appointment);
+		}, __("Appointment"));
+	}
+
+	if (frm.doc.follow_up_appointment) {
+		frm.add_custom_button(__("Open Follow-up Appointment"), () => {
+			frappe.set_route("Form", "Veterinary Appointment", frm.doc.follow_up_appointment);
+		}, __("Appointment"));
+	}
+}
+
+frappe.ui.form.on("Planned Treatment Item", {
+	item(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.item) {
+			return;
+		}
+
+		frappe.db.get_value("Item", row.item, ["stock_uom", "standard_rate"]).then((result) => {
+			const item = result?.message || {};
+			if (!row.uom && item.stock_uom) {
+				frappe.model.set_value(cdt, cdn, "uom", item.stock_uom);
+			}
+			if (!flt(row.rate) && flt(item.standard_rate)) {
+				frappe.model.set_value(cdt, cdn, "rate", flt(item.standard_rate));
+			}
+			update_planned_treatment_amount(cdt, cdn);
+		});
+	},
+	qty(frm, cdt, cdn) {
+		update_planned_treatment_amount(cdt, cdn);
+	},
+	rate(frm, cdt, cdn) {
+		update_planned_treatment_amount(cdt, cdn);
+	},
+});
+
+function update_planned_treatment_amount(cdt, cdn) {
+	const row = locals[cdt][cdn];
+	frappe.model.set_value(cdt, cdn, "amount", flt(row.qty) * flt(row.rate));
+}
+
+function add_billing_actions(frm) {
+	if (frm.doc.linked_invoice) {
+		frm.add_custom_button(__("Open Invoice"), () => {
+			window.open(
+				frappe.urllib.get_full_url(`/app/sales-invoice/${encodeURIComponent(frm.doc.linked_invoice)}`),
+				"_blank"
+			);
+		}, __("Billing"));
+		return;
+	}
+
+	if (!["Completed", "Cancelled"].includes(frm.doc.status)) {
+		frm.add_custom_button(__("Create Invoice"), () => {
+			create_consultation_invoice(frm);
+		}, __("Billing"));
+	}
+}
+
+function create_consultation_invoice(frm) {
+	frappe.call({
+		method: "vetedge.services.billing.create_consultation_invoice",
+		args: {
+			consultation: frm.doc.name,
+		},
+		freeze: true,
+		freeze_message: __("Creating invoice..."),
+		callback(result) {
+			if (!result.message?.invoice) {
+				return;
+			}
+			frappe.show_alert({
+				message: __("Invoice created"),
+				indicator: "green",
+			});
+			frm.reload_doc();
+		},
+	});
+}
 
 function add_status_actions(frm) {
 	if (["Completed", "Cancelled"].includes(frm.doc.status)) {
@@ -250,8 +379,10 @@ function show_follow_up_appointment_dialog(frm) {
 					}
 
 					dialog.hide();
-					frm.set_value("linked_appointment", appointment.name);
-					frm.save_or_update();
+					if (frm.fields_dict.follow_up_appointment) {
+						frm.set_value("follow_up_appointment", appointment.name);
+						frm.save_or_update().then(() => frm.reload_doc());
+					}
 					frappe.show_alert({
 						message: __("Follow-up appointment created"),
 						indicator: "green",

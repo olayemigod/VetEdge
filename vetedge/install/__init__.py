@@ -4,8 +4,10 @@ import frappe
 
 from vetedge.install.custom_fields import ensure_custom_fields
 from vetedge.install.dashboard import ensure_financial_dashboard
+from vetedge.install.print_formats import ensure_print_formats
 from vetedge.seed.master_data import seed_master_data
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
+from vetedge.services.portal_access import normalize_owner_portal_users
 
 
 def after_install() -> None:
@@ -21,12 +23,19 @@ def setup_foundation() -> None:
 	ensure_custom_fields()
 	ensure_veterinary_settings()
 	cleanup_stale_portal_menu_items()
+	normalize_owner_portal_users()
+	ensure_print_formats()
 	seed_master_data()
 	ensure_financial_dashboard()
 
 
 def ensure_vetedge_roles() -> None:
-	for role in ("VetEdge Administrator", "VetEdge Front Desk", "VetEdge Doctor"):
+	for role, desk_access in (
+		("VetEdge Administrator", 1),
+		("VetEdge Front Desk", 1),
+		("VetEdge Doctor", 1),
+		("VetEdge Portal User", 0),
+	):
 		if frappe.db.exists("Role", role):
 			continue
 
@@ -34,7 +43,7 @@ def ensure_vetedge_roles() -> None:
 			{
 				"doctype": "Role",
 				"role_name": role,
-				"desk_access": 1,
+				"desk_access": desk_access,
 			}
 		).insert(ignore_permissions=True)
 
@@ -65,7 +74,7 @@ def cleanup_stale_portal_menu_items() -> None:
 
 	portal_settings = frappe.get_doc("Portal Settings", "Portal Settings")
 	routes = {"/vetedge_portal", "/vetedge_guest_booking"}
-	titles = {"VetEdge Owner Portal", "Book Veterinary Appointment"}
+	titles = {"VetEdge Owner Portal", "Owner Portal", "Book Veterinary Appointment"}
 	changed = False
 
 	for table_field in ("menu", "custom_menu"):

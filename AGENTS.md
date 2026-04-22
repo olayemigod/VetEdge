@@ -211,3 +211,66 @@ Every task must return:
 - Prefer correctness over speed
 - Keep flows simple for clinics
 - Ensure SaaS readiness without overengineering
+
+## ProcessEdge Core Payment integration rule
+
+VetEdge must be payment-provider ready, but must not hardcode gateway vendors.
+
+### Architecture rule
+VetEdge handles:
+- invoice visibility
+- payment eligibility checks
+- owner access validation
+- payment initiation requests
+- payment status display
+- workflow state updates
+- transaction notifications
+
+ProcessEdge Core Payment will handle:
+- provider adapters
+- gateway credentials
+- webhook/callback verification
+- payment session/request creation with live gateways
+- provider routing
+- reusable payment APIs across ProcessEdge products
+
+### Mandatory implementation rule
+All VetEdge payment logic must go through a provider-agnostic service interface.
+
+Examples:
+- `initiate_payment(...)`
+- `validate_invoice_payable(...)`
+- `get_payment_status(...)`
+
+Do not place provider-specific API logic inside VetEdge domain modules, portal pages, or doctypes.
+
+### Backend mode rule
+VetEdge payment code should support a backend mode such as:
+- `stub`
+- `erpnext_native`
+- `processedge_core`
+
+Default behavior may remain stubbed or abstracted until ProcessEdge Core Payment is ready.
+
+### Accounting rule
+ERPNext remains the source of truth for:
+- Sales Invoice
+- Payment Entry
+- invoice status
+- accounting impact
+
+ProcessEdge Core Payment must not replace ERPNext accounting logic.
+VetEdge must not mark invoices paid manually.
+
+### Data model rule
+VetEdge may store lightweight payment integration fields such as:
+- payment_reference
+- payment_provider
+- payment_initiated_on
+- payment_status_snapshot
+
+But must avoid provider-specific field sprawl.
+
+### Global readiness rule
+Do not hardcode Nigeria-only gateways, currencies, or country assumptions into VetEdge.
+VetEdge must remain globally deployable and white-label ready.

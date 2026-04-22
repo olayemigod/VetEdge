@@ -5,6 +5,8 @@ from frappe import _
 from frappe.utils import now_datetime
 from frappe.utils import flt
 
+from vetedge.services.portal_access import require_internal_user
+
 
 def validate_vital_signs(doc) -> None:
 	resolve_vitals_context(doc)
@@ -92,6 +94,7 @@ def validate_vitals_values(doc) -> None:
 
 @frappe.whitelist()
 def create_vitals_from_consultation(consultation: str, values: dict | str | None = None) -> str:
+	require_internal_user()
 	if not consultation:
 		frappe.throw(_("Consultation is required to create vitals."), frappe.ValidationError)
 
@@ -134,6 +137,7 @@ def create_vitals_from_consultation(consultation: str, values: dict | str | None
 
 @frappe.whitelist()
 def get_latest_vitals_for_consultation(consultation: str) -> dict | None:
+	require_internal_user()
 	if not consultation:
 		return None
 

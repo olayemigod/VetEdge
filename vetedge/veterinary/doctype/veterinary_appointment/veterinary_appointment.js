@@ -14,10 +14,9 @@ frappe.ui.form.on("Veterinary Appointment", {
 			return;
 		}
 
+		add_consultation_link_actions(frm);
+
 		if (has_service_consultation(frm)) {
-			frm.add_custom_button(__("Open Consultation"), () => {
-				frappe.set_route("Form", "Veterinary Consultation", frm.doc.linked_consultation);
-			}, __("Appointment"));
 			return;
 		}
 
@@ -98,6 +97,20 @@ frappe.ui.form.on("Veterinary Appointment", {
 function set_consultation_link_display(frm) {
 	frm.toggle_display("follow_up_reference", Boolean(frm.doc.is_follow_up || frm.doc.follow_up_reference));
 	frm.toggle_display("linked_consultation", has_service_consultation(frm));
+}
+
+function add_consultation_link_actions(frm) {
+	if (has_service_consultation(frm)) {
+		frm.add_custom_button(__("Open Service Consultation"), () => {
+			frappe.set_route("Form", "Veterinary Consultation", frm.doc.linked_consultation);
+		}, __("Consultation"));
+	}
+
+	if (frm.doc.follow_up_reference) {
+		frm.add_custom_button(__("Open Originating Consultation"), () => {
+			frappe.set_route("Form", "Veterinary Consultation", frm.doc.follow_up_reference);
+		}, __("Consultation"));
+	}
 }
 
 function has_service_consultation(frm) {

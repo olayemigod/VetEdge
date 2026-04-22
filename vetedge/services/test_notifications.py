@@ -7,6 +7,7 @@ from unittest.mock import patch
 import frappe
 
 from vetedge.services.notifications import (
+	dispatch_notification_event,
 	emit_notification_event,
 	parse_notification_channels,
 	send_due_appointment_reminders,
@@ -31,6 +32,10 @@ class TestNotifications(TestCase):
 				},
 			),
 			patch("vetedge.services.notifications.frappe.logger", return_value=SimpleNamespace(info=lambda payload: None)),
+			patch(
+				"vetedge.services.notifications.dispatch_notification_event",
+				return_value={"Email": {"queued": True, "recipients": ["owner@example.com"]}},
+			),
 		):
 			result = emit_notification_event(
 				"appointment_created",
@@ -41,6 +46,26 @@ class TestNotifications(TestCase):
 
 		self.assertTrue(result["queued"])
 		self.assertEqual(result["channels"], ["Email"])
+		self.assertTrue(result["delivery"]["Email"]["queued"])
+
+	def test_email_dispatch_queues_frappe_email(self):
+		sent = []
+		event_payload = {
+			"event": "invoice_created",
+			"reference_doctype": "Sales Invoice",
+			"reference_name": "SINV-001",
+			"payload": {"customer": "CUST-001", "invoice": "SINV-001"},
+		}
+
+		with (
+			patch("vetedge.services.notifications.get_email_recipients", return_value=["owner@example.com"]),
+			patch("vetedge.services.notifications.frappe.sendmail", side_effect=lambda **kwargs: sent.append(kwargs)),
+		):
+			result = dispatch_notification_event(event_payload, {"channels": ["Email"]})
+
+		self.assertTrue(result["Email"]["queued"])
+		self.assertEqual(sent[0]["recipients"], ["owner@example.com"])
+		self.assertEqual(sent[0]["reference_doctype"], "Sales Invoice")
 
 	def test_disabled_event_does_not_queue(self):
 		with patch(

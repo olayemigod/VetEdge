@@ -2,49 +2,101 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
+from vetedge.services.billing import validate_consultation_billing_settings
 from vetedge.services.registration_billing import validate_registration_settings
 
 
 class VeterinarySettings(Document):
 	def validate(self) -> None:
-		if not self.enable_vetedge:
-			self.enable_registration_billing = 0
-			self.enable_consultations = 0
-			self.enable_vitals = 0
-			self.require_vitals_before_completion = 0
-			self.enable_appointments = 0
-			self.enable_owner_portal = 0
-			self.enable_guest_booking = 0
-			self.allow_owner_cancel_appointment = 0
-			self.allow_owner_reschedule_appointment = 0
-			self.enable_portal_payments = 0
-			self.portal_show_consultation_summary_only = 1
-			self.enable_notifications = 0
-			self.notify_on_appointment_create = 0
-			self.notify_on_appointment_reminder = 0
-			self.notify_on_reschedule = 0
-			self.notify_on_cancellation = 0
-			self.enable_treatment_billing = 0
-			self.enable_dispensary_flow = 0
-			self.enable_vaccination = 0
-			self.enable_boarding = 0
-			self.enable_demo_tools = 0
-			self.enable_advanced_reports = 0
+		if not self.get("enable_vetedge"):
+			clear_fields(
+				self,
+				[
+					"enable_registration_billing",
+					"enable_consultations",
+					"enable_consultation_billing",
+					"allow_doctor_collect_payment",
+					"consultation_requires_payment_before_treatment",
+					"enable_vitals",
+					"require_vitals_before_completion",
+					"enable_appointments",
+					"enable_owner_portal",
+					"enable_guest_booking",
+					"allow_owner_cancel_appointment",
+					"allow_owner_reschedule_appointment",
+					"enable_portal_payments",
+					"enable_notifications",
+					"notify_on_appointment_create",
+					"notify_on_appointment_status_change",
+					"notify_on_appointment_reminder",
+					"notify_on_owner_portal_appointment_request",
+					"notify_on_guest_registration_request",
+					"notify_on_guest_registration_confirmed",
+					"notify_on_guest_appointment_request",
+					"notify_on_reschedule",
+					"notify_on_cancellation",
+					"enable_treatment_billing",
+					"enable_dispensary_flow",
+					"enable_vaccination",
+					"enable_boarding",
+					"enable_demo_tools",
+					"enable_advanced_reports",
+				],
+			)
+			set_if_field_exists(self, "portal_show_consultation_summary_only", 1)
 
-		if not self.enable_vitals:
-			self.require_vitals_before_completion = 0
+		if not self.get("enable_vitals"):
+			set_if_field_exists(self, "require_vitals_before_completion", 0)
 
-		if not self.enable_notifications:
-			self.notify_on_appointment_create = 0
-			self.notify_on_appointment_reminder = 0
-			self.notify_on_reschedule = 0
-			self.notify_on_cancellation = 0
-			self.notification_channels = None
+		if not self.get("enable_consultations"):
+			set_if_field_exists(self, "enable_consultation_billing", 0)
 
-		if not self.enable_owner_portal:
-			self.allow_owner_cancel_appointment = 0
-			self.allow_owner_reschedule_appointment = 0
-			self.enable_portal_payments = 0
-			self.portal_show_consultation_summary_only = 1
+		if not self.get("enable_consultation_billing"):
+			set_if_field_exists(self, "allow_doctor_collect_payment", 0)
+			set_if_field_exists(self, "consultation_requires_payment_before_treatment", 0)
+
+		if not self.get("enable_notifications"):
+			clear_fields(
+				self,
+				[
+					"notify_on_appointment_create",
+					"notify_on_appointment_status_change",
+					"notify_on_appointment_reminder",
+					"notify_on_owner_portal_appointment_request",
+					"notify_on_guest_registration_request",
+					"notify_on_guest_registration_confirmed",
+					"notify_on_guest_appointment_request",
+					"notify_on_reschedule",
+					"notify_on_cancellation",
+					"notify_on_invoice_created",
+					"notify_on_payment_received",
+					"notify_on_accounts_action_required",
+				],
+			)
+			set_if_field_exists(self, "notification_channels", None)
+
+		if not self.get("enable_owner_portal"):
+			clear_fields(
+				self,
+				[
+					"allow_owner_cancel_appointment",
+					"allow_owner_reschedule_appointment",
+					"enable_portal_payments",
+				],
+			)
+			set_if_field_exists(self, "portal_show_consultation_summary_only", 1)
+		if self.meta.has_field("payment_backend_mode") and not self.get("payment_backend_mode"):
+			self.set("payment_backend_mode", "stub")
 
 		validate_registration_settings(self)
+		validate_consultation_billing_settings(self)
+
+
+def clear_fields(doc, fieldnames: list[str]) -> None:
+	for fieldname in fieldnames:
+		set_if_field_exists(doc, fieldname, 0)
+
+
+def set_if_field_exists(doc, fieldname: str, value) -> None:
+	if doc.meta.has_field(fieldname):
+		doc.set(fieldname, value)

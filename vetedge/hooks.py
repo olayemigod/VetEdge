@@ -23,7 +23,7 @@ add_to_apps_screen = [
 ]
 
 portal_menu_items = [
-	{"title": "VetEdge Owner Portal", "route": "/vetedge_portal", "role": "Customer"},
+	{"title": "Owner Portal", "route": "/vetedge_portal", "role": "VetEdge Portal User"},
 	{"title": "Book Veterinary Appointment", "route": "/vetedge_guest_booking"},
 ]
 
@@ -128,13 +128,21 @@ after_migrate = "vetedge.install.after_migrate"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"Veterinary Patient": "vetedge.services.portal_access.get_veterinary_patient_query",
+	"Veterinary Appointment": "vetedge.services.portal_access.get_veterinary_appointment_query",
+	"Veterinary Consultation": "vetedge.services.portal_access.get_veterinary_consultation_query",
+	"Veterinary Vital Signs": "vetedge.services.portal_access.get_veterinary_vital_signs_query",
+	"Sales Invoice": "vetedge.services.portal_access.get_sales_invoice_query",
+}
+
+has_permission = {
+	"Veterinary Patient": "vetedge.services.portal_access.has_veterinary_patient_permission",
+	"Veterinary Appointment": "vetedge.services.portal_access.has_veterinary_appointment_permission",
+	"Veterinary Consultation": "vetedge.services.portal_access.has_veterinary_consultation_permission",
+	"Veterinary Vital Signs": "vetedge.services.portal_access.has_veterinary_vital_signs_permission",
+	"Sales Invoice": "vetedge.services.portal_access.has_sales_invoice_permission",
+}
 
 # Document Events
 # ---------------
@@ -142,9 +150,23 @@ after_migrate = "vetedge.install.after_migrate"
 
 doc_events = {
 	"Sales Invoice": {
-		"on_update": "vetedge.services.registration_billing.update_registration_status_from_invoice",
-		"on_submit": "vetedge.services.registration_billing.update_registration_status_from_invoice",
-		"on_cancel": "vetedge.services.registration_billing.update_registration_status_from_invoice",
+		"on_update": [
+			"vetedge.services.registration_billing.update_registration_status_from_invoice",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		],
+		"on_update_after_submit": "vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		"on_submit": [
+			"vetedge.services.registration_billing.update_registration_status_from_invoice",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		],
+		"on_cancel": [
+			"vetedge.services.registration_billing.update_registration_status_from_invoice",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		],
+	},
+	"Payment Entry": {
+		"on_submit": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+		"on_cancel": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
 	}
 }
 
@@ -195,7 +217,7 @@ scheduler_events = {
 
 # Request Events
 # ----------------
-# before_request = ["vetedge.utils.before_request"]
+before_request = ["vetedge.services.portal_access.block_owner_portal_desk_access"]
 # after_request = ["vetedge.utils.after_request"]
 
 # Job Events

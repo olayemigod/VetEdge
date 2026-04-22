@@ -141,7 +141,7 @@ class VetEdgeMedicalHistory {
 				<li class="nav-item">
 					<a
 						class="nav-link ${is_active ? "active" : ""}"
-						data-toggle="tab"
+						data-chart-tab="${tab_id}"
 						href="#${tab_id}"
 						role="tab"
 					>${label}</a>
@@ -158,6 +158,18 @@ class VetEdgeMedicalHistory {
 				</div>
 			`).appendTo(content);
 			this.render_chart(pane.find(".vetedge-chart")[0], label, trends[fieldname] || []);
+		});
+
+		nav.find("[data-chart-tab]").on("click", (event) => {
+			event.preventDefault();
+			const link = $(event.currentTarget);
+			const tab_id = link.attr("data-chart-tab");
+
+			nav.find(".nav-link").removeClass("active");
+			link.addClass("active");
+
+			content.find(".tab-pane").removeClass("show active");
+			content.find(`#${tab_id}`).addClass("show active");
 		});
 	}
 

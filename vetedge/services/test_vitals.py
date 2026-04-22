@@ -157,6 +157,7 @@ def make_frappe_stub(**overrides):
 			get_title_field=lambda: "patient_name" if doctype == "Veterinary Patient" else "name"
 		),
 		get_doc=lambda *args, **kwargs: None,
+		get_roles=lambda *args, **kwargs: ["VetEdge Doctor"],
 		has_permission=lambda *args, **kwargs: True,
 		parse_json=lambda value: value,
 		session=SimpleNamespace(user="test@example.com"),

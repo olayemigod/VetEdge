@@ -3,6 +3,9 @@ from __future__ import annotations
 import frappe
 from frappe.utils import flt, getdate
 
+from vetedge.services.notifications import emit_notification_event
+from vetedge.services.portal_access import require_internal_user
+
 
 CONSULTATION_STATUSES = {
 	"Draft",
@@ -22,10 +25,23 @@ VALID_CONSULTATION_STATUS_TRANSITIONS = {
 	"Cancelled": set(),
 }
 
+CONSULTATION_READY_APPOINTMENT_STATUSES = (
+	"Confirmed",
+	"Checked In",
+)
+
+CONSULTATION_APPOINTMENT_STATUS_MAP = {
+	"Completed": "Completed",
+	"Cancelled": "Cancelled",
+}
+
 
 def validate_consultation(doc) -> None:
 	validate_consultation_status(doc)
 	resolve_consultation_context(doc)
+	normalize_consultation_appointment_links(doc)
+	apply_linked_appointment_context(doc)
+	validate_linked_appointment(doc)
 	set_consultation_title(doc)
 	validate_service_branch_access(doc)
 	validate_consultation_children(doc)
@@ -61,6 +77,7 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 
 @frappe.whitelist()
 def transition_consultation_status(consultation: str, status: str) -> dict:
+	require_internal_user()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
 	validate_consultation_status_transition(doc.status, status)
 	doc.status = status
@@ -104,6 +121,200 @@ def resolve_consultation_context(doc) -> None:
 
 	doc.consulting_practitioner_name = get_user_full_name(doc.consulting_practitioner)
 	set_daily_consultation_number(doc)
+
+
+def apply_linked_appointment_context(doc) -> None:
+	if not doc.linked_appointment:
+		return
+
+	appointment = get_linked_appointment_data(doc.linked_appointment)
+	if not appointment:
+		return
+
+	if appointment.branch and not doc.service_branch:
+		doc.service_branch = appointment.branch
+	if appointment.practitioner and not doc.consulting_practitioner:
+		doc.consulting_practitioner = appointment.practitioner
+	if appointment.notes and not doc.presenting_complaint:
+		doc.presenting_complaint = appointment.notes
+
+
+def normalize_consultation_appointment_links(doc) -> None:
+	if not doc.linked_appointment or not getattr(doc, "name", None):
+		return
+
+	appointment = get_linked_appointment_data(doc.linked_appointment)
+	if not appointment:
+		return
+
+	if appointment.follow_up_reference != doc.name:
+		return
+
+	if frappe.get_meta("Veterinary Consultation").has_field("follow_up_appointment"):
+		doc.follow_up_appointment = doc.linked_appointment
+		doc.linked_appointment = None
+
+
+def validate_linked_appointment(doc) -> None:
+	if not doc.linked_appointment:
+		return
+
+	appointment = get_linked_appointment_data(doc.linked_appointment)
+	if not appointment:
+		frappe.throw("Linked Appointment must be a valid Veterinary Appointment.", frappe.ValidationError)
+
+	if appointment.patient != doc.patient:
+		frappe.throw("Linked Appointment must belong to the selected Veterinary Patient.", frappe.ValidationError)
+
+	if appointment.linked_consultation and appointment.linked_consultation != doc.name:
+		frappe.throw(
+			"Linked Appointment already has another Veterinary Consultation.",
+			frappe.ValidationError,
+		)
+
+	if appointment.status in CONSULTATION_READY_APPOINTMENT_STATUSES:
+		return
+
+	if appointment.status == "In Consultation" and appointment.linked_consultation == doc.name:
+		return
+
+	frappe.throw(
+		"Linked Appointment must be Confirmed or Checked In before consultation can start.",
+		frappe.ValidationError,
+	)
+
+
+def claim_linked_appointment_for_consultation(doc) -> None:
+	if not doc.linked_appointment:
+		return
+
+	appointment = get_linked_appointment_data(doc.linked_appointment)
+	if not appointment:
+		frappe.throw("Linked Appointment must be a valid Veterinary Appointment.", frappe.ValidationError)
+
+	if appointment.linked_consultation and appointment.linked_consultation != doc.name:
+		frappe.throw(
+			"Linked Appointment already has another Veterinary Consultation.",
+			frappe.ValidationError,
+		)
+
+	if appointment.status not in CONSULTATION_READY_APPOINTMENT_STATUSES:
+		if appointment.status == "In Consultation" and appointment.linked_consultation == doc.name:
+			return
+		frappe.throw(
+			"Linked Appointment must be Confirmed or Checked In before consultation can start.",
+			frappe.ValidationError,
+		)
+
+	frappe.db.set_value(
+		"Veterinary Appointment",
+		appointment.name,
+		{
+			"linked_consultation": doc.name,
+			"status": "In Consultation",
+		},
+		update_modified=False,
+	)
+
+
+def sync_service_appointment_status_from_consultation(doc) -> None:
+	if not doc.linked_appointment or doc.status not in CONSULTATION_APPOINTMENT_STATUS_MAP:
+		return
+
+	appointment = get_linked_appointment_data(doc.linked_appointment)
+	if not appointment:
+		return
+
+	if appointment.linked_consultation and appointment.linked_consultation != doc.name:
+		frappe.throw(
+			"Service Appointment is linked to another Veterinary Consultation.",
+			frappe.ValidationError,
+		)
+
+	target_status = CONSULTATION_APPOINTMENT_STATUS_MAP[doc.status]
+	if appointment.status == target_status:
+		return
+
+	if target_status == "Cancelled" and appointment.status == "Completed":
+		return
+
+	frappe.db.set_value(
+		"Veterinary Appointment",
+		appointment.name,
+		"status",
+		target_status,
+		update_modified=False,
+	)
+	emit_service_appointment_status_event(appointment, target_status)
+
+
+def emit_service_appointment_status_event(appointment, status: str) -> dict | None:
+	event = {
+		"Completed": "appointment_completed",
+		"Cancelled": "appointment_cancelled",
+	}.get(status)
+	if not event:
+		return None
+
+	return emit_notification_event(
+		event=event,
+		reference_doctype="Veterinary Appointment",
+		reference_name=appointment.name,
+		payload={
+			"appointment": appointment.name,
+			"patient": appointment.patient,
+			"branch": appointment.branch,
+			"practitioner": appointment.practitioner,
+			"previous_status": appointment.status,
+			"status": status,
+			"linked_consultation": appointment.linked_consultation,
+		},
+	)
+
+
+def get_linked_appointment_data(appointment: str):
+	return frappe.db.get_value(
+		"Veterinary Appointment",
+		appointment,
+		["name", "patient", "status", "branch", "practitioner", "notes", "linked_consultation", "follow_up_reference"],
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_pending_appointments_for_patient(doctype, txt, searchfield, start, page_len, filters):
+	require_internal_user()
+	patient = (filters or {}).get("patient")
+	if not patient:
+		return []
+
+	search = f"%{txt}%"
+	return frappe.db.sql(
+		"""
+		SELECT
+			name,
+			appointment_title
+		FROM `tabVeterinary Appointment`
+		WHERE patient = %(patient)s
+			AND status IN %(statuses)s
+			AND (linked_consultation IS NULL OR linked_consultation = '')
+			AND (
+				name LIKE %(search)s
+				OR appointment_title LIKE %(search)s
+				OR appointment_datetime LIKE %(search)s
+			)
+		ORDER BY appointment_datetime ASC
+		LIMIT %(start)s, %(page_len)s
+		""",
+		{
+			"patient": patient,
+			"statuses": CONSULTATION_READY_APPOINTMENT_STATUSES,
+			"search": search,
+			"start": start,
+			"page_len": page_len,
+		},
+	)
 
 
 def set_consultation_title(doc) -> None:
@@ -228,6 +439,9 @@ def validate_consultation_children(doc) -> None:
 	for row in doc.get("planned_treatments") or []:
 		if flt(row.qty) <= 0:
 			frappe.throw("Planned Treatment Qty must be greater than zero.", frappe.ValidationError)
+		if row.get("rate") not in (None, "") and flt(row.rate) < 0:
+			frappe.throw("Planned Treatment Rate cannot be negative.", frappe.ValidationError)
+		row.amount = flt(row.qty) * flt(row.get("rate"))
 		validate_enabled_item(row.item)
 		validate_enabled_link("Veterinary Service Type", row.service_type, "Service Type", required=False)
 		validate_enabled_link("Veterinary Treatment Type", row.treatment_type, "Treatment Type", required=False)

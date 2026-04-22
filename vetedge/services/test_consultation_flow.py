@@ -7,10 +7,14 @@ from unittest.mock import patch
 import frappe
 
 from vetedge.services.consultation_flow import (
+	claim_linked_appointment_for_consultation,
 	get_next_daily_consultation_number,
+	normalize_consultation_appointment_links,
+	sync_service_appointment_status_from_consultation,
 	transition_consultation_status,
 	validate_consultation,
 	validate_consultation_children,
+	validate_linked_appointment,
 	validate_completion_requirements,
 	validate_service_branch_access,
 	validate_consultation_status_transition,
@@ -232,6 +236,219 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(result["status"], "Ready for Treatment")
 		self.assertEqual(saved, [doc])
 
+	def test_linked_appointment_must_belong_to_selected_patient(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			patient="VP-001",
+			linked_appointment="VAPT-001",
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-002",
+					status="Confirmed",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation=None,
+				)
+			)
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			self.assertRaises(frappe.ValidationError, validate_linked_appointment, doc)
+
+	def test_linked_appointment_allows_ready_status_for_selected_patient(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			patient="VP-001",
+			linked_appointment="VAPT-001",
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Confirmed",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation=None,
+				)
+			)
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			validate_linked_appointment(doc)
+
+	def test_linked_appointment_rejects_completed_appointment(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			patient="VP-001",
+			linked_appointment="VAPT-001",
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Completed",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation=None,
+				)
+			)
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			self.assertRaises(frappe.ValidationError, validate_linked_appointment, doc)
+
+	def test_linked_appointment_rejects_existing_consultation_link(self):
+		doc = frappe._dict(
+			name="VCON-002",
+			patient="VP-001",
+			linked_appointment="VAPT-001",
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Confirmed",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation="VCON-001",
+				)
+			)
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			self.assertRaises(frappe.ValidationError, validate_linked_appointment, doc)
+
+	def test_claim_linked_appointment_marks_it_in_consultation(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			linked_appointment="VAPT-001",
+		)
+		updates = []
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Checked In",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation=None,
+				),
+				set_value=lambda *args, **kwargs: updates.append((args, kwargs)),
+			)
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			claim_linked_appointment_for_consultation(doc)
+
+		self.assertEqual(updates[0][0][0], "Veterinary Appointment")
+		self.assertEqual(updates[0][0][1], "VAPT-001")
+		self.assertEqual(updates[0][0][2]["linked_consultation"], "VCON-001")
+		self.assertEqual(updates[0][0][2]["status"], "In Consultation")
+
+	def test_normalize_moves_legacy_follow_up_appointment_link(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			linked_appointment="VAPT-001",
+			follow_up_appointment=None,
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Scheduled",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation=None,
+					follow_up_reference="VCON-001",
+				)
+			),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "follow_up_appointment"),
+		)
+
+		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+			normalize_consultation_appointment_links(doc)
+
+		self.assertIsNone(doc.linked_appointment)
+		self.assertEqual(doc.follow_up_appointment, "VAPT-001")
+
+	def test_completed_consultation_marks_service_appointment_completed(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			status="Completed",
+			linked_appointment="VAPT-001",
+		)
+		updates = []
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="In Consultation",
+					branch="Main",
+					practitioner="doctor@example.com",
+					notes=None,
+					linked_consultation="VCON-001",
+					follow_up_reference=None,
+				),
+				set_value=lambda *args, **kwargs: updates.append((args, kwargs)),
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.emit_notification_event", return_value={"queued": False}) as emit,
+		):
+			sync_service_appointment_status_from_consultation(doc)
+
+		self.assertEqual(updates[0][0], ("Veterinary Appointment", "VAPT-001", "status", "Completed"))
+		self.assertEqual(emit.call_args.kwargs["event"], "appointment_completed")
+
+	def test_cancelled_consultation_marks_service_appointment_cancelled(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			status="Cancelled",
+			linked_appointment="VAPT-001",
+		)
+		updates = []
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="In Consultation",
+					branch="Main",
+					practitioner=None,
+					notes=None,
+					linked_consultation="VCON-001",
+					follow_up_reference=None,
+				),
+				set_value=lambda *args, **kwargs: updates.append((args, kwargs)),
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.emit_notification_event", return_value={"queued": False}) as emit,
+		):
+			sync_service_appointment_status_from_consultation(doc)
+
+		self.assertEqual(updates[0][0], ("Veterinary Appointment", "VAPT-001", "status", "Cancelled"))
+		self.assertEqual(emit.call_args.kwargs["event"], "appointment_cancelled")
+
 	def test_branch_assignment_is_enforced_when_assignment_doctype_exists(self):
 		frappe_stub = make_frappe_stub(
 			db=SimpleNamespace(exists=lambda *args, **kwargs: args == ("DocType", "Branch User Assignment")),
@@ -257,6 +474,7 @@ def make_frappe_stub(**overrides):
 	stub = SimpleNamespace(
 		db=SimpleNamespace(exists=lambda *args, **kwargs: False),
 		get_all=lambda *args, **kwargs: [],
+		get_roles=lambda *args, **kwargs: ["VetEdge Doctor"],
 		get_meta=lambda doctype: SimpleNamespace(
 			has_field=lambda fieldname: False,
 			get_title_field=lambda: "patient_name" if doctype == "Veterinary Patient" else "name",

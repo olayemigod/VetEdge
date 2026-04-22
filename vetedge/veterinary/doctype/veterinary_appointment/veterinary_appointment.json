@@ -43,7 +43,7 @@
   {"fieldname": "practitioner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Practitioner User", "options": "User"},
   {"fetch_from": "practitioner.full_name", "fieldname": "practitioner_name", "fieldtype": "Data", "in_list_view": 1, "label": "Practitioner", "read_only": 1},
   {"fieldname": "appointment_type", "fieldtype": "Select", "label": "Appointment Type", "options": "\nConsultation\nFollow Up\nVaccination\nGrooming\nBoarding\nOther"},
-  {"collapsible": 1, "fieldname": "source_section", "fieldtype": "Section Break", "label": "Source and Follow-up"},
+  {"fieldname": "source_section", "fieldtype": "Section Break", "label": "Consultation Links"},
   {"default": "Manual", "fieldname": "created_from", "fieldtype": "Select", "in_standard_filter": 1, "label": "Created From", "options": "Manual\nConsultation\nPortal\nGuest"},
   {"description": "System-filled when this appointment is started and a new consultation is created from it.", "fieldname": "linked_consultation", "fieldtype": "Link", "label": "Service Consultation", "options": "Veterinary Consultation", "read_only": 1},
   {"default": "0", "fieldname": "is_follow_up", "fieldtype": "Check", "label": "Is Follow-up", "read_only": 1},

@@ -182,11 +182,14 @@ class TestAppointmentFlow(TestCase):
 
 		frappe_stub = make_frappe_stub(
 			get_doc=get_doc,
-			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "linked_appointment"),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "follow_up_appointment"),
 			db=SimpleNamespace(set_value=lambda *args, **kwargs: set_values.append(args)),
 		)
 
-		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
+			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
+		):
 			from vetedge.services.appointment_flow import create_follow_up_from_consultation
 
 			result = create_follow_up_from_consultation("VCON-001", "2026-04-25 09:00:00")
@@ -194,7 +197,8 @@ class TestAppointmentFlow(TestCase):
 		self.assertEqual(result["name"], "VAPT-001")
 		self.assertEqual(inserted[0].follow_up_reference, "VCON-001")
 		self.assertIsNone(inserted[0].get("linked_consultation"))
-		self.assertEqual(set_values[0][2], "linked_appointment")
+		self.assertEqual(set_values[0][2], "follow_up_appointment")
+		self.assertEqual(emit.call_args.kwargs["event"], "appointment_created")
 
 	def test_normalize_clears_old_follow_up_link_bug(self):
 		doc = make_appointment_doc(
@@ -246,6 +250,7 @@ class TestAppointmentFlow(TestCase):
 		with (
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.now_datetime", return_value="2026-04-20 10:00:00"),
+			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			result = create_consultation_from_appointment("VAPT-001")
 
@@ -255,6 +260,7 @@ class TestAppointmentFlow(TestCase):
 		self.assertEqual(appointment.linked_consultation, "VCON-001")
 		self.assertEqual(appointment.status, "In Consultation")
 		self.assertEqual(saved, [appointment])
+		self.assertEqual(emit.call_args.kwargs["event"], "appointment_started")
 
 	def test_consultation_creation_from_appointment_rejects_duplicate_link(self):
 		appointment = make_appointment_doc(
@@ -278,11 +284,15 @@ class TestAppointmentFlow(TestCase):
 
 		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: appointment)
 
-		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
+			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
+		):
 			result = transition_appointment_status("VAPT-001", "Confirmed")
 
 		self.assertEqual(result["status"], "Confirmed")
 		self.assertEqual(saved, [appointment])
+		self.assertEqual(emit.call_args.kwargs["event"], "appointment_confirmed")
 
 
 def make_appointment_doc(**overrides):
@@ -319,10 +329,12 @@ def make_frappe_stub(**overrides):
 			get_value=get_value_for_patient_and_user,
 		),
 		get_all=lambda *args, **kwargs: [],
+		get_roles=lambda *args, **kwargs: ["VetEdge Front Desk"],
 		get_meta=lambda doctype: SimpleNamespace(
 			has_field=lambda fieldname: False,
 			get_title_field=lambda: "patient_name" if doctype == "Veterinary Patient" else "name",
 		),
+		session=SimpleNamespace(user="staff@example.com"),
 		throw=throw,
 		ValidationError=frappe.ValidationError,
 		PermissionError=frappe.PermissionError,

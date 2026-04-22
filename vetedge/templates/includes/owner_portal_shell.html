@@ -1,10 +1,34 @@
 {% extends "templates/web.html" %}
 
 {% block page_content %}
-<div class="container my-5 vetedge-owner-portal">
+<link rel="stylesheet" href="/assets/vetedge/css/owner_portal.css">
+<div
+	class="container my-5 vetedge-owner-portal"
+	style="
+		--ve-page-bg: {{ dashboard.portal_theme.page_background }};
+		--ve-surface: {{ dashboard.portal_theme.surface_color }};
+		--ve-primary: {{ dashboard.portal_theme.primary_color }};
+		--ve-primary-text: {{ dashboard.portal_theme.primary_text_color }};
+		--ve-accent: {{ dashboard.portal_theme.accent_color }};
+		--ve-nav-bg: {{ dashboard.portal_theme.nav_background }};
+		--ve-nav-text: {{ dashboard.portal_theme.nav_text_color }};
+		--ve-muted: {{ dashboard.portal_theme.muted_text_color }};
+		--ve-heading: {{ dashboard.portal_theme.heading_color }};
+		--ve-radius: {{ dashboard.portal_theme.card_radius }};
+	"
+>
+	{% if dashboard.portal_theme.custom_css %}
+	<style>{{ dashboard.portal_theme.custom_css }}</style>
+	{% endif %}
 	<div class="row">
 		<aside class="col-md-3 mb-4">
-			<div class="list-group">
+			<div class="vetedge-portal-brand-panel">
+				{% if dashboard.portal_theme.logo_url %}
+				<img class="vetedge-portal-logo" src="{{ dashboard.portal_theme.logo_url }}" alt="{{ dashboard.portal_theme.brand_name }}">
+				{% endif %}
+				<div class="vetedge-portal-brand-name">{{ dashboard.portal_theme.brand_name }}</div>
+			</div>
+			<div class="list-group vetedge-portal-nav">
 				<a class="list-group-item list-group-item-action {% if owner_portal_page == 'overview' %}active{% endif %}" href="/vetedge_portal">Overview</a>
 				<a class="list-group-item list-group-item-action {% if owner_portal_page == 'pets' %}active{% endif %}" href="/vetedge_portal_pets">Pets</a>
 				<a class="list-group-item list-group-item-action {% if owner_portal_page == 'appointments' %}active{% endif %}" href="/vetedge_portal_appointments">Appointments</a>
@@ -13,22 +37,44 @@
 			</div>
 		</aside>
 
-		<main class="col-md-9">
-			<h1>{{ title or "VetEdge Owner Portal" }}</h1>
-			<p class="text-muted">{{ portal_subtitle or "Pets, appointments, invoices, and safe consultation summaries." }}</p>
+		<main class="col-md-9 vetedge-portal-main">
+			<h1>{{ title or dashboard.portal_theme.brand_name or "Owner Portal" }}</h1>
+			<p class="text-muted vetedge-portal-subtitle">{{ portal_subtitle or "Pets, appointments, invoices, and safe consultation summaries." }}</p>
 
 			{% if owner_portal_page == "overview" %}
+				{% if dashboard.owner_profile %}
+				<div class="border rounded p-3 my-4 vetedge-portal-card">
+					<h3 class="h5 mb-3">Owner Profile</h3>
+					<div class="row">
+						<div class="col-md-6 mb-2"><strong>Name:</strong> {{ dashboard.owner_profile.display_name }}</div>
+						<div class="col-md-6 mb-2"><strong>Customer ID:</strong> {{ dashboard.owner_profile.customer }}</div>
+						<div class="col-md-6 mb-2"><strong>Email:</strong> {{ dashboard.owner_profile.email or "Not available" }}</div>
+						<div class="col-md-6 mb-2"><strong>Phone:</strong> {{ dashboard.owner_profile.phone or "Not available" }}</div>
+					</div>
+				</div>
+				{% endif %}
 				<div class="row my-4">
-					<div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Pets</div><h3>{{ dashboard.pets|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Upcoming</div><h3>{{ dashboard.upcoming_appointments|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Invoices Due</div><h3>{{ dashboard.outstanding_invoices|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Summaries</div><h3>{{ dashboard.consultations|length }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Pets</div><h3>{{ dashboard.pets|length }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Upcoming</div><h3>{{ dashboard.upcoming_appointments|length }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Invoices Due</div><h3>{{ dashboard.outstanding_invoices|length }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Summaries</div><h3>{{ dashboard.consultations|length }}</h3></div></div>
 				</div>
 				<p>Choose a section from the left to view details.</p>
 			{% elif owner_portal_page == "pets" %}
+				{% if dashboard.owner_profile %}
+				<div class="border rounded p-3 my-4 vetedge-portal-card">
+					<h3 class="h5 mb-3">Owner Profile</h3>
+					<div class="row">
+						<div class="col-md-6 mb-2"><strong>Name:</strong> {{ dashboard.owner_profile.display_name }}</div>
+						<div class="col-md-6 mb-2"><strong>Customer ID:</strong> {{ dashboard.owner_profile.customer }}</div>
+						<div class="col-md-6 mb-2"><strong>Email:</strong> {{ dashboard.owner_profile.email or "Not available" }}</div>
+						<div class="col-md-6 mb-2"><strong>Phone:</strong> {{ dashboard.owner_profile.phone or "Not available" }}</div>
+					</div>
+				</div>
+				{% endif %}
 				{% if dashboard.pets %}
 				<div class="table-responsive">
-					<table class="table table-bordered">
+					<table class="table table-bordered vetedge-portal-table">
 						<thead><tr><th>Pet</th><th>Species</th><th>Breed</th><th>Status</th><th>Branch</th></tr></thead>
 						<tbody>
 						{% for pet in dashboard.pets %}
@@ -53,7 +99,7 @@
 					<div class="row g-3 align-items-end">
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-patient">Pet</label>
-							<select class="form-control" id="vetedge-request-patient">
+							<select class="form-control vetedge-portal-input" id="vetedge-request-patient">
 								{% for pet in dashboard.pets %}
 								<option value="{{ pet.name }}" data-branch="{{ pet.default_branch or '' }}">{{ pet.patient_name or pet.name }}</option>
 								{% endfor %}
@@ -61,7 +107,7 @@
 						</div>
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-branch">Preferred Branch</label>
-							<select class="form-control" id="vetedge-request-branch">
+							<select class="form-control vetedge-portal-input" id="vetedge-request-branch">
 								<option value="">Use pet home branch</option>
 								{% for branch in dashboard.branches %}
 								<option value="{{ branch.name }}">{{ branch.name }}</option>
@@ -70,14 +116,14 @@
 						</div>
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-datetime">Preferred Date/Time</label>
-							<input class="form-control" id="vetedge-request-datetime" type="datetime-local">
+							<input class="form-control vetedge-portal-input" id="vetedge-request-datetime" type="datetime-local">
 						</div>
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-reason">Reason</label>
-							<input class="form-control" id="vetedge-request-reason" type="text" maxlength="140">
+							<input class="form-control vetedge-portal-input" id="vetedge-request-reason" type="text" maxlength="140">
 						</div>
 						<div class="col-12">
-							<button class="btn btn-primary" id="vetedge-request-appointment" type="button">Request Appointment</button>
+							<button class="btn btn-primary vetedge-portal-button" id="vetedge-request-appointment" type="button">Request Appointment</button>
 						</div>
 					</div>
 					<p class="text-muted mt-2">The clinic will approve the request before it is scheduled.</p>
@@ -90,7 +136,7 @@
 					<h3>Upcoming Appointments</h3>
 					{% if dashboard.upcoming_appointments %}
 					<div class="table-responsive">
-						<table class="table table-bordered">
+						<table class="table table-bordered vetedge-portal-table">
 							<thead><tr><th>Appointment</th><th>Date/Time</th><th>Branch</th><th>Practitioner</th><th>Status</th></tr></thead>
 							<tbody>
 							{% for appointment in dashboard.upcoming_appointments %}
@@ -114,7 +160,7 @@
 					<h3>Outstanding Invoices</h3>
 					{% if dashboard.outstanding_invoices %}
 					<div class="table-responsive">
-						<table class="table table-bordered">
+						<table class="table table-bordered vetedge-portal-table">
 							<thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th>Outstanding</th><th></th></tr></thead>
 							<tbody>
 							{% for invoice in dashboard.outstanding_invoices %}
@@ -125,10 +171,11 @@
 									<td>{{ invoice.currency }} {{ invoice.outstanding_amount }}</td>
 									<td>
 										{% if dashboard.settings.enable_portal_payments %}
-										<button class="btn btn-primary btn-sm vetedge-pay-invoice" data-invoice="{{ invoice.name }}">Initiate Payment</button>
+										<button class="btn btn-primary btn-sm vetedge-portal-button vetedge-pay-invoice" data-invoice="{{ invoice.name }}">Initiate Payment</button>
 										{% else %}
 										<span class="text-muted">Portal payment disabled</span>
 										{% endif %}
+										<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button" href="{{ invoice.download_pdf_url }}" target="_blank" rel="noopener">Download PDF</a>
 									</td>
 								</tr>
 							{% endfor %}
@@ -144,8 +191,8 @@
 					<h3>Paid Invoices</h3>
 					{% if dashboard.paid_invoices %}
 					<div class="table-responsive">
-						<table class="table table-bordered">
-							<thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th>Total</th></tr></thead>
+						<table class="table table-bordered vetedge-portal-table">
+							<thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th>Total</th><th></th></tr></thead>
 							<tbody>
 							{% for invoice in dashboard.paid_invoices %}
 								<tr>
@@ -153,6 +200,7 @@
 									<td>{{ frappe.format(invoice.posting_date, {"fieldtype": "Date"}) }}</td>
 									<td>{{ invoice.status or "" }}</td>
 									<td>{{ invoice.currency }} {{ invoice.grand_total }}</td>
+									<td><a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button" href="{{ invoice.download_pdf_url }}" target="_blank" rel="noopener">Download PDF</a></td>
 								</tr>
 							{% endfor %}
 							</tbody>
@@ -165,17 +213,17 @@
 			{% elif owner_portal_page == "history" %}
 				{% if dashboard.consultations %}
 				<div class="table-responsive">
-					<table class="table table-bordered">
+					<table class="table table-bordered vetedge-portal-table">
 						<thead><tr><th>Date/Time</th><th>Pet</th><th>Branch</th><th>Practitioner</th><th>Status</th><th>Summary</th></tr></thead>
 						<tbody>
 						{% for consultation in dashboard.consultations %}
 							<tr>
 								<td>{{ frappe.format(consultation.consultation_datetime, {"fieldtype": "Datetime"}) }}</td>
-								<td>{{ consultation.patient }}</td>
+								<td>{{ consultation.patient_name or consultation.patient }}</td>
 								<td>{{ consultation.service_branch or "" }}</td>
 								<td>{{ consultation.consulting_practitioner_name or "" }}</td>
 								<td>{{ consultation.status or "" }}</td>
-								<td>{{ consultation.presenting_complaint or consultation.treatment_plan_summary or "" }}</td>
+								<td>{{ consultation.summary_title or consultation.consultation_title or "Consultation Summary" }}</td>
 							</tr>
 						{% endfor %}
 						</tbody>
@@ -196,6 +244,10 @@ document.querySelectorAll(".vetedge-pay-invoice").forEach((button) => {
 			method: "vetedge.services.payment_service.initiate_invoice_payment",
 			args: { invoice_name: button.dataset.invoice },
 			callback(result) {
+				if (result.message && result.message.redirect_url) {
+					window.location.href = result.message.redirect_url;
+					return;
+				}
 				const message = result.message && result.message.message
 					? result.message.message
 					: "Payment initiation prepared.";
