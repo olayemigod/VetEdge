@@ -54,10 +54,10 @@
 				</div>
 				{% endif %}
 				<div class="row my-4">
-					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Pets</div><h3>{{ dashboard.pets|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Upcoming</div><h3>{{ dashboard.upcoming_appointments|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Invoices Due</div><h3>{{ dashboard.outstanding_invoices|length }}</h3></div></div>
-					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Summaries</div><h3>{{ dashboard.consultations|length }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Pets</div><h3>{{ dashboard.counts.pets }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Upcoming</div><h3>{{ dashboard.counts.upcoming_appointments }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Invoices Due</div><h3>{{ dashboard.counts.outstanding_invoices }}</h3></div></div>
+					<div class="col-md-3 mb-3"><div class="border rounded p-3 vetedge-portal-card"><div class="text-muted">Summaries</div><h3>{{ dashboard.counts.consultations }}</h3></div></div>
 				</div>
 				<p>Choose a section from the left to view details.</p>
 			{% elif owner_portal_page == "pets" %}
@@ -155,6 +155,40 @@
 					<p class="text-muted">No upcoming appointments.</p>
 					{% endif %}
 				</section>
+
+				<section class="my-4">
+					<h3>Appointment History</h3>
+					{% if dashboard.appointment_history %}
+					<div class="table-responsive">
+						<table class="table table-bordered vetedge-portal-table">
+							<thead><tr><th>Appointment</th><th>Date/Time</th><th>Branch</th><th>Practitioner</th><th>Status</th></tr></thead>
+							<tbody>
+							{% for appointment in dashboard.appointment_history %}
+								<tr>
+									<td>{{ appointment.appointment_title or appointment.name }}</td>
+									<td>{{ frappe.format(appointment.appointment_datetime, {"fieldtype": "Datetime"}) }}</td>
+									<td>{{ appointment.branch or "" }}</td>
+									<td>{{ appointment.practitioner_name or "" }}</td>
+									<td>{{ appointment.status or "" }}</td>
+								</tr>
+							{% endfor %}
+							</tbody>
+						</table>
+					</div>
+					<div class="d-flex justify-content-between align-items-center mt-3 text-muted">
+						<div>
+							Showing {{ dashboard.appointment_history_pagination.start_row }}-{{ dashboard.appointment_history_pagination.end_row }}
+							of {{ dashboard.appointment_history_pagination.total_count }}
+						</div>
+						<div class="btn-group">
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.appointment_history_pagination.has_prev %}disabled{% endif %}" href="{{ dashboard.appointment_history_pagination.prev_url or '#' }}">Previous</a>
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.appointment_history_pagination.has_next %}disabled{% endif %}" href="{{ dashboard.appointment_history_pagination.next_url or '#' }}">Next</a>
+						</div>
+					</div>
+					{% else %}
+					<p class="text-muted">No appointment history found.</p>
+					{% endif %}
+				</section>
 			{% elif owner_portal_page == "billing" %}
 				<section class="my-4">
 					<h3>Outstanding Invoices</h3>
@@ -182,6 +216,16 @@
 							</tbody>
 						</table>
 					</div>
+					<div class="d-flex justify-content-between align-items-center mt-3 text-muted">
+						<div>
+							Showing {{ dashboard.outstanding_invoice_pagination.start_row }}-{{ dashboard.outstanding_invoice_pagination.end_row }}
+							of {{ dashboard.outstanding_invoice_pagination.total_count }}
+						</div>
+						<div class="btn-group">
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.outstanding_invoice_pagination.has_prev %}disabled{% endif %}" href="{{ dashboard.outstanding_invoice_pagination.prev_url or '#' }}">Previous</a>
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.outstanding_invoice_pagination.has_next %}disabled{% endif %}" href="{{ dashboard.outstanding_invoice_pagination.next_url or '#' }}">Next</a>
+						</div>
+					</div>
 					{% else %}
 					<p class="text-muted">No outstanding invoices.</p>
 					{% endif %}
@@ -206,6 +250,16 @@
 							</tbody>
 						</table>
 					</div>
+					<div class="d-flex justify-content-between align-items-center mt-3 text-muted">
+						<div>
+							Showing {{ dashboard.paid_invoice_pagination.start_row }}-{{ dashboard.paid_invoice_pagination.end_row }}
+							of {{ dashboard.paid_invoice_pagination.total_count }}
+						</div>
+						<div class="btn-group">
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.paid_invoice_pagination.has_prev %}disabled{% endif %}" href="{{ dashboard.paid_invoice_pagination.prev_url or '#' }}">Previous</a>
+							<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.paid_invoice_pagination.has_next %}disabled{% endif %}" href="{{ dashboard.paid_invoice_pagination.next_url or '#' }}">Next</a>
+						</div>
+					</div>
 					{% else %}
 					<p class="text-muted">No paid invoices found.</p>
 					{% endif %}
@@ -228,6 +282,16 @@
 						{% endfor %}
 						</tbody>
 					</table>
+				</div>
+				<div class="d-flex justify-content-between align-items-center mt-3 text-muted">
+					<div>
+						Showing {{ dashboard.consultation_pagination.start_row }}-{{ dashboard.consultation_pagination.end_row }}
+						of {{ dashboard.consultation_pagination.total_count }}
+					</div>
+					<div class="btn-group">
+						<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.consultation_pagination.has_prev %}disabled{% endif %}" href="{{ dashboard.consultation_pagination.prev_url or '#' }}">Previous</a>
+						<a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button {% if not dashboard.consultation_pagination.has_next %}disabled{% endif %}" href="{{ dashboard.consultation_pagination.next_url or '#' }}">Next</a>
+					</div>
 				</div>
 				{% else %}
 				<p class="text-muted">No consultation summaries found.</p>

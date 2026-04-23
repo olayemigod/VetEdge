@@ -57,7 +57,7 @@ DEFAULT_FEATURE_FLAGS = {
 
 def is_enabled(flag: str) -> bool:
 	if flag not in FEATURE_FLAG_FIELDS:
-		frappe.throw(f"Unknown VetEdge feature flag: {flag}", frappe.ValidationError)
+		frappe.throw(f"Unknown feature flag: {flag}", frappe.ValidationError)
 
 	flags = get_feature_flags()
 	if flag != "vetedge" and not flags["vetedge"]:

@@ -7,10 +7,14 @@ from unittest.mock import patch
 import frappe
 
 from vetedge.services.owner_portal import (
+	build_pagination_payload,
 	create_owner_appointment_request,
 	download_owner_invoice_pdf,
 	generate_owner_invoice_pdf,
 	get_owner_invoice,
+	get_owner_appointments,
+	get_owner_consultation_summaries,
+	get_owner_invoices,
 	get_owner_portal_dashboard,
 )
 
@@ -275,9 +279,24 @@ class TestOwnerPortal(TestCase):
 				return_value={"enable_owner_portal": True},
 			),
 			patch("vetedge.services.owner_portal.get_owner_pets", return_value=[]),
-			patch("vetedge.services.owner_portal.get_owner_appointments", return_value={"upcoming": [], "history": []}),
-			patch("vetedge.services.owner_portal.get_owner_invoices", return_value={"outstanding": [], "paid": []}),
-			patch("vetedge.services.owner_portal.get_owner_consultation_summaries", return_value=[]),
+			patch(
+				"vetedge.services.owner_portal.get_owner_appointments",
+				return_value={
+					"upcoming": [],
+					"history": build_pagination_payload([], 0, 1, 20, "/vetedge_portal_appointments", "history_page"),
+				},
+			),
+			patch(
+				"vetedge.services.owner_portal.get_owner_invoices",
+				return_value={
+					"outstanding": build_pagination_payload([], 0, 1, 20, "/vetedge_portal_billing", "outstanding_page"),
+					"paid": build_pagination_payload([], 0, 1, 20, "/vetedge_portal_billing", "paid_page"),
+				},
+			),
+			patch(
+				"vetedge.services.owner_portal.get_owner_consultation_summaries",
+				return_value=build_pagination_payload([], 0, 1, 20, "/vetedge_portal_history", "consultation_page"),
+			),
 			patch("vetedge.services.owner_portal.get_portal_branches", return_value=[]),
 		):
 			dashboard = get_owner_portal_dashboard()
@@ -285,6 +304,113 @@ class TestOwnerPortal(TestCase):
 		self.assertEqual(dashboard["owner_profile"]["display_name"], "Jane Owner")
 		self.assertEqual(dashboard["owner_profile"]["email"], "jane@example.com")
 		self.assertEqual(dashboard["owner_profile"]["phone"], "+2348000000000")
+
+	def test_build_pagination_payload_generates_links_and_counts(self):
+		payload = build_pagination_payload(
+			rows=[{"name": "ROW-1"}],
+			total_count=41,
+			page=2,
+			page_length=20,
+			path="/vetedge_portal_history",
+			page_key="consultation_page",
+			extra_params={"paid_page": 3},
+		)
+
+		self.assertEqual(payload["pagination"]["start_row"], 21)
+		self.assertEqual(payload["pagination"]["end_row"], 40)
+		self.assertEqual(payload["pagination"]["prev_url"], "/vetedge_portal_history?paid_page=3")
+		self.assertEqual(payload["pagination"]["next_url"], "/vetedge_portal_history?paid_page=3&consultation_page=3")
+
+	def test_owner_invoices_use_twenty_row_pages(self):
+		get_all_calls = []
+
+		def get_all(doctype, **kwargs):
+			get_all_calls.append((doctype, kwargs))
+			return []
+
+		frappe_stub = make_frappe_stub(
+			get_all=get_all,
+			db=SimpleNamespace(
+				exists=lambda *args, **kwargs: True,
+				get_value=lambda *args, **kwargs: None,
+				count=lambda *args, **kwargs: 0,
+			),
+		)
+
+		with patch("vetedge.services.owner_portal.frappe", frappe_stub):
+			result = get_owner_invoices(
+				owner_context={"customers": ["CUST-001"]},
+				outstanding_page=2,
+				paid_page=1,
+				page_path="/vetedge_portal_billing",
+			)
+
+		self.assertEqual(get_all_calls[0][1]["start"], 20)
+		self.assertEqual(get_all_calls[0][1]["limit"], 20)
+		self.assertEqual(result["outstanding"]["pagination"]["page_length"], 20)
+
+	def test_owner_appointment_history_uses_twenty_row_pages(self):
+		get_all_calls = []
+
+		def get_all(doctype, **kwargs):
+			get_all_calls.append((doctype, kwargs))
+			return []
+
+		frappe_stub = make_frappe_stub(
+			get_all=get_all,
+			db=SimpleNamespace(
+				exists=lambda *args, **kwargs: True,
+				get_value=lambda *args, **kwargs: None,
+				count=lambda *args, **kwargs: 0,
+			),
+		)
+
+		with (
+			patch("vetedge.services.owner_portal.frappe", frappe_stub),
+			patch("vetedge.services.owner_portal.get_owner_patient_names", return_value=["VP-001"]),
+			patch("vetedge.services.owner_portal.nowdate", return_value="2026-04-23"),
+		):
+			result = get_owner_appointments(
+				owner_context={"customers": ["CUST-001"]},
+				history_page=2,
+				page_path="/vetedge_portal_appointments",
+			)
+
+		self.assertEqual(get_all_calls[1][1]["start"], 20)
+		self.assertEqual(get_all_calls[1][1]["limit"], 20)
+		self.assertEqual(result["history"]["pagination"]["page_length"], 20)
+
+	def test_owner_consultation_history_uses_twenty_row_pages(self):
+		get_all_calls = []
+
+		def get_all(doctype, **kwargs):
+			get_all_calls.append((doctype, kwargs))
+			if doctype == "Veterinary Patient":
+				return []
+			return []
+
+		frappe_stub = make_frappe_stub(
+			get_all=get_all,
+			db=SimpleNamespace(
+				exists=lambda *args, **kwargs: True,
+				get_value=lambda *args, **kwargs: None,
+				count=lambda *args, **kwargs: 0,
+			),
+		)
+
+		with (
+			patch("vetedge.services.owner_portal.frappe", frappe_stub),
+			patch("vetedge.services.owner_portal.get_owner_patient_names", return_value=["VP-001"]),
+		):
+			result = get_owner_consultation_summaries(
+				owner_context={"customers": ["CUST-001"]},
+				page=2,
+				page_path="/vetedge_portal_history",
+			)
+
+		self.assertEqual(get_all_calls[1][1]["start"], 20)
+		self.assertEqual(get_all_calls[1][1]["limit"], 20)
+		self.assertEqual(result["pagination"]["page_length"], 20)
 
 
 def make_frappe_stub(**overrides):

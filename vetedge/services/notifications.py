@@ -4,6 +4,8 @@ import frappe
 from frappe.utils import escape_html
 from frappe.utils import add_to_date, now_datetime
 
+from vetedge.services.branding import get_clinic_brand_name
+
 
 SUPPORTED_CHANNELS = {"Email", "SMS", "WhatsApp"}
 
@@ -31,6 +33,11 @@ STAFF_EVENTS = {
 	"registration_request_received",
 	"accounts_action_required",
 	"consultation_awaiting_payment",
+	"consultation_sent_to_dispensary",
+	"dispensary_confirmation_completed",
+	"dispensary_stock_issue_failed",
+	"dispensary_expired_stock_blocked",
+	"dispensary_insufficient_non_expired_stock",
 	"consultation_ready_for_treatment",
 }
 
@@ -68,6 +75,11 @@ EVENT_SETTING_FIELDS = {
 	"payment_reminder": "notify_on_payment_received",
 	"accounts_action_required": "notify_on_accounts_action_required",
 	"consultation_awaiting_payment": "notify_on_accounts_action_required",
+	"consultation_sent_to_dispensary": "notify_on_accounts_action_required",
+	"dispensary_confirmation_completed": "notify_on_payment_received",
+	"dispensary_stock_issue_failed": "notify_on_accounts_action_required",
+	"dispensary_expired_stock_blocked": "notify_on_accounts_action_required",
+	"dispensary_insufficient_non_expired_stock": "notify_on_accounts_action_required",
 	"consultation_ready_for_treatment": "notify_on_payment_received",
 }
 
@@ -226,10 +238,11 @@ def get_staff_email_recipients(event: str) -> set[str]:
 
 def get_email_subject(event_payload: dict) -> str:
 	event_label = event_payload["event"].replace("_", " ").title()
-	return f"VetEdge: {event_label}"
+	return f"{get_clinic_brand_name()}: {event_label}"
 
 
 def get_email_message(event_payload: dict) -> str:
+	brand_name = get_clinic_brand_name()
 	payload = event_payload.get("payload") or {}
 	rows = [
 		("Event", event_payload["event"].replace("_", " ").title()),
@@ -245,7 +258,7 @@ def get_email_message(event_payload: dict) -> str:
 		f"<td style='padding:6px;border:1px solid #ddd'>{escape_html(str(value))}</td></tr>"
 		for label, value in rows
 	)
-	return f"<p>A VetEdge update is available.</p><table style='border-collapse:collapse'>{items}</table>"
+	return f"<p>An update is available from {escape_html(brand_name)}.</p><table style='border-collapse:collapse'>{items}</table>"
 
 
 def get_notification_settings() -> dict:

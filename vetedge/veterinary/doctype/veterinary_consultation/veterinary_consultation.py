@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
+from vetedge.services.copy_control import reset_vetedge_copy_state
 from vetedge.services.consultation_flow import (
 	claim_linked_appointment_for_consultation,
 	sync_service_appointment_status_from_consultation,
@@ -11,6 +12,7 @@ from vetedge.services.consultation_flow import (
 
 class VeterinaryConsultation(Document):
 	def validate(self) -> None:
+		reset_vetedge_copy_state(self)
 		validate_consultation(self)
 
 	def after_insert(self) -> None:

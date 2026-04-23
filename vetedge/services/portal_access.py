@@ -5,6 +5,8 @@ from frappe import _
 from frappe.utils import cint, validate_email_address
 from werkzeug.routing import RequestRedirect
 
+from vetedge.services.branding import get_owner_portal_brand_name
+
 
 STAFF_OWNER_PORTAL_ROLES = {
 	"System Manager",
@@ -39,14 +41,14 @@ OWNER_PORTAL_REDIRECT_ENTRY_ROUTES = {"/", "/login", "/me"}
 def get_owner_context(user: str | None = None) -> dict:
 	user = user or get_session_user()
 	if not user or user == "Guest":
-		frappe.throw("Please sign in to access the VetEdge owner portal.", frappe.PermissionError)
+		frappe.throw(f"Please sign in to access the {get_owner_portal_brand_name()} owner portal.", frappe.PermissionError)
 
 	if not is_portal_owner_user(user):
-		frappe.throw("You do not have access to the VetEdge owner portal.", frappe.PermissionError)
+		frappe.throw(f"You do not have access to the {get_owner_portal_brand_name()} owner portal.", frappe.PermissionError)
 
 	customers = get_customers_for_user(user)
 	if not customers:
-		frappe.throw("You do not have access to the VetEdge owner portal.", frappe.PermissionError)
+		frappe.throw(f"You do not have access to the {get_owner_portal_brand_name()} owner portal.", frappe.PermissionError)
 
 	return {
 		"user": user,
@@ -164,7 +166,7 @@ def ensure_owner_portal_user_for_customer(
 
 def validate_staff_can_manage_owner_portal_users() -> None:
 	if STAFF_OWNER_PORTAL_ROLES.isdisjoint(set(get_user_roles())):
-		frappe.throw("Only authorized VetEdge staff can manage owner portal users.", frappe.PermissionError)
+		frappe.throw("Only authorized staff can manage owner portal users.", frappe.PermissionError)
 
 
 def validate_owner_portal_email(email: str | None) -> str:

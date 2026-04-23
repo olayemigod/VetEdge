@@ -224,7 +224,7 @@ def get_billing_cost_center(branch: str | None, required: bool = True) -> str | 
 
 	if required:
 		frappe.throw(
-			f"Cost Center is required for Branch {branch} before VetEdge can create billing documents.",
+			f"Cost Center is required for Branch {branch} before billing documents can be created.",
 			frappe.ValidationError,
 		)
 

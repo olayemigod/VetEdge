@@ -44,8 +44,8 @@ def get_patient_medical_history_view(
 		"treatments": get_treatment_history(patient, limit, from_date, to_date),
 		"trends": get_patient_vitals_trends(patient, from_date, to_date),
 		"placeholders": {
-			"vaccination_history": "Deferred until VetEdge vaccination records are implemented.",
-			"lab_history": "Deferred until VetEdge lab/result records are implemented.",
+			"vaccination_history": "Deferred until vaccination records are implemented.",
+			"lab_history": "Deferred until lab and result records are implemented.",
 		},
 	}
 

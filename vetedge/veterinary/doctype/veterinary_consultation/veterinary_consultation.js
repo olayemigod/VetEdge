@@ -33,9 +33,13 @@ frappe.ui.form.on("Veterinary Consultation", {
 	},
 
 	refresh(frm) {
+		configure_dispensary_grid(frm);
+		sync_dispensary_preview(frm);
+
 		if (!frm.is_new() && frm.doc.patient && frm.doc.service_branch) {
 			add_appointment_link_actions(frm);
 			add_status_actions(frm);
+			add_dispensary_actions(frm);
 
 			frm.add_custom_button(__("New Vitals"), () => {
 				show_vitals_entry_dialog(frm);
@@ -122,6 +126,14 @@ frappe.ui.form.on("Veterinary Consultation", {
 				);
 			});
 	},
+
+	planned_treatments_add(frm) {
+		sync_dispensary_preview(frm, true);
+	},
+
+	planned_treatments_remove(frm) {
+		sync_dispensary_preview(frm, true);
+	},
 });
 
 function add_appointment_link_actions(frm) {
@@ -155,18 +167,117 @@ frappe.ui.form.on("Planned Treatment Item", {
 			}
 			update_planned_treatment_amount(cdt, cdn);
 		});
+
+		frappe.call({
+			method: "vetedge.services.treatment_items.get_treatment_item_defaults_for_consultation",
+			args: {
+				item_code: row.item,
+			},
+			callback(result) {
+				const defaults = result.message || {};
+				if (!row.service_type && defaults.service_type) {
+					frappe.model.set_value(cdt, cdn, "service_type", defaults.service_type);
+				}
+				if (!row.treatment_type && defaults.treatment_type) {
+					frappe.model.set_value(cdt, cdn, "treatment_type", defaults.treatment_type);
+				}
+				sync_dispensary_preview(frm, true);
+			},
+		});
 	},
 	qty(frm, cdt, cdn) {
 		update_planned_treatment_amount(cdt, cdn);
+		sync_dispensary_preview(frm, true);
 	},
 	rate(frm, cdt, cdn) {
 		update_planned_treatment_amount(cdt, cdn);
+	},
+	treatment_type(frm) {
+		sync_dispensary_preview(frm, true);
+	},
+	service_type(frm) {
+		sync_dispensary_preview(frm, true);
 	},
 });
 
 function update_planned_treatment_amount(cdt, cdn) {
 	const row = locals[cdt][cdn];
 	frappe.model.set_value(cdt, cdn, "amount", flt(row.qty) * flt(row.rate));
+}
+
+function configure_dispensary_grid(frm) {
+	const grid = frm.get_field("dispensed_treatments")?.grid;
+	if (!grid) {
+		return;
+	}
+
+	frm.set_query("selected_batch", "dispensed_treatments", (_doc, _cdt, cdn) => {
+		const row = locals["Dispensed Treatment Item"]?.[cdn];
+		return {
+			filters: {
+				item: row?.item,
+				disabled: 0,
+			},
+		};
+	});
+
+	grid.cannot_add_rows = true;
+	grid.only_sortable();
+	frm.set_df_property(
+		"dispensed_treatments",
+		"read_only",
+		!["Pending Dispensary", "Not Required"].includes(frm.doc.dispensary_status)
+	);
+	frm.refresh_field("dispensed_treatments");
+}
+
+function sync_dispensary_preview(frm, force = false) {
+	if (frm.is_new()) {
+		return;
+	}
+
+	const currentRows = frm.doc.dispensed_treatments || [];
+	if (frm.doc.dispensary_status !== "Pending Dispensary") {
+		if (frm.doc.dispensary_status === "Not Required" && currentRows.length && !frm.doc.dispensary_stock_entry) {
+			frm.clear_table("dispensed_treatments");
+			frm.refresh_field("dispensed_treatments");
+		}
+		configure_dispensary_grid(frm);
+		return;
+	}
+
+	if (!force && currentRows.length) {
+		configure_dispensary_grid(frm);
+		return;
+	}
+
+	frappe.call({
+		method: "vetedge.services.dispensary.get_dispensed_item_preview",
+		args: {
+			consultation: frm.doc.name,
+		},
+		callback(result) {
+			const items = result.message?.items || [];
+			const existingRowsByPlan = Object.fromEntries(
+				(currentRows || []).map((row) => [row.planned_treatment_row, row])
+			);
+			frm.clear_table("dispensed_treatments");
+			items.forEach((item) => {
+				const row = frm.add_child("dispensed_treatments");
+				Object.entries(item).forEach(([key, value]) => {
+					row[key] = value;
+				});
+				const existing = existingRowsByPlan[item.planned_treatment_row];
+				if (existing) {
+					row.dispensed_qty = existing.dispensed_qty || row.dispensed_qty;
+					row.notes = existing.notes || row.notes;
+					row.selected_batch = existing.selected_batch || row.selected_batch;
+				}
+			});
+			frm.refresh_field("dispensed_treatments");
+			configure_dispensary_grid(frm);
+		},
+	});
 }
 
 function add_billing_actions(frm) {
@@ -213,19 +324,22 @@ function add_status_actions(frm) {
 		return;
 	}
 
+	const paymentRequired = frm.doc.payment_status !== "Paid" && frm.doc.status === "Awaiting Payment";
 	const transitions = {
 		Draft: [
 			[__("Start Consultation"), "In Progress"],
 			[__("Cancel Consultation"), "Cancelled"],
 		],
 		"In Progress": [
-			[__("Send to Billing"), "Awaiting Payment"],
 			[__("Mark Ready for Treatment"), "Ready for Treatment"],
 			[__("Complete Consultation"), "Completed"],
 			[__("Cancel Consultation"), "Cancelled"],
 		],
 		"Awaiting Payment": [
-			[__("Mark Ready for Treatment"), "Ready for Treatment"],
+			[__("Complete Consultation"), "Completed"],
+			[__("Cancel Consultation"), "Cancelled"],
+		],
+		"Pending Dispensary": [
 			[__("Complete Consultation"), "Completed"],
 			[__("Cancel Consultation"), "Cancelled"],
 		],
@@ -235,11 +349,50 @@ function add_status_actions(frm) {
 		],
 	};
 
-	(transitions[frm.doc.status] || []).forEach(([label, status]) => {
+	(transitions[frm.doc.status] || [])
+		.filter(([, status]) => !(paymentRequired && ["Pending Dispensary", "Ready for Treatment", "Completed"].includes(status)))
+		.forEach(([label, status]) => {
 		frm.add_custom_button(label, () => {
 			transition_consultation(frm, status);
 		}, __("Status"));
 	});
+}
+
+function add_dispensary_actions(frm) {
+	if (frm.doc.dispensary_stock_entry) {
+		frm.add_custom_button(__("Open Stock Entry"), () => {
+			frappe.set_route("Form", "Stock Entry", frm.doc.dispensary_stock_entry);
+		}, __("Dispensary"));
+	}
+
+	if (
+		["Completed", "Cancelled"].includes(frm.doc.status) ||
+		frm.doc.dispensary_status !== "Pending Dispensary"
+	) {
+		return;
+	}
+
+	frm.add_custom_button(__("Confirm Dispensary Issue"), () => {
+		frappe.call({
+			method: "vetedge.services.dispensary.confirm_dispensary_issue",
+			args: {
+				consultation: frm.doc.name,
+				dispensed_items: frm.doc.dispensed_treatments || [],
+			},
+			freeze: true,
+			freeze_message: __("Confirming dispensary issue..."),
+			callback(result) {
+				if (!result.message?.consultation) {
+					return;
+				}
+				frappe.show_alert({
+					message: __("Dispensary issue confirmed"),
+					indicator: "green",
+				});
+				frm.reload_doc();
+			},
+		});
+	}, __("Dispensary"));
 }
 
 function transition_consultation(frm, status) {

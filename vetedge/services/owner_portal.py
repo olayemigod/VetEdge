@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import frappe
-from frappe.utils import get_datetime, nowdate
+from frappe.utils import cint, get_datetime, nowdate
 
 from vetedge.services.appointment_flow import emit_appointment_status_notification
 from vetedge.install.print_formats import OWNER_INVOICE_PRINT_FORMAT
@@ -17,31 +17,60 @@ from vetedge.services.portal_access import (
 	validate_owner_patient_access,
 )
 
+OWNER_PORTAL_PAGE_LENGTH = 20
+
 
 @frappe.whitelist()
-def get_owner_portal_dashboard() -> dict:
+def get_owner_portal_dashboard(page_context: dict | None = None) -> dict:
 	owner_context = get_owner_context()
 	settings = get_portal_settings()
 	if not settings["enable_owner_portal"]:
 		frappe.throw("Owner portal is not enabled.", frappe.PermissionError)
+	page_context = normalize_page_context(page_context)
 
 	owner_profile = get_owner_profile(owner_context)
 	patients = get_owner_pets(owner_context)
-	appointments = get_owner_appointments(owner_context)
-	invoices = get_owner_invoices(owner_context)
-	consultations = get_owner_consultation_summaries(owner_context)
+	appointments = get_owner_appointments(
+		owner_context,
+		history_page=page_context["appointment_history_page"],
+		page_length=page_context["page_length"],
+		page_path=page_context["current_path"],
+	)
+	invoices = get_owner_invoices(
+		owner_context,
+		outstanding_page=page_context["outstanding_invoice_page"],
+		paid_page=page_context["paid_invoice_page"],
+		page_length=page_context["page_length"],
+		page_path=page_context["current_path"],
+	)
+	consultations = get_owner_consultation_summaries(
+		owner_context,
+		page=page_context["consultation_page"],
+		page_length=page_context["page_length"],
+		page_path=page_context["current_path"],
+	)
 
 	return {
 		"owner_context": owner_context,
 		"owner_profile": owner_profile,
 		"portal_theme": settings.get("portal_theme", get_portal_settings().get("portal_theme", {})),
 		"pets": patients,
+		"counts": {
+			"pets": len(patients),
+			"upcoming_appointments": len(appointments["upcoming"]),
+			"outstanding_invoices": invoices["outstanding"]["pagination"]["total_count"],
+			"consultations": consultations["pagination"]["total_count"],
+		},
 		"branches": get_portal_branches(),
 		"upcoming_appointments": appointments["upcoming"],
-		"appointment_history": appointments["history"],
-		"outstanding_invoices": invoices["outstanding"],
-		"paid_invoices": invoices["paid"],
-		"consultations": consultations,
+		"appointment_history": appointments["history"]["rows"],
+		"appointment_history_pagination": appointments["history"]["pagination"],
+		"outstanding_invoices": invoices["outstanding"]["rows"],
+		"outstanding_invoice_pagination": invoices["outstanding"]["pagination"],
+		"paid_invoices": invoices["paid"]["rows"],
+		"paid_invoice_pagination": invoices["paid"]["pagination"],
+		"consultations": consultations["rows"],
+		"consultation_pagination": consultations["pagination"],
 		"settings": settings,
 	}
 
@@ -91,10 +120,18 @@ def get_owner_pets(owner_context: dict | None = None) -> list[dict]:
 	)
 
 
-def get_owner_appointments(owner_context: dict | None = None) -> dict[str, list[dict]]:
+def get_owner_appointments(
+	owner_context: dict | None = None,
+	history_page: int = 1,
+	page_length: int = OWNER_PORTAL_PAGE_LENGTH,
+	page_path: str = "/vetedge_portal_appointments",
+) -> dict[str, list[dict] | dict]:
 	patients = get_owner_patient_names(owner_context)
 	if not patients:
-		return {"upcoming": [], "history": []}
+		return {
+			"upcoming": [],
+			"history": build_empty_pagination(page_path, "history_page", history_page, page_length),
+		}
 
 	fields = [
 		"name",
@@ -125,9 +162,27 @@ def get_owner_appointments(owner_context: dict | None = None) -> dict[str, list[
 		},
 		fields=fields,
 		order_by="appointment_datetime desc",
-		limit=50,
+		start=(max(cint(history_page), 1) - 1) * page_length,
+		limit=page_length,
 	)
-	return {"upcoming": upcoming, "history": history}
+	history_count = frappe.db.count(
+		"Veterinary Appointment",
+		filters={
+			"patient": ["in", patients],
+			"status": ["in", ["Completed", "Cancelled", "No Show"]],
+		},
+	)
+	return {
+		"upcoming": upcoming,
+		"history": build_pagination_payload(
+			rows=history,
+			total_count=history_count,
+			page=history_page,
+			page_length=page_length,
+			path=page_path,
+			page_key="history_page",
+		),
+	}
 
 
 def get_portal_branches() -> list[dict]:
@@ -201,44 +256,81 @@ def create_owner_appointment_request(
 	}
 
 
-def get_owner_invoices(owner_context: dict | None = None) -> dict[str, list[dict]]:
+def get_owner_invoices(
+	owner_context: dict | None = None,
+	outstanding_page: int = 1,
+	paid_page: int = 1,
+	page_length: int = OWNER_PORTAL_PAGE_LENGTH,
+	page_path: str = "/vetedge_portal_billing",
+) -> dict[str, dict]:
 	owner_context = owner_context or get_owner_context()
 	customers = owner_context.get("customers", [])
 	if not customers:
-		return {"outstanding": [], "paid": []}
+		return {
+			"outstanding": build_empty_pagination(page_path, "outstanding_page", outstanding_page, page_length),
+			"paid": build_empty_pagination(page_path, "paid_page", paid_page, page_length),
+		}
 
 	fields = ["name", "posting_date", "customer", "status", "outstanding_amount", "grand_total", "currency"]
+	outstanding_filters = {
+		"customer": ["in", customers],
+		"docstatus": 1,
+		"outstanding_amount": [">", 0],
+	}
+	paid_filters = {
+		"customer": ["in", customers],
+		"docstatus": 1,
+		"outstanding_amount": ["<=", 0],
+	}
 	outstanding = frappe.get_all(
 		"Sales Invoice",
-		filters={
-			"customer": ["in", customers],
-			"docstatus": 1,
-			"outstanding_amount": [">", 0],
-		},
+		filters=outstanding_filters,
 		fields=fields,
 		order_by="posting_date desc",
-		limit=50,
+		start=(max(cint(outstanding_page), 1) - 1) * page_length,
+		limit=page_length,
 	)
 	paid = frappe.get_all(
 		"Sales Invoice",
-		filters={
-			"customer": ["in", customers],
-			"docstatus": 1,
-			"outstanding_amount": ["<=", 0],
-		},
+		filters=paid_filters,
 		fields=fields,
 		order_by="posting_date desc",
-		limit=50,
+		start=(max(cint(paid_page), 1) - 1) * page_length,
+		limit=page_length,
 	)
 	for invoice in outstanding + paid:
 		invoice["download_pdf_url"] = get_owner_invoice_pdf_url(invoice.name)
-	return {"outstanding": outstanding, "paid": paid}
+	return {
+		"outstanding": build_pagination_payload(
+			rows=outstanding,
+			total_count=frappe.db.count("Sales Invoice", filters=outstanding_filters),
+			page=outstanding_page,
+			page_length=page_length,
+			path=page_path,
+			page_key="outstanding_page",
+			extra_params={"paid_page": max(cint(paid_page), 1)},
+		),
+		"paid": build_pagination_payload(
+			rows=paid,
+			total_count=frappe.db.count("Sales Invoice", filters=paid_filters),
+			page=paid_page,
+			page_length=page_length,
+			path=page_path,
+			page_key="paid_page",
+			extra_params={"outstanding_page": max(cint(outstanding_page), 1)},
+		),
+	}
 
 
-def get_owner_consultation_summaries(owner_context: dict | None = None) -> list[dict]:
+def get_owner_consultation_summaries(
+	owner_context: dict | None = None,
+	page: int = 1,
+	page_length: int = OWNER_PORTAL_PAGE_LENGTH,
+	page_path: str = "/vetedge_portal_history",
+) -> dict[str, list[dict] | dict]:
 	patients = get_owner_patient_names(owner_context)
 	if not patients:
-		return []
+		return build_empty_pagination(page_path, "consultation_page", page, page_length)
 
 	patient_map = {
 		row.name: row.patient_name or row.name
@@ -262,9 +354,10 @@ def get_owner_consultation_summaries(owner_context: dict | None = None) -> list[
 			"status",
 		],
 		order_by="consultation_datetime desc",
-		limit=50,
+		start=(max(cint(page), 1) - 1) * page_length,
+		limit=page_length,
 	)
-	return [
+	mapped_rows = [
 		{
 			**row,
 			"patient_name": patient_map.get(row.patient, row.patient),
@@ -272,6 +365,14 @@ def get_owner_consultation_summaries(owner_context: dict | None = None) -> list[
 		}
 		for row in rows
 	]
+	return build_pagination_payload(
+		rows=mapped_rows,
+		total_count=frappe.db.count("Veterinary Consultation", filters={"patient": ["in", patients]}),
+		page=page,
+		page_length=page_length,
+		path=page_path,
+		page_key="consultation_page",
+	)
 
 
 @frappe.whitelist()
@@ -288,6 +389,77 @@ def get_owner_invoice(invoice_name: str) -> dict:
 		"currency": invoice.currency,
 		"download_pdf_url": get_owner_invoice_pdf_url(invoice.name),
 	}
+
+
+def normalize_page_context(page_context: dict | None = None) -> dict:
+	page_context = dict(page_context or {})
+	return {
+		"current_path": page_context.get("current_path") or "/vetedge_portal",
+		"page_length": OWNER_PORTAL_PAGE_LENGTH,
+		"appointment_history_page": max(cint(page_context.get("appointment_history_page")) or 1, 1),
+		"outstanding_invoice_page": max(cint(page_context.get("outstanding_invoice_page")) or 1, 1),
+		"paid_invoice_page": max(cint(page_context.get("paid_invoice_page")) or 1, 1),
+		"consultation_page": max(cint(page_context.get("consultation_page")) or 1, 1),
+	}
+
+
+def build_empty_pagination(path: str, page_key: str, page: int, page_length: int) -> dict:
+	return build_pagination_payload(
+		rows=[],
+		total_count=0,
+		page=page,
+		page_length=page_length,
+		path=path,
+		page_key=page_key,
+	)
+
+
+def build_pagination_payload(
+	rows: list[dict],
+	total_count: int,
+	page: int,
+	page_length: int,
+	path: str,
+	page_key: str,
+	extra_params: dict | None = None,
+) -> dict:
+	page = max(cint(page) or 1, 1)
+	page_length = max(cint(page_length) or OWNER_PORTAL_PAGE_LENGTH, 1)
+	total_count = max(cint(total_count) or 0, 0)
+	total_pages = max((total_count + page_length - 1) // page_length, 1)
+	if total_count and page > total_pages:
+		page = total_pages
+	has_prev = page > 1
+	has_next = page < total_pages and total_count > 0
+	start_row = ((page - 1) * page_length) + 1 if total_count else 0
+	end_row = min(page * page_length, total_count) if total_count else 0
+	params = {key: value for key, value in (extra_params or {}).items() if value not in (None, "", 1)}
+
+	return {
+		"rows": rows,
+		"pagination": {
+			"page": page,
+			"page_length": page_length,
+			"total_count": total_count,
+			"total_pages": total_pages,
+			"has_prev": has_prev,
+			"has_next": has_next,
+			"prev_page": page - 1 if has_prev else None,
+			"next_page": page + 1 if has_next else None,
+			"prev_url": build_portal_page_url(path, page_key, page - 1, params) if has_prev else None,
+			"next_url": build_portal_page_url(path, page_key, page + 1, params) if has_next else None,
+			"start_row": start_row,
+			"end_row": end_row,
+		},
+	}
+
+
+def build_portal_page_url(path: str, page_key: str, target_page: int, extra_params: dict | None = None) -> str:
+	query = {key: value for key, value in (extra_params or {}).items() if value not in (None, "", 1)}
+	if target_page > 1:
+		query[page_key] = target_page
+	query_string = urlencode(query)
+	return f"{path}?{query_string}" if query_string else path
 
 
 @frappe.whitelist()

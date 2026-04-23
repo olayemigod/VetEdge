@@ -2,7 +2,8 @@
 	<div class="container py-4">
 		<div class="row align-items-center">
 			<div class="col-sm-6">
-				<strong>VetEdge</strong>
+				{% set clinic_brand_name = dashboard.portal_theme.brand_name if dashboard and dashboard.portal_theme and dashboard.portal_theme.brand_name else "VetEdge" %}
+				<strong>{{ clinic_brand_name }}</strong>
 			</div>
 			<div class="col-sm-6 text-sm-right text-muted">
 				Powered by VetEdge

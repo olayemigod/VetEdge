@@ -37,6 +37,8 @@ class VeterinarySettings(Document):
 					"notify_on_cancellation",
 					"enable_treatment_billing",
 					"enable_dispensary_flow",
+					"enforce_strict_expiry_control",
+					"block_manual_expired_batch_override",
 					"enable_vaccination",
 					"enable_boarding",
 					"enable_demo_tools",
@@ -44,6 +46,7 @@ class VeterinarySettings(Document):
 				],
 			)
 			set_if_field_exists(self, "portal_show_consultation_summary_only", 1)
+			set_if_field_exists(self, "batch_selection_policy", "FEFO")
 
 		if not self.get("enable_vitals"):
 			set_if_field_exists(self, "require_vitals_before_completion", 0)
@@ -74,6 +77,11 @@ class VeterinarySettings(Document):
 				],
 			)
 			set_if_field_exists(self, "notification_channels", None)
+
+		if not self.get("enable_dispensary_flow"):
+			set_if_field_exists(self, "enforce_strict_expiry_control", 1)
+			set_if_field_exists(self, "block_manual_expired_batch_override", 1)
+			set_if_field_exists(self, "batch_selection_policy", "FEFO")
 
 		if not self.get("enable_owner_portal"):
 			clear_fields(

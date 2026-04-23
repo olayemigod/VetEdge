@@ -3,14 +3,24 @@ from __future__ import annotations
 import frappe
 from frappe.utils import flt, getdate
 
+from vetedge.services.dispensary import (
+	sync_consultation_dispensary_state,
+	validate_consultation_dispensary_requirements,
+)
+from vetedge.services.billing import (
+	validate_consultation_invoice_before_progress,
+	validate_consultation_payment_before_treatment,
+)
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.portal_access import require_internal_user
+from vetedge.services.treatment_items import apply_planned_treatment_defaults
 
 
 CONSULTATION_STATUSES = {
 	"Draft",
 	"In Progress",
 	"Awaiting Payment",
+	"Pending Dispensary",
 	"Ready for Treatment",
 	"Completed",
 	"Cancelled",
@@ -18,8 +28,9 @@ CONSULTATION_STATUSES = {
 
 VALID_CONSULTATION_STATUS_TRANSITIONS = {
 	"Draft": {"In Progress", "Cancelled"},
-	"In Progress": {"Awaiting Payment", "Ready for Treatment", "Completed", "Cancelled"},
-	"Awaiting Payment": {"Ready for Treatment", "Completed", "Cancelled"},
+	"In Progress": {"Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"},
+	"Awaiting Payment": {"Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"},
+	"Pending Dispensary": {"Ready for Treatment", "Completed", "Cancelled"},
 	"Ready for Treatment": {"Completed", "Cancelled"},
 	"Completed": set(),
 	"Cancelled": set(),
@@ -45,6 +56,7 @@ def validate_consultation(doc) -> None:
 	set_consultation_title(doc)
 	validate_service_branch_access(doc)
 	validate_consultation_children(doc)
+	sync_consultation_dispensary_state(doc)
 	validate_completion_requirements(doc)
 
 
@@ -80,6 +92,8 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
 	validate_consultation_status_transition(doc.status, status)
+	validate_consultation_invoice_before_progress(doc, status)
+	validate_consultation_payment_before_treatment(doc, status)
 	doc.status = status
 	doc.save()
 
@@ -437,6 +451,7 @@ def validate_consultation_children(doc) -> None:
 		validate_enabled_link("Veterinary Diagnosis", row.diagnosis, "Diagnosis")
 
 	for row in doc.get("planned_treatments") or []:
+		apply_planned_treatment_defaults(row)
 		if flt(row.qty) <= 0:
 			frappe.throw("Planned Treatment Qty must be greater than zero.", frappe.ValidationError)
 		if row.get("rate") not in (None, "") and flt(row.rate) < 0:
@@ -473,6 +488,10 @@ def validate_enabled_item(item: str | None) -> None:
 
 
 def validate_completion_requirements(doc) -> None:
+	validate_consultation_invoice_before_progress(doc)
+	validate_consultation_payment_before_treatment(doc)
+	validate_consultation_dispensary_requirements(doc)
+
 	if doc.status != "Completed":
 		return
 

@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "autoname": "field:item",
+ "creation": "2026-04-22 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "service_type",
+  "treatment_type",
+  "shelf_life_in_days",
+  "description",
+  "disabled"
+ ],
+ "fields": [
+  {"fieldname": "item", "fieldtype": "Link", "in_list_view": 1, "label": "ERPNext Item", "options": "Item", "reqd": 1, "unique": 1},
+  {"fetch_from": "item.item_name", "fieldname": "item_name", "fieldtype": "Data", "in_list_view": 1, "label": "Item Name", "read_only": 1},
+  {"fieldname": "service_type", "fieldtype": "Link", "in_list_view": 1, "label": "Default Service Type", "options": "Veterinary Service Type"},
+  {"fieldname": "treatment_type", "fieldtype": "Link", "in_list_view": 1, "label": "Default Treatment Type", "options": "Veterinary Treatment Type"},
+  {"fieldname": "shelf_life_in_days", "fieldtype": "Int", "label": "Shelf Life in Days"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Treatment Item",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"export": 1, "read": 1, "report": 1, "role": "Desk User"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "item_name"
+}

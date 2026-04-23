@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
+from vetedge.services.copy_control import reset_vetedge_copy_state
 from vetedge.services.appointment_flow import validate_appointment
 from vetedge.services.notifications import notify_appointment_event
 
 
 class VeterinaryAppointment(Document):
 	def validate(self) -> None:
+		reset_vetedge_copy_state(self)
 		validate_appointment(self)
 
 	def after_insert(self) -> None:

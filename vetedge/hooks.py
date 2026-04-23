@@ -167,7 +167,10 @@ doc_events = {
 	"Payment Entry": {
 		"on_submit": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
 		"on_cancel": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
-	}
+	},
+	"Stock Entry": {
+		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",
+	},
 }
 
 # Scheduled Tasks

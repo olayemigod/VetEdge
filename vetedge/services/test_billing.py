@@ -8,9 +8,12 @@ import frappe
 
 from vetedge.services.billing import (
 	ConsultationBillingSettings,
+	consultation_requires_invoice_before_progress,
 	create_consultation_invoice,
 	get_invoice_payment_status,
 	update_single_consultation_payment_status,
+	validate_consultation_invoice_before_progress,
+	validate_consultation_payment_before_treatment,
 	validate_consultation_invoice_request,
 )
 
@@ -74,6 +77,7 @@ class TestConsultationBilling(TestCase):
 
 	def test_paid_invoice_status_sets_consultation_ready_for_treatment(self):
 		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
+		consultation_doc = make_consultation()
 		invoice = frappe._dict(
 			name="SINV-001",
 			docstatus=1,
@@ -84,7 +88,15 @@ class TestConsultationBilling(TestCase):
 		set_values = []
 
 		with (
-			patch("vetedge.services.billing.frappe", make_frappe_stub(set_values=set_values, get_value=lambda *args, **kwargs: "Main")),
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
 			patch("vetedge.services.billing.emit_notification_event") as emit,
 		):
 			update_single_consultation_payment_status(consultation, invoice)
@@ -97,6 +109,106 @@ class TestConsultationBilling(TestCase):
 		invoice = frappe._dict(docstatus=1, outstanding_amount=250, grand_total=1000)
 
 		self.assertEqual(get_invoice_payment_status(invoice), "Partly Paid")
+
+	def test_create_consultation_invoice_sets_pending_dispensary_when_required(self):
+		consultation = make_consultation()
+		invoice = make_invoice()
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True)
+		set_values = []
+
+		with (
+			patched_invoice_context(consultation, invoice, settings, set_values),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Pending Dispensary"),
+		):
+			result = create_consultation_invoice("VCON-001")
+
+		self.assertEqual(result["status"], "Pending Dispensary")
+		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
+
+	def test_paid_invoice_status_sets_consultation_pending_dispensary_when_required(self):
+		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
+		consultation_doc = make_consultation()
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			outstanding_amount=0,
+			grand_total=1000,
+			customer="CUST-001",
+		)
+		set_values = []
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Pending Dispensary"),
+			patch("vetedge.services.billing.emit_notification_event") as emit,
+		):
+			update_single_consultation_payment_status(consultation, invoice)
+
+		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
+		self.assertEqual(emit.call_args_list[1].args[0], "consultation_sent_to_dispensary")
+
+	def test_consultation_requires_invoice_before_progress_when_billing_enabled(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+
+		with patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings):
+			self.assertTrue(consultation_requires_invoice_before_progress(consultation, "Ready for Treatment"))
+
+	def test_validate_consultation_invoice_before_progress_blocks_without_invoice(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_consultation_invoice_before_progress,
+				consultation,
+				"Ready for Treatment",
+			)
+
+	def test_validate_consultation_invoice_before_progress_allows_active_invoice(self):
+		consultation = make_consultation(linked_invoice="SINV-001")
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.is_active_sales_invoice", return_value=True),
+		):
+			validate_consultation_invoice_before_progress(consultation, "Ready for Treatment")
+
+	def test_validate_consultation_payment_before_treatment_blocks_unpaid_progress(self):
+		consultation = make_consultation(linked_invoice="SINV-001")
+		consultation.payment_status = "Unpaid"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_consultation_payment_before_treatment,
+				consultation,
+				"Ready for Treatment",
+			)
+
+	def test_validate_consultation_payment_before_treatment_allows_paid_progress(self):
+		consultation = make_consultation(linked_invoice="SINV-001")
+		consultation.payment_status = "Paid"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+
+		with patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings):
+			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
 
 
 def make_consultation(linked_invoice=None):
@@ -137,6 +249,7 @@ class patched_invoice_context:
 		frappe_stub = make_frappe_stub(set_values=self.set_values, get_doc=get_doc, get_value=get_value)
 		self.stack.enter_context(patch("vetedge.services.billing.frappe", frappe_stub))
 		self.stack.enter_context(patch("vetedge.services.billing.get_consultation_billing_settings", return_value=self.settings))
+		self.stack.enter_context(patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"))
 		self.stack.enter_context(patch("vetedge.services.billing.get_billing_cost_center", return_value="Main - CC"))
 		self.stack.enter_context(patch("vetedge.services.billing.nowdate", return_value="2026-04-20"))
 		self.stack.enter_context(patch("vetedge.services.billing.emit_notification_event", return_value={"queued": False}))

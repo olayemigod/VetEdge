@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import frappe
 from frappe.utils import cint, flt, nowdate
 
+from vetedge.services.branding import get_clinic_brand_name
+from vetedge.services.dispensary import get_consultation_ready_status
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.registration_billing import get_billing_cost_center, get_default_company
@@ -89,7 +91,7 @@ def create_consultation_invoice(consultation: str) -> dict:
 			"posting_date": nowdate(),
 			"due_date": nowdate(),
 			"items": items,
-			"remarks": f"VetEdge consultation billing for {consultation_doc.name}",
+			"remarks": f"{get_clinic_brand_name()} consultation billing for {consultation_doc.name}",
 		}
 	)
 
@@ -185,8 +187,54 @@ def get_consultation_status_after_invoice_created(doc, settings: ConsultationBil
 	if settings.requires_payment_before_treatment:
 		return "Awaiting Payment"
 	if doc.status in {"Draft", "In Progress", "Awaiting Payment"}:
-		return "Ready for Treatment"
+		return get_consultation_ready_status(doc)
 	return doc.status
+
+
+def consultation_requires_invoice_before_progress(doc, target_status: str | None = None) -> bool:
+	settings = get_consultation_billing_settings()
+	if not settings.enabled:
+		return False
+
+	target_status = target_status or doc.status
+	if target_status not in {"Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed"}:
+		return False
+
+	return bool(settings.consultation_item or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])))
+
+
+def validate_consultation_invoice_before_progress(doc, target_status: str | None = None) -> None:
+	if not consultation_requires_invoice_before_progress(doc, target_status):
+		return
+
+	if doc.linked_invoice and is_active_sales_invoice(doc.linked_invoice):
+		return
+
+	frappe.throw(
+		"Create the consultation invoice before moving this consultation to the next treatment stage.",
+		frappe.ValidationError,
+	)
+
+
+def validate_consultation_payment_before_treatment(doc, target_status: str | None = None) -> None:
+	settings = get_consultation_billing_settings()
+	if not settings.enabled or not settings.requires_payment_before_treatment:
+		return
+
+	target_status = target_status or doc.status
+	if target_status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
+		return
+
+	if not consultation_requires_invoice_before_progress(doc, target_status):
+		return
+
+	if doc.payment_status == PAID_STATUS:
+		return
+
+	frappe.throw(
+		"Consultation payment is required before treatment can proceed.",
+		frappe.ValidationError,
+	)
 
 
 def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBillingSettings) -> None:
@@ -204,6 +252,8 @@ def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBilli
 		emit_notification_event("consultation_awaiting_payment", doc.doctype, doc.name, payload)
 		if not settings.allow_doctor_collect_payment:
 			emit_notification_event("accounts_action_required", doc.doctype, doc.name, payload)
+	elif get_consultation_status_after_invoice_created(doc, settings) == "Pending Dispensary":
+		emit_notification_event("consultation_sent_to_dispensary", doc.doctype, doc.name, payload)
 
 
 @frappe.whitelist()
@@ -270,9 +320,11 @@ def update_consultation_payment_status_from_payment_entry(doc, method: str | Non
 def update_single_consultation_payment_status(consultation, invoice) -> None:
 	new_payment_status = get_invoice_payment_status(invoice)
 	values = {"payment_status": new_payment_status}
+	consultation_doc = None
 
 	if new_payment_status == PAID_STATUS and consultation.status == "Awaiting Payment":
-		values["status"] = "Ready for Treatment"
+		consultation_doc = frappe.get_doc("Veterinary Consultation", consultation.name)
+		values["status"] = get_consultation_ready_status(consultation_doc)
 
 	frappe.db.set_value("Veterinary Consultation", consultation.name, values, update_modified=False)
 
@@ -288,12 +340,20 @@ def update_single_consultation_payment_status(consultation, invoice) -> None:
 				"branch": frappe.db.get_value("Veterinary Consultation", consultation.name, "service_branch"),
 			},
 		)
-		emit_notification_event(
-			"consultation_ready_for_treatment",
-			"Veterinary Consultation",
-			consultation.name,
-			{"invoice": invoice.name, "payment_status": new_payment_status},
-		)
+		if values.get("status") == "Pending Dispensary":
+			emit_notification_event(
+				"consultation_sent_to_dispensary",
+				"Veterinary Consultation",
+				consultation.name,
+				{"invoice": invoice.name, "payment_status": new_payment_status},
+			)
+		else:
+			emit_notification_event(
+				"consultation_ready_for_treatment",
+				"Veterinary Consultation",
+				consultation.name,
+				{"invoice": invoice.name, "payment_status": new_payment_status},
+			)
 
 
 def get_invoice_payment_status(invoice) -> str:

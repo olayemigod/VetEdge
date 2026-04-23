@@ -52,7 +52,14 @@ class TestConsultationFlow(TestCase):
 			)
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.primary_owner, "CUST-001")
@@ -90,7 +97,14 @@ class TestConsultationFlow(TestCase):
 			)
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.consulting_practitioner_name, "Dr Ada Vet")
@@ -142,7 +156,14 @@ class TestConsultationFlow(TestCase):
 			)
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.service_branch, "Branch A")
@@ -170,7 +191,14 @@ class TestConsultationFlow(TestCase):
 			)
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
 			self.assertRaises(frappe.ValidationError, validate_consultation, doc)
 
 	def test_child_rows_validate_links_and_qty(self):
@@ -197,13 +225,19 @@ class TestConsultationFlow(TestCase):
 			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "disabled"),
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+		):
 			validate_consultation_children(doc)
 
 	def test_completion_requires_vitals_when_setting_is_active(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")
 
 		with (
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
 			patch("vetedge.services.consultation_flow.is_vitals_required_before_completion", return_value=True),
 			patch("vetedge.services.consultation_flow.has_vitals_for_consultation", return_value=False),
 			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
@@ -212,6 +246,43 @@ class TestConsultationFlow(TestCase):
 
 	def test_consultation_status_transition_allows_in_progress_to_billing(self):
 		validate_consultation_status_transition("In Progress", "Awaiting Payment")
+
+	def test_consultation_status_transition_allows_pending_dispensary(self):
+		validate_consultation_status_transition("In Progress", "Pending Dispensary")
+
+	def test_transition_consultation_status_requires_invoice_before_ready(self):
+		doc = frappe._dict(name="VCON-001", status="In Progress", save=lambda: doc)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: doc)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress", side_effect=frappe.ValidationError),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				transition_consultation_status,
+				"VCON-001",
+				"Ready for Treatment",
+			)
+
+	def test_transition_consultation_status_requires_payment_before_ready(self):
+		doc = frappe._dict(name="VCON-001", status="Awaiting Payment", save=lambda: doc)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: doc)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				transition_consultation_status,
+				"VCON-001",
+				"Ready for Treatment",
+			)
 
 	def test_consultation_status_transition_rejects_completed_reopen(self):
 		frappe_stub = make_frappe_stub()
@@ -230,7 +301,11 @@ class TestConsultationFlow(TestCase):
 		doc.save = lambda: saved.append(doc)
 		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: doc)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+		):
 			result = transition_consultation_status("VCON-001", "Ready for Treatment")
 
 		self.assertEqual(result["status"], "Ready for Treatment")

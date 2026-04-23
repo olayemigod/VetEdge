@@ -325,13 +325,15 @@ def get_revenue_by_service_type(filters=None) -> list[frappe._dict]:
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			COALESCE(vst.service_type_name, %(unmapped)s) AS service_type,
+			COALESCE(vst.service_type_name, legacy_vst.service_type_name, %(unmapped)s) AS service_type,
 			COALESCE(SUM(sii.base_net_amount), 0) AS revenue
 		FROM `tabSales Invoice` si
 		INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
-		LEFT JOIN `tabVeterinary Service Type` vst ON vst.default_item = sii.item_code
+		LEFT JOIN `tabVeterinary Treatment Item` vti ON vti.item = sii.item_code AND IFNULL(vti.disabled, 0) = 0
+		LEFT JOIN `tabVeterinary Service Type` vst ON vst.name = vti.service_type
+		LEFT JOIN `tabVeterinary Service Type` legacy_vst ON legacy_vst.default_item = sii.item_code
 		WHERE {" AND ".join(conditions)}
-		GROUP BY COALESCE(vst.service_type_name, %(unmapped)s)
+		GROUP BY COALESCE(vst.service_type_name, legacy_vst.service_type_name, %(unmapped)s)
 		ORDER BY revenue DESC
 		""",
 		{**params, "unmapped": _("Unmapped Service")},
