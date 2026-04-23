@@ -62,6 +62,7 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
 			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
@@ -95,6 +96,7 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
 			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
@@ -118,7 +120,9 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
+			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
 			patch("vetedge.services.dispensary.get_treatment_type_requires_dispensary", return_value=False),
 			patch("vetedge.services.dispensary.get_treatment_item_defaults", return_value=None),
@@ -132,6 +136,7 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
 			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
@@ -152,6 +157,7 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
 			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
@@ -178,6 +184,7 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
 			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
@@ -227,7 +234,9 @@ class TestDispensaryFlow(TestCase):
 
 		with (
 			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
 			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
+			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
 			patch("vetedge.services.dispensary.get_treatment_type_requires_dispensary", return_value=False),
 			patch("vetedge.services.dispensary.get_treatment_item_defaults", return_value=None),
 			patch("vetedge.services.dispensary.get_item_stock_profile", return_value=SimpleNamespace(is_stock_item=True, stock_uom="Nos", has_batch_no=False, has_expiry_date=False, shelf_life_in_days=0)),

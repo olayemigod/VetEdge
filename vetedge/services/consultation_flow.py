@@ -12,6 +12,11 @@ from vetedge.services.billing import (
 	validate_consultation_payment_before_treatment,
 )
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.permissions import (
+	can_access_branch_data,
+	can_access_consultation,
+	validate_consultation_clinical_permissions,
+)
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.treatment_items import apply_planned_treatment_defaults
 
@@ -91,6 +96,7 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 def transition_consultation_status(consultation: str, status: str) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	validate_consultation_status_transition(doc.status, status)
 	validate_consultation_invoice_before_progress(doc, status)
 	validate_consultation_payment_before_treatment(doc, status)
@@ -404,23 +410,7 @@ def validate_service_branch_access(doc) -> None:
 
 
 def validate_user_branch_access(service_branch: str) -> None:
-	if not frappe.db.exists("DocType", "Branch User Assignment"):
-		return
-
-	filters = {"user": frappe.session.user, "branch": service_branch}
-	if frappe.get_meta("Branch User Assignment").has_field("disabled"):
-		filters["disabled"] = ["!=", 1]
-
-	assignments = frappe.get_all(
-		"Branch User Assignment",
-		filters=filters,
-		limit=1,
-	)
-	if not assignments:
-		frappe.throw(
-			f"User {frappe.session.user} is not assigned to Service Branch {service_branch}.",
-			frappe.PermissionError,
-		)
+	can_access_branch_data(frappe.session.user, service_branch, raise_exception=True)
 
 
 def validate_practitioner_branch_access(practitioner: str | None, service_branch: str) -> None:
@@ -444,6 +434,7 @@ def validate_practitioner_branch_access(practitioner: str | None, service_branch
 
 
 def validate_consultation_children(doc) -> None:
+	validate_consultation_clinical_permissions(doc)
 	for row in doc.get("symptoms") or []:
 		validate_enabled_link("Veterinary Symptom", row.symptom, "Symptom")
 

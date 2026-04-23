@@ -54,7 +54,9 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -99,7 +101,9 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -158,7 +162,9 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -193,7 +199,9 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -228,6 +236,7 @@ class TestConsultationFlow(TestCase):
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 		):
 			validate_consultation_children(doc)
 
@@ -257,6 +266,7 @@ class TestConsultationFlow(TestCase):
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress", side_effect=frappe.ValidationError),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 		):
@@ -274,6 +284,7 @@ class TestConsultationFlow(TestCase):
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment", side_effect=frappe.ValidationError),
 		):
@@ -303,6 +314,7 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 		):
@@ -531,7 +543,10 @@ class TestConsultationFlow(TestCase):
 			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
 		)
 
-		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data", side_effect=frappe.PermissionError),
+		):
 			self.assertRaises(
 				frappe.PermissionError,
 				validate_service_branch_access,

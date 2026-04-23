@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_days, cint, flt, getdate, nowdate
 
+from vetedge.services.permissions import can_access_medical_history
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -28,6 +29,7 @@ def get_patient_medical_history_view(
 	limit: int = 100,
 ) -> dict:
 	require_internal_user()
+	can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
 	validate_patient_context(patient)
 	from_date, to_date = normalize_date_range(from_date, to_date)
 	limit = cint(limit) or 100
@@ -58,6 +60,7 @@ def get_patient_medical_history(
 	to_date: str | None = None,
 ) -> list[dict]:
 	require_internal_user()
+	can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
 	validate_patient_context(patient)
 	from_date, to_date = normalize_date_range(from_date, to_date)
 	limit = cint(limit) or 50
@@ -81,6 +84,7 @@ def get_patient_vitals_trend(
 	to_date: str | None = None,
 ) -> list[dict]:
 	require_internal_user()
+	can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
 	validate_patient_context(patient)
 	from_date, to_date = normalize_date_range(from_date, to_date)
 	if fieldname not in CHARTABLE_VITAL_FIELDS:

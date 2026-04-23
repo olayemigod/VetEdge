@@ -3,25 +3,38 @@
  "creation": "2026-04-18 00:00:00.000000",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
- "header_icon": "heart-pulse",
+ "header_icon": "support",
  "idx": 0,
  "items": [
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "layout-dashboard",
+   "icon": "users-round",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Veterinary Financial Dashboard",
-   "link_to": "Veterinary Financial Dashboard",
-   "link_type": "Workspace",
+   "label": "Veterinary Patient",
+   "link_to": "Veterinary Patient",
+   "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "paw-print",
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Dispensary User') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Sales Manager')",
+   "icon": "chart",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Veterinary Financial Dashboard",
+   "link_to": "veterinary-financial-dashboard",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "database",
    "indent": 1,
    "keep_closed": 0,
    "label": "Veterinary Records",
@@ -44,7 +57,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "notepad-text",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Consultation",
@@ -56,7 +69,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "calendar-days",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Appointment",
@@ -68,7 +81,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "file-question-mark",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Guest Booking Request",
@@ -80,7 +93,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "list-tree",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Appointment Queue",
@@ -92,7 +105,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "clipboard-check",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Vital Signs",
@@ -104,7 +117,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "scroll-text",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Medical History",
@@ -116,7 +129,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "customer",
    "indent": 0,
    "keep_closed": 0,
    "label": "Customer",
@@ -139,7 +152,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "sprout",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Species",
@@ -151,7 +164,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "list-tree",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Breed",
@@ -163,7 +176,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "activity",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Symptom",
@@ -175,7 +188,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "file-question-mark",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Diagnosis",
@@ -187,7 +200,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "folder-tree",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Diagnosis Category",
@@ -199,7 +212,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "tool",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Service Type",
@@ -211,7 +224,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "stock",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Treatment Item",
@@ -223,7 +236,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "settings",
    "indent": 0,
    "keep_closed": 0,
    "label": "Veterinary Treatment Type",
@@ -246,7 +259,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "receipt-text",
    "indent": 0,
    "keep_closed": 0,
    "label": "Sales Invoice",
@@ -258,7 +271,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "money-coins-1",
    "indent": 0,
    "keep_closed": 0,
    "label": "Payment Entry",
@@ -270,7 +283,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "accounting",
    "indent": 0,
    "keep_closed": 0,
    "label": "Cost Center",
@@ -282,7 +295,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "stock",
    "indent": 0,
    "keep_closed": 0,
    "label": "Item",
@@ -305,11 +318,11 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "organization",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Veterinary Settings",
-   "link_to": "Veterinary Settings",
+   "label": "Branch",
+   "link_to": "Branch",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
@@ -317,7 +330,46 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
+   "icon": "users",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Branch User Assignment",
+   "link_to": "Branch User Assignment",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
+   "icon": "user-round-check",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Branch Practitioner Assignment",
+   "link_to": "Branch Practitioner Assignment",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
+   "icon": "book-user",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "VetEdge Role Bundle",
+   "link_to": "VetEdge Role Bundle",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "sheet",
    "indent": 0,
    "keep_closed": 0,
    "label": "VetEdge License Profile",
@@ -329,11 +381,11 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "settings",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Branch",
-   "link_to": "Branch",
+   "label": "Veterinary Settings",
+   "link_to": "Veterinary Settings",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"

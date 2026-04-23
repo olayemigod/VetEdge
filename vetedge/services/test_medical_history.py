@@ -17,7 +17,10 @@ class TestMedicalHistory(TestCase):
 	def test_medical_history_combines_consultations_and_vitals(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			history = get_patient_medical_history("VP-001", from_date="2026-04-01", to_date="2026-04-30")
 
 		self.assertEqual([event["type"] for event in history], ["vitals", "consultation"])
@@ -27,7 +30,10 @@ class TestMedicalHistory(TestCase):
 	def test_medical_history_view_returns_patient_sections_and_cross_branch_records(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
 
 		self.assertEqual(view["summary"]["patient_name"], "Buddy")
@@ -43,7 +49,10 @@ class TestMedicalHistory(TestCase):
 	def test_medical_history_view_handles_empty_history(self):
 		frappe_stub = make_frappe_stub(get_list=lambda *args, **kwargs: [], get_all=lambda *args, **kwargs: [])
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
 
 		self.assertEqual(view["consultations"], [])
@@ -61,7 +70,10 @@ class TestMedicalHistory(TestCase):
 
 		frappe_stub = make_frappe_stub(get_list=get_list)
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
 
 		consultation_filters = [filters for doctype, filters in calls if doctype == "Veterinary Consultation"]
@@ -77,7 +89,10 @@ class TestMedicalHistory(TestCase):
 			]
 		)
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			trend = get_patient_vitals_trend("VP-001", "weight", from_date="2026-04-01", to_date="2026-04-30")
 
 		self.assertEqual(trend, [{"name": "VVS-001", "timestamp": "2026-04-18 10:00:00", "fieldname": "weight", "value": 12.0}])
@@ -85,7 +100,10 @@ class TestMedicalHistory(TestCase):
 	def test_vitals_trend_rejects_non_chartable_field(self):
 		frappe_stub = make_frappe_stub()
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
 			self.assertRaises(
 				frappe.ValidationError,
 				get_patient_vitals_trend,

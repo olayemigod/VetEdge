@@ -8,6 +8,7 @@ from vetedge.install.print_formats import ensure_print_formats
 from vetedge.seed.master_data import seed_master_data
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
 from vetedge.services.portal_access import normalize_owner_portal_users
+from vetedge.services.role_bundles import ensure_starter_role_bundles
 
 
 def after_install() -> None:
@@ -20,6 +21,7 @@ def after_migrate() -> None:
 
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
+	ensure_starter_role_bundles()
 	ensure_custom_fields()
 	ensure_veterinary_settings()
 	cleanup_stale_portal_menu_items()
@@ -34,6 +36,11 @@ def ensure_vetedge_roles() -> None:
 		("VetEdge Administrator", 1),
 		("VetEdge Front Desk", 1),
 		("VetEdge Doctor", 1),
+		("Veterinary Nurse", 1),
+		("Dispensary User", 1),
+		("Lab Technician", 1),
+		("Branch Manager", 1),
+		("Accounts/Cashier", 1),
 		("VetEdge Portal User", 0),
 	):
 		if frappe.db.exists("Role", role):

@@ -66,7 +66,11 @@ class TestVitals(TestCase):
 			parse_json=lambda value: value,
 		)
 
-		with patch("vetedge.services.vitals.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.vitals.frappe", frappe_stub),
+			patch("vetedge.services.vitals.can_access_consultation"),
+			patch("vetedge.services.vitals.can_access_branch_data"),
+		):
 			name = create_vitals_from_consultation(
 				"VCON-001",
 				{
@@ -137,7 +141,10 @@ class TestVitals(TestCase):
 			get_list=get_list,
 		)
 
-		with patch("vetedge.services.vitals.frappe", frappe_stub):
+		with (
+			patch("vetedge.services.vitals.frappe", frappe_stub),
+			patch("vetedge.services.vitals.can_access_consultation"),
+		):
 			vitals = get_latest_vitals_for_consultation("VCON-001")
 
 		self.assertEqual(vitals.name, "VVS-001")

@@ -18,7 +18,7 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "dashboard_chart", "revenue_by_service_type", "revenue_by_service_type.json"),
 	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
 	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
-	("veterinary", "workspace", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
 	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),
 )
@@ -30,7 +30,13 @@ def ensure_financial_dashboard() -> None:
 		if os.path.exists(file_path):
 			import_file_by_path(file_path, force=True, ignore_version=True)
 
+	cleanup_legacy_financial_workspace()
 	ensure_vetedge_desktop_icon()
+
+
+def cleanup_legacy_financial_workspace() -> None:
+	if frappe.db.exists("Workspace", "Veterinary Financial Dashboard"):
+		frappe.delete_doc_if_exists("Workspace", "Veterinary Financial Dashboard", force=1)
 
 
 def ensure_vetedge_desktop_icon() -> None:

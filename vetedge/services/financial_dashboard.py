@@ -59,6 +59,70 @@ def get_payments_today(filters=None):
 	return currency_card(get_payment_total(today, today), {"from_date": today, "to_date": today})
 
 
+@frappe.whitelist()
+def get_financial_dashboard_view(filters=None) -> dict:
+	require_read_permission("Sales Invoice")
+	if isinstance(filters, str):
+		filters = frappe.parse_json(filters)
+	filters = frappe._dict(filters or {})
+	currency = frappe.defaults.get_global_default("currency") or frappe.defaults.get_default("currency")
+	can_read_payment_entry = can_read_doctype("Payment Entry")
+
+	cards = [
+		{"label": _("Today Revenue"), "value": get_today_revenue(filters).get("value"), "currency": currency},
+		{"label": _("Week Revenue"), "value": get_week_revenue(filters).get("value"), "currency": currency},
+		{"label": _("Month Revenue"), "value": get_month_revenue(filters).get("value"), "currency": currency},
+		{
+			"label": _("Outstanding Receivables"),
+			"value": get_outstanding_receivables(filters).get("value"),
+			"currency": currency,
+		},
+	]
+	if can_read_payment_entry:
+		cards.append(
+			{"label": _("Payments Today"), "value": get_payments_today(filters).get("value"), "currency": currency}
+		)
+
+	charts = [
+		{"key": "daily_revenue_trend", "label": _("Daily Revenue Trend"), **get_daily_revenue_chart(filters)},
+		{
+			"key": "revenue_by_cost_center",
+			"label": _("Revenue by Cost Center"),
+			**get_revenue_by_cost_center_chart(filters),
+		},
+		{
+			"key": "revenue_by_service_type",
+			"label": _("Revenue by Service Type"),
+			**get_revenue_by_service_type_chart(filters),
+		},
+		{
+			"key": "paid_vs_outstanding",
+			"label": _("Paid vs Outstanding"),
+			**get_paid_vs_outstanding_chart(filters),
+		},
+	]
+	if can_read_payment_entry:
+		charts.append(
+			{
+				"key": "payment_method_breakdown",
+				"label": _("Payment Method Breakdown"),
+				**get_payment_method_breakdown_chart(filters),
+			}
+		)
+
+	return {
+		"cards": cards,
+		"charts": charts,
+		"shortcuts": get_financial_shortcuts(),
+		"capabilities": {
+			"can_read_sales_invoice": True,
+			"can_read_payment_entry": can_read_payment_entry,
+			"can_read_cost_center": can_read_doctype("Cost Center"),
+			"can_read_branch_performance_summary": can_read_report("Branch Performance Summary"),
+		},
+	}
+
+
 def currency_card(value: float, route_options: dict | None = None) -> dict:
 	return {
 		"value": flt(value, 2),
@@ -81,6 +145,33 @@ def get_filter_value(filters, fieldname: str):
 def require_read_permission(doctype: str) -> None:
 	if not frappe.has_permission(doctype, "read"):
 		frappe.throw(_("Not permitted to read {0}.").format(_(doctype)), frappe.PermissionError)
+
+
+def can_read_doctype(doctype: str) -> bool:
+	return bool(frappe.has_permission(doctype, "read"))
+
+
+def can_read_report(report_name: str) -> bool:
+	if not frappe.db.exists("Report", report_name):
+		return False
+	return bool(frappe.has_permission(doc=frappe.get_doc("Report", report_name), ptype="read"))
+
+
+def get_financial_shortcuts() -> list[dict]:
+	shortcuts = []
+
+	if can_read_report("Branch Performance Summary"):
+		shortcuts.append(
+			{"label": _("Branch Performance Summary"), "route": {"type": "Report", "name": "Branch Performance Summary"}}
+		)
+	if can_read_doctype("Sales Invoice"):
+		shortcuts.append({"label": _("Sales Invoice"), "route": {"type": "DocType", "name": "Sales Invoice"}})
+	if can_read_doctype("Payment Entry"):
+		shortcuts.append({"label": _("Payment Entry"), "route": {"type": "DocType", "name": "Payment Entry"}})
+	if can_read_doctype("Cost Center"):
+		shortcuts.append({"label": _("Cost Center"), "route": {"type": "DocType", "name": "Cost Center"}})
+
+	return shortcuts
 
 
 def default_date_range(filters=None) -> tuple[date, date]:

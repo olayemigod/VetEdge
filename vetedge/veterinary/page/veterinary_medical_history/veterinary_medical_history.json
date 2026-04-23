@@ -15,7 +15,16 @@
    "role": "System Manager"
   },
   {
-   "role": "Desk User"
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "Branch Manager"
   }
  ],
  "script": null,

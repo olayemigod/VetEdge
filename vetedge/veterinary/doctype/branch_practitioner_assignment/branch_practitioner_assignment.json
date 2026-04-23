@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-04-23 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "assignment_section",
+  "practitioner",
+  "branch",
+  "disabled"
+ ],
+ "fields": [
+  {"fieldname": "assignment_section", "fieldtype": "Section Break", "label": "Assignment"},
+  {"fieldname": "practitioner", "fieldtype": "Link", "in_list_view": 1, "label": "Practitioner User", "options": "User", "reqd": 1},
+  {"fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "label": "Branch", "options": "Branch", "reqd": 1},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Branch Practitioner Assignment",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "VetEdge Administrator"},
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "Branch Manager"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

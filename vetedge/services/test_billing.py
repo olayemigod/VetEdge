@@ -253,6 +253,8 @@ class patched_invoice_context:
 		self.stack.enter_context(patch("vetedge.services.billing.get_billing_cost_center", return_value="Main - CC"))
 		self.stack.enter_context(patch("vetedge.services.billing.nowdate", return_value="2026-04-20"))
 		self.stack.enter_context(patch("vetedge.services.billing.emit_notification_event", return_value={"queued": False}))
+		self.stack.enter_context(patch("vetedge.services.billing.can_access_consultation"))
+		self.stack.enter_context(patch("vetedge.services.billing.can_initiate_payment"))
 		return get_doc
 
 	def __exit__(self, exc_type, exc, tb):

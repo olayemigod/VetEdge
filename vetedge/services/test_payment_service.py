@@ -50,6 +50,8 @@ class TestPaymentService(TestCase):
 		invoice_doc.company = "Vet Company"
 
 		with (
+			patch("vetedge.services.payment_service.can_initiate_payment"),
+			patch("vetedge.services.payment_service.frappe.session", SimpleNamespace(user="owner@example.com")),
 			patch("vetedge.services.payment_service.validate_owner_invoice_access", return_value=invoice_summary),
 			patch("vetedge.services.payment_service.frappe.get_doc", return_value=invoice_doc),
 		):
@@ -68,6 +70,8 @@ class TestPaymentService(TestCase):
 		)
 
 		with (
+			patch("vetedge.services.payment_service.can_initiate_payment"),
+			patch("vetedge.services.payment_service.frappe.session", SimpleNamespace(user="owner@example.com")),
 			patch("vetedge.services.payment_service.validate_owner_invoice_access", return_value=invoice_summary),
 			patch("vetedge.services.payment_service.frappe.throw", side_effect=frappe.ValidationError),
 		):

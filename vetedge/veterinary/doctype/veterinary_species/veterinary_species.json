@@ -17,7 +17,11 @@
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"export": 1, "read": 1, "report": 1, "role": "Desk User"}
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1},
+  {"read": 1, "report": 1, "role": "Veterinary Nurse"},
+  {"read": 1, "report": 1, "role": "Branch Manager"}
  ],
  "sort_field": "modified",
  "sort_order": "DESC",

@@ -5,6 +5,7 @@ from frappe import _
 from frappe.utils import now_datetime
 from frappe.utils import flt
 
+from vetedge.services.permissions import can_access_branch_data, can_access_consultation
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -110,6 +111,8 @@ def create_vitals_from_consultation(consultation: str, values: dict | str | None
 	)
 	if not consultation_context:
 		frappe.throw(_("Vitals must reference a valid Veterinary Consultation."), frappe.ValidationError)
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+	can_access_branch_data(frappe.session.user, consultation_context.service_branch, raise_exception=True)
 
 	doc = frappe.get_doc(
 		{
@@ -140,6 +143,7 @@ def get_latest_vitals_for_consultation(consultation: str) -> dict | None:
 	require_internal_user()
 	if not consultation:
 		return None
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 
 	if not frappe.has_permission("Veterinary Vital Signs", "read"):
 		frappe.throw("Not permitted to read Veterinary Vital Signs.", frappe.PermissionError)

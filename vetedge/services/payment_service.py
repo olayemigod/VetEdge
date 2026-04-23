@@ -6,6 +6,7 @@ import frappe
 from frappe.utils import flt, now_datetime
 
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.permissions import can_initiate_payment
 from vetedge.services.portal_access import get_owner_context, get_portal_settings, validate_owner_invoice_access
 
 
@@ -74,6 +75,7 @@ def validate_invoice_payable(invoice_name: str, access_context: dict | None = No
 
 	if mode == "owner":
 		owner_context = access_context.get("owner_context") or get_owner_context()
+		can_initiate_payment(getattr(frappe.session, "user", None), invoice_name, mode="owner", raise_exception=True)
 		invoice = validate_owner_invoice_access(invoice_name, owner_context)
 	else:
 		invoice = frappe.db.get_value(
@@ -86,6 +88,7 @@ def validate_invoice_payable(invoice_name: str, access_context: dict | None = No
 			frappe.throw("Sales Invoice not found.", frappe.PermissionError)
 		if mode == "guest_registration" and invoice.name != access_context.get("allowed_invoice"):
 			frappe.throw("This payment session is not allowed for the requested invoice.", frappe.PermissionError)
+		can_initiate_payment(getattr(frappe.session, "user", None), invoice_name, mode="internal", raise_exception=True)
 
 	if invoice.docstatus != 1:
 		frappe.throw("Only submitted Sales Invoices can be paid.", frappe.ValidationError)

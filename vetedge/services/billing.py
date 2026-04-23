@@ -8,6 +8,7 @@ from frappe.utils import cint, flt, nowdate
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.dispensary import get_consultation_ready_status
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.permissions import can_access_consultation, can_initiate_payment
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.registration_billing import get_billing_cost_center, get_default_company
 
@@ -75,6 +76,7 @@ def get_consultation_billing_settings() -> ConsultationBillingSettings:
 def create_consultation_invoice(consultation: str) -> dict:
 	require_internal_user()
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	settings = get_consultation_billing_settings()
 	validate_consultation_invoice_request(consultation_doc, settings)
 
@@ -264,6 +266,8 @@ def create_payment_entry_from_consultation(consultation: str, mode_of_payment: s
 		frappe.throw("Doctor payment collection is not enabled.", frappe.PermissionError)
 
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
+	if consultation_doc.linked_invoice:
+		can_initiate_payment(frappe.session.user, consultation_doc.linked_invoice, mode="internal", raise_exception=True)
 	if not consultation_doc.linked_invoice:
 		frappe.throw("Create a consultation invoice before collecting payment.", frappe.ValidationError)
 

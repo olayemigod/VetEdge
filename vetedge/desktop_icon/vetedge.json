@@ -9,11 +9,11 @@
  "label": "VetEdge",
  "link_to": "VetEdge",
  "link_type": "Workspace Sidebar",
- "logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
  "modified": "2026-04-18 00:00:00.000000",
  "modified_by": "Administrator",
  "name": "VetEdge",
  "owner": "Administrator",
+ "logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
  "roles": [],
  "standard": 1
 }

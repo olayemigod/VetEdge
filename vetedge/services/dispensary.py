@@ -12,6 +12,7 @@ from vetedge.services.expiry_control import (
 )
 from vetedge.services.feature_flags import is_enabled
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.permissions import can_dispense
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.stock import (
 	STOCK_ENTRY_CONSULTATION_FIELD,
@@ -205,12 +206,15 @@ def validate_dispensary_confirmation_request(doc) -> None:
 		frappe.throw("Consultation must have a Service Branch before dispensary confirmation.", frappe.ValidationError)
 	if not doc.company:
 		frappe.throw("Consultation must have a Company before dispensary confirmation.", frappe.ValidationError)
+	if doc.status not in {DISPENSARY_PENDING, "In Progress", "Awaiting Payment"}:
+		frappe.throw("Dispensary confirmation is not allowed in the current consultation state.", frappe.ValidationError)
 
 
 @frappe.whitelist()
 def confirm_dispensary_issue(consultation: str, dispensed_items=None) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
+	can_dispense(frappe.session.user, doc, raise_exception=True)
 	validate_dispensary_confirmation_request(doc)
 
 	dispensed_rows = normalize_dispensed_items_input(doc, dispensed_items)
@@ -370,6 +374,7 @@ def confirm_dispensary_issue(consultation: str, dispensed_items=None) -> dict:
 def get_dispensed_item_preview(consultation: str) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
+	can_dispense(frappe.session.user, doc, raise_exception=True)
 
 	return {
 		"consultation": doc.name,

@@ -129,19 +129,19 @@ after_migrate = "vetedge.install.after_migrate"
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
-	"Veterinary Patient": "vetedge.services.portal_access.get_veterinary_patient_query",
-	"Veterinary Appointment": "vetedge.services.portal_access.get_veterinary_appointment_query",
-	"Veterinary Consultation": "vetedge.services.portal_access.get_veterinary_consultation_query",
-	"Veterinary Vital Signs": "vetedge.services.portal_access.get_veterinary_vital_signs_query",
-	"Sales Invoice": "vetedge.services.portal_access.get_sales_invoice_query",
+	"Veterinary Patient": "vetedge.services.permissions.get_veterinary_patient_query",
+	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
+	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
+	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
+	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
 }
 
 has_permission = {
-	"Veterinary Patient": "vetedge.services.portal_access.has_veterinary_patient_permission",
-	"Veterinary Appointment": "vetedge.services.portal_access.has_veterinary_appointment_permission",
-	"Veterinary Consultation": "vetedge.services.portal_access.has_veterinary_consultation_permission",
-	"Veterinary Vital Signs": "vetedge.services.portal_access.has_veterinary_vital_signs_permission",
-	"Sales Invoice": "vetedge.services.portal_access.has_sales_invoice_permission",
+	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
+	"Veterinary Appointment": "vetedge.services.permissions.has_veterinary_appointment_permission",
+	"Veterinary Consultation": "vetedge.services.permissions.has_veterinary_consultation_permission",
+	"Veterinary Vital Signs": "vetedge.services.permissions.has_veterinary_vital_signs_permission",
+	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
 }
 
 # Document Events
