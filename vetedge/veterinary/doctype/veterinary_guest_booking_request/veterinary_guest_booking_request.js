@@ -18,7 +18,7 @@ frappe.ui.form.on("Veterinary Guest Booking Request", {
 
 		if (frm.doc.registration_invoice) {
 			frm.add_custom_button(__("Open Registration Invoice"), () => {
-				frappe.set_route("Form", "Sales Invoice", frm.doc.registration_invoice);
+				vetedgeInvoiceSummary.open(frm.doc.registration_invoice);
 			}, __("Open"));
 		}
 

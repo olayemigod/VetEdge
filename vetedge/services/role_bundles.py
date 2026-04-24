@@ -4,59 +4,80 @@ import frappe
 from frappe.utils import cint
 
 from vetedge.services.audit import log_operational_event
-from vetedge.services.permissions import can_apply_role_bundle, can_manage_role_bundles
+from vetedge.services.permissions import (
+	ROLE_ACCOUNTS_CASHIER,
+	ROLE_ACCOUNTS_USER,
+	ROLE_BRANCH_MANAGER,
+	ROLE_DISPENSARY_USER,
+	ROLE_LAB_TECHNICIAN,
+	ROLE_VETEDGE_ADMINISTRATOR,
+	ROLE_VETEDGE_DOCTOR,
+	ROLE_VETEDGE_FRONT_DESK,
+	ROLE_VETERINARY_NURSE,
+	can_apply_role_bundle,
+	can_manage_role_bundles,
+)
 
 
 STARTER_ROLE_BUNDLES = {
 	"VetEdge Administrator": [
-		"VetEdge Administrator",
+		ROLE_VETEDGE_ADMINISTRATOR,
 		"Desk User",
 		"Workspace Manager",
 		"Report Manager",
-		"Accounts User",
+		ROLE_ACCOUNTS_USER,
 		"Sales User",
 		"Stock User",
 	],
 	"Veterinary Doctor": [
-		"VetEdge Doctor",
+		ROLE_VETEDGE_DOCTOR,
 		"Desk User",
+		ROLE_ACCOUNTS_USER,
 		"Sales User",
 		"Stock User",
 	],
 	"Veterinary Nurse": [
-		"Veterinary Nurse",
+		ROLE_VETERINARY_NURSE,
 		"Desk User",
 		"Stock User",
 	],
 	"Front Desk": [
-		"VetEdge Front Desk",
+		ROLE_VETEDGE_FRONT_DESK,
 		"Desk User",
+		ROLE_ACCOUNTS_USER,
 		"Sales User",
 	],
 	"Dispensary User": [
-		"Dispensary User",
+		ROLE_DISPENSARY_USER,
 		"Desk User",
+		ROLE_ACCOUNTS_USER,
 		"Stock User",
 		"Sales User",
 	],
 	"Lab Technician": [
-		"Lab Technician",
+		ROLE_LAB_TECHNICIAN,
 		"Desk User",
 		"Stock User",
 	],
 	"Branch Manager": [
-		"Branch Manager",
+		ROLE_BRANCH_MANAGER,
 		"Desk User",
-		"Accounts User",
+		ROLE_ACCOUNTS_USER,
 		"Sales User",
 		"Stock User",
 	],
 	"Accounts/Cashier": [
-		"Accounts/Cashier",
+		ROLE_ACCOUNTS_CASHIER,
 		"Desk User",
-		"Accounts User",
+		ROLE_ACCOUNTS_USER,
 		"Sales User",
 	],
+}
+
+STARTER_BUNDLE_PRIMARY_ROLES = {
+	bundle_name: roles[0]
+	for bundle_name, roles in STARTER_ROLE_BUNDLES.items()
+	if roles
 }
 
 
@@ -86,6 +107,42 @@ def ensure_starter_role_bundles() -> None:
 			}
 		)
 		bundle.insert(ignore_permissions=True)
+
+
+def ensure_existing_internal_users_have_starter_bundle_roles() -> None:
+	if not frappe.db.exists("DocType", "Has Role"):
+		return
+
+	for bundle_name, primary_role in STARTER_BUNDLE_PRIMARY_ROLES.items():
+		users = frappe.get_all(
+			"Has Role",
+			filters={
+				"role": primary_role,
+				"parenttype": "User",
+			},
+			pluck="parent",
+		)
+		if not users:
+			continue
+
+		bundle_roles = list(dict.fromkeys(STARTER_ROLE_BUNDLES.get(bundle_name, [])))
+		for user in users:
+			ensure_user_has_roles(user, bundle_roles)
+
+
+def ensure_user_has_roles(user: str, roles: list[str]) -> list[str]:
+	user_doc = frappe.get_doc("User", user)
+	existing_roles = {row.role for row in user_doc.get("roles") or []}
+	added_roles: list[str] = []
+
+	for role in roles:
+		if not role or role in existing_roles:
+			continue
+		user_doc.add_roles(role)
+		existing_roles.add(role)
+		added_roles.append(role)
+
+	return added_roles
 
 
 @frappe.whitelist()

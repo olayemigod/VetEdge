@@ -1,0 +1,43 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:test_name",
+ "creation": "2026-04-23 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "test_name",
+  "test_code",
+  "is_active",
+  "description",
+  "sample_type",
+  "linked_item",
+  "default_rate"
+ ],
+ "fields": [
+  {"fieldname": "test_name", "fieldtype": "Data", "in_list_view": 1, "label": "Test Name", "reqd": 1, "unique": 1},
+  {"fieldname": "test_code", "fieldtype": "Data", "in_list_view": 1, "label": "Test Code", "unique": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "sample_type", "fieldtype": "Select", "in_list_view": 1, "label": "Sample Type", "options": "\nBlood\nSerum\nPlasma\nUrine\nFeces\nSwab\nTissue\nOther"},
+  {"fieldname": "linked_item", "fieldtype": "Link", "label": "Linked Billing Item", "options": "Item"},
+  {"fieldname": "default_rate", "fieldtype": "Currency", "label": "Default Rate"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Lab Test",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Lab Technician", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Branch Manager", "share": 1}
+ ],
+ "quick_entry": 1,
+ "search_fields": "test_name,test_code,sample_type,linked_item",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "show_title_field_in_link": 1,
+ "title_field": "test_name",
+ "track_changes": 1
+}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import frappe
 from frappe.utils import flt, getdate
 
@@ -12,9 +14,12 @@ from vetedge.services.billing import (
 	validate_consultation_payment_before_treatment,
 )
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.registration_billing import validate_registration_payment_before_first_consultation
 from vetedge.services.permissions import (
+	DOCTOR_ROLES,
 	can_access_branch_data,
 	can_access_consultation,
+	validate_doctor_user,
 	validate_consultation_clinical_permissions,
 )
 from vetedge.services.portal_access import require_internal_user
@@ -51,12 +56,20 @@ CONSULTATION_APPOINTMENT_STATUS_MAP = {
 	"Cancelled": "Cancelled",
 }
 
+CONSULTATION_SCOPE_LOCKED_STATUSES = {
+	"Ready for Treatment",
+	"Completed",
+	"Cancelled",
+}
+
 
 def validate_consultation(doc) -> None:
 	validate_consultation_status(doc)
-	resolve_consultation_context(doc)
+	validate_consultation_scope_lock(doc)
 	normalize_consultation_appointment_links(doc)
 	apply_linked_appointment_context(doc)
+	resolve_consultation_context(doc)
+	validate_registration_payment_before_first_consultation(doc.patient, current_consultation=getattr(doc, "name", None))
 	validate_linked_appointment(doc)
 	set_consultation_title(doc)
 	validate_service_branch_access(doc)
@@ -82,6 +95,8 @@ def validate_consultation_status(doc) -> None:
 	if previous and previous.status != doc.status:
 		validate_consultation_status_transition(previous.status, doc.status)
 
+	validate_paid_consultation_cancellation(doc, previous)
+
 
 def validate_consultation_status_transition(current_status: str, target_status: str) -> None:
 	allowed = VALID_CONSULTATION_STATUS_TRANSITIONS.get(current_status, set())
@@ -92,6 +107,51 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 		)
 
 
+def validate_paid_consultation_cancellation(doc, previous=None) -> None:
+	if doc.status != "Cancelled":
+		return
+
+	previous_status = getattr(previous, "status", None) if previous else None
+	if previous_status == "Cancelled":
+		return
+
+	if getattr(doc, "payment_status", None) == "Paid":
+		frappe.throw(
+			"Paid consultations cannot be cancelled. Start the appropriate refund or finance reversal flow first, then create a new consultation if needed.",
+			frappe.ValidationError,
+		)
+
+
+def consultation_scope_is_locked(status: str | None) -> bool:
+	return (status or "") in CONSULTATION_SCOPE_LOCKED_STATUSES
+
+
+def validate_consultation_scope_lock(doc) -> None:
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	if not previous or not consultation_scope_is_locked(previous.status):
+		return
+
+	if _serialize_planned_treatments(doc) == _serialize_planned_treatments(previous):
+		return
+
+	frappe.throw(
+		"Treatment items cannot be added or changed after the consultation is Ready for Treatment. "
+		"Start a new consultation to capture additional treatment, lab, vaccine, or other clinical orders.",
+		frappe.ValidationError,
+	)
+
+
+def validate_consultation_allows_new_clinical_entries(doc, entry_type: str = "clinical items") -> None:
+	if not consultation_scope_is_locked(getattr(doc, "status", None)):
+		return
+
+	frappe.throw(
+		f"This consultation is already {doc.status}. No new {entry_type} can be added. "
+		"Start a new consultation for additional treatment, lab, vaccine, or other clinical orders.",
+		frappe.ValidationError,
+	)
+
+
 @frappe.whitelist()
 def transition_consultation_status(consultation: str, status: str) -> dict:
 	require_internal_user()
@@ -100,7 +160,9 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 	validate_consultation_status_transition(doc.status, status)
 	validate_consultation_invoice_before_progress(doc, status)
 	validate_consultation_payment_before_treatment(doc, status)
+	previous = SimpleNamespace(status=doc.status)
 	doc.status = status
+	validate_paid_consultation_cancellation(doc, previous)
 	doc.save()
 
 	return {
@@ -139,6 +201,10 @@ def resolve_consultation_context(doc) -> None:
 	if not doc.company:
 		doc.company = get_default_company()
 
+	if not doc.consulting_practitioner:
+		doc.consulting_practitioner = get_default_consulting_practitioner()
+
+	validate_doctor_user(doc.consulting_practitioner, label="Consulting Practitioner")
 	doc.consulting_practitioner_name = get_user_full_name(doc.consulting_practitioner)
 	set_daily_consultation_number(doc)
 
@@ -401,6 +467,16 @@ def get_user_full_name(user: str | None) -> str | None:
 	return full_name or user
 
 
+def get_default_consulting_practitioner(user: str | None = None) -> str | None:
+	user = user or getattr(frappe.session, "user", None)
+	if not user or user == "Guest":
+		return None
+	get_roles = getattr(frappe, "get_roles", None)
+	if get_roles and (set(get_roles(user)) & DOCTOR_ROLES):
+		return user
+	return None
+
+
 def validate_service_branch_access(doc) -> None:
 	if not doc.service_branch:
 		return
@@ -417,9 +493,18 @@ def validate_practitioner_branch_access(practitioner: str | None, service_branch
 	if not practitioner or not frappe.db.exists("DocType", "Branch Practitioner Assignment"):
 		return
 
-	filters = {"practitioner": practitioner, "branch": service_branch}
+	base_filters = {"practitioner": practitioner}
 	if frappe.get_meta("Branch Practitioner Assignment").has_field("disabled"):
-		filters["disabled"] = ["!=", 1]
+		base_filters["disabled"] = ["!=", 1]
+
+	if not frappe.get_all(
+		"Branch Practitioner Assignment",
+		filters=base_filters,
+		limit=1,
+	):
+		return
+
+	filters = dict(base_filters, branch=service_branch)
 
 	assignments = frappe.get_all(
 		"Branch Practitioner Assignment",
@@ -451,6 +536,21 @@ def validate_consultation_children(doc) -> None:
 		validate_enabled_item(row.item)
 		validate_enabled_link("Veterinary Service Type", row.service_type, "Service Type", required=False)
 		validate_enabled_link("Veterinary Treatment Type", row.treatment_type, "Treatment Type", required=False)
+
+
+def _serialize_planned_treatments(doc) -> list[tuple]:
+	return [
+		(
+			row.get("name"),
+			row.get("item"),
+			flt(row.get("qty")),
+			row.get("uom"),
+			flt(row.get("rate")) if row.get("rate") not in (None, "") else None,
+			row.get("service_type"),
+			row.get("treatment_type"),
+		)
+		for row in doc.get("planned_treatments") or []
+	]
 
 
 def validate_enabled_link(doctype: str, name: str | None, label: str, required: bool = True) -> None:

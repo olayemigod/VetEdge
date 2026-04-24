@@ -37,6 +37,8 @@ def reset_consultation_copy_state(doc) -> None:
 	doc.dispensary_stock_entry = None
 	doc.linked_invoice = None
 	doc.payment_status = "Not Billed"
+	doc.consultation_invoices = []
+	doc.consultation_billing_sources = []
 	if hasattr(doc, "set"):
 		doc.set("dispensed_treatments", [])
 	else:

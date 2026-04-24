@@ -1,0 +1,23 @@
+{
+ "actions": [],
+ "creation": "2026-04-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["source_type", "source_name", "sales_invoice", "item_code", "invoice_status", "invoice_docstatus"],
+ "fields": [
+  {"fieldname": "source_type", "fieldtype": "Select", "in_list_view": 1, "label": "Source Type", "options": "\nConsultation Fee\nTreatment\nLab Order", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_name", "fieldtype": "Data", "in_list_view": 1, "label": "Source Name", "read_only": 1, "reqd": 1},
+  {"fieldname": "sales_invoice", "fieldtype": "Link", "label": "Sales Invoice", "options": "Sales Invoice", "read_only": 1},
+  {"fieldname": "item_code", "fieldtype": "Link", "label": "Item Code", "options": "Item", "read_only": 1},
+  {"fieldname": "invoice_status", "fieldtype": "Data", "label": "Invoice Status", "read_only": 1},
+  {"fieldname": "invoice_docstatus", "fieldtype": "Int", "hidden": 1, "label": "Invoice Docstatus", "read_only": 1}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Consultation Billing Source",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

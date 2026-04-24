@@ -39,7 +39,9 @@
   "dispensary_stock_entry",
   "billing_section",
   "linked_invoice",
-  "payment_status"
+  "payment_status",
+  "consultation_invoices",
+  "consultation_billing_sources"
  ],
  "fields": [
   {"default": "VCON-.YYYY.-.#####", "fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "VCON-.YYYY.-.#####", "reqd": 1},
@@ -75,7 +77,9 @@
   {"fieldname": "dispensary_stock_entry", "fieldtype": "Link", "label": "Dispensary Stock Entry", "no_copy": 1, "options": "Stock Entry", "read_only": 1},
   {"collapsible": 1, "fieldname": "billing_section", "fieldtype": "Section Break", "label": "Billing Scaffold"},
   {"fieldname": "linked_invoice", "fieldtype": "Link", "label": "Linked Invoice", "no_copy": 1, "options": "Sales Invoice", "read_only": 1},
-  {"default": "Not Billed", "fieldname": "payment_status", "fieldtype": "Select", "label": "Payment Status", "no_copy": 1, "options": "Not Billed\nUnpaid\nPartly Paid\nPaid\nCancelled", "read_only": 1}
+  {"default": "Not Billed", "fieldname": "payment_status", "fieldtype": "Select", "label": "Payment Status", "no_copy": 1, "options": "Not Billed\nUnpaid\nPartly Paid\nPaid\nCancelled", "read_only": 1},
+  {"fieldname": "consultation_invoices", "fieldtype": "Table", "label": "Consultation Invoices", "no_copy": 1, "options": "Consultation Invoice Reference", "read_only": 1},
+  {"fieldname": "consultation_billing_sources", "fieldtype": "Table", "hidden": 1, "label": "Consultation Billing Sources", "no_copy": 1, "options": "Consultation Billing Source", "read_only": 1}
  ],
  "module": "Veterinary",
  "name": "Veterinary Consultation",

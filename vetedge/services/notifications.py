@@ -39,6 +39,10 @@ STAFF_EVENTS = {
 	"dispensary_expired_stock_blocked",
 	"dispensary_insufficient_non_expired_stock",
 	"consultation_ready_for_treatment",
+	"lab_order_created",
+	"lab_sample_collected",
+	"lab_result_entered",
+	"lab_result_ready_for_review",
 }
 
 STAFF_NOTIFICATION_ROLES = {
@@ -51,6 +55,19 @@ ACCOUNTS_NOTIFICATION_ROLES = {
 	"Accounts Manager",
 	"Accounts User",
 	"VetEdge Administrator",
+}
+
+LAB_NOTIFICATION_ROLES = {
+	"Lab Technician",
+	"VetEdge Doctor",
+	"VetEdge Administrator",
+	"Branch Manager",
+}
+
+LAB_REVIEW_NOTIFICATION_ROLES = {
+	"VetEdge Doctor",
+	"VetEdge Administrator",
+	"Branch Manager",
 }
 
 EVENT_SETTING_FIELDS = {
@@ -81,6 +98,10 @@ EVENT_SETTING_FIELDS = {
 	"dispensary_expired_stock_blocked": "notify_on_accounts_action_required",
 	"dispensary_insufficient_non_expired_stock": "notify_on_accounts_action_required",
 	"consultation_ready_for_treatment": "notify_on_payment_received",
+	"lab_order_created": "notify_on_lab_updates",
+	"lab_sample_collected": "notify_on_lab_updates",
+	"lab_result_entered": "notify_on_lab_updates",
+	"lab_result_ready_for_review": "notify_on_lab_updates",
 }
 
 APPOINTMENT_EVENTS = {
@@ -219,7 +240,14 @@ def get_owner_email_recipients(payload: dict) -> set[str]:
 
 
 def get_staff_email_recipients(event: str) -> set[str]:
-	roles = ACCOUNTS_NOTIFICATION_ROLES if event in {"accounts_action_required", "consultation_awaiting_payment"} else STAFF_NOTIFICATION_ROLES
+	if event in {"accounts_action_required", "consultation_awaiting_payment"}:
+		roles = ACCOUNTS_NOTIFICATION_ROLES
+	elif event == "lab_result_ready_for_review":
+		roles = LAB_REVIEW_NOTIFICATION_ROLES
+	elif event in {"lab_order_created", "lab_sample_collected", "lab_result_entered"}:
+		roles = LAB_NOTIFICATION_ROLES
+	else:
+		roles = STAFF_NOTIFICATION_ROLES
 	users = frappe.get_all(
 		"Has Role",
 		filters={"role": ["in", list(roles)], "parenttype": "User"},
@@ -289,6 +317,7 @@ def get_notification_settings() -> dict:
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_lab_updates": False,
 	}
 
 	for fieldname in result:
@@ -317,6 +346,7 @@ def default_notification_settings() -> dict:
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_lab_updates": False,
 	}
 
 

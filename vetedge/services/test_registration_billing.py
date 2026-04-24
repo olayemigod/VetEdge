@@ -10,11 +10,15 @@ from vetedge.services.registration_billing import (
 	AWAITING_PAYMENT_STATUS,
 	REGISTERED_STATUS,
 	RegistrationBillingRule,
+	create_manual_registration_invoice,
 	create_registration_invoice,
 	get_billing_cost_center,
 	get_registration_rule,
 	handle_patient_registration_insert,
+	is_first_consultation_for_patient,
 	is_invoice_paid,
+	update_patient_registration_payment_status,
+	validate_registration_payment_before_first_consultation,
 	validate_registration_item,
 	validate_patient_registration,
 )
@@ -99,6 +103,81 @@ class TestRegistrationBilling(TestCase):
 		create_invoice.assert_not_called()
 		update_status.assert_called_once_with(patient.name, patient.registration_invoice)
 
+	def test_manual_registration_invoice_is_created_later(self):
+		patient = frappe._dict(
+			name="VET-PAT-001",
+			default_branch="Main",
+			primary_owner="CUST-001",
+			registration_invoice=None,
+			registration_status=REGISTERED_STATUS,
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 1500, False, False)
+		invoice = SimpleNamespace(name="SINV-NEW")
+
+		with (
+			patch("vetedge.services.registration_billing.require_internal_user"),
+			patch("vetedge.services.registration_billing.can_access_patient"),
+			patch("vetedge.services.registration_billing.frappe.session", SimpleNamespace(user="staff@example.com")),
+			patch("vetedge.services.registration_billing.frappe.get_doc", return_value=patient),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.get_active_registration_invoice_name", return_value=None),
+			patch("vetedge.services.registration_billing.create_registration_invoice", return_value=invoice),
+			patch("vetedge.services.registration_billing.set_patient_registration_fields") as set_fields,
+		):
+			result = create_manual_registration_invoice(patient.name)
+
+		self.assertEqual(
+			result,
+			{
+				"patient": patient.name,
+				"invoice": invoice.name,
+				"created": True,
+				"status": AWAITING_PAYMENT_STATUS,
+			},
+		)
+		set_fields.assert_called_once_with(
+			patient.name,
+			registration_invoice=invoice.name,
+			registration_status=AWAITING_PAYMENT_STATUS,
+			registration_billed=1,
+			registration_fee_amount=rule.registration_fee,
+		)
+
+	def test_manual_registration_invoice_reuses_existing_active_invoice(self):
+		patient = frappe._dict(
+			name="VET-PAT-001",
+			default_branch="Main",
+			primary_owner="CUST-001",
+			registration_invoice="SINV-001",
+			registration_status=REGISTERED_STATUS,
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 1500, False, False)
+
+		with (
+			patch("vetedge.services.registration_billing.require_internal_user"),
+			patch("vetedge.services.registration_billing.can_access_patient"),
+			patch("vetedge.services.registration_billing.frappe.session", SimpleNamespace(user="staff@example.com")),
+			patch("vetedge.services.registration_billing.frappe.get_doc", return_value=patient),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.get_active_registration_invoice_name", return_value="SINV-001"),
+			patch("vetedge.services.registration_billing.update_patient_registration_payment_status") as update_status,
+			patch("vetedge.services.registration_billing.create_registration_invoice") as create_invoice,
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=AWAITING_PAYMENT_STATUS),
+		):
+			result = create_manual_registration_invoice(patient.name)
+
+		self.assertEqual(
+			result,
+			{
+				"patient": patient.name,
+				"invoice": "SINV-001",
+				"created": False,
+				"status": AWAITING_PAYMENT_STATUS,
+			},
+		)
+		update_status.assert_called_once_with(patient.name, "SINV-001")
+		create_invoice.assert_not_called()
+
 	def test_paid_invoice_is_detected(self):
 		invoice = SimpleNamespace(docstatus=1, status="Paid", outstanding_amount=0)
 
@@ -108,6 +187,32 @@ class TestRegistrationBilling(TestCase):
 		invoice = SimpleNamespace(docstatus=0, status="Paid", outstanding_amount=0)
 
 		self.assertFalse(is_invoice_paid(invoice))
+
+	def test_registration_status_moves_to_awaiting_payment_for_unpaid_invoice(self):
+		invoice = SimpleNamespace(name="SINV-001", docstatus=1, status="Unpaid", outstanding_amount=500)
+
+		with patch("vetedge.services.registration_billing.set_patient_registration_fields") as set_fields:
+			update_patient_registration_payment_status("VET-PAT-001", invoice)
+
+		set_fields.assert_called_once_with(
+			"VET-PAT-001",
+			registration_invoice=invoice.name,
+			registration_status=AWAITING_PAYMENT_STATUS,
+			registration_billed=1,
+		)
+
+	def test_cancelled_registration_invoice_resets_patient_to_registered(self):
+		invoice = SimpleNamespace(name="SINV-001", docstatus=2, status="Cancelled", outstanding_amount=1500)
+
+		with patch("vetedge.services.registration_billing.set_patient_registration_fields") as set_fields:
+			update_patient_registration_payment_status("VET-PAT-001", invoice)
+
+		set_fields.assert_called_once_with(
+			"VET-PAT-001",
+			registration_invoice=None,
+			registration_status=REGISTERED_STATUS,
+			registration_billed=0,
+		)
 
 	def test_branch_rule_overrides_global_registration_values(self):
 		settings = frappe._dict(
@@ -155,6 +260,72 @@ class TestRegistrationBilling(TestCase):
 		self.assertEqual(rule.registration_item, "GLOBAL-ITEM")
 		self.assertEqual(rule.registration_fee, 100)
 		self.assertTrue(rule.auto_create_invoice)
+
+	def test_branch_rule_can_disable_global_auto_create_invoice(self):
+		settings = frappe._dict(
+			enable_registration_billing=1,
+			default_registration_item="GLOBAL-ITEM",
+			default_registration_fee=100,
+			auto_create_invoice_on_registration=1,
+			require_payment_before_first_consultation=0,
+			enforce_cost_center_on_billing=1,
+			branch_registration_rules=[
+				frappe._dict(
+					branch="Main",
+					registration_item="BRANCH-ITEM",
+					registration_fee=250,
+					auto_create_invoice_on_registration=0,
+					require_payment_before_first_consultation=0,
+					is_active=1,
+				)
+			],
+		)
+
+		with patch("vetedge.services.registration_billing.get_registration_settings", return_value=settings):
+			rule = get_registration_rule("Main")
+
+		self.assertFalse(rule.auto_create_invoice)
+
+	def test_registration_payment_gate_blocks_unpaid_first_consultation(self):
+		patient_doc = frappe._dict(
+			name="VP-001",
+			default_branch="Main",
+			registration_status=AWAITING_PAYMENT_STATUS,
+			registration_invoice="SINV-001",
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch("vetedge.services.registration_billing.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_registration_payment_before_first_consultation,
+				"VP-001",
+			)
+
+	def test_registration_payment_gate_allows_paid_first_consultation(self):
+		patient_doc = frappe._dict(
+			name="VP-001",
+			default_branch="Main",
+			registration_status="Registration Paid",
+			registration_invoice="SINV-001",
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+		):
+			validate_registration_payment_before_first_consultation("VP-001")
+
+	def test_first_consultation_check_ignores_cancelled_consultations(self):
+		with patch("vetedge.services.registration_billing.frappe.get_all", return_value=[]):
+			self.assertTrue(is_first_consultation_for_patient("VP-001"))
 
 	def test_branch_with_cost_center_creates_invoice_with_cost_center(self):
 		patient = frappe._dict(default_branch="Main", primary_owner="CUST-001")

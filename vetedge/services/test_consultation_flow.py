@@ -22,6 +22,117 @@ from vetedge.services.consultation_flow import (
 
 
 class TestConsultationFlow(TestCase):
+	def test_consultation_defaults_practitioner_to_current_doctor(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner=None,
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch B",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Draft",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+			linked_appointment=None,
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Ada Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			),
+			session=SimpleNamespace(user="doctor@example.com"),
+			get_roles=lambda *args, **kwargs: ["VetEdge Doctor"],
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			validate_consultation(doc)
+
+		self.assertEqual(doc.consulting_practitioner, "doctor@example.com")
+		self.assertEqual(doc.consulting_practitioner_name, "Dr Ada Vet")
+
+	def test_linked_appointment_practitioner_takes_precedence_over_current_doctor(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner=None,
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch B",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Draft",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+			linked_appointment="VAPT-001",
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Assigned Vet" if name == "assigned.doctor@example.com" else "Dr Current Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			if doctype == "Veterinary Appointment":
+				return frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Confirmed",
+					branch="Branch B",
+					practitioner="assigned.doctor@example.com",
+					notes=None,
+					linked_consultation=None,
+					follow_up_reference=None,
+				)
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			),
+			session=SimpleNamespace(user="doctor@example.com"),
+			get_roles=lambda *args, **kwargs: ["VetEdge Doctor"],
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			validate_consultation(doc)
+
+		self.assertEqual(doc.consulting_practitioner, "assigned.doctor@example.com")
+		self.assertEqual(doc.consulting_practitioner_name, "Dr Assigned Vet")
+
 	def test_consultation_resolves_owner_and_allows_cross_branch_service(self):
 		doc = frappe._dict(
 			patient="VP-001",
@@ -49,13 +160,16 @@ class TestConsultationFlow(TestCase):
 			db=SimpleNamespace(
 				get_value=get_value,
 				exists=lambda *args, **kwargs: False,
-			)
+			),
+			get_roles=lambda *args, **kwargs: [],
 		)
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
 			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
@@ -101,8 +215,10 @@ class TestConsultationFlow(TestCase):
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
 			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
@@ -116,6 +232,50 @@ class TestConsultationFlow(TestCase):
 			doc.consultation_title,
 			"Buddy - 2026-04-18 - Consultation 1 - Dr Ada Vet - Branch B",
 		)
+
+	def test_consulting_practitioner_must_be_doctor_user(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner="nurse@example.com",
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch B",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Draft",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Nurse User"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user", side_effect=frappe.ValidationError),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			self.assertRaises(frappe.ValidationError, validate_consultation, doc)
 
 	def test_daily_consultation_number_increments_per_patient_day(self):
 		frappe_stub = make_frappe_stub(
@@ -157,13 +317,16 @@ class TestConsultationFlow(TestCase):
 			db=SimpleNamespace(
 				get_value=get_value,
 				exists=lambda *args, **kwargs: False,
-			)
+			),
+			get_roles=lambda *args, **kwargs: [],
 		)
 
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
 			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
@@ -173,6 +336,108 @@ class TestConsultationFlow(TestCase):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.service_branch, "Branch A")
+
+	def test_consultation_checks_registration_payment_gate(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner=None,
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch B",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Draft",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Ada Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation") as validate_gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			validate_consultation(doc)
+
+		validate_gate.assert_called_once_with("VP-001", current_consultation=None)
+
+	def test_ready_for_treatment_consultation_blocks_new_treatment_items(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner="doctor@example.com",
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch A",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Ready for Treatment",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[
+				frappe._dict(name="ROW-1", item="XRAY", qty=1, uom="Nos", rate=500),
+				frappe._dict(name="ROW-2", item="CBC", qty=1, uom="Nos", rate=1000),
+			],
+		)
+		previous = frappe._dict(
+			status="Ready for Treatment",
+			planned_treatments=[
+				frappe._dict(name="ROW-1", item="XRAY", qty=1, uom="Nos", rate=500),
+			],
+			get=lambda key, default=None: previous[key] if key in previous else default,
+		)
+		doc.get_doc_before_save = lambda: previous
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Ada Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				validate_consultation(doc)
 
 	def test_consultation_requires_service_branch_when_patient_has_no_default(self):
 		doc = frappe._dict(
@@ -201,6 +466,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.can_access_branch_data"),
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
@@ -295,6 +561,30 @@ class TestConsultationFlow(TestCase):
 				"Ready for Treatment",
 			)
 
+	def test_transition_consultation_status_blocks_cancelling_paid_consultation(self):
+		doc = frappe._dict(
+			name="VCON-001",
+			status="Ready for Treatment",
+			payment_status="Paid",
+			save=lambda: doc,
+		)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: doc)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				transition_consultation_status,
+				"VCON-001",
+				"Cancelled",
+			)
+
 	def test_consultation_status_transition_rejects_completed_reopen(self):
 		frappe_stub = make_frappe_stub()
 
@@ -320,8 +610,61 @@ class TestConsultationFlow(TestCase):
 		):
 			result = transition_consultation_status("VCON-001", "Ready for Treatment")
 
-		self.assertEqual(result["status"], "Ready for Treatment")
+			self.assertEqual(result["status"], "Ready for Treatment")
 		self.assertEqual(saved, [doc])
+
+	def test_validate_consultation_blocks_saving_paid_consultation_as_cancelled(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner="CUST-001",
+			consulting_practitioner="doctor@example.com",
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch A",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Cancelled",
+			payment_status="Paid",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+		)
+		previous = frappe._dict(
+			status="Ready for Treatment",
+			payment_status="Paid",
+			planned_treatments=[],
+			get=lambda key, default=None: previous[key] if key in previous else default,
+		)
+		doc.get_doc_before_save = lambda: previous
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Ada Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				validate_consultation(doc)
 
 	def test_linked_appointment_must_belong_to_selected_patient(self):
 		doc = frappe._dict(
@@ -552,6 +895,65 @@ class TestConsultationFlow(TestCase):
 				validate_service_branch_access,
 				frappe._dict(service_branch="Main", consulting_practitioner=None),
 			)
+
+	def test_practitioner_branch_assignment_is_optional_until_assignments_exist(self):
+		get_all_calls = []
+
+		def get_all(doctype, filters=None, **kwargs):
+			get_all_calls.append((doctype, filters))
+			return []
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(exists=lambda *args, **kwargs: args == ("DocType", "Branch Practitioner Assignment")),
+			get_all=get_all,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+		):
+			validate_service_branch_access(
+				frappe._dict(service_branch="Main", consulting_practitioner="doctor@example.com"),
+			)
+
+		self.assertEqual(
+			get_all_calls,
+			[("Branch Practitioner Assignment", {"practitioner": "doctor@example.com"})],
+		)
+
+	def test_practitioner_branch_assignment_is_enforced_when_practitioner_is_scoped(self):
+		get_all_calls = []
+
+		def get_all(doctype, filters=None, **kwargs):
+			get_all_calls.append((doctype, filters))
+			if filters == {"practitioner": "doctor@example.com"}:
+				return [frappe._dict(name="BPA-001")]
+			return []
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(exists=lambda *args, **kwargs: args == ("DocType", "Branch Practitioner Assignment")),
+			get_all=get_all,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				validate_service_branch_access,
+				frappe._dict(service_branch="Main", consulting_practitioner="doctor@example.com"),
+			)
+
+		self.assertEqual(
+			get_all_calls,
+			[
+				("Branch Practitioner Assignment", {"practitioner": "doctor@example.com"}),
+				("Branch Practitioner Assignment", {"practitioner": "doctor@example.com", "branch": "Main"}),
+			],
+		)
 
 
 def make_frappe_stub(**overrides):

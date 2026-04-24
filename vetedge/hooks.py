@@ -32,7 +32,9 @@ portal_menu_items = [
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/vetedge/css/vetedge.css"
-# app_include_js = "/assets/vetedge/js/vetedge.js"
+app_include_js = [
+	"/assets/vetedge/js/invoice_summary_dialog.js",
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/vetedge/css/vetedge.css"
@@ -133,14 +135,13 @@ permission_query_conditions = {
 	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
 	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
 	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
+	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
+	"Veterinary Guest Booking Request": "vetedge.services.permissions.get_veterinary_guest_booking_request_query",
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
 }
 
 has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
-	"Veterinary Appointment": "vetedge.services.permissions.has_veterinary_appointment_permission",
-	"Veterinary Consultation": "vetedge.services.permissions.has_veterinary_consultation_permission",
-	"Veterinary Vital Signs": "vetedge.services.permissions.has_veterinary_vital_signs_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
 }
 

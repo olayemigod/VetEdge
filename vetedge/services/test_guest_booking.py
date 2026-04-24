@@ -7,6 +7,7 @@ from unittest.mock import patch
 import frappe
 
 from vetedge.services.guest_booking import (
+	confirm_guest_registration,
 	create_appointment_from_booking_request,
 	create_guest_booking_request,
 	initiate_guest_registration_payment,
@@ -95,6 +96,7 @@ class TestGuestBooking(TestCase):
 
 		with (
 			patch("vetedge.services.guest_booking.frappe", frappe_stub),
+			patch("vetedge.services.guest_booking.can_access_branch_data", return_value=True),
 			patch("vetedge.services.guest_booking.emit_notification_event", return_value={"queued": False}),
 		):
 			result = create_appointment_from_booking_request("VGBR-001")
@@ -116,6 +118,31 @@ class TestGuestBooking(TestCase):
 				"VGBR-001",
 			)
 
+	def test_confirm_guest_registration_blocks_staff_without_branch_access(self):
+		request = frappe._dict(
+			doctype="Veterinary Guest Booking Request",
+			name="VGBR-001",
+			status="Registration Requested",
+			preferred_branch="Branch B",
+		)
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda *args, **kwargs: request,
+			get_roles=lambda *args, **kwargs: ["VetEdge Front Desk"],
+		)
+
+		with (
+			patch("vetedge.services.guest_booking.frappe", frappe_stub),
+			patch(
+				"vetedge.services.guest_booking.can_access_branch_data",
+				side_effect=frappe.PermissionError,
+			),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				confirm_guest_registration,
+				"VGBR-001",
+			)
+
 	def test_create_appointment_from_booking_request_requires_linked_patient(self):
 		request = frappe._dict(
 			name="VGBR-001",
@@ -130,8 +157,40 @@ class TestGuestBooking(TestCase):
 		)
 
 		with patch("vetedge.services.guest_booking.frappe", frappe_stub):
+			with patch("vetedge.services.guest_booking.can_access_branch_data", return_value=True):
+				self.assertRaises(
+					frappe.ValidationError,
+					create_appointment_from_booking_request,
+					"VGBR-001",
+				)
+
+	def test_create_appointment_from_booking_request_blocks_staff_without_branch_access(self):
+		request = frappe._dict(
+			doctype="Veterinary Guest Booking Request",
+			name="VGBR-001",
+			status="Registration Confirmed",
+			linked_patient="VP-001",
+			linked_appointment=None,
+			preferred_branch="Branch B",
+			preferred_datetime="2026-04-21 10:30:00",
+			source="Guest Portal",
+			reason_for_visit="Follow up",
+		)
+
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda *args, **kwargs: request,
+			get_roles=lambda *args, **kwargs: ["VetEdge Front Desk"],
+		)
+
+		with (
+			patch("vetedge.services.guest_booking.frappe", frappe_stub),
+			patch(
+				"vetedge.services.guest_booking.can_access_branch_data",
+				side_effect=frappe.PermissionError,
+			),
+		):
 			self.assertRaises(
-				frappe.ValidationError,
+				frappe.PermissionError,
 				create_appointment_from_booking_request,
 				"VGBR-001",
 			)
@@ -178,6 +237,7 @@ def make_frappe_stub(**overrides):
 		db=SimpleNamespace(exists=lambda *args, **kwargs: True),
 		get_doc=lambda *args, **kwargs: None,
 		get_roles=lambda *args, **kwargs: [],
+		session=SimpleNamespace(user="frontdesk@example.com"),
 		throw=throw,
 		PermissionError=frappe.PermissionError,
 		ValidationError=frappe.ValidationError,

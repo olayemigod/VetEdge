@@ -5,6 +5,10 @@ frappe.ui.form.on("Veterinary Appointment", {
 				status: ["!=", "Deceased"],
 			},
 		}));
+
+		frm.set_query("practitioner", () => ({
+			query: "vetedge.services.permissions.get_veterinary_doctor_users",
+		}));
 	},
 
 	refresh(frm) {

@@ -42,6 +42,7 @@ class VeterinarySettings(Document):
 					"enable_vaccination",
 					"enable_boarding",
 					"enable_demo_tools",
+					"patient_branch_restriction_enabled",
 					"enable_advanced_reports",
 				],
 			)

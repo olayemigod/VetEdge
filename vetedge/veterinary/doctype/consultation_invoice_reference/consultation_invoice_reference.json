@@ -1,0 +1,24 @@
+{
+ "actions": [],
+ "creation": "2026-04-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["sales_invoice", "invoice_status", "posting_date", "grand_total", "outstanding_amount", "currency", "invoice_docstatus"],
+ "fields": [
+  {"fieldname": "sales_invoice", "fieldtype": "Link", "in_list_view": 1, "label": "Sales Invoice", "options": "Sales Invoice", "reqd": 1},
+  {"fieldname": "invoice_status", "fieldtype": "Data", "in_list_view": 1, "label": "Invoice Status", "read_only": 1},
+  {"fieldname": "posting_date", "fieldtype": "Date", "in_list_view": 1, "label": "Posting Date", "read_only": 1},
+  {"fieldname": "grand_total", "fieldtype": "Currency", "in_list_view": 1, "label": "Grand Total", "read_only": 1},
+  {"fieldname": "outstanding_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Outstanding Amount", "read_only": 1},
+  {"fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency", "read_only": 1},
+  {"fieldname": "invoice_docstatus", "fieldtype": "Int", "hidden": 1, "label": "Invoice Docstatus", "read_only": 1}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Consultation Invoice Reference",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

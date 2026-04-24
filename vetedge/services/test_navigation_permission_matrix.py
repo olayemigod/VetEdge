@@ -108,3 +108,20 @@ class TestNavigationPermissionMatrix(TestCase):
 				"Sales Manager",
 			},
 		)
+
+	def test_workspace_sidebar_role_visibility_covers_supported_aliases(self):
+		data = json.loads((VETERINARY_ROOT.parent / "workspace_sidebar" / "vetedge.json").read_text())
+		display_rules = {
+			item.get("label"): item.get("display_depends_on", "")
+			for item in data.get("items", [])
+			if item.get("display_depends_on")
+		}
+
+		self.assertIn("VetEdge Dispensary User", display_rules["Veterinary Financial Dashboard"])
+		self.assertIn("VetEdge Branch Manager", display_rules["Veterinary Financial Dashboard"])
+		self.assertIn("VetEdge Accounts/Cashier", display_rules["Veterinary Financial Dashboard"])
+		self.assertIn("VetEdge Lab Technician", display_rules["Veterinary Lab Order"])
+		self.assertIn("VetEdge Branch Manager", display_rules["Veterinary Lab Order"])
+		self.assertIn("VetEdge Lab Technician", display_rules["Veterinary Lab Test"])
+		self.assertIn("VetEdge Branch Manager", display_rules["Branch User Assignment"])
+		self.assertIn("VetEdge Branch Manager", display_rules["Branch Practitioner Assignment"])

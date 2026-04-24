@@ -35,6 +35,7 @@ class TestAppointmentFlow(TestCase):
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.get_user_full_name", return_value="Dr Ada Vet"),
 			patch("vetedge.services.appointment_flow.get_document_title", return_value="Buddy"),
+			patch("vetedge.services.appointment_flow.validate_doctor_user"),
 			patch("vetedge.services.appointment_flow.validate_user_branch_access"),
 			patch("vetedge.services.appointment_flow.validate_practitioner_branch_access"),
 		):
@@ -57,6 +58,7 @@ class TestAppointmentFlow(TestCase):
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.get_user_full_name", return_value="Dr Ada Vet"),
 			patch("vetedge.services.appointment_flow.get_document_title", return_value="Buddy"),
+			patch("vetedge.services.appointment_flow.validate_doctor_user"),
 			patch("vetedge.services.appointment_flow.validate_user_branch_access"),
 			patch("vetedge.services.appointment_flow.validate_practitioner_branch_access"),
 		):
@@ -119,6 +121,19 @@ class TestAppointmentFlow(TestCase):
 		user_validator.assert_called_once_with("Branch B")
 		practitioner_validator.assert_called_once_with("doctor@example.com", "Branch B")
 
+	def test_appointment_practitioner_must_be_doctor_user(self):
+		doc = make_appointment_doc(practitioner="nurse@example.com")
+
+		with (
+			patch("vetedge.services.appointment_flow.frappe", make_frappe_stub()),
+			patch("vetedge.services.appointment_flow.validate_doctor_user", side_effect=frappe.ValidationError),
+			patch("vetedge.services.appointment_flow.get_user_full_name", return_value="Nurse User"),
+			patch("vetedge.services.appointment_flow.get_document_title", return_value="Buddy"),
+			patch("vetedge.services.appointment_flow.validate_user_branch_access"),
+			patch("vetedge.services.appointment_flow.validate_practitioner_branch_access"),
+		):
+			self.assertRaises(frappe.ValidationError, validate_appointment, doc)
+
 	def test_queue_segments_today_tomorrow_and_future(self):
 		calls = []
 
@@ -177,7 +192,7 @@ class TestAppointmentFlow(TestCase):
 			doc = frappe._dict(args[0])
 			doc.name = "VAPT-001"
 			doc.appointment_title = "Buddy - Follow Up"
-			doc.insert = lambda: inserted.append(doc)
+			doc.insert = lambda ignore_permissions=True: inserted.append(doc)
 			return doc
 
 		frappe_stub = make_frappe_stub(
@@ -188,6 +203,7 @@ class TestAppointmentFlow(TestCase):
 
 		with (
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
+			patch("vetedge.services.appointment_flow.can_access_consultation"),
 			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			from vetedge.services.appointment_flow import create_follow_up_from_consultation

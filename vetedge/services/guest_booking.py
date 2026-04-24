@@ -5,6 +5,7 @@ from frappe.utils import cint, flt, get_datetime
 
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.payment_service import initiate_payment
+from vetedge.services.permissions import can_access_branch_data
 from vetedge.services.portal_access import get_portal_settings
 
 
@@ -155,6 +156,7 @@ def confirm_guest_registration(booking_request: str) -> dict:
 	validate_staff_can_convert_booking_request()
 
 	request = frappe.get_doc("Veterinary Guest Booking Request", booking_request)
+	validate_staff_can_manage_booking_request(request)
 	if request.status in {"Converted", "Cancelled"}:
 		frappe.throw(f"Registration request cannot be confirmed while it is {request.status}.")
 
@@ -191,6 +193,7 @@ def create_appointment_from_booking_request(booking_request: str) -> dict:
 	validate_staff_can_convert_booking_request()
 
 	request = frappe.get_doc("Veterinary Guest Booking Request", booking_request)
+	validate_staff_can_manage_booking_request(request)
 	if request.status in {"Converted", "Cancelled"}:
 		frappe.throw(
 			f"Booking request cannot be converted while it is {request.status}.",
@@ -414,3 +417,7 @@ def validate_guest_registration_payment_access(
 def validate_staff_can_convert_booking_request() -> None:
 	if STAFF_CONVERSION_ROLES.isdisjoint(set(frappe.get_roles())):
 		frappe.throw("Only clinic staff can manage guest registration requests.", frappe.PermissionError)
+
+
+def validate_staff_can_manage_booking_request(request) -> None:
+	can_access_branch_data(frappe.session.user, request.preferred_branch, raise_exception=True)

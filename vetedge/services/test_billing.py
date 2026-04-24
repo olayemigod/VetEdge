@@ -10,6 +10,7 @@ from vetedge.services.billing import (
 	ConsultationBillingSettings,
 	consultation_requires_invoice_before_progress,
 	create_consultation_invoice,
+	get_invoice_access_summary,
 	get_invoice_payment_status,
 	update_single_consultation_payment_status,
 	validate_consultation_invoice_before_progress,
@@ -60,20 +61,11 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(set_values[0][2]["linked_invoice"], "SINV-001")
 		self.assertEqual(set_values[0][2]["status"], "Awaiting Payment")
 
-	def test_duplicate_active_invoice_is_prevented(self):
+	def test_existing_draft_invoice_is_allowed_for_update(self):
 		consultation = make_consultation(linked_invoice="SINV-001")
 		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, False, True)
 
-		with (
-			patch("vetedge.services.billing.is_active_sales_invoice", return_value=True),
-			patch("vetedge.services.billing.frappe.throw", side_effect=frappe.ValidationError),
-		):
-			self.assertRaises(
-				frappe.ValidationError,
-				validate_consultation_invoice_request,
-				consultation,
-				settings,
-			)
+		validate_consultation_invoice_request(consultation, settings)
 
 	def test_paid_invoice_status_sets_consultation_ready_for_treatment(self):
 		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
@@ -210,6 +202,44 @@ class TestConsultationBilling(TestCase):
 		with patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings):
 			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
 
+	def test_get_invoice_access_summary_uses_invoice_permission_helper(self):
+		invoice_row = frappe._dict(
+			name="SINV-001",
+			customer="CUST-001",
+			posting_date="2026-04-20",
+			due_date="2026-04-20",
+			status="Unpaid",
+			outstanding_amount=1000,
+			grand_total=1000,
+			currency="NGN",
+			branch="Main",
+		)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(get_value=lambda *args, **kwargs: invoice_row),
+			get_doc=lambda *args, **kwargs: invoice_row,
+			get_meta=lambda *args, **kwargs: SimpleNamespace(has_field=lambda field: field == "branch"),
+			has_permission=lambda *args, **kwargs: True,
+			session=SimpleNamespace(user="staff@example.com"),
+			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)()),
+			_dict=frappe._dict,
+			PermissionError=frappe.PermissionError,
+		)
+
+		with (
+			patch("vetedge.services.billing.frappe", frappe_stub),
+			patch("vetedge.services.billing.require_internal_user"),
+			patch(
+				"vetedge.services.billing.get_invoice_access_diagnostic",
+				return_value={"allowed": True, "can_open_full_form": True},
+			) as diagnostic,
+		):
+			summary = get_invoice_access_summary("SINV-001")
+
+		diagnostic.assert_called_once_with("staff@example.com", "SINV-001")
+		self.assertEqual(summary["name"], "SINV-001")
+		self.assertEqual(summary["customer"], "CUST-001")
+		self.assertTrue(summary["can_open_full_form"])
+
 
 def make_consultation(linked_invoice=None):
 	return frappe._dict(
@@ -301,6 +331,7 @@ def make_frappe_stub(set_values=None, get_doc=None, get_value=None):
 		get_meta=lambda *args, **kwargs: SimpleNamespace(has_field=lambda field: True),
 		session=SimpleNamespace(user="staff@example.com"),
 		throw=throw,
+		_dict=frappe._dict,
 		ValidationError=frappe.ValidationError,
 		PermissionError=frappe.PermissionError,
 	)

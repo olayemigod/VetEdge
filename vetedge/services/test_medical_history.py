@@ -19,19 +19,21 @@ class TestMedicalHistory(TestCase):
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			history = get_patient_medical_history("VP-001", from_date="2026-04-01", to_date="2026-04-30")
 
-		self.assertEqual([event["type"] for event in history], ["vitals", "consultation"])
-		self.assertEqual(history[1]["symptoms"][0]["value"], "Vomiting")
-		self.assertEqual(history[1]["diagnoses"][0]["value"], "Gastroenteritis")
+		self.assertEqual([event["type"] for event in history], ["lab", "vitals", "consultation"])
+		self.assertEqual(history[2]["symptoms"][0]["value"], "Vomiting")
+		self.assertEqual(history[2]["diagnoses"][0]["value"], "Gastroenteritis")
 
 	def test_medical_history_view_returns_patient_sections_and_cross_branch_records(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -43,6 +45,8 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["diagnoses"][0]["diagnosis"], "Gastroenteritis")
 		self.assertEqual(view["symptoms"][0]["symptom"], "Vomiting")
 		self.assertEqual(view["treatments"][0]["item"], "Fluid Therapy")
+		self.assertEqual(view["labs"][0]["status"], "Reviewed")
+		self.assertIn("CBC", view["labs"][0]["tests_summary"])
 		self.assertIn("temperature", view["trends"])
 		self.assertIn("vaccination_history", view["placeholders"])
 
@@ -51,6 +55,7 @@ class TestMedicalHistory(TestCase):
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -60,6 +65,7 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["diagnoses"], [])
 		self.assertEqual(view["symptoms"], [])
 		self.assertEqual(view["treatments"], [])
+		self.assertEqual(view["labs"], [])
 
 	def test_history_date_range_is_applied_to_consultations_and_vitals(self):
 		calls = []
@@ -72,6 +78,7 @@ class TestMedicalHistory(TestCase):
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -91,6 +98,7 @@ class TestMedicalHistory(TestCase):
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			trend = get_patient_vitals_trend("VP-001", "weight", from_date="2026-04-01", to_date="2026-04-30")
@@ -102,6 +110,7 @@ class TestMedicalHistory(TestCase):
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			self.assertRaises(
@@ -199,6 +208,19 @@ def get_list_for_history(doctype, filters=None, fields=None, **kwargs):
 				notes="Alert",
 			)
 		]
+	if doctype == "Veterinary Lab Order":
+		return [
+			frappe._dict(
+				name="VLAB-001",
+				consultation="VCON-001",
+				requested_on="2026-04-18 10:30:00",
+				requested_by="labtech@example.com",
+				service_branch="Branch B",
+				status="Reviewed",
+				doctor_reviewed_by="doctor@example.com",
+				doctor_reviewed_on="2026-04-18 12:00:00",
+			)
+		]
 	return []
 
 
@@ -224,6 +246,16 @@ def get_all_for_history(doctype, filters=None, fields=None, **kwargs):
 				service_type="Treatment",
 				treatment_type="Medication",
 				notes="SQ fluids",
+			)
+		]
+	if doctype == "Veterinary Lab Order Item":
+		return [
+			frappe._dict(
+				parent="VLAB-001",
+				lab_test_name="CBC",
+				lab_test_template="CBC",
+				result_value="Normal",
+				result_text="",
 			)
 		]
 	return []

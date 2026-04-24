@@ -7,8 +7,9 @@ from frappe.utils import cint, flt, nowdate
 
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.dispensary import get_consultation_ready_status
+from vetedge.services.lab import get_consultation_lab_billing_items, mark_consultation_lab_orders_invoiced
 from vetedge.services.notifications import emit_notification_event
-from vetedge.services.permissions import can_access_consultation, can_initiate_payment
+from vetedge.services.permissions import can_access_consultation, can_initiate_payment, get_invoice_access_diagnostic
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.registration_billing import get_billing_cost_center, get_default_company
 
@@ -18,6 +19,10 @@ PAID_STATUS = "Paid"
 UNPAID_STATUS = "Unpaid"
 PARTLY_PAID_STATUS = "Partly Paid"
 CANCELLED_STATUS = "Cancelled"
+CONSULTATION_INVOICE_REFERENCE_DOCTYPE = "Consultation Invoice Reference"
+CONSULTATION_BILLING_SOURCE_DOCTYPE = "Consultation Billing Source"
+CONSULTATION_INVOICE_REFERENCE_FIELD = "consultation_invoices"
+CONSULTATION_BILLING_SOURCE_FIELD = "consultation_billing_sources"
 
 
 @dataclass(frozen=True)
@@ -81,36 +86,79 @@ def create_consultation_invoice(consultation: str) -> dict:
 	validate_consultation_invoice_request(consultation_doc, settings)
 
 	cost_center = get_billing_cost_center(consultation_doc.service_branch, required=True)
-	items = build_consultation_invoice_items(consultation_doc, settings, cost_center)
+	draft_invoice_name = get_active_consultation_invoice_name(consultation_doc)
+	items, billed_sources = build_consultation_invoice_payload(
+		consultation_doc,
+		settings,
+		cost_center,
+		draft_invoice_name=draft_invoice_name,
+	)
 	if not items:
 		frappe.throw("No billable consultation or treatment items found.", frappe.ValidationError)
 
-	invoice = frappe.get_doc(
-		{
-			"doctype": "Sales Invoice",
-			"customer": consultation_doc.primary_owner,
-			"company": consultation_doc.company or get_default_company(),
-			"posting_date": nowdate(),
-			"due_date": nowdate(),
-			"items": items,
-			"remarks": f"{get_clinic_brand_name()} consultation billing for {consultation_doc.name}",
-		}
+	if draft_invoice_name:
+		invoice = update_existing_consultation_invoice(consultation_doc, draft_invoice_name, items, cost_center)
+	else:
+		invoice = create_new_consultation_invoice(consultation_doc, items, cost_center)
+
+	update_consultation_after_invoice_created(
+		consultation_doc,
+		invoice,
+		settings,
+		billed_sources=billed_sources,
 	)
-
-	if consultation_doc.service_branch and frappe.get_meta("Sales Invoice").has_field("branch"):
-		invoice.branch = consultation_doc.service_branch
-	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
-		invoice.cost_center = cost_center
-
-	invoice.insert(ignore_permissions=True)
-	update_consultation_after_invoice_created(consultation_doc, invoice, settings)
-	emit_invoice_created_notifications(consultation_doc, invoice, settings)
+	if not draft_invoice_name:
+		emit_invoice_created_notifications(consultation_doc, invoice, settings)
 
 	return {
 		"consultation": consultation_doc.name,
 		"invoice": invoice.name,
+		"is_draft_update": bool(draft_invoice_name),
 		"status": get_consultation_status_after_invoice_created(consultation_doc, settings),
 	}
+
+
+@frappe.whitelist()
+def get_invoice_access_summary(invoice: str) -> dict:
+	require_internal_user()
+	diagnostic = get_invoice_access_diagnostic(frappe.session.user, invoice)
+	if not diagnostic.get("allowed"):
+		frappe.throw(diagnostic.get("message"), frappe.PermissionError)
+
+	fields = [
+		"name",
+		"customer",
+		"posting_date",
+		"due_date",
+		"status",
+		"outstanding_amount",
+		"grand_total",
+		"currency",
+	]
+	invoice_doc = frappe.get_doc("Sales Invoice", invoice)
+	if frappe.get_meta("Sales Invoice").has_field("branch"):
+		fields.append("branch")
+
+	invoice_row = frappe._dict({fieldname: invoice_doc.get(fieldname) for fieldname in fields})
+
+	return {
+		**invoice_row,
+		"can_open_full_form": bool(diagnostic.get("can_open_full_form")),
+	}
+
+
+@frappe.whitelist()
+def get_consultation_invoice_summaries(consultation: str) -> list[dict]:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
+	summaries = []
+	for invoice_name in get_consultation_invoice_names(consultation_doc):
+		try:
+			summaries.append(get_invoice_access_summary(invoice_name))
+		except frappe.PermissionError:
+			continue
+	return summaries
 
 
 def validate_consultation_invoice_request(doc, settings: ConsultationBillingSettings) -> None:
@@ -126,8 +174,6 @@ def validate_consultation_invoice_request(doc, settings: ConsultationBillingSett
 		frappe.throw("Consultation must have a service branch before billing.", frappe.ValidationError)
 	if not settings.consultation_item:
 		frappe.throw("Consultation Item is required when consultation billing is enabled.", frappe.ValidationError)
-	if doc.linked_invoice and is_active_sales_invoice(doc.linked_invoice):
-		frappe.throw("This consultation already has an active linked Sales Invoice.", frappe.ValidationError)
 
 
 def is_active_sales_invoice(invoice: str) -> bool:
@@ -135,18 +181,47 @@ def is_active_sales_invoice(invoice: str) -> bool:
 	return docstatus is not None and cint(docstatus) != 2
 
 
-def build_consultation_invoice_items(
+def build_consultation_invoice_payload(
 	consultation_doc,
 	settings: ConsultationBillingSettings,
 	cost_center: str,
-) -> list[dict]:
-	items = [build_invoice_item(settings.consultation_item, 1, None, None, cost_center)]
+	draft_invoice_name: str | None = None,
+) -> tuple[list[dict], list[dict]]:
+	items: list[dict] = []
+	sources: list[dict] = []
+
+	if should_include_consultation_fee(consultation_doc, draft_invoice_name):
+		items.append(build_invoice_item(settings.consultation_item, 1, None, None, cost_center))
+		sources.append(
+			build_consultation_billing_source(
+				source_type="Consultation Fee",
+				source_name=consultation_doc.name,
+				sales_invoice=draft_invoice_name,
+				item_code=settings.consultation_item,
+			)
+		)
 
 	if settings.enable_treatment_billing:
-		for row in consultation_doc.get("planned_treatments") or []:
+		for row in get_unbilled_treatment_rows(consultation_doc, draft_invoice_name):
 			items.append(build_invoice_item(row.item, row.qty, row.get("uom"), row.get("rate"), cost_center))
+			sources.append(
+				build_consultation_billing_source(
+					source_type="Treatment",
+					source_name=get_consultation_treatment_source_name(row),
+					sales_invoice=draft_invoice_name,
+					item_code=row.item,
+				)
+			)
 
-	return items
+	lab_items, lab_sources = get_consultation_lab_billing_items(
+		consultation_doc,
+		cost_center,
+		invoice_name=draft_invoice_name,
+	)
+	items.extend(lab_items)
+	sources.extend(lab_sources)
+
+	return items, sources
 
 
 def build_invoice_item(
@@ -173,16 +248,41 @@ def build_invoice_item(
 	}
 
 
-def update_consultation_after_invoice_created(doc, invoice, settings: ConsultationBillingSettings) -> None:
+def update_consultation_after_invoice_created(
+	doc,
+	invoice,
+	settings: ConsultationBillingSettings,
+	billed_sources: list[dict] | None = None,
+) -> None:
+	doc = get_latest_consultation_doc(doc)
 	status = get_consultation_status_after_invoice_created(doc, settings)
 	values = {
 		"linked_invoice": invoice.name,
-		"payment_status": UNPAID_STATUS,
+		"payment_status": get_invoice_payment_status(invoice),
 	}
 	if status and doc.status not in {"Completed", "Cancelled"}:
 		values["status"] = status
 
-	frappe.db.set_value("Veterinary Consultation", doc.name, values, update_modified=False)
+	for fieldname, value in values.items():
+		setattr(doc, fieldname, value)
+
+	replace_child_rows(
+		doc,
+		CONSULTATION_INVOICE_REFERENCE_FIELD,
+		build_consultation_invoice_reference_rows(doc, invoice),
+	)
+	replace_child_rows(
+		doc,
+		CONSULTATION_BILLING_SOURCE_FIELD,
+		build_consultation_billing_source_rows(doc, invoice, billed_sources or []),
+	)
+
+	if getattr(doc, "save", None):
+		doc.save(ignore_permissions=True, ignore_version=True)
+	else:
+		frappe.db.set_value("Veterinary Consultation", doc.name, values, update_modified=False)
+
+	mark_consultation_lab_orders_invoiced(doc.name, invoice.name)
 
 
 def get_consultation_status_after_invoice_created(doc, settings: ConsultationBillingSettings) -> str:
@@ -266,12 +366,13 @@ def create_payment_entry_from_consultation(consultation: str, mode_of_payment: s
 		frappe.throw("Doctor payment collection is not enabled.", frappe.PermissionError)
 
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
-	if consultation_doc.linked_invoice:
-		can_initiate_payment(frappe.session.user, consultation_doc.linked_invoice, mode="internal", raise_exception=True)
-	if not consultation_doc.linked_invoice:
+	active_invoice = get_collectible_consultation_invoice_name(consultation_doc)
+	if active_invoice:
+		can_initiate_payment(frappe.session.user, active_invoice, mode="internal", raise_exception=True)
+	if not active_invoice:
 		frappe.throw("Create a consultation invoice before collecting payment.", frappe.ValidationError)
 
-	invoice = frappe.get_doc("Sales Invoice", consultation_doc.linked_invoice)
+	invoice = frappe.get_doc("Sales Invoice", active_invoice)
 	if invoice.docstatus != 1:
 		frappe.throw("Submit the Sales Invoice before creating a Payment Entry.", frappe.ValidationError)
 	if flt(invoice.outstanding_amount) <= 0:
@@ -304,12 +405,17 @@ def create_payment_entry_from_consultation(consultation: str, mode_of_payment: s
 
 
 def update_consultation_payment_status_from_invoice(doc, method: str | None = None) -> None:
-	consultations = frappe.get_all(
-		"Veterinary Consultation",
-		filters={"linked_invoice": doc.name},
-		fields=["name", "status", "payment_status"],
-	)
+	consultation_names = get_consultation_names_for_invoice(doc.name)
+	consultations = [
+		frappe._dict(
+			name=name,
+			status=frappe.db.get_value("Veterinary Consultation", name, "status"),
+			payment_status=frappe.db.get_value("Veterinary Consultation", name, "payment_status"),
+		)
+		for name in consultation_names
+	]
 	for consultation in consultations:
+		sync_consultation_invoice_reference_from_invoice(consultation.name, doc)
 		update_single_consultation_payment_status(consultation, doc)
 
 
@@ -370,3 +476,253 @@ def get_invoice_payment_status(invoice) -> str:
 	if flt(invoice.outstanding_amount) < flt(invoice.grand_total):
 		return PARTLY_PAID_STATUS
 	return UNPAID_STATUS
+
+
+def create_new_consultation_invoice(consultation_doc, items: list[dict], cost_center: str):
+	invoice = frappe.get_doc(
+		{
+			"doctype": "Sales Invoice",
+			"customer": consultation_doc.primary_owner,
+			"company": consultation_doc.company or get_default_company(),
+			"posting_date": nowdate(),
+			"due_date": nowdate(),
+			"items": items,
+			"remarks": f"{get_clinic_brand_name()} consultation billing for {consultation_doc.name}",
+		}
+	)
+	apply_consultation_invoice_defaults(consultation_doc, invoice, cost_center)
+	invoice.insert(ignore_permissions=True)
+	return invoice
+
+
+def update_existing_consultation_invoice(consultation_doc, invoice_name: str, items: list[dict], cost_center: str):
+	invoice = frappe.get_doc("Sales Invoice", invoice_name)
+	if invoice.docstatus != 0:
+		frappe.throw("Only draft consultation invoices can be updated.", frappe.ValidationError)
+	invoice.customer = consultation_doc.primary_owner
+	invoice.company = consultation_doc.company or get_default_company()
+	invoice.posting_date = nowdate()
+	invoice.due_date = nowdate()
+	invoice.remarks = f"{get_clinic_brand_name()} consultation billing for {consultation_doc.name}"
+	invoice.set("items", items)
+	apply_consultation_invoice_defaults(consultation_doc, invoice, cost_center)
+	invoice.save(ignore_permissions=True)
+	return invoice
+
+
+def apply_consultation_invoice_defaults(consultation_doc, invoice, cost_center: str) -> None:
+	if consultation_doc.service_branch and frappe.get_meta("Sales Invoice").has_field("branch"):
+		invoice.branch = consultation_doc.service_branch
+	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
+		invoice.cost_center = cost_center
+
+
+def get_active_consultation_invoice_name(doc) -> str | None:
+	for invoice_name in get_consultation_invoice_names(doc):
+		if frappe.db.get_value("Sales Invoice", invoice_name, "docstatus") == 0:
+			return invoice_name
+	if doc.get("linked_invoice") and frappe.db.get_value("Sales Invoice", doc.linked_invoice, "docstatus") == 0:
+		return doc.linked_invoice
+	return None
+
+
+def get_collectible_consultation_invoice_name(doc) -> str | None:
+	for invoice_name in get_consultation_invoice_names(doc):
+		invoice = frappe.db.get_value(
+			"Sales Invoice",
+			invoice_name,
+			["docstatus", "outstanding_amount"],
+			as_dict=True,
+		)
+		if invoice and invoice.docstatus == 1 and flt(invoice.outstanding_amount) > 0:
+			return invoice_name
+	if doc.get("linked_invoice"):
+		return doc.linked_invoice
+	return None
+
+
+def get_consultation_invoice_names(doc) -> list[str]:
+	names = []
+	for row in doc.get(CONSULTATION_INVOICE_REFERENCE_FIELD) or []:
+		if row.sales_invoice and row.sales_invoice not in names:
+			names.append(row.sales_invoice)
+	if doc.get("linked_invoice") and doc.linked_invoice not in names:
+		names.append(doc.linked_invoice)
+	return names
+
+
+def should_include_consultation_fee(doc, draft_invoice_name: str | None = None) -> bool:
+	return not is_consultation_source_billed(doc, "Consultation Fee", doc.name, draft_invoice_name)
+
+
+def get_unbilled_treatment_rows(doc, draft_invoice_name: str | None = None) -> list:
+	rows = []
+	for row in doc.get("planned_treatments") or []:
+		if not row.item:
+			continue
+		if is_consultation_source_billed(doc, "Treatment", get_consultation_treatment_source_name(row), draft_invoice_name):
+			continue
+		rows.append(row)
+	return rows
+
+
+def get_consultation_treatment_source_name(row) -> str:
+	return row.get("name") or f"{row.item}:{row.get('idx') or 0}"
+
+
+def is_consultation_source_billed(doc, source_type: str, source_name: str, draft_invoice_name: str | None = None) -> bool:
+	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
+		if row.source_type != source_type or row.source_name != source_name:
+			continue
+		if draft_invoice_name and row.sales_invoice == draft_invoice_name:
+			return False
+		if cint(row.get("invoice_docstatus")) == 2:
+			continue
+		return True
+	return False
+
+
+def build_consultation_billing_source(source_type: str, source_name: str, sales_invoice: str | None, item_code: str | None = None) -> dict:
+	return {
+		"source_type": source_type,
+		"source_name": source_name,
+		"sales_invoice": sales_invoice,
+		"item_code": item_code,
+	}
+
+
+def build_consultation_invoice_reference_rows(doc, invoice) -> list[dict]:
+	rows = []
+	for row in doc.get(CONSULTATION_INVOICE_REFERENCE_FIELD) or []:
+		if row.sales_invoice == invoice.name:
+			continue
+		rows.append(
+			{
+				"sales_invoice": row.sales_invoice,
+				"invoice_status": row.invoice_status,
+				"invoice_docstatus": row.invoice_docstatus,
+				"posting_date": row.posting_date,
+				"currency": row.currency,
+				"grand_total": row.grand_total,
+				"outstanding_amount": row.outstanding_amount,
+			}
+		)
+	rows.append(build_consultation_invoice_reference(invoice))
+	return rows
+
+
+def build_consultation_invoice_reference(invoice) -> dict:
+	return {
+		"sales_invoice": invoice.name,
+		"invoice_status": invoice.status,
+		"invoice_docstatus": invoice.docstatus,
+		"posting_date": invoice.posting_date,
+		"currency": invoice.currency,
+		"grand_total": invoice.grand_total,
+		"outstanding_amount": invoice.outstanding_amount,
+	}
+
+
+def build_consultation_billing_source_rows(doc, invoice, billed_sources: list[dict]) -> list[dict]:
+	rows = []
+	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
+		if row.sales_invoice == invoice.name:
+			continue
+		rows.append(
+			{
+				"source_type": row.source_type,
+				"source_name": row.source_name,
+				"sales_invoice": row.sales_invoice,
+				"invoice_docstatus": row.invoice_docstatus,
+				"invoice_status": row.invoice_status,
+				"item_code": row.item_code,
+			}
+		)
+	for source in billed_sources:
+		rows.append(
+			{
+				**source,
+				"sales_invoice": invoice.name,
+				"invoice_docstatus": invoice.docstatus,
+				"invoice_status": invoice.status,
+			}
+		)
+	return rows
+
+
+def replace_child_rows(doc, fieldname: str, rows: list[dict]) -> None:
+	new_rows = [frappe._dict(row) for row in rows]
+	setter = getattr(doc, "set", None)
+	if callable(setter):
+		doc.set(fieldname, new_rows)
+	else:
+		doc[fieldname] = new_rows
+
+
+def get_consultation_names_for_invoice(invoice_name: str) -> list[str]:
+	names = []
+	if frappe.db.exists("DocType", CONSULTATION_INVOICE_REFERENCE_DOCTYPE):
+		for row in frappe.get_all(
+			CONSULTATION_INVOICE_REFERENCE_DOCTYPE,
+			filters={"sales_invoice": invoice_name},
+			fields=["parent"],
+		):
+			if row.parent and row.parent not in names:
+				names.append(row.parent)
+
+	for row in frappe.get_all(
+		"Veterinary Consultation",
+		filters={"linked_invoice": invoice_name},
+		fields=["name"],
+	):
+		if row.name not in names:
+			names.append(row.name)
+	return names
+
+
+def sync_consultation_invoice_reference_from_invoice(consultation_name: str, invoice) -> None:
+	if not consultation_name or not frappe.db.exists("Veterinary Consultation", consultation_name):
+		return
+	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation_name)
+	replace_child_rows(
+		consultation_doc,
+		CONSULTATION_INVOICE_REFERENCE_FIELD,
+		build_consultation_invoice_reference_rows(consultation_doc, invoice),
+	)
+	replace_child_rows(
+		consultation_doc,
+		CONSULTATION_BILLING_SOURCE_FIELD,
+		update_consultation_billing_source_statuses(consultation_doc, invoice),
+	)
+	if consultation_doc.get("linked_invoice") == invoice.name:
+		consultation_doc.payment_status = get_invoice_payment_status(invoice)
+	if getattr(consultation_doc, "save", None):
+		consultation_doc.save(ignore_permissions=True, ignore_version=True)
+
+
+def get_latest_consultation_doc(doc):
+	if isinstance(doc, str):
+		return frappe.get_doc("Veterinary Consultation", doc)
+
+	name = getattr(doc, "name", None) or doc.get("name")
+	doctype = getattr(doc, "doctype", None) or doc.get("doctype")
+	exists = getattr(getattr(frappe, "db", None), "exists", None)
+	if doctype == "Veterinary Consultation" and name and (not callable(exists) or exists("Veterinary Consultation", name)):
+		return frappe.get_doc("Veterinary Consultation", name)
+	return doc
+
+
+def update_consultation_billing_source_statuses(doc, invoice) -> list[dict]:
+	rows = []
+	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
+		rows.append(
+			{
+				"source_type": row.source_type,
+				"source_name": row.source_name,
+				"sales_invoice": row.sales_invoice,
+				"invoice_docstatus": invoice.docstatus if row.sales_invoice == invoice.name else row.invoice_docstatus,
+				"invoice_status": invoice.status if row.sales_invoice == invoice.name else row.invoice_status,
+				"item_code": row.item_code,
+			}
+		)
+	return rows

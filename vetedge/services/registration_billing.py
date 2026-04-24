@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import frappe
+from frappe import _
 from frappe.utils import cint, flt, nowdate
 
 from vetedge.install.custom_fields import BRANCH_COST_CENTER_FIELD
+from vetedge.services.permissions import can_access_patient
+from vetedge.services.portal_access import require_internal_user
 
 
 SETTINGS_DOCTYPE = "Veterinary Settings"
@@ -214,6 +217,64 @@ def create_registration_invoice(doc, rule: RegistrationBillingRule):
 	return invoice
 
 
+def validate_registration_payment_before_first_consultation(
+	patient: str,
+	current_consultation: str | None = None,
+) -> None:
+	if not patient:
+		return
+
+	patient_doc = frappe.db.get_value(
+		"Veterinary Patient",
+		patient,
+		["name", "default_branch", "registration_status", "registration_invoice"],
+		as_dict=True,
+	)
+	if not patient_doc:
+		return
+
+	rule = get_registration_rule(patient_doc.default_branch)
+	if not rule.enabled or not rule.require_payment_before_first_consultation:
+		return
+
+	if not is_first_consultation_for_patient(patient, current_consultation=current_consultation):
+		return
+
+	if patient_doc.registration_status == PAID_STATUS:
+		return
+
+	if patient_doc.registration_invoice:
+		frappe.throw(
+			_("Registration invoice {0} must be paid before the first consultation can proceed.").format(
+				patient_doc.registration_invoice
+			),
+			frappe.ValidationError,
+		)
+
+	frappe.throw(
+		_("Registration payment is required before the first consultation can proceed."),
+		frappe.ValidationError,
+	)
+
+
+def is_first_consultation_for_patient(patient: str, current_consultation: str | None = None) -> bool:
+	filters = {
+		"patient": patient,
+		"status": ["!=", "Cancelled"],
+	}
+	if current_consultation:
+		filters["name"] = ["!=", current_consultation]
+
+	return not bool(
+		frappe.get_all(
+			"Veterinary Consultation",
+			filters=filters,
+			fields=["name"],
+			limit=1,
+		)
+	)
+
+
 def get_billing_cost_center(branch: str | None, required: bool = True) -> str | None:
 	if not branch:
 		return None
@@ -246,6 +307,18 @@ def get_existing_registration_invoice(patient: str) -> str | None:
 	return frappe.db.get_value("Veterinary Patient", patient, "registration_invoice")
 
 
+def get_active_registration_invoice_name(patient: str) -> str | None:
+	invoice_name = get_existing_registration_invoice(patient)
+	if not invoice_name:
+		return None
+
+	docstatus = frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")
+	if cint(docstatus) == 2:
+		return None
+
+	return invoice_name
+
+
 def get_default_company() -> str | None:
 	try:
 		from erpnext import get_default_company as erpnext_get_default_company
@@ -267,6 +340,49 @@ def set_patient_registration_fields(patient: str, **values) -> None:
 	frappe.db.set_value("Veterinary Patient", patient, values, update_modified=False)
 
 
+@frappe.whitelist()
+def is_registration_billing_enabled_for_ui() -> bool:
+	require_internal_user()
+	return bool(get_registration_rule(None).enabled)
+
+
+@frappe.whitelist()
+def create_manual_registration_invoice(patient: str) -> dict:
+	require_internal_user()
+	can_access_patient(frappe.session.user, patient, raise_exception=True)
+
+	patient_doc = frappe.get_doc("Veterinary Patient", patient)
+	rule = get_registration_rule(patient_doc.default_branch)
+	if not rule.enabled:
+		frappe.throw(_("Registration billing is not enabled."), frappe.ValidationError)
+
+	validate_patient_registration(patient_doc)
+	active_invoice_name = get_active_registration_invoice_name(patient_doc.name)
+	if active_invoice_name:
+		update_patient_registration_payment_status(patient_doc.name, active_invoice_name)
+		return {
+			"patient": patient_doc.name,
+			"invoice": active_invoice_name,
+			"created": False,
+			"status": frappe.db.get_value("Veterinary Patient", patient_doc.name, "registration_status"),
+		}
+
+	invoice = create_registration_invoice(patient_doc, rule)
+	set_patient_registration_fields(
+		patient_doc.name,
+		registration_invoice=invoice.name,
+		registration_status=AWAITING_PAYMENT_STATUS,
+		registration_billed=1,
+		registration_fee_amount=rule.registration_fee,
+	)
+	return {
+		"patient": patient_doc.name,
+		"invoice": invoice.name,
+		"created": True,
+		"status": AWAITING_PAYMENT_STATUS,
+	}
+
+
 def update_registration_status_from_invoice(doc, method: str | None = None) -> None:
 	patients = frappe.get_all(
 		"Veterinary Patient",
@@ -283,7 +399,29 @@ def update_patient_registration_payment_status(patient: str, invoice) -> None:
 		invoice = frappe.get_doc("Sales Invoice", invoice)
 
 	if is_invoice_paid(invoice):
-		set_patient_registration_fields(patient, registration_status=PAID_STATUS)
+		set_patient_registration_fields(
+			patient,
+			registration_invoice=invoice.name,
+			registration_status=PAID_STATUS,
+			registration_billed=1,
+		)
+		return
+
+	if cint(invoice.docstatus) == 2:
+		set_patient_registration_fields(
+			patient,
+			registration_invoice=None,
+			registration_status=REGISTERED_STATUS,
+			registration_billed=0,
+		)
+		return
+
+	set_patient_registration_fields(
+		patient,
+		registration_invoice=invoice.name,
+		registration_status=AWAITING_PAYMENT_STATUS,
+		registration_billed=1,
+	)
 
 
 def is_invoice_paid(invoice) -> bool:

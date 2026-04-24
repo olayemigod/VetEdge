@@ -1,27 +1,67 @@
 from __future__ import annotations
 
 import frappe
+import frappe.permissions
 
 from vetedge.services.audit import log_operational_event
 
 
-ELEVATED_ROLES = {"System Manager", "VetEdge Administrator"}
-DOCTOR_ROLES = {"VetEdge Doctor", *ELEVATED_ROLES}
-DISPENSARY_ROLES = {"Dispensary User", "VetEdge Doctor", *ELEVATED_ROLES}
+ROLE_SYSTEM_MANAGER = "System Manager"
+ROLE_VETEDGE_ADMINISTRATOR = "VetEdge Administrator"
+ROLE_VETEDGE_DOCTOR = "VetEdge Doctor"
+ROLE_VETEDGE_FRONT_DESK = "VetEdge Front Desk"
+ROLE_VETERINARY_NURSE = "Veterinary Nurse"
+ROLE_DISPENSARY_USER = "Dispensary User"
+ROLE_LAB_TECHNICIAN = "Lab Technician"
+ROLE_BRANCH_MANAGER = "Branch Manager"
+ROLE_ACCOUNTS_CASHIER = "Accounts/Cashier"
+ROLE_ACCOUNTS_MANAGER = "Accounts Manager"
+ROLE_ACCOUNTS_USER = "Accounts User"
+
+ROLE_ALIASES = {
+	ROLE_VETEDGE_ADMINISTRATOR: {ROLE_VETEDGE_ADMINISTRATOR},
+	ROLE_VETEDGE_DOCTOR: {ROLE_VETEDGE_DOCTOR},
+	ROLE_VETEDGE_FRONT_DESK: {ROLE_VETEDGE_FRONT_DESK},
+	ROLE_VETERINARY_NURSE: {ROLE_VETERINARY_NURSE, "VetEdge Nurse"},
+	ROLE_DISPENSARY_USER: {ROLE_DISPENSARY_USER, "VetEdge Dispensary User"},
+	ROLE_LAB_TECHNICIAN: {ROLE_LAB_TECHNICIAN, "VetEdge Lab Technician"},
+	ROLE_BRANCH_MANAGER: {ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"},
+	ROLE_ACCOUNTS_CASHIER: {ROLE_ACCOUNTS_CASHIER, "VetEdge Accounts/Cashier"},
+}
+
+
+def _role_group(*roles: str) -> set[str]:
+	group: set[str] = set()
+	for role in roles:
+		group |= ROLE_ALIASES.get(role, {role})
+	return group
+
+
+ELEVATED_ROLES = {ROLE_SYSTEM_MANAGER, *_role_group(ROLE_VETEDGE_ADMINISTRATOR)}
+DOCTOR_ROLES = {*_role_group(ROLE_VETEDGE_DOCTOR), *ELEVATED_ROLES}
+DISPENSARY_ROLES = {*_role_group(ROLE_DISPENSARY_USER), *ELEVATED_ROLES}
+LAB_REQUEST_ROLES = DOCTOR_ROLES
+LAB_RESULT_ENTRY_ROLES = {*_role_group(ROLE_LAB_TECHNICIAN), *DOCTOR_ROLES}
+LAB_REVIEW_ROLES = DOCTOR_ROLES
 ROLE_BUNDLE_MANAGER_ROLES = ELEVATED_ROLES
-FRONT_DESK_ROLES = {"VetEdge Front Desk", *ELEVATED_ROLES}
-ACCOUNTS_COLLECTION_ROLES = {"Accounts Manager", "Accounts User", "Accounts/Cashier", *ELEVATED_ROLES}
+FRONT_DESK_ROLES = {*_role_group(ROLE_VETEDGE_FRONT_DESK), *ELEVATED_ROLES}
+ACCOUNTS_COLLECTION_ROLES = {
+	ROLE_ACCOUNTS_MANAGER,
+	ROLE_ACCOUNTS_USER,
+	*_role_group(ROLE_ACCOUNTS_CASHIER),
+	*ELEVATED_ROLES,
+}
 INTERNAL_ROLES = {
 	*ELEVATED_ROLES,
-	"VetEdge Doctor",
-	"VetEdge Front Desk",
-	"Veterinary Nurse",
-	"Dispensary User",
-	"Lab Technician",
-	"Branch Manager",
-	"Accounts/Cashier",
-	"Accounts Manager",
-	"Accounts User",
+	*_role_group(ROLE_VETEDGE_DOCTOR),
+	*_role_group(ROLE_VETEDGE_FRONT_DESK),
+	*_role_group(ROLE_VETERINARY_NURSE),
+	*_role_group(ROLE_DISPENSARY_USER),
+	*_role_group(ROLE_LAB_TECHNICIAN),
+	*_role_group(ROLE_BRANCH_MANAGER),
+	*_role_group(ROLE_ACCOUNTS_CASHIER),
+	ROLE_ACCOUNTS_MANAGER,
+	ROLE_ACCOUNTS_USER,
 }
 PORTAL_ALLOWED_PERMISSION_TYPES = {"read", "print"}
 
@@ -112,6 +152,16 @@ def can_access_branch_data(user: str | None, branch: str | None, raise_exception
 
 def can_access_patient(user: str | None, patient: str, raise_exception: bool = False) -> bool:
 	user = user or get_current_user()
+	if not user or user == "Guest":
+		return _deny(
+			raise_exception,
+			"Not permitted to access this patient.",
+			"patient_access_blocked",
+			reference_doctype="Veterinary Patient",
+			reference_name=patient,
+			user=user,
+		)
+
 	if is_portal_owner_user(user):
 		from vetedge.services.portal_access import validate_owner_patient_access
 
@@ -128,8 +178,52 @@ def can_access_patient(user: str | None, patient: str, raise_exception: bool = F
 				user=user,
 			)
 
+	if user_has_global_branch_access(user) or not is_patient_branch_restriction_enabled():
+		return True
+
+	assigned_branches = get_assigned_branches(user)
+	if not assigned_branches:
+		return _deny(
+			raise_exception,
+			f"User {user} has no branch assignment.",
+			"patient_access_blocked",
+			reference_doctype="Veterinary Patient",
+			reference_name=patient,
+			details={"assigned_branches": assigned_branches},
+			user=user,
+		)
+
 	branch = frappe.db.get_value("Veterinary Patient", patient, "default_branch")
-	return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	if not branch or branch in assigned_branches:
+		return True
+
+	return _deny(
+		raise_exception,
+		f"User {user} is not allowed to access Veterinary Patient {patient} for Branch {branch}.",
+		"patient_access_blocked",
+		reference_doctype="Veterinary Patient",
+		reference_name=patient,
+		details={"branch": branch, "assigned_branches": assigned_branches},
+		user=user,
+	)
+
+
+def validate_patient_branch_access(patient: str, user: str | None = None) -> None:
+	if not patient:
+		return
+
+	can_access_patient(user or get_current_user(), patient, raise_exception=True)
+
+
+def is_patient_branch_restriction_enabled() -> bool:
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return False
+
+	meta = frappe.get_meta("Veterinary Settings")
+	if not meta.has_field("patient_branch_restriction_enabled"):
+		return False
+
+	return bool(frappe.db.get_single_value("Veterinary Settings", "patient_branch_restriction_enabled"))
 
 
 def can_access_consultation(user: str | None, consultation: str, raise_exception: bool = False) -> bool:
@@ -168,6 +262,32 @@ def can_access_medical_history(user: str | None, patient: str, raise_exception: 
 	return can_access_patient(user, patient, raise_exception=raise_exception)
 
 
+def can_access_lab_order(user: str | None, lab_order: str, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_order_access_blocked",
+			reference_doctype="Veterinary Lab Order",
+			reference_name=lab_order,
+			user=user,
+		)
+
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_order_access_blocked",
+			reference_doctype="Veterinary Lab Order",
+			reference_name=lab_order,
+			user=user,
+		)
+
+	branch = frappe.db.get_value("Veterinary Lab Order", lab_order, "service_branch")
+	return can_access_branch_data(user, branch, raise_exception=raise_exception)
+
+
 def can_view_invoice(user: str | None, invoice_name: str, raise_exception: bool = False) -> bool:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
@@ -200,6 +320,77 @@ def can_view_invoice(user: str | None, invoice_name: str, raise_exception: bool 
 	if frappe.get_meta("Sales Invoice").has_field("branch"):
 		branch = frappe.db.get_value("Sales Invoice", invoice_name, "branch")
 	return can_access_branch_data(user, branch, raise_exception=raise_exception)
+
+
+def get_invoice_access_diagnostic(user: str | None, invoice_name: str) -> dict:
+	user = user or get_current_user()
+	if not frappe.db.exists("Sales Invoice", invoice_name):
+		return {
+			"allowed": False,
+			"category": "missing",
+			"message": f"Sales Invoice {invoice_name} was not found.",
+			"can_open_full_form": False,
+		}
+
+	if not is_internal_staff_user(user):
+		return {
+			"allowed": False,
+			"category": "contextual_restriction",
+			"message": (
+				f"Sales Invoice {invoice_name} is blocked by VetEdge contextual restriction. "
+				"This invoice summary is only available to internal clinic staff."
+			),
+			"can_open_full_form": False,
+		}
+
+	branch = frappe.db.get_value("Sales Invoice", invoice_name, "branch") if frappe.get_meta("Sales Invoice").has_field("branch") else None
+	assigned_branches = get_assigned_branches(user)
+	if not can_view_invoice(user, invoice_name, raise_exception=False):
+		if branch and not user_has_global_branch_access(user) and assigned_branches and branch not in assigned_branches:
+			return {
+				"allowed": False,
+				"category": "branch_restriction",
+				"message": (
+					f"Sales Invoice {invoice_name} is blocked by VetEdge branch restriction. "
+					f"User {user} is not assigned to Branch {branch}."
+				),
+				"can_open_full_form": False,
+			}
+
+		return {
+			"allowed": False,
+			"category": "contextual_restriction",
+			"message": (
+				f"Sales Invoice {invoice_name} is blocked by VetEdge contextual restriction "
+				"for this internal invoice summary request."
+			),
+			"can_open_full_form": False,
+		}
+
+	doctype_allowed, doctype_logs = _evaluate_frappe_permission_debug(
+		"Sales Invoice",
+		user=user,
+		ptype="read",
+	)
+	if not doctype_allowed:
+		return _build_invoice_permission_block(invoice_name, "erpnext_role_permission", doctype_logs)
+
+	doc_allowed, doc_logs = _evaluate_frappe_permission_debug(
+		"Sales Invoice",
+		user=user,
+		ptype="read",
+		doc=invoice_name,
+	)
+	if not doc_allowed:
+		category = _classify_invoice_permission_debug_logs(doc_logs)
+		return _build_invoice_permission_block(invoice_name, category, doc_logs)
+
+	return {
+		"allowed": True,
+		"category": "allowed",
+		"message": None,
+		"can_open_full_form": True,
+	}
 
 
 def can_initiate_payment(
@@ -261,6 +452,81 @@ def can_dispense(user: str | None, consultation, raise_exception: bool = False) 
 		"service_branch",
 	)
 	return can_access_branch_data(user, branch, raise_exception=raise_exception)
+
+
+def can_request_lab_tests(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_request_blocked",
+			reference_doctype=getattr(context, "doctype", None) if context else None,
+			reference_name=getattr(context, "name", None) if context else None,
+			user=user,
+		)
+
+	if user_has_any_role(user, LAB_REQUEST_ROLES):
+		return True
+
+	return _deny(
+		raise_exception,
+		"Only a Veterinary Doctor can request lab tests.",
+		"lab_request_blocked",
+		reference_doctype=getattr(context, "doctype", None) if context else None,
+		reference_name=getattr(context, "name", None) if context else None,
+		user=user,
+	)
+
+
+def can_enter_lab_results(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_result_entry_blocked",
+			reference_doctype=getattr(context, "doctype", None) if context else None,
+			reference_name=getattr(context, "name", None) if context else None,
+			user=user,
+		)
+
+	if user_has_any_role(user, LAB_RESULT_ENTRY_ROLES):
+		return True
+
+	return _deny(
+		raise_exception,
+		"Only lab staff can enter or update lab results.",
+		"lab_result_entry_blocked",
+		reference_doctype=getattr(context, "doctype", None) if context else None,
+		reference_name=getattr(context, "name", None) if context else None,
+		user=user,
+	)
+
+
+def can_review_lab_results(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_result_review_blocked",
+			reference_doctype=getattr(context, "doctype", None) if context else None,
+			reference_name=getattr(context, "name", None) if context else None,
+			user=user,
+		)
+
+	if user_has_any_role(user, LAB_REVIEW_ROLES):
+		return True
+
+	return _deny(
+		raise_exception,
+		"Only a Veterinary Doctor can review lab results.",
+		"lab_result_review_blocked",
+		reference_doctype=getattr(context, "doctype", None) if context else None,
+		reference_name=getattr(context, "name", None) if context else None,
+		user=user,
+	)
 
 
 def can_manage_role_bundles(user: str | None = None, raise_exception: bool = False) -> bool:
@@ -349,16 +615,25 @@ def validate_branch_user_assignment(doc) -> None:
 
 
 def validate_branch_practitioner_assignment(doc) -> None:
-	if not user_has_any_role(doc.practitioner, DOCTOR_ROLES):
-		frappe.throw(
-			f"Practitioner {doc.practitioner} must have the VetEdge Doctor role.",
-			frappe.ValidationError,
-		)
+	validate_doctor_user(doc.practitioner, label="Practitioner")
 	_validate_branch_assignment_duplicate(
 		doctype="Branch Practitioner Assignment",
 		current_name=getattr(doc, "name", None),
 		filters={"practitioner": doc.practitioner, "branch": doc.branch},
 		label=f"Practitioner {doc.practitioner} is already assigned to Branch {doc.branch}.",
+	)
+
+
+def validate_doctor_user(user: str | None, label: str = "Practitioner") -> None:
+	if not user:
+		return
+
+	if user_has_any_role(user, DOCTOR_ROLES):
+		return
+
+	frappe.throw(
+		f"{label} {user} must have the VetEdge Doctor role.",
+		frappe.ValidationError,
 	)
 
 
@@ -443,7 +718,10 @@ def get_branch_scoped_query_condition(doctype: str, branch_field: str, user: str
 		return None
 
 	quoted = ", ".join(frappe.db.escape(branch) for branch in branches)
-	return f"`tab{doctype}`.`{branch_field}` in ({quoted})"
+	return (
+		f"(IFNULL(`tab{doctype}`.`{branch_field}`, '') = '' "
+		f"OR `tab{doctype}`.`{branch_field}` in ({quoted}))"
+	)
 
 
 def has_document_permission(doc, doctype: str, branch_field: str, permission_type: str | None = None, user: str | None = None) -> bool | None:
@@ -462,6 +740,9 @@ def has_document_permission(doc, doctype: str, branch_field: str, permission_typ
 		}
 		return owner_permission_map.get(doctype, lambda *args, **kwargs: None)(doc, user=user, permission_type=permission_type)
 
+	if permission_type == "create":
+		return None
+
 	if not user or user == "Guest" or user_has_global_branch_access(user):
 		return None
 
@@ -470,8 +751,10 @@ def has_document_permission(doc, doctype: str, branch_field: str, permission_typ
 		return None
 
 	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if _is_unsaved_document(doc, doctype, name):
+		return None
 	if not name:
-		return False
+		return None
 	branch = (
 		getattr(doc, branch_field, None)
 		if not isinstance(doc, str)
@@ -481,7 +764,27 @@ def has_document_permission(doc, doctype: str, branch_field: str, permission_typ
 
 
 def get_veterinary_patient_query(user: str | None = None) -> str | None:
-	return get_branch_scoped_query_condition("Veterinary Patient", "default_branch", user=user)
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		from vetedge.services import portal_access
+
+		return portal_access.get_veterinary_patient_query(user=user)
+
+	if not is_patient_branch_restriction_enabled():
+		return None
+
+	if not user or user == "Guest" or user_has_global_branch_access(user):
+		return None
+
+	branches = get_assigned_branches(user)
+	if not branches:
+		return "1=0"
+
+	quoted = ", ".join(frappe.db.escape(branch) for branch in branches)
+	return (
+		"(IFNULL(`tabVeterinary Patient`.`default_branch`, '') = '' "
+		f"OR `tabVeterinary Patient`.`default_branch` in ({quoted}))"
+	)
 
 
 def get_veterinary_appointment_query(user: str | None = None) -> str | None:
@@ -496,6 +799,17 @@ def get_veterinary_vital_signs_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Vital Signs", "service_branch", user=user)
 
 
+def get_veterinary_lab_order_query(user: str | None = None) -> str | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return "1=0"
+	return get_branch_scoped_query_condition("Veterinary Lab Order", "service_branch", user=user)
+
+
+def get_veterinary_guest_booking_request_query(user: str | None = None) -> str | None:
+	return get_branch_scoped_query_condition("Veterinary Guest Booking Request", "preferred_branch", user=user)
+
+
 def get_sales_invoice_query(user: str | None = None) -> str | None:
 	if frappe.get_meta("Sales Invoice").has_field("branch"):
 		return get_branch_scoped_query_condition("Sales Invoice", "branch", user=user)
@@ -503,7 +817,37 @@ def get_sales_invoice_query(user: str | None = None) -> str | None:
 
 
 def has_veterinary_patient_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
-	return has_document_permission(doc, "Veterinary Patient", "default_branch", permission_type=permission_type, user=user)
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		from vetedge.services import portal_access
+
+		return portal_access.has_veterinary_patient_permission(doc, user=user, permission_type=permission_type)
+
+	if permission_type == "create" or not is_patient_branch_restriction_enabled():
+		return True
+
+	if not user or user == "Guest":
+		return False
+
+	if user_has_global_branch_access(user):
+		return True
+
+	branches = get_assigned_branches(user)
+	if not branches:
+		return False
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if _is_unsaved_document(doc, "Veterinary Patient", name):
+		return True
+	if not name:
+		return True
+
+	branch = (
+		getattr(doc, "default_branch", None)
+		if not isinstance(doc, str)
+		else frappe.db.get_value("Veterinary Patient", name, "default_branch")
+	)
+	return bool(not branch or branch in branches)
 
 
 def has_veterinary_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
@@ -518,10 +862,26 @@ def has_veterinary_vital_signs_permission(doc, user: str | None = None, permissi
 	return has_document_permission(doc, "Veterinary Vital Signs", "service_branch", permission_type=permission_type, user=user)
 
 
+def has_veterinary_lab_order_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	return has_document_permission(doc, "Veterinary Lab Order", "service_branch", permission_type=permission_type, user=user)
+
+
 def has_sales_invoice_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return has_document_permission(doc, "Sales Invoice", "branch", permission_type=permission_type, user=user)
+
+	if permission_type in {"create", "read", "write"}:
+		return True
+
 	if not frappe.get_meta("Sales Invoice").has_field("branch"):
-		return None
-	return has_document_permission(doc, "Sales Invoice", "branch", permission_type=permission_type, user=user)
+		return True
+
+	result = has_document_permission(doc, "Sales Invoice", "branch", permission_type=permission_type, user=user)
+	return True if result is None else result
 
 
 def _validate_branch_assignment_duplicate(doctype: str, current_name: str | None, filters: dict, label: str) -> None:
@@ -530,6 +890,30 @@ def _validate_branch_assignment_duplicate(doctype: str, current_name: str | None
 	duplicates = frappe.get_all(doctype, filters=filters, pluck="name", limit=1)
 	if duplicates and duplicates[0] != current_name:
 		frappe.throw(label, frappe.ValidationError)
+
+
+def _is_unsaved_document(doc, doctype: str, name: str | None) -> bool:
+	if not name:
+		return True
+
+	if isinstance(doc, str):
+		return name.startswith("new-") or not _document_exists(doctype, name)
+
+	if getattr(doc, "__islocal", False):
+		return True
+
+	flags = getattr(doc, "flags", None)
+	if getattr(flags, "in_insert", False):
+		return True
+
+	return name.startswith("new-") or not _document_exists(doctype, name)
+
+
+def _document_exists(doctype: str, name: str) -> bool:
+	try:
+		return bool(frappe.db.exists(doctype, name))
+	except RuntimeError:
+		return False
 
 
 def _deny(
@@ -552,3 +936,89 @@ def _deny(
 	if raise_exception:
 		frappe.throw(message, frappe.PermissionError)
 	return False
+
+
+def _evaluate_frappe_permission_debug(
+	doctype: str,
+	user: str | None = None,
+	ptype: str = "read",
+	doc=None,
+) -> tuple[bool, list[str]]:
+	allowed = frappe.permissions.has_permission(
+		doctype,
+		ptype=ptype,
+		doc=doc,
+		user=user,
+		print_logs=False,
+		debug=True,
+	)
+	return bool(allowed), list(frappe.permissions._pop_debug_log())
+
+
+def _classify_invoice_permission_debug_logs(logs: list[str]) -> str:
+	text = " ".join(logs or [])
+	if (
+		"User doesn't have access to this document because of User Permissions" in text
+		or "User has no permissions because of User Permissions" in text
+		or "because of User Permissions" in text
+		or "Not allowed for" in text
+	):
+		return "user_permission"
+	if "linked to" in text:
+		return "user_permission"
+	if "doctype access via role permission" in text:
+		return "erpnext_role_permission"
+	if "Permission check failed from role permission system" in text:
+		return "erpnext_role_permission"
+	if "Not allowed via controller permission check" in text:
+		return "contextual_restriction"
+	return "erpnext_permission"
+
+
+def _build_invoice_permission_block(invoice_name: str, category: str, logs: list[str]) -> dict:
+	if category == "user_permission":
+		message = (
+			f"Sales Invoice {invoice_name} is blocked by ERPNext User Permission rules. "
+			"Review User Permission records affecting Sales Invoice or linked doctypes such as "
+			"Customer, Company, Branch, Cost Center, or Territory."
+		)
+	elif category == "erpnext_role_permission":
+		runtime_roles = sorted(get_user_roles())
+		configured_read_roles = get_sales_invoice_read_roles()
+		matching_roles = sorted(set(runtime_roles) & set(configured_read_roles))
+		message = (
+			f"Sales Invoice {invoice_name} failed the ERPNext DocType read check. "
+			f"Runtime user roles: {', '.join(runtime_roles) or 'none'}. "
+			f"Sales Invoice read roles configured on this site: {', '.join(configured_read_roles) or 'none'}. "
+			f"Matching read roles on the current user: {', '.join(matching_roles) or 'none'}."
+		)
+	elif category == "contextual_restriction":
+		message = (
+			f"Sales Invoice {invoice_name} is blocked by a scripted permission check. "
+			"Review VetEdge or ERPNext controller-level permission hooks for this invoice."
+		)
+	else:
+		message = (
+			f"Sales Invoice {invoice_name} is blocked by ERPNext document access rules."
+		)
+
+	if logs:
+		message = f"{message} Diagnostic: {logs[-1]}"
+
+	return {
+		"allowed": False,
+		"category": category,
+		"message": message,
+		"can_open_full_form": False,
+	}
+
+
+def get_sales_invoice_read_roles() -> list[str]:
+	meta = frappe.get_meta("Sales Invoice")
+	return sorted(
+		{
+			row.role
+			for row in getattr(meta, "permissions", [])
+			if getattr(row, "role", None) and frappe.utils.cint(getattr(row, "read", 0)) and not frappe.utils.cint(getattr(row, "permlevel", 0))
+		}
+	)

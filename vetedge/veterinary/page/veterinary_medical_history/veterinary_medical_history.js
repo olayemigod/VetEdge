@@ -232,6 +232,15 @@ class VetEdgeMedicalHistory {
 			[__("Practitioner"), "practitioner"],
 			[__("Branch"), "service_branch"],
 		]);
+		this.render_table(sections, __("Lab History"), data.labs || [], [
+			[__("Requested On"), "timestamp", format_datetime],
+			[__("Order"), "name"],
+			[__("Status"), "status"],
+			[__("Tests"), "tests_summary"],
+			[__("Results"), "results_summary"],
+			[__("Branch"), "service_branch"],
+			[__("Consultation"), "consultation"],
+		]);
 		this.render_placeholders(sections, data.placeholders || {});
 	}
 

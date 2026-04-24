@@ -18,6 +18,7 @@ class TestVeterinaryPatient(IntegrationTestCase):
 				"primary_owner": "Test Customer",
 				"species": "Dog",
 				"status": "Deceased",
+				"default_branch": "Main Branch",
 			}
 		)
 
@@ -34,6 +35,7 @@ class TestVeterinaryPatient(IntegrationTestCase):
 				"species": "Dog",
 				"is_deceased": 1,
 				"status": "Active",
+				"default_branch": "Main Branch",
 			}
 		)
 
@@ -49,6 +51,7 @@ class TestVeterinaryPatient(IntegrationTestCase):
 				"primary_owner": "Test Customer",
 				"species": "Dog",
 				"date_of_birth": add_days(nowdate(), 1),
+				"default_branch": "Main Branch",
 			}
 		)
 
@@ -66,6 +69,7 @@ class TestVeterinaryPatient(IntegrationTestCase):
 				"primary_owner": "Test Customer",
 				"species": "Dog",
 				"weight_baseline": -1,
+				"default_branch": "Main Branch",
 			}
 		)
 
@@ -79,6 +83,7 @@ class TestVeterinaryPatient(IntegrationTestCase):
 				"primary_owner": "Test Customer",
 				"species": "Dog",
 				"breed": "Persian",
+				"default_branch": "Main Branch",
 			}
 		)
 

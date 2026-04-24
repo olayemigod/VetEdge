@@ -12,6 +12,7 @@ from vetedge.services.consultation_flow import (
 	validate_user_branch_access,
 )
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.permissions import can_access_consultation, validate_doctor_user
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -129,6 +130,7 @@ def resolve_appointment_context(doc) -> None:
 	if not doc.created_from:
 		doc.created_from = "Manual"
 
+	validate_doctor_user(doc.practitioner)
 	doc.practitioner_name = get_user_full_name(doc.practitioner)
 
 
@@ -247,6 +249,7 @@ def create_follow_up_from_consultation(
 	notes: str | None = None,
 ) -> dict:
 	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
 	if not consultation_doc.patient:
 		frappe.throw("Consultation must have a patient before creating a follow-up appointment.")
@@ -267,7 +270,7 @@ def create_follow_up_from_consultation(
 			"notes": notes,
 		}
 	)
-	appointment.insert()
+	appointment.insert(ignore_permissions=True)
 	emit_appointment_event(appointment, "appointment_created", previous_status=None)
 
 	consultation_meta = frappe.get_meta("Veterinary Consultation")

@@ -6,7 +6,11 @@ from unittest.mock import patch
 
 import frappe
 
-from vetedge.services.role_bundles import apply_role_bundle
+from vetedge.services.role_bundles import (
+	apply_role_bundle,
+	ensure_existing_internal_users_have_starter_bundle_roles,
+	ensure_user_has_roles,
+)
 
 
 class TestRoleBundles(TestCase):
@@ -31,11 +35,15 @@ class TestRoleBundles(TestCase):
 		)
 		self.assertEqual(
 			STARTER_ROLE_BUNDLES["Dispensary User"],
-			["Dispensary User", "Desk User", "Stock User", "Sales User"],
+			["Dispensary User", "Desk User", "Accounts User", "Stock User", "Sales User"],
 		)
 		self.assertEqual(
 			STARTER_ROLE_BUNDLES["Veterinary Doctor"],
-			["VetEdge Doctor", "Desk User", "Sales User", "Stock User"],
+			["VetEdge Doctor", "Desk User", "Accounts User", "Sales User", "Stock User"],
+		)
+		self.assertEqual(
+			STARTER_ROLE_BUNDLES["Front Desk"],
+			["VetEdge Front Desk", "Desk User", "Accounts User", "Sales User"],
 		)
 
 	def test_duplicate_roles_in_bundle_are_rejected(self):
@@ -102,3 +110,41 @@ class TestRoleBundles(TestCase):
 				"doctor@example.com",
 				acting_user="frontdesk@example.com",
 			)
+
+	def test_ensure_user_has_roles_adds_missing_only(self):
+		added = []
+		user_doc = frappe._dict(
+			roles=[frappe._dict(role="VetEdge Doctor"), frappe._dict(role="Desk User")],
+			add_roles=lambda role: added.append(role),
+			get=lambda key, default=None: user_doc[key] if key in user_doc else default,
+		)
+		frappe_stub = SimpleNamespace(get_doc=lambda doctype, name: user_doc)
+
+		with patch("vetedge.services.role_bundles.frappe", frappe_stub):
+			result = ensure_user_has_roles(
+				"doctor@example.com",
+				["VetEdge Doctor", "Desk User", "Accounts User", "Sales User"],
+			)
+
+		self.assertEqual(result, ["Accounts User", "Sales User"])
+		self.assertEqual(added, ["Accounts User", "Sales User"])
+
+	def test_existing_doctor_users_pick_up_invoice_roles_on_sync(self):
+		added = []
+		user_doc = frappe._dict(
+			roles=[frappe._dict(role="VetEdge Doctor"), frappe._dict(role="Desk User")],
+			add_roles=lambda role: added.append(role),
+			get=lambda key, default=None: user_doc[key] if key in user_doc else default,
+		)
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=lambda doctype, name: doctype in {"DocType", "Has Role"}),
+			get_all=lambda doctype, filters=None, pluck=None: ["doctor@example.com"],
+			get_doc=lambda doctype, name: user_doc,
+		)
+
+		with patch("vetedge.services.role_bundles.frappe", frappe_stub):
+			ensure_existing_internal_users_have_starter_bundle_roles()
+
+		self.assertIn("Accounts User", added)
+		self.assertIn("Sales User", added)

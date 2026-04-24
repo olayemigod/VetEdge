@@ -13,6 +13,7 @@ frappe.ui.form.on("Veterinary Patient", {
 		set_registration_status_read_only(frm);
 		set_approximate_age(frm);
 		if (!frm.is_new()) {
+			add_registration_invoice_actions(frm);
 			frm.add_custom_button(__("Medical History"), () => {
 				frappe.route_options = { patient: frm.doc.name };
 				frappe.set_route("veterinary-medical-history");
@@ -44,6 +45,54 @@ frappe.ui.form.on("Veterinary Patient", {
 
 function set_registration_status_read_only(frm) {
 	frm.set_df_property("registration_status", "read_only", 1);
+}
+
+function add_registration_invoice_actions(frm) {
+	if (!frm.doc.primary_owner || !frm.doc.default_branch) {
+		return;
+	}
+
+	frappe.call({
+		method: "vetedge.services.registration_billing.is_registration_billing_enabled_for_ui",
+		callback(response) {
+			if (!response.message) {
+				return;
+			}
+
+			if (frm.doc.registration_invoice) {
+				frm.add_custom_button(__("View Registration Invoice"), () => {
+					window.vetedgeInvoiceSummary.open(frm.doc.registration_invoice);
+				}, __("Registration Billing"));
+				return;
+			}
+
+			frm.add_custom_button(__("Create Registration Invoice"), () => {
+				frappe.call({
+					method: "vetedge.services.registration_billing.create_manual_registration_invoice",
+					args: { patient: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Creating registration invoice..."),
+					callback(response) {
+						const result = response.message || {};
+						if (!result.invoice) {
+							return;
+						}
+
+						const message = result.created
+							? __("Registration invoice {0} created.", [result.invoice])
+							: __("Registration invoice {0} is already available.", [result.invoice]);
+						frappe.show_alert({ message, indicator: result.created ? "green" : "blue" });
+						frm.reload_doc().then(() => {
+							window.vetedgeInvoiceSummary.open(result.invoice);
+						});
+					},
+				});
+			}, __("Registration Billing"));
+		},
+		error() {
+			return;
+		},
+	});
 }
 
 function set_approximate_age(frm) {
