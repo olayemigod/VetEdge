@@ -274,3 +274,39 @@ But must avoid provider-specific field sprawl.
 ### Global readiness rule
 Do not hardcode Nigeria-only gateways, currencies, or country assumptions into VetEdge.
 VetEdge must remain globally deployable and white-label ready.
+
+## VetEdge Development Roadmap
+
+### Completed Phases
+- [x] Phase 1 — Foundation / Core Doctypes
+- [x] Phase 2 — Consultation Workflow
+- [x] Phase 3 — Clinical Flow & Basic Operations
+- [x] Phase 4 — Billing & Payments
+- [x] Phase 5 — Dispensary + Stock + Expiry Control
+- [x] Phase 5.5 — Operational Control + Role Enforcement + Role Bundles
+- [x] Phase 6 — Lab Workflow
+
+### Pending Phases
+- [ ] Phase 7 — Vaccination & Preventive Care
+- [ ] Phase 8 — Boarding / Kennel Management
+- [ ] Phase 9 — Pharmacy & Retail (POS Integration)
+- [ ] Phase 10 — Reporting & Dashboards
+- [ ] Phase 11 — Owner Portal Expansion
+- [ ] Phase 12 — Notification System (ProcessEdge Core Ready)
+- [ ] Phase 13 — Multi-Branch & Cost Center Optimization
+- [ ] Phase 14 — Advanced Medical Records
+- [ ] Phase 15 — Inventory Intelligence
+- [ ] Phase 16 — SaaS Enablement
+- [ ] Phase 17 — AI & Automation
+
+### Mobile Layer
+
+- [ ] Phase 17 — Mobile Application (VetEdge Mobile)
+
+Scope:
+- Staff mobile access (consultation, lab, schedule)
+- Owner mobile access (appointments, invoices, pets, payments)
+
+Note:
+Mobile app will consume VetEdge APIs (Frappe backend).
+To be implemented after core workflows, reporting, and notifications are stable.
