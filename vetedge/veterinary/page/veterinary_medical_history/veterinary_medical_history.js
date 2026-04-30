@@ -12,6 +12,7 @@ frappe.pages["veterinary-medical-history"].on_page_load = function (wrapper) {
 class VetEdgeMedicalHistory {
 	constructor(page) {
 		this.page = page;
+		this.tableStates = {};
 		this.body = $(`
 			<div class="vetedge-medical-history">
 				<div class="vetedge-history-summary"></div>
@@ -81,6 +82,7 @@ class VetEdgeMedicalHistory {
 	}
 
 	render(data) {
+		this.current_data = data || {};
 		this.render_summary(data.summary || {});
 		this.render_charts(data.trends || {});
 		this.render_sections(data);
@@ -232,6 +234,16 @@ class VetEdgeMedicalHistory {
 			[__("Practitioner"), "practitioner"],
 			[__("Branch"), "service_branch"],
 		]);
+		this.render_table(sections, __("Vaccination History"), data.vaccinations || [], [
+			[__("Date/Time"), "timestamp", format_datetime],
+			[__("Vaccine"), "vaccine"],
+			[__("Practitioner"), "administered_by_name"],
+			[__("Branch"), "service_branch"],
+			[__("Status"), "status"],
+			[__("Next Due"), "next_due_date"],
+			[__("Invoice"), "linked_invoice"],
+			[__("Consultation"), "linked_consultation"],
+		]);
 		this.render_table(sections, __("Lab History"), data.labs || [], [
 			[__("Requested On"), "timestamp", format_datetime],
 			[__("Order"), "name"],
@@ -245,20 +257,38 @@ class VetEdgeMedicalHistory {
 	}
 
 	render_table(parent, title, rows, columns) {
+		const tableKey = make_table_key(title);
+		const state = this.get_table_state(tableKey, rows.length);
 		const table = $(`
 			<div class="frappe-card p-3 mb-4">
-				<h5>${title}</h5>
+				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+					<h5 class="mb-0">${title}</h5>
+					<div class="d-flex align-items-center gap-2">
+						<label class="text-muted mb-0">${__("Rows per page")}</label>
+						<select class="form-control form-control-sm vetedge-page-size" style="width: auto;">
+							${[5, 10, 20, 50]
+								.map((size) => `<option value="${size}" ${state.pageSize === size ? "selected" : ""}>${size}</option>`)
+								.join("")}
+						</select>
+					</div>
+				</div>
 				<div class="table-responsive"></div>
+				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 vetedge-table-pagination"></div>
 			</div>
 		`).appendTo(parent);
 
 		if (!rows.length) {
 			table.find(".table-responsive").html(`<p class="text-muted mb-0">${__("No records in this range.")}</p>`);
+			table.find(".vetedge-table-pagination").empty();
 			return;
 		}
 
+		const totalPages = Math.max(1, Math.ceil(rows.length / state.pageSize));
+		state.page = Math.min(state.page, totalPages);
+		const startIndex = (state.page - 1) * state.pageSize;
+		const visibleRows = rows.slice(startIndex, startIndex + state.pageSize);
 		const header = columns.map(([label]) => `<th>${label}</th>`).join("");
-		const body = rows
+		const body = visibleRows
 			.map((row) => {
 				const cells = columns
 					.map(([, fieldname, formatter]) => {
@@ -276,6 +306,49 @@ class VetEdgeMedicalHistory {
 				<tbody>${body}</tbody>
 			</table>
 		`);
+
+		const fromRow = startIndex + 1;
+		const toRow = Math.min(startIndex + state.pageSize, rows.length);
+		table.find(".vetedge-table-pagination").html(`
+			<div class="text-muted">${__("Showing {0} to {1} of {2}", [fromRow, toRow, rows.length])}</div>
+			<div class="btn-group btn-group-sm" role="group">
+				<button class="btn btn-default vetedge-page-prev" ${state.page <= 1 ? "disabled" : ""}>${__("Previous")}</button>
+				<button class="btn btn-default disabled">${__("Page {0} of {1}", [state.page, totalPages])}</button>
+				<button class="btn btn-default vetedge-page-next" ${state.page >= totalPages ? "disabled" : ""}>${__("Next")}</button>
+			</div>
+		`);
+
+		table.find(".vetedge-page-size").on("change", (event) => {
+			state.pageSize = Number(event.currentTarget.value) || 5;
+			state.page = 1;
+			this.render_sections(this.current_data || {});
+		});
+
+		table.find(".vetedge-page-prev").on("click", () => {
+			if (state.page > 1) {
+				state.page -= 1;
+				this.render_sections(this.current_data || {});
+			}
+		});
+
+		table.find(".vetedge-page-next").on("click", () => {
+			if (state.page < totalPages) {
+				state.page += 1;
+				this.render_sections(this.current_data || {});
+			}
+		});
+	}
+
+	get_table_state(tableKey, totalRows) {
+		if (!this.tableStates[tableKey]) {
+			this.tableStates[tableKey] = { page: 1, pageSize: 5 };
+		}
+		const state = this.tableStates[tableKey];
+		const totalPages = Math.max(1, Math.ceil(totalRows / state.pageSize));
+		if (state.page > totalPages) {
+			state.page = totalPages;
+		}
+		return state;
 	}
 
 	render_placeholders(parent, placeholders) {
@@ -293,6 +366,13 @@ class VetEdgeMedicalHistory {
 			</div>
 		`);
 	}
+}
+
+function make_table_key(title) {
+	return String(title || "table")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
 }
 
 function summary_item(label, value) {

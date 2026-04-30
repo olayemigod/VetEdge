@@ -47,6 +47,11 @@ frappe.ui.form.on("Veterinary Consultation", {
 			add_status_actions(frm);
 			add_dispensary_actions(frm);
 			add_lab_actions(frm);
+			try {
+				add_vaccination_actions(frm);
+			} catch (error) {
+				console.error("Failed to initialize vaccination actions", error);
+			}
 
 			frm.add_custom_button(__("New Vitals"), () => {
 				show_vitals_entry_dialog(frm);
@@ -1055,6 +1060,131 @@ function show_latest_vitals_dialog(frm) {
 
 			dialog.set_values(vitals);
 			dialog.show();
+		},
+	});
+}
+
+function add_vaccination_actions(frm) {
+	frm.add_custom_button(__("New Vaccination"), () => {
+		show_vaccination_dialog(frm);
+	}, __("Clinical"));
+
+	frm.add_custom_button(__("View Vaccinations"), () => {
+		show_vaccination_history(frm);
+	}, __("Clinical"));
+}
+
+function show_vaccination_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("New Vaccination"),
+		fields: [
+			{ fieldtype: "Link", fieldname: "vaccine", label: __("Vaccine"), options: "Veterinary Vaccine", reqd: 1 },
+			{ fieldtype: "Data", fieldname: "dose", label: __("Dose") },
+			{ fieldtype: "Select", fieldname: "route", label: __("Route"), options: "\nOral\nSubcutaneous\nIntramuscular\nIntranasal\nTopical\nOther" },
+			{ fieldtype: "Datetime", fieldname: "administered_on", label: __("Administered On"), default: frappe.datetime.now_datetime(), reqd: 1 },
+			{ fieldtype: "Date", fieldname: "next_due_date", label: __("Next Due Date") },
+			{ fieldtype: "Small Text", fieldname: "notes", label: __("Notes") },
+		],
+		primary_action_label: __("Save Vaccination"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.vaccination.create_vaccination_from_consultation",
+				args: {
+					consultation: frm.doc.name,
+					values,
+				},
+				freeze: true,
+				freeze_message: __("Saving vaccination..."),
+				callback(response) {
+					const record = response?.message;
+					if (!record?.name) {
+						return;
+					}
+
+					dialog.hide();
+					frappe.show_alert({
+						message: __("Vaccination recorded"),
+						indicator: "green",
+					});
+				},
+			});
+		},
+	});
+
+	dialog.show();
+}
+
+function formatVaccinationBilling(row) {
+	if (!row.linked_invoice) {
+		return __("Not billed");
+	}
+
+	const parts = [frappe.utils.escape_html(row.linked_invoice)];
+	if (row.billing_status) {
+		parts.push(frappe.utils.escape_html(row.billing_status));
+	}
+	if (row.invoice_total != null) {
+		parts.push(format_currency(row.invoice_total));
+	}
+	if (row.invoice_outstanding_amount != null) {
+		parts.push(`${__("Outstanding")}: ${format_currency(row.invoice_outstanding_amount)}`);
+	}
+	return parts.join(" | ");
+}
+
+function show_vaccination_history(frm) {
+	frappe.call({
+		method: "vetedge.services.vaccination.get_consultation_vaccinations",
+		args: { consultation: frm.doc.name, limit: 20 },
+		freeze: true,
+		freeze_message: __("Loading consultation vaccinations..."),
+		callback(response) {
+			const rows = response?.message || [];
+			const html = rows.length
+				? `
+					<div class="table-responsive">
+						<table class="table table-bordered table-sm">
+							<thead>
+								<tr>
+									<th>${__("Date")}</th>
+									<th>${__("Vaccine")}</th>
+									<th>${__("Practitioner")}</th>
+									<th>${__("Branch")}</th>
+									<th>${__("Workflow")}</th>
+									<th>${__("Next Due")}</th>
+									<th>${__("Billing")}</th>
+								</tr>
+							</thead>
+							<tbody>
+								${rows
+									.map(
+										(row) => `
+											<tr>
+												<td>${frappe.datetime.str_to_user(row.timestamp || row.administered_on || "")}</td>
+												<td>
+													<b>${frappe.utils.escape_html(row.vaccine || "")}</b>
+													${row.dose ? `<br>${__("Dose")}: ${frappe.utils.escape_html(row.dose)}` : ""}
+													${row.route ? `<br>${__("Route")}: ${frappe.utils.escape_html(row.route)}` : ""}
+												</td>
+												<td>${frappe.utils.escape_html(row.administered_by_name || row.administered_by || "")}</td>
+												<td>${frappe.utils.escape_html(row.service_branch || "")}</td>
+												<td>${frappe.utils.escape_html(row.workflow_status || row.status || "")}</td>
+												<td>${row.next_due_date ? `${frappe.datetime.str_to_user(row.next_due_date)}${row.due_state ? ` (${frappe.utils.escape_html(row.due_state)})` : ""}` : __("Not set")}</td>
+												<td>${formatVaccinationBilling(row)}</td>
+											</tr>`
+									)
+									.join("")}
+							</tbody>
+						</table>
+					</div>`
+				: `<p class="text-muted">${__("No vaccinations linked to this consultation yet.")}</p>`;
+
+			frappe.msgprint({
+				title: __("Consultation Vaccinations"),
+				message: html,
+				indicator: "blue",
+				wide: true,
+			});
 		},
 	});
 }

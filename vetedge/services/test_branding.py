@@ -67,7 +67,7 @@ class TestBranding(TestCase):
 
 		self.assertEqual(str(context.exception), "Unknown feature flag: unknown_flag")
 
-	def test_medical_history_placeholders_are_neutral(self):
+	def test_medical_history_vaccinations_are_present_in_view(self):
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(
 				exists=lambda *args, **kwargs: True,
@@ -93,14 +93,8 @@ class TestBranding(TestCase):
 		with patch("vetedge.services.medical_history.frappe", frappe_stub):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
 
-		self.assertEqual(
-			view["placeholders"]["vaccination_history"],
-			"Deferred until vaccination records are implemented.",
-		)
-		self.assertEqual(
-			view["placeholders"]["lab_history"],
-			"Deferred until lab and result records are implemented.",
-		)
+		self.assertIn("vaccinations", view)
+		self.assertEqual(view["vaccinations"], [])
 
 	def test_registration_billing_cost_center_error_message_is_neutral(self):
 		def throw(message, exc=None):

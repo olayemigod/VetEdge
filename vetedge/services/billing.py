@@ -9,7 +9,15 @@ from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.dispensary import get_consultation_ready_status
 from vetedge.services.lab import get_consultation_lab_billing_items, mark_consultation_lab_orders_invoiced
 from vetedge.services.notifications import emit_notification_event
-from vetedge.services.permissions import can_access_consultation, can_initiate_payment, get_invoice_access_diagnostic
+from vetedge.services.permissions import (
+	ELEVATED_ROLES,
+	ROLE_BRANCH_MANAGER,
+	can_access_consultation,
+	can_initiate_payment,
+	get_current_user,
+	get_invoice_access_diagnostic,
+	user_has_any_role,
+)
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.registration_billing import get_billing_cost_center, get_default_company
 
@@ -94,7 +102,7 @@ def create_consultation_invoice(consultation: str) -> dict:
 		draft_invoice_name=draft_invoice_name,
 	)
 	if not items:
-		frappe.throw("No billable consultation or treatment items found.", frappe.ValidationError)
+		frappe.throw("No billable consultation, treatment, lab, or vaccination items found.", frappe.ValidationError)
 
 	if draft_invoice_name:
 		invoice = update_existing_consultation_invoice(consultation_doc, draft_invoice_name, items, cost_center)
@@ -221,6 +229,14 @@ def build_consultation_invoice_payload(
 	items.extend(lab_items)
 	sources.extend(lab_sources)
 
+	vaccination_items, vaccination_sources = get_consultation_vaccination_billing_items(
+		consultation_doc,
+		cost_center,
+		draft_invoice_name=draft_invoice_name,
+	)
+	items.extend(vaccination_items)
+	sources.extend(vaccination_sources)
+
 	return items, sources
 
 
@@ -302,7 +318,22 @@ def consultation_requires_invoice_before_progress(doc, target_status: str | None
 	if target_status not in {"Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed"}:
 		return False
 
-	return bool(settings.consultation_item or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])))
+	if get_consultation_invoice_names(doc):
+		return True
+
+	if settings.consultation_item or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])):
+		return True
+
+	for row in frappe.get_all(
+		"Veterinary Vaccination Record",
+		filters={"linked_consultation": doc.name, "status": ["!=", "Cancelled"]},
+		fields=["vaccine"],
+		limit=50,
+	):
+		if frappe.db.get_value("Veterinary Vaccine", row.vaccine, "default_item"):
+			return True
+
+	return False
 
 
 def validate_consultation_invoice_before_progress(doc, target_status: str | None = None) -> None:
@@ -330,13 +361,27 @@ def validate_consultation_payment_before_treatment(doc, target_status: str | Non
 	if not consultation_requires_invoice_before_progress(doc, target_status):
 		return
 
-	if doc.payment_status == PAID_STATUS:
+	if user_has_any_role(get_current_user(), {*ELEVATED_ROLES, ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"}):
 		return
 
-	frappe.throw(
-		"Consultation payment is required before treatment can proceed.",
-		frappe.ValidationError,
-	)
+	invoice_names = get_consultation_invoice_names(doc)
+	if doc.get("linked_invoice") and doc.linked_invoice not in invoice_names:
+		invoice_names.append(doc.linked_invoice)
+	if not invoice_names:
+		frappe.throw(
+			"Create and pay all consultation-related invoices before treatment can proceed.",
+			frappe.ValidationError,
+		)
+
+	for invoice_name in invoice_names:
+		invoice = frappe.get_doc("Sales Invoice", invoice_name)
+		if invoice.docstatus == 2:
+			continue
+		if get_invoice_payment_status(invoice) != PAID_STATUS:
+			frappe.throw(
+				"All consultation-related invoices, including vaccination invoices, must be fully paid before treatment can proceed.",
+				frappe.ValidationError,
+			)
 
 
 def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBillingSettings) -> None:
@@ -568,6 +613,34 @@ def get_unbilled_treatment_rows(doc, draft_invoice_name: str | None = None) -> l
 
 def get_consultation_treatment_source_name(row) -> str:
 	return row.get("name") or f"{row.item}:{row.get('idx') or 0}"
+
+
+
+def get_consultation_vaccination_billing_items(doc, cost_center: str, draft_invoice_name: str | None = None) -> tuple[list[dict], list[dict]]:
+	items: list[dict] = []
+	sources: list[dict] = []
+	rows = frappe.get_all(
+		"Veterinary Vaccination Record",
+		filters={"linked_consultation": doc.name, "status": ["!=", "Cancelled"]},
+		fields=["name", "vaccine"],
+		order_by="creation asc",
+	)
+	for row in rows:
+		if is_consultation_source_billed(doc, "Vaccination", row.name, draft_invoice_name):
+			continue
+		item_code = frappe.db.get_value("Veterinary Vaccine", row.vaccine, "default_item")
+		if not item_code:
+			continue
+		items.append(build_invoice_item(item_code, 1, None, None, cost_center))
+		sources.append(
+			build_consultation_billing_source(
+				source_type="Vaccination",
+				source_name=row.name,
+				sales_invoice=draft_invoice_name,
+				item_code=item_code,
+			)
+		)
+	return items, sources
 
 
 def is_consultation_source_billed(doc, source_type: str, source_name: str, draft_invoice_name: str | None = None) -> bool:

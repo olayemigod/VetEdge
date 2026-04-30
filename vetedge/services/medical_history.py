@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from vetedge.services.lab import get_lab_history
+from vetedge.services.vaccination import get_vaccination_history
 from vetedge.services.permissions import can_access_medical_history
 from vetedge.services.portal_access import require_internal_user
 
@@ -46,10 +47,8 @@ def get_patient_medical_history_view(
 		"symptoms": get_symptom_history(patient, limit, from_date, to_date),
 		"treatments": get_treatment_history(patient, limit, from_date, to_date),
 		"labs": get_lab_history(patient, limit, from_date, to_date),
+		"vaccinations": get_vaccination_history(patient, limit, from_date, to_date),
 		"trends": get_patient_vitals_trends(patient, from_date, to_date),
-		"placeholders": {
-			"vaccination_history": "Deferred until vaccination records are implemented.",
-		},
 	}
 
 
@@ -73,6 +72,8 @@ def get_patient_medical_history(
 		events.extend(get_vitals_history(patient, limit, from_date, to_date))
 	if frappe.has_permission("Veterinary Lab Order", "read"):
 		events.extend(get_lab_history(patient, limit, from_date, to_date))
+	if frappe.has_permission("Veterinary Vaccination Record", "read"):
+		events.extend(get_vaccination_history(patient, limit, from_date, to_date))
 
 	events.sort(key=lambda event: event.get("timestamp") or "", reverse=True)
 	return events[:limit]

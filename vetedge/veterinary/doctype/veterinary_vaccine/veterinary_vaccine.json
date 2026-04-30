@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:vaccine_name",
+ "creation": "2026-04-30 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "vaccine_name",
+  "vaccine_code",
+  "is_active",
+  "species",
+  "description",
+  "billing_section",
+  "default_item",
+  "schedule_section",
+  "default_validity_days",
+  "default_next_due_days"
+ ],
+ "fields": [
+  {"fieldname": "vaccine_name", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Vaccine Name", "reqd": 1, "search_index": 1, "unique": 1},
+  {"fieldname": "vaccine_code", "fieldtype": "Data", "in_list_view": 1, "label": "Vaccine Code", "search_index": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"},
+  {"fieldname": "species", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Species", "options": "Veterinary Species"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"collapsible": 1, "fieldname": "billing_section", "fieldtype": "Section Break", "label": "Billing and Stock"},
+  {"fieldname": "default_item", "fieldtype": "Link", "in_standard_filter": 1, "label": "Default Item", "options": "Item"},
+  {"collapsible": 1, "fieldname": "schedule_section", "fieldtype": "Section Break", "label": "Preventive Schedule"},
+  {"fieldname": "default_validity_days", "fieldtype": "Int", "label": "Default Validity Days"},
+  {"fieldname": "default_next_due_days", "fieldtype": "Int", "label": "Default Next Due Days"}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Vaccine",
+ "naming_rule": "By fieldname",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Nurse", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Veterinary Nurse", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Branch Manager", "share": 1}
+ ],
+ "quick_entry": 1,
+ "search_fields": "vaccine_name,vaccine_code,species,default_item",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "vaccine_name",
+ "track_changes": 1
+}

@@ -136,6 +136,7 @@ permission_query_conditions = {
 	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
 	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
 	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
+	"Veterinary Vaccination Record": "vetedge.services.permissions.get_veterinary_vaccination_record_query",
 	"Veterinary Guest Booking Request": "vetedge.services.permissions.get_veterinary_guest_booking_request_query",
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
 }
@@ -143,6 +144,7 @@ permission_query_conditions = {
 has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
+	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 }
 
 # Document Events
@@ -154,28 +156,34 @@ doc_events = {
 		"on_update": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 		],
 		"on_update_after_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 		],
 		"on_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 		],
 		"on_cancel": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 		],
 	},
 	"Payment Entry": {
 		"on_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_payment_entry",
 			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
 		],
 		"on_cancel": [
 			"vetedge.services.registration_billing.update_registration_status_from_payment_entry",
 			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
 		],
 	},
 	"Stock Entry": {
@@ -189,6 +197,7 @@ doc_events = {
 scheduler_events = {
 	"hourly": [
 		"vetedge.services.notifications.send_due_appointment_reminders",
+		"vetedge.services.vaccination.emit_due_vaccination_events",
 	],
 }
 

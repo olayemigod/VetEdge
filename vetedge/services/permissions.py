@@ -9,6 +9,7 @@ from vetedge.services.audit import log_operational_event
 ROLE_SYSTEM_MANAGER = "System Manager"
 ROLE_VETEDGE_ADMINISTRATOR = "VetEdge Administrator"
 ROLE_VETEDGE_DOCTOR = "VetEdge Doctor"
+ROLE_VETEDGE_NURSE = "VetEdge Nurse"
 ROLE_VETEDGE_FRONT_DESK = "VetEdge Front Desk"
 ROLE_VETERINARY_NURSE = "Veterinary Nurse"
 ROLE_DISPENSARY_USER = "Dispensary User"
@@ -21,6 +22,7 @@ ROLE_ACCOUNTS_USER = "Accounts User"
 ROLE_ALIASES = {
 	ROLE_VETEDGE_ADMINISTRATOR: {ROLE_VETEDGE_ADMINISTRATOR},
 	ROLE_VETEDGE_DOCTOR: {ROLE_VETEDGE_DOCTOR},
+	ROLE_VETEDGE_NURSE: {ROLE_VETEDGE_NURSE, ROLE_VETERINARY_NURSE},
 	ROLE_VETEDGE_FRONT_DESK: {ROLE_VETEDGE_FRONT_DESK},
 	ROLE_VETERINARY_NURSE: {ROLE_VETERINARY_NURSE, "VetEdge Nurse"},
 	ROLE_DISPENSARY_USER: {ROLE_DISPENSARY_USER, "VetEdge Dispensary User"},
@@ -55,6 +57,7 @@ INTERNAL_ROLES = {
 	*ELEVATED_ROLES,
 	*_role_group(ROLE_VETEDGE_DOCTOR),
 	*_role_group(ROLE_VETEDGE_FRONT_DESK),
+	*_role_group(ROLE_VETEDGE_NURSE),
 	*_role_group(ROLE_VETERINARY_NURSE),
 	*_role_group(ROLE_DISPENSARY_USER),
 	*_role_group(ROLE_LAB_TECHNICIAN),
@@ -696,6 +699,42 @@ def get_system_users(doctype, txt, searchfield, start, page_len, filters):
 	)
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_vaccination_staff_users(doctype, txt, searchfield, start, page_len, filters):
+	search = f"%{txt}%"
+	roles = (
+		ROLE_SYSTEM_MANAGER,
+		ROLE_VETEDGE_ADMINISTRATOR,
+		ROLE_VETEDGE_DOCTOR,
+		ROLE_VETEDGE_NURSE,
+		ROLE_VETERINARY_NURSE,
+	)
+	placeholders = ", ".join(["%s"] * len(roles))
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT
+			user.name,
+			COALESCE(NULLIF(user.full_name, ''), user.email, user.name)
+		FROM `tabUser` user
+		INNER JOIN `tabHas Role` has_role
+			ON has_role.parent = user.name
+			AND has_role.parenttype = 'User'
+		WHERE user.enabled = 1
+			AND user.user_type = 'System User'
+			AND has_role.role IN ({placeholders})
+			AND (
+				user.name LIKE %s
+				OR user.full_name LIKE %s
+				OR user.email LIKE %s
+			)
+		ORDER BY COALESCE(NULLIF(user.full_name, ''), user.email, user.name) ASC
+		LIMIT %s, %s
+		""",
+		(*roles, search, search, search, start, page_len),
+	)
+
+
 def get_branch_scoped_query_condition(doctype: str, branch_field: str, user: str | None = None) -> str | None:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
@@ -806,6 +845,13 @@ def get_veterinary_lab_order_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Lab Order", "service_branch", user=user)
 
 
+def get_veterinary_vaccination_record_query(user: str | None = None) -> str | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return "1=0"
+	return get_branch_scoped_query_condition("Veterinary Vaccination Record", "service_branch", user=user)
+
+
 def get_veterinary_guest_booking_request_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Guest Booking Request", "preferred_branch", user=user)
 
@@ -867,6 +913,22 @@ def has_veterinary_lab_order_permission(doc, user: str | None = None, permission
 	if is_portal_owner_user(user):
 		return False
 	return has_document_permission(doc, "Veterinary Lab Order", "service_branch", permission_type=permission_type, user=user)
+
+
+def has_veterinary_vaccination_record_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Vaccination Record", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+
+	return has_document_permission(doc, "Veterinary Vaccination Record", "service_branch", permission_type=permission_type, user=user)
 
 
 def has_sales_invoice_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:

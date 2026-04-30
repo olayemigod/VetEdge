@@ -1,0 +1,293 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-30 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "primary_owner",
+  "status",
+  "service_branch",
+  "company",
+  "column_break_context",
+  "vaccine",
+  "administered_by",
+  "administered_on",
+  "vaccination_id",
+  "vaccination_title",
+  "linked_consultation",
+  "clinical_section",
+  "dose",
+  "route",
+  "next_due_date",
+  "expiry_date",
+  "batch_no",
+  "notes",
+  "integration_section",
+  "linked_invoice",
+  "stock_entry_reference"
+ ],
+ "fields": [
+  {
+   "default": "VVAC-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "VVAC-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "primary_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Primary Owner",
+   "options": "Customer",
+   "read_only": 1,
+   "fetch_from": "patient.primary_owner",
+   "fetch_if_empty": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Draft\nAwaiting Payment\nPending Administration\nAdministered\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_context",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "vaccine",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vaccine",
+   "options": "Veterinary Vaccine",
+   "reqd": 1
+  },
+  {
+   "fieldname": "administered_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Administered By",
+   "options": "User"
+  },
+  {
+   "fieldname": "administered_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Administered On"
+  },
+  {
+   "fieldname": "vaccination_id",
+   "fieldtype": "Data",
+   "label": "Vaccination ID",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "vaccination_title",
+   "fieldtype": "Data",
+   "label": "Vaccination Title",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "linked_consultation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Linked Consultation",
+   "options": "Veterinary Consultation"
+  },
+  {
+   "fieldname": "clinical_section",
+   "fieldtype": "Section Break",
+   "label": "Clinical Details"
+  },
+  {
+   "fieldname": "dose",
+   "fieldtype": "Data",
+   "label": "Dose"
+  },
+  {
+   "fieldname": "route",
+   "fieldtype": "Select",
+   "label": "Route",
+   "options": "\nOral\nSubcutaneous\nIntramuscular\nIntranasal\nTopical\nOther"
+  },
+  {
+   "fieldname": "next_due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Next Due Date"
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Batch Expiry Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "integration_section",
+   "fieldtype": "Section Break",
+   "label": "Billing and Stock"
+  },
+  {
+   "fieldname": "linked_invoice",
+   "fieldtype": "Link",
+   "label": "Linked Invoice",
+   "no_copy": 1,
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry_reference",
+   "fieldtype": "Link",
+   "label": "Stock Entry Reference",
+   "no_copy": 1,
+   "options": "Stock Entry",
+   "read_only": 1
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Vaccination Record",
+ "naming_rule": "By \"Naming Series\" field",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Doctor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Nurse",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Veterinary Nurse",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "vaccination_id,patient,primary_owner,vaccine,service_branch,linked_consultation,status",
+ "show_title_field_in_link": 1,
+ "sort_field": "administered_on",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "title_field": "vaccination_title"
+}

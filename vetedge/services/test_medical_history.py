@@ -24,7 +24,7 @@ class TestMedicalHistory(TestCase):
 		):
 			history = get_patient_medical_history("VP-001", from_date="2026-04-01", to_date="2026-04-30")
 
-		self.assertEqual([event["type"] for event in history], ["lab", "vitals", "consultation"])
+		self.assertEqual([event["type"] for event in history], ["vaccination", "lab", "vitals", "consultation"])
 		self.assertEqual(history[2]["symptoms"][0]["value"], "Vomiting")
 		self.assertEqual(history[2]["diagnoses"][0]["value"], "Gastroenteritis")
 
@@ -48,7 +48,7 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["labs"][0]["status"], "Reviewed")
 		self.assertIn("CBC", view["labs"][0]["tests_summary"])
 		self.assertIn("temperature", view["trends"])
-		self.assertIn("vaccination_history", view["placeholders"])
+		self.assertEqual(view["vaccinations"][0]["vaccine"], "Rabies")
 
 	def test_medical_history_view_handles_empty_history(self):
 		frappe_stub = make_frappe_stub(get_list=lambda *args, **kwargs: [], get_all=lambda *args, **kwargs: [])
@@ -66,6 +66,7 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["symptoms"], [])
 		self.assertEqual(view["treatments"], [])
 		self.assertEqual(view["labs"], [])
+		self.assertEqual(view["vaccinations"], [])
 
 	def test_history_date_range_is_applied_to_consultations_and_vitals(self):
 		calls = []
@@ -258,4 +259,26 @@ def get_all_for_history(doctype, filters=None, fields=None, **kwargs):
 				result_text="",
 			)
 		]
+	if doctype == "Veterinary Vaccination Record":
+		return [
+			frappe._dict(
+				name="VVAC-001",
+				vaccine="Rabies",
+				administered_on="2026-04-18 13:00:00",
+				service_branch="Branch D",
+				administered_by="doctor@example.com",
+				next_due_date="2027-04-18",
+				status="Administered",
+				linked_consultation="VCON-001",
+				linked_invoice="SINV-001",
+				stock_entry_reference=None,
+				dose="1 ml",
+				route="Subcutaneous",
+				primary_owner="CUST-001",
+			)
+		]
+	if doctype == "Sales Invoice":
+		return [frappe._dict(name="SINV-001", status="Unpaid", outstanding_amount=5000, grand_total=5000)]
+	if doctype == "User":
+		return [frappe._dict(name="doctor@example.com", full_name="Dr Ada Vet")]
 	return []

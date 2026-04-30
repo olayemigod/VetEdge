@@ -32,7 +32,10 @@ window.vetedgeInvoiceSummary = {
 				dialog.fields_dict.summary_html.$wrapper.find(".vetedge-open-invoice-link").on("click", function (event) {
 					event.preventDefault();
 					event.stopPropagation();
-					openInvoiceInNewTab($(this).attr("data-invoice-name"));
+					event.stopImmediatePropagation();
+					dialog.hide();
+					openInvoiceWithFrappeRoute($(this).attr("data-invoice-name"));
+					return false;
 				});
 				dialog.show();
 			},
@@ -65,15 +68,12 @@ window.vetedgeInvoiceSummary = {
 	},
 };
 
-function openInvoiceInNewTab(invoiceName) {
-	const url = buildInvoiceUrl(invoiceName);
-	const newTab = window.open("", "_blank", "noopener,noreferrer");
-	if (newTab) {
-		newTab.opener = null;
-		newTab.location.replace(url);
+function openInvoiceWithFrappeRoute(invoiceName) {
+	if (!invoiceName) {
 		return;
 	}
-	window.location.href = url;
+	frappe.open_in_new_tab = true;
+	frappe.set_route("Form", "Sales Invoice", invoiceName);
 }
 
 function buildInvoiceUrl(invoiceName) {
@@ -124,15 +124,13 @@ function renderInvoiceSummary(invoice) {
 				${invoice.can_open_full_form
 					? `
 						<div class="mt-3">
-							<a
-								href="${frappe.utils.escape_html(invoiceUrl)}"
-								target="_blank"
-								rel="noopener noreferrer"
+							<button
+								type="button"
 								class="btn btn-primary vetedge-open-invoice-link"
 								data-invoice-name="${frappe.utils.escape_html(invoice.name)}"
 							>
 								${__("Open Invoice In New Tab")}
-							</a>
+							</button>
 						</div>
 						<div class="text-muted small mt-2">${__("Use this link to keep the consultation open while reviewing the ERPNext invoice form.")}</div>
 					`

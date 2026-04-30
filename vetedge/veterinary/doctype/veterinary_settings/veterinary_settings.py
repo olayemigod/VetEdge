@@ -40,6 +40,7 @@ class VeterinarySettings(Document):
 					"enforce_strict_expiry_control",
 					"block_manual_expired_batch_override",
 					"enable_vaccination",
+					"vaccination_requires_payment_before_administration",
 					"enable_boarding",
 					"enable_demo_tools",
 					"patient_branch_restriction_enabled",
@@ -51,6 +52,9 @@ class VeterinarySettings(Document):
 
 		if not self.get("enable_vitals"):
 			set_if_field_exists(self, "require_vitals_before_completion", 0)
+
+		if not self.get("enable_vaccination"):
+			set_if_field_exists(self, "vaccination_requires_payment_before_administration", 0)
 
 		if not self.get("enable_consultations"):
 			set_if_field_exists(self, "enable_consultation_billing", 0)

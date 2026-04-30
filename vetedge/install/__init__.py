@@ -41,6 +41,7 @@ def ensure_vetedge_roles() -> None:
 		("VetEdge Front Desk", 1),
 		("VetEdge Doctor", 1),
 		("Veterinary Nurse", 1),
+		("VetEdge Nurse", 1),
 		("Dispensary User", 1),
 		("Lab Technician", 1),
 		("Branch Manager", 1),
