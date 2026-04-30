@@ -5,11 +5,13 @@ from frappe import _
 from frappe.utils import now_datetime
 from frappe.utils import flt
 
+from vetedge.services.feature_flags import is_enabled
 from vetedge.services.permissions import can_access_branch_data, can_access_consultation
 from vetedge.services.portal_access import require_internal_user
 
 
 def validate_vital_signs(doc) -> None:
+	ensure_vitals_enabled()
 	resolve_vitals_context(doc)
 	set_vitals_title(doc)
 	validate_vitals_values(doc)
@@ -96,6 +98,7 @@ def validate_vitals_values(doc) -> None:
 @frappe.whitelist()
 def create_vitals_from_consultation(consultation: str, values: dict | str | None = None) -> str:
 	require_internal_user()
+	ensure_vitals_enabled()
 	if not consultation:
 		frappe.throw(_("Consultation is required to create vitals."), frappe.ValidationError)
 
@@ -141,6 +144,7 @@ def create_vitals_from_consultation(consultation: str, values: dict | str | None
 @frappe.whitelist()
 def get_latest_vitals_for_consultation(consultation: str) -> dict | None:
 	require_internal_user()
+	ensure_vitals_enabled()
 	if not consultation:
 		return None
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
@@ -185,3 +189,13 @@ def get_latest_vitals(filters: dict) -> dict | None:
 		limit=1,
 	)
 	return rows[0] if rows else None
+
+
+def ensure_vitals_enabled() -> None:
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return
+
+	if is_enabled("vitals"):
+		return
+
+	frappe.throw("Vitals are not enabled in Veterinary Settings.", frappe.ValidationError)

@@ -14,6 +14,15 @@ from vetedge.services.vitals import (
 
 
 class TestVitals(TestCase):
+	def test_vitals_feature_flag_blocks_validation(self):
+		doc = frappe._dict(patient="VP-001", service_branch="Branch A")
+
+		with (
+			patch("vetedge.services.vitals.frappe", make_frappe_stub()),
+			patch("vetedge.services.vitals.is_enabled", return_value=False),
+		):
+			self.assertRaises(frappe.ValidationError, validate_vital_signs, doc)
+
 	def test_vitals_resolve_patient_and_branch_from_consultation(self):
 		doc = frappe._dict(
 			consultation="VCON-001",
@@ -148,6 +157,13 @@ class TestVitals(TestCase):
 			vitals = get_latest_vitals_for_consultation("VCON-001")
 
 		self.assertEqual(vitals.name, "VVS-001")
+
+	def test_create_vitals_blocks_when_feature_disabled(self):
+		with (
+			patch("vetedge.services.vitals.frappe", make_frappe_stub()),
+			patch("vetedge.services.vitals.is_enabled", return_value=False),
+		):
+			self.assertRaises(frappe.ValidationError, create_vitals_from_consultation, "VCON-001", {})
 
 
 def make_frappe_stub(**overrides):

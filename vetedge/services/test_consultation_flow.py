@@ -22,6 +22,15 @@ from vetedge.services.consultation_flow import (
 
 
 class TestConsultationFlow(TestCase):
+	def test_consultation_feature_flag_blocks_validation(self):
+		doc = frappe._dict(patient="VP-001")
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", make_frappe_stub()),
+			patch("vetedge.services.consultation_flow.is_enabled", return_value=False),
+		):
+			self.assertRaises(frappe.ValidationError, validate_consultation, doc)
+
 	def test_consultation_defaults_practitioner_to_current_doctor(self):
 		doc = frappe._dict(
 			patient="VP-001",
@@ -612,6 +621,21 @@ class TestConsultationFlow(TestCase):
 
 			self.assertEqual(result["status"], "Ready for Treatment")
 		self.assertEqual(saved, [doc])
+
+	def test_transition_consultation_status_blocks_when_feature_disabled(self):
+		doc = frappe._dict(name="VCON-001", status="In Progress")
+		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: doc)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.is_enabled", return_value=False),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				transition_consultation_status,
+				"VCON-001",
+				"Ready for Treatment",
+			)
 
 	def test_validate_consultation_blocks_saving_paid_consultation_as_cancelled(self):
 		doc = frappe._dict(

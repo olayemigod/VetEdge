@@ -17,6 +17,8 @@ from vetedge.services.registration_billing import (
 	handle_patient_registration_insert,
 	is_first_consultation_for_patient,
 	is_invoice_paid,
+	update_registration_status_from_invoice,
+	update_registration_status_from_payment_entry,
 	update_patient_registration_payment_status,
 	validate_registration_payment_before_first_consultation,
 	validate_registration_item,
@@ -213,6 +215,36 @@ class TestRegistrationBilling(TestCase):
 			registration_status=REGISTERED_STATUS,
 			registration_billed=0,
 		)
+
+	def test_invoice_hook_updates_each_linked_patient(self):
+		invoice = SimpleNamespace(name="SINV-001")
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.get_all", return_value=["VP-001", "VP-002"]),
+			patch("vetedge.services.registration_billing.update_patient_registration_payment_status") as update_status,
+		):
+			update_registration_status_from_invoice(invoice)
+
+		update_status.assert_any_call("VP-001", invoice)
+		update_status.assert_any_call("VP-002", invoice)
+		self.assertEqual(update_status.call_count, 2)
+
+	def test_payment_entry_hook_updates_registration_status_for_referenced_invoice(self):
+		payment_entry = frappe._dict(
+			references=[
+				frappe._dict(reference_doctype="Sales Invoice", reference_name="SINV-001"),
+				frappe._dict(reference_doctype="Journal Entry", reference_name="JV-001"),
+			]
+		)
+		invoice = SimpleNamespace(name="SINV-001")
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.get_doc", return_value=invoice),
+			patch("vetedge.services.registration_billing.update_registration_status_from_invoice") as update_from_invoice,
+		):
+			update_registration_status_from_payment_entry(payment_entry)
+
+		update_from_invoice.assert_called_once_with(invoice, None)
 
 	def test_branch_rule_overrides_global_registration_values(self):
 		settings = frappe._dict(

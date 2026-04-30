@@ -21,6 +21,15 @@ from vetedge.services.appointment_flow import (
 
 
 class TestAppointmentFlow(TestCase):
+	def test_appointment_feature_flag_blocks_validation(self):
+		doc = make_appointment_doc()
+
+		with (
+			patch("vetedge.services.appointment_flow.frappe", make_frappe_stub()),
+			patch("vetedge.services.appointment_flow.is_enabled", return_value=False),
+		):
+			self.assertRaises(frappe.ValidationError, validate_appointment, doc)
+
 	def test_appointment_resolves_owner_and_allows_cross_branch_patient(self):
 		doc = make_appointment_doc(branch="Branch B")
 
@@ -175,6 +184,13 @@ class TestAppointmentFlow(TestCase):
 				status="Bad Status",
 				reference_date="2026-04-19",
 			)
+
+	def test_queue_blocks_when_appointments_disabled(self):
+		with (
+			patch("vetedge.services.appointment_flow.frappe", make_frappe_stub()),
+			patch("vetedge.services.appointment_flow.is_enabled", return_value=False),
+		):
+			self.assertRaises(frappe.ValidationError, get_appointment_queue, reference_date="2026-04-19")
 
 	def test_follow_up_creation_from_consultation_links_consultation(self):
 		inserted = []

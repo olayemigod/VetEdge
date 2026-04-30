@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 import frappe
@@ -30,6 +31,7 @@ def ensure_financial_dashboard() -> None:
 		if os.path.exists(file_path):
 			import_file_by_path(file_path, force=True, ignore_version=True)
 
+	ensure_vetedge_workspace_sidebar()
 	cleanup_legacy_financial_workspace()
 	ensure_vetedge_desktop_icon()
 
@@ -39,24 +41,43 @@ def cleanup_legacy_financial_workspace() -> None:
 		frappe.delete_doc_if_exists("Workspace", "Veterinary Financial Dashboard", force=1)
 
 
-def ensure_vetedge_desktop_icon() -> None:
-	if not frappe.db.exists("Desktop Icon", "VetEdge"):
+def ensure_vetedge_workspace_sidebar() -> None:
+	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 
-	frappe.db.set_value(
-		"Desktop Icon",
-		"VetEdge",
-		{
-			"app": "vetedge",
-			"hidden": 0,
-			"icon_type": "Link",
-			"link_type": "Workspace Sidebar",
-			"link_to": "VetEdge",
-			"link": "",
-			"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
-			"standard": 1,
-		},
-		update_modified=False,
-	)
+	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		return
+
+	frappe.get_doc(_load_standard_doc("workspace_sidebar", "vetedge.json")).insert(ignore_permissions=True)
+
+
+def ensure_vetedge_desktop_icon() -> None:
+	if not frappe.db.exists("DocType", "Desktop Icon"):
+		return
+
+	if not frappe.db.exists("Desktop Icon", "VetEdge"):
+		frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json")).insert(ignore_permissions=True)
+	else:
+		frappe.db.set_value(
+			"Desktop Icon",
+			"VetEdge",
+			{
+				"app": "vetedge",
+				"hidden": 0,
+				"icon_type": "Link",
+				"link_type": "Workspace Sidebar",
+				"link_to": "VetEdge",
+				"link": "",
+				"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
+				"standard": 1,
+			},
+			update_modified=False,
+		)
 	frappe.cache.delete_key("desktop_icons")
 	frappe.cache.delete_key("bootinfo")
+
+
+def _load_standard_doc(*file_parts: str) -> dict:
+	file_path = frappe.get_app_path("vetedge", *file_parts)
+	with open(file_path, encoding="utf-8") as handle:
+		return json.load(handle)

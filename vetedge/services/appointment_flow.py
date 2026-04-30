@@ -11,6 +11,7 @@ from vetedge.services.consultation_flow import (
 	validate_practitioner_branch_access,
 	validate_user_branch_access,
 )
+from vetedge.services.feature_flags import is_enabled
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.permissions import can_access_consultation, validate_doctor_user
 from vetedge.services.portal_access import require_internal_user
@@ -54,6 +55,7 @@ ACTIVE_QUEUE_STATUSES = (
 
 
 def validate_appointment(doc) -> None:
+	ensure_appointments_enabled()
 	normalize_consultation_links(doc)
 	validate_status(doc)
 	resolve_appointment_context(doc)
@@ -249,6 +251,7 @@ def create_follow_up_from_consultation(
 	notes: str | None = None,
 ) -> dict:
 	require_internal_user()
+	ensure_appointments_enabled()
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
 	if not consultation_doc.patient:
@@ -288,6 +291,7 @@ def create_follow_up_from_consultation(
 @frappe.whitelist()
 def create_consultation_from_appointment(appointment: str) -> dict:
 	require_internal_user()
+	ensure_appointments_enabled()
 	appointment_doc = frappe.get_doc("Veterinary Appointment", appointment)
 	normalize_consultation_links(appointment_doc)
 	validate_start_consultation_from_appointment(appointment_doc)
@@ -322,6 +326,7 @@ def create_consultation_from_appointment(appointment: str) -> dict:
 @frappe.whitelist()
 def transition_appointment_status(appointment: str, status: str) -> dict:
 	require_internal_user()
+	ensure_appointments_enabled()
 	appointment_doc = frappe.get_doc("Veterinary Appointment", appointment)
 	previous_status = appointment_doc.status
 	appointment_doc.status = status
@@ -403,6 +408,7 @@ def get_appointment_queue(
 	reference_date: str | None = None,
 ) -> dict[str, list[dict]]:
 	require_internal_user()
+	ensure_appointments_enabled()
 	today = getdate(reference_date or now_datetime())
 	tomorrow = add_days(today, 1)
 	future_start = add_days(today, 2)
@@ -435,6 +441,16 @@ def get_appointments_between(
 	}
 	add_optional_queue_filters(filters, branch=branch, practitioner=practitioner, status=status)
 	return fetch_queue_rows(filters)
+
+
+def ensure_appointments_enabled() -> None:
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return
+
+	if is_enabled("appointments"):
+		return
+
+	frappe.throw("Appointments are not enabled in Veterinary Settings.", frappe.ValidationError)
 
 
 def get_future_appointments(

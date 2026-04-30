@@ -13,6 +13,7 @@ from vetedge.services.billing import (
 	validate_consultation_invoice_before_progress,
 	validate_consultation_payment_before_treatment,
 )
+from vetedge.services.feature_flags import is_enabled
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.registration_billing import validate_registration_payment_before_first_consultation
 from vetedge.services.permissions import (
@@ -64,6 +65,7 @@ CONSULTATION_SCOPE_LOCKED_STATUSES = {
 
 
 def validate_consultation(doc) -> None:
+	ensure_consultations_enabled()
 	validate_consultation_status(doc)
 	validate_consultation_scope_lock(doc)
 	normalize_consultation_appointment_links(doc)
@@ -155,6 +157,7 @@ def validate_consultation_allows_new_clinical_entries(doc, entry_type: str = "cl
 @frappe.whitelist()
 def transition_consultation_status(consultation: str, status: str) -> dict:
 	require_internal_user()
+	ensure_consultations_enabled()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	validate_consultation_status_transition(doc.status, status)
@@ -169,6 +172,16 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 		"name": doc.name,
 		"status": doc.status,
 	}
+
+
+def ensure_consultations_enabled() -> None:
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return
+
+	if is_enabled("consultations"):
+		return
+
+	frappe.throw("Consultations are not enabled in Veterinary Settings.", frappe.ValidationError)
 
 
 def resolve_consultation_context(doc) -> None:

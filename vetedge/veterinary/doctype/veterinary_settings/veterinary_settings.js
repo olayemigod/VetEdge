@@ -34,6 +34,16 @@ function set_registration_billing_read_only(frm) {
 	const read_only = !frm.doc.enable_registration_billing;
 	frm.set_df_property("default_registration_item", "read_only", read_only);
 	frm.set_df_property("default_registration_fee", "read_only", read_only);
+	frm.set_df_property("auto_create_invoice_on_registration", "read_only", read_only);
+	frm.set_df_property("require_payment_before_first_consultation", "read_only", read_only);
+	frm.set_df_property("branch_registration_rules", "read_only", read_only);
+
+	const rules_grid = frm.fields_dict.branch_registration_rules?.grid;
+	if (rules_grid) {
+		rules_grid.cannot_add_rows = read_only;
+		rules_grid.cannot_delete_rows = read_only;
+		rules_grid.refresh();
+	}
 }
 
 function set_consultation_billing_read_only(frm) {

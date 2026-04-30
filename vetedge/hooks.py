@@ -155,7 +155,10 @@ doc_events = {
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
 		],
-		"on_update_after_submit": "vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		"on_update_after_submit": [
+			"vetedge.services.registration_billing.update_registration_status_from_invoice",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+		],
 		"on_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
@@ -166,8 +169,14 @@ doc_events = {
 		],
 	},
 	"Payment Entry": {
-		"on_submit": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
-		"on_cancel": "vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+		"on_submit": [
+			"vetedge.services.registration_billing.update_registration_status_from_payment_entry",
+			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+		],
+		"on_cancel": [
+			"vetedge.services.registration_billing.update_registration_status_from_payment_entry",
+			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+		],
 	},
 	"Stock Entry": {
 		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",

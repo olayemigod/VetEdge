@@ -394,6 +394,15 @@ def update_registration_status_from_invoice(doc, method: str | None = None) -> N
 		update_patient_registration_payment_status(patient, doc)
 
 
+def update_registration_status_from_payment_entry(doc, method: str | None = None) -> None:
+	for reference in doc.get("references") or []:
+		if reference.reference_doctype != "Sales Invoice" or not reference.reference_name:
+			continue
+
+		invoice = frappe.get_doc("Sales Invoice", reference.reference_name)
+		update_registration_status_from_invoice(invoice, method)
+
+
 def update_patient_registration_payment_status(patient: str, invoice) -> None:
 	if isinstance(invoice, str):
 		invoice = frappe.get_doc("Sales Invoice", invoice)
