@@ -9,10 +9,16 @@ import frappe
 from vetedge.services.permissions import (
 	can_access_patient,
 	can_access_branch_data,
+	can_create_grooming_session,
 	can_dispense,
 	can_enter_lab_results,
+	can_manage_grooming_billing,
+	can_progress_grooming_session,
 	can_review_lab_results,
 	get_invoice_access_diagnostic,
+	get_pet_grooming_appointment_query,
+	has_pet_grooming_appointment_permission,
+	has_pet_grooming_session_permission,
 	has_veterinary_appointment_permission,
 	can_request_lab_tests,
 	has_veterinary_patient_permission,
@@ -596,3 +602,119 @@ class TestPermissions(TestCase):
 			patch("vetedge.services.permissions.frappe", frappe_stub),
 		):
 			self.assertRaises(frappe.ValidationError, validate_branch_user_assignment, doc)
+
+	def test_front_desk_can_create_grooming_appointment(self):
+		appointment = frappe._dict(doctype="Pet Grooming Appointment", service_branch="Main Branch")
+
+		with patch("vetedge.services.permissions.is_portal_owner_user", return_value=False):
+			self.assertTrue(
+				has_pet_grooming_appointment_permission(
+					appointment,
+					user="frontdesk@example.com",
+					permission_type="create",
+				)
+			)
+
+	def test_grooming_appointment_query_scopes_groomer_to_assigned_branch(self):
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Groomer"}),
+		):
+			query = get_pet_grooming_appointment_query("groomer@example.com")
+
+		self.assertIn("service_branch", query)
+		self.assertNotIn("groomer@example.com", query)
+
+	def test_groomer_can_complete_session_in_assigned_branch(self):
+		session = frappe._dict(doctype="Pet Grooming Session", name="PGSE-0001", service_branch="Main Branch", groomer="groomer@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Groomer"}),
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+		):
+			self.assertTrue(can_progress_grooming_session("groomer@example.com", session, raise_exception=True))
+
+	def test_groomer_cannot_complete_session_outside_assigned_branch(self):
+		session = frappe._dict(doctype="Pet Grooming Session", name="PGSE-0001", service_branch="Other Branch", groomer="groomer@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Groomer"}),
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+			patch("vetedge.services.permissions.frappe.throw", side_effect=frappe.PermissionError),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				can_progress_grooming_session,
+				"groomer@example.com",
+				session,
+				True,
+			)
+
+	def test_doctor_role_alone_cannot_manage_grooming(self):
+		session = frappe._dict(doctype="Pet Grooming Session", name="PGSE-0001", service_branch="Main Branch", groomer="groomer@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Doctor"}),
+			patch("vetedge.services.permissions.frappe.throw", side_effect=frappe.PermissionError),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				can_progress_grooming_session,
+				"doctor@example.com",
+				session,
+				True,
+			)
+
+	def test_admin_can_manage_all_grooming_billing(self):
+		session = frappe._dict(doctype="Pet Grooming Session", name="PGSE-0001", service_branch="Branch X", groomer="groomer@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"System Manager"}),
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
+		):
+			self.assertTrue(can_manage_grooming_billing("admin@example.com", session, raise_exception=True))
+
+	def test_front_desk_can_read_grooming_session_but_not_write_without_docperm(self):
+		session = frappe._dict(name="PGSE-0001", doctype="Pet Grooming Session", service_branch="Main Branch", groomer="groomer@example.com")
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Front Desk"}),
+		):
+			self.assertTrue(has_pet_grooming_session_permission(session, user="frontdesk@example.com", permission_type="read"))
+
+	def test_groomer_can_create_grooming_session_in_assigned_branch_without_being_assigned(self):
+		appointment = frappe._dict(doctype="Pet Grooming Appointment", name="PGAP-0001", service_branch="Main Branch", groomer="other@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Groomer"}),
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+		):
+			self.assertTrue(can_create_grooming_session("groomer@example.com", appointment, raise_exception=True))
+
+	def test_groomer_can_manage_grooming_billing_in_assigned_branch(self):
+		session = frappe._dict(doctype="Pet Grooming Session", name="PGSE-0001", service_branch="Main Branch", groomer="other@example.com")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Groomer"}),
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+		):
+			self.assertTrue(can_manage_grooming_billing("groomer@example.com", session, raise_exception=True))

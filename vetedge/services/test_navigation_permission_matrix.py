@@ -125,3 +125,48 @@ class TestNavigationPermissionMatrix(TestCase):
 		self.assertIn("VetEdge Lab Technician", display_rules["Veterinary Lab Test"])
 		self.assertIn("VetEdge Branch Manager", display_rules["Branch User Assignment"])
 		self.assertIn("VetEdge Branch Manager", display_rules["Branch Practitioner Assignment"])
+
+	def test_grooming_doctypes_have_expected_explicit_roles(self):
+		expected = {
+			"doctype/pet_grooming_service/pet_grooming_service.json": {
+				"System Manager",
+				"VetEdge Administrator",
+				"VetEdge Groomer",
+				"VetEdge Front Desk",
+				"Branch Manager",
+				"VetEdge Branch Manager",
+			},
+			"doctype/pet_grooming_appointment/pet_grooming_appointment.json": {
+				"System Manager",
+				"VetEdge Administrator",
+				"VetEdge Groomer",
+				"VetEdge Front Desk",
+				"Branch Manager",
+				"VetEdge Branch Manager",
+			},
+			"doctype/pet_grooming_session/pet_grooming_session.json": {
+				"System Manager",
+				"VetEdge Administrator",
+				"VetEdge Groomer",
+				"VetEdge Front Desk",
+				"Branch Manager",
+				"VetEdge Branch Manager",
+			},
+		}
+		for relative_path, expected_roles in expected.items():
+			with self.subTest(target=relative_path):
+				data = json.loads((VETERINARY_ROOT / relative_path).read_text())
+				roles = {row["role"] for row in data.get("permissions", [])}
+				self.assertEqual(roles, expected_roles)
+
+	def test_workspace_sidebar_grooming_links_include_grooming_roles(self):
+		data = json.loads((VETERINARY_ROOT.parent / "workspace_sidebar" / "vetedge.json").read_text())
+		display_rules = {
+			item.get("label"): item.get("display_depends_on", "")
+			for item in data.get("items", [])
+			if item.get("display_depends_on")
+		}
+		for label in ("Pet Grooming Service", "Pet Grooming Appointment", "Pet Grooming Session"):
+			with self.subTest(label=label):
+				self.assertIn("VetEdge Groomer", display_rules[label])
+				self.assertIn("VetEdge Branch Manager", display_rules[label])

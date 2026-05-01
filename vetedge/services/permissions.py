@@ -9,6 +9,7 @@ from vetedge.services.audit import log_operational_event
 ROLE_SYSTEM_MANAGER = "System Manager"
 ROLE_VETEDGE_ADMINISTRATOR = "VetEdge Administrator"
 ROLE_VETEDGE_DOCTOR = "VetEdge Doctor"
+ROLE_VETEDGE_GROOMER = "VetEdge Groomer"
 ROLE_VETEDGE_NURSE = "VetEdge Nurse"
 ROLE_VETEDGE_FRONT_DESK = "VetEdge Front Desk"
 ROLE_VETERINARY_NURSE = "Veterinary Nurse"
@@ -22,6 +23,7 @@ ROLE_ACCOUNTS_USER = "Accounts User"
 ROLE_ALIASES = {
 	ROLE_VETEDGE_ADMINISTRATOR: {ROLE_VETEDGE_ADMINISTRATOR},
 	ROLE_VETEDGE_DOCTOR: {ROLE_VETEDGE_DOCTOR},
+	ROLE_VETEDGE_GROOMER: {ROLE_VETEDGE_GROOMER},
 	ROLE_VETEDGE_NURSE: {ROLE_VETEDGE_NURSE, ROLE_VETERINARY_NURSE},
 	ROLE_VETEDGE_FRONT_DESK: {ROLE_VETEDGE_FRONT_DESK},
 	ROLE_VETERINARY_NURSE: {ROLE_VETERINARY_NURSE, "VetEdge Nurse"},
@@ -47,6 +49,11 @@ LAB_RESULT_ENTRY_ROLES = {*_role_group(ROLE_LAB_TECHNICIAN), *DOCTOR_ROLES}
 LAB_REVIEW_ROLES = DOCTOR_ROLES
 ROLE_BUNDLE_MANAGER_ROLES = ELEVATED_ROLES
 FRONT_DESK_ROLES = {*_role_group(ROLE_VETEDGE_FRONT_DESK), *ELEVATED_ROLES}
+GROOMER_ROLES = {*_role_group(ROLE_VETEDGE_GROOMER), *ELEVATED_ROLES}
+GROOMING_MANAGER_ROLES = {*_role_group(ROLE_BRANCH_MANAGER), *ELEVATED_ROLES}
+GROOMING_APPOINTMENT_ACTION_ROLES = {*FRONT_DESK_ROLES, *GROOMING_MANAGER_ROLES}
+GROOMING_SESSION_PROGRESS_ROLES = {*GROOMER_ROLES, *GROOMING_MANAGER_ROLES}
+GROOMING_BILLING_ROLES = {*FRONT_DESK_ROLES, *GROOMING_MANAGER_ROLES}
 ACCOUNTS_COLLECTION_ROLES = {
 	ROLE_ACCOUNTS_MANAGER,
 	ROLE_ACCOUNTS_USER,
@@ -56,6 +63,7 @@ ACCOUNTS_COLLECTION_ROLES = {
 INTERNAL_ROLES = {
 	*ELEVATED_ROLES,
 	*_role_group(ROLE_VETEDGE_DOCTOR),
+	*_role_group(ROLE_VETEDGE_GROOMER),
 	*_role_group(ROLE_VETEDGE_FRONT_DESK),
 	*_role_group(ROLE_VETEDGE_NURSE),
 	*_role_group(ROLE_VETERINARY_NURSE),
@@ -532,6 +540,137 @@ def can_review_lab_results(user: str | None, context=None, raise_exception: bool
 	)
 
 
+def _get_grooming_context_values(context, doctype: str | None = None) -> tuple[str | None, str | None, str | None, str | None]:
+	if context is None:
+		return None, None, None, None
+	if isinstance(context, str):
+		if not doctype:
+			return None, None, doctype, context
+		values = frappe.db.get_value(doctype, context, ["service_branch", "groomer"], as_dict=True) or {}
+		return values.get("service_branch"), values.get("groomer"), doctype, context
+	return (
+		getattr(context, "service_branch", None),
+		getattr(context, "groomer", None),
+		getattr(context, "doctype", doctype),
+		getattr(context, "name", None),
+	)
+
+
+
+def can_manage_grooming_appointments(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	branch, groomer, doctype, name = _get_grooming_context_values(context, "Pet Grooming Appointment")
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"grooming_appointment_access_blocked",
+			reference_doctype=doctype,
+			reference_name=name,
+			user=user,
+		)
+	if user_has_any_role(user, GROOMING_APPOINTMENT_ACTION_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	if user_has_any_role(user, GROOMER_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	return _deny(
+		raise_exception,
+		"Only front desk, assigned groomers, or grooming managers can manage grooming appointments.",
+		"grooming_appointment_access_blocked",
+		reference_doctype=doctype,
+		reference_name=name,
+		user=user,
+	)
+
+
+
+def can_create_grooming_session(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	branch, groomer, doctype, name = _get_grooming_context_values(context, "Pet Grooming Appointment")
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"grooming_session_create_blocked",
+			reference_doctype=doctype,
+			reference_name=name,
+			user=user,
+		)
+	if user_has_any_role(user, GROOMING_APPOINTMENT_ACTION_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	if user_has_any_role(user, GROOMER_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	return _deny(
+		raise_exception,
+		"Only front desk, assigned groomers, or grooming managers can create grooming sessions.",
+		"grooming_session_create_blocked",
+		reference_doctype=doctype,
+		reference_name=name,
+		user=user,
+	)
+
+
+
+def can_progress_grooming_session(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	branch, groomer, doctype, name = _get_grooming_context_values(context, "Pet Grooming Session")
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"grooming_session_progress_blocked",
+			reference_doctype=doctype,
+			reference_name=name,
+			user=user,
+		)
+	if user_has_any_role(user, GROOMING_MANAGER_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	if user_has_any_role(user, GROOMER_ROLES):
+		if groomer != user:
+			return _deny(
+				raise_exception,
+				"Only the assigned groomer can update grooming session progress.",
+				"grooming_session_progress_blocked",
+				reference_doctype=doctype,
+				reference_name=name,
+				user=user,
+			)
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	return _deny(
+		raise_exception,
+		"Only assigned groomers or grooming managers can update grooming sessions.",
+		"grooming_session_progress_blocked",
+		reference_doctype=doctype,
+		reference_name=name,
+		user=user,
+	)
+
+
+
+def can_manage_grooming_billing(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	branch, _groomer, doctype, name = _get_grooming_context_values(context, "Pet Grooming Session")
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"grooming_billing_blocked",
+			reference_doctype=doctype,
+			reference_name=name,
+			user=user,
+		)
+	if user_has_any_role(user, GROOMING_BILLING_ROLES | GROOMER_ROLES):
+		return can_access_branch_data(user, branch, raise_exception=raise_exception)
+	return _deny(
+		raise_exception,
+		"Only front desk or grooming managers can create or update grooming billing.",
+		"grooming_billing_blocked",
+		reference_doctype=doctype,
+		reference_name=name,
+		user=user,
+	)
+
+
 def can_manage_role_bundles(user: str | None = None, raise_exception: bool = False) -> bool:
 	user = user or get_current_user()
 	if user_has_any_role(user, ROLE_BUNDLE_MANAGER_ROLES):
@@ -701,6 +840,42 @@ def get_system_users(doctype, txt, searchfield, start, page_len, filters):
 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
+def get_grooming_staff_users(doctype, txt, searchfield, start, page_len, filters):
+	search = f"%{txt}%"
+	roles = (
+		ROLE_SYSTEM_MANAGER,
+		ROLE_VETEDGE_ADMINISTRATOR,
+		ROLE_VETEDGE_GROOMER,
+		ROLE_BRANCH_MANAGER,
+		"VetEdge Branch Manager",
+	)
+	placeholders = ", ".join(["%s"] * len(roles))
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT
+			user.name,
+			COALESCE(NULLIF(user.full_name, ''), user.email, user.name)
+		FROM `tabUser` user
+		INNER JOIN `tabHas Role` has_role
+			ON has_role.parent = user.name
+			AND has_role.parenttype = 'User'
+		WHERE user.enabled = 1
+			AND user.user_type = 'System User'
+			AND has_role.role IN ({placeholders})
+			AND (
+				user.name LIKE %s
+				OR user.full_name LIKE %s
+				OR user.email LIKE %s
+			)
+		ORDER BY COALESCE(NULLIF(user.full_name, ''), user.email, user.name) ASC
+		LIMIT %s, %s
+		""",
+		(*roles, search, search, search, start, page_len),
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
 def get_vaccination_staff_users(doctype, txt, searchfield, start, page_len, filters):
 	search = f"%{txt}%"
 	roles = (
@@ -733,6 +908,60 @@ def get_vaccination_staff_users(doctype, txt, searchfield, start, page_len, filt
 		""",
 		(*roles, search, search, search, start, page_len),
 	)
+
+
+def _combine_query_conditions(*conditions: str | None) -> str | None:
+	parts = [f"({condition})" for condition in conditions if condition]
+	if not parts:
+		return None
+	return " and ".join(parts)
+
+
+
+def get_grooming_query_condition(doctype: str, user: str | None = None, *, allow_front_desk: bool = False) -> str | None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return "1=0"
+	if not user or user == "Guest":
+		return "1=0"
+	if user_has_global_branch_access(user):
+		return None
+	branch_condition = get_branch_scoped_query_condition(doctype, "service_branch", user=user)
+	if user_has_any_role(user, GROOMING_MANAGER_ROLES):
+		return branch_condition
+	if allow_front_desk and user_has_any_role(user, FRONT_DESK_ROLES):
+		return branch_condition
+	if user_has_any_role(user, GROOMER_ROLES):
+		return branch_condition
+	return "1=0"
+
+
+
+def has_grooming_document_permission(doc, doctype: str, permission_type: str | None = None, user: str | None = None, *, allow_front_desk: bool = False) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	if permission_type == "create":
+		return True
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if _is_unsaved_document(doc, doctype, name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if not user or user == "Guest":
+		return False
+	if user_has_global_branch_access(user):
+		return True
+	branch_allowed = has_document_permission(doc, doctype, "service_branch", permission_type=permission_type, user=user)
+	if branch_allowed is False:
+		return False
+	if user_has_any_role(user, GROOMING_MANAGER_ROLES):
+		return True
+	if allow_front_desk and user_has_any_role(user, FRONT_DESK_ROLES):
+		return True
+	if user_has_any_role(user, GROOMER_ROLES):
+		return True
+	return False
 
 
 def get_branch_scoped_query_condition(doctype: str, branch_field: str, user: str | None = None) -> str | None:
@@ -852,6 +1081,16 @@ def get_veterinary_vaccination_record_query(user: str | None = None) -> str | No
 	return get_branch_scoped_query_condition("Veterinary Vaccination Record", "service_branch", user=user)
 
 
+
+def get_pet_grooming_appointment_query(user: str | None = None) -> str | None:
+	return get_grooming_query_condition("Pet Grooming Appointment", user=user, allow_front_desk=True)
+
+
+
+def get_pet_grooming_session_query(user: str | None = None) -> str | None:
+	return get_grooming_query_condition("Pet Grooming Session", user=user, allow_front_desk=True)
+
+
 def get_veterinary_guest_booking_request_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Guest Booking Request", "preferred_branch", user=user)
 
@@ -929,6 +1168,16 @@ def has_veterinary_vaccination_record_permission(doc, user: str | None = None, p
 		return True
 
 	return has_document_permission(doc, "Veterinary Vaccination Record", "service_branch", permission_type=permission_type, user=user)
+
+
+
+def has_pet_grooming_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	return has_grooming_document_permission(doc, "Pet Grooming Appointment", permission_type=permission_type, user=user, allow_front_desk=True)
+
+
+
+def has_pet_grooming_session_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	return has_grooming_document_permission(doc, "Pet Grooming Session", permission_type=permission_type, user=user, allow_front_desk=True)
 
 
 def has_sales_invoice_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:

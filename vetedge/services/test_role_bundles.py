@@ -45,6 +45,14 @@ class TestRoleBundles(TestCase):
 			STARTER_ROLE_BUNDLES["Front Desk"],
 			["VetEdge Front Desk", "Desk User", "Accounts User", "Sales User"],
 		)
+		self.assertEqual(
+			STARTER_ROLE_BUNDLES["Grooming Staff"],
+			["VetEdge Groomer", "Desk User"],
+		)
+		self.assertEqual(
+			STARTER_ROLE_BUNDLES["Branch Manager"],
+			["Branch Manager", "VetEdge Branch Manager", "Desk User", "Accounts User", "Sales User", "Stock User"],
+		)
 
 	def test_duplicate_roles_in_bundle_are_rejected(self):
 		doc = frappe._dict(

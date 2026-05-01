@@ -40,6 +40,10 @@ class VeterinarySettings(Document):
 					"enforce_strict_expiry_control",
 					"block_manual_expired_batch_override",
 					"enable_vaccination",
+					"enable_grooming",
+					"enable_grooming_billing",
+					"require_grooming_appointment",
+					"allow_grooming_without_consultation",
 					"vaccination_requires_payment_before_administration",
 					"enable_boarding",
 					"enable_demo_tools",
@@ -55,6 +59,11 @@ class VeterinarySettings(Document):
 
 		if not self.get("enable_vaccination"):
 			set_if_field_exists(self, "vaccination_requires_payment_before_administration", 0)
+
+		if not self.get("enable_grooming"):
+			set_if_field_exists(self, "enable_grooming_billing", 0)
+			set_if_field_exists(self, "require_grooming_appointment", 0)
+			set_if_field_exists(self, "allow_grooming_without_consultation", 1)
 
 		if not self.get("enable_consultations"):
 			set_if_field_exists(self, "enable_consultation_billing", 0)

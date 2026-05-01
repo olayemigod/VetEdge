@@ -12,6 +12,7 @@ from vetedge.services.permissions import (
 	ROLE_LAB_TECHNICIAN,
 	ROLE_VETEDGE_ADMINISTRATOR,
 	ROLE_VETEDGE_DOCTOR,
+	ROLE_VETEDGE_GROOMER,
 	ROLE_VETEDGE_FRONT_DESK,
 	ROLE_VETERINARY_NURSE,
 	can_apply_role_bundle,
@@ -47,6 +48,10 @@ STARTER_ROLE_BUNDLES = {
 		ROLE_ACCOUNTS_USER,
 		"Sales User",
 	],
+	"Grooming Staff": [
+		ROLE_VETEDGE_GROOMER,
+		"Desk User",
+	],
 	"Dispensary User": [
 		ROLE_DISPENSARY_USER,
 		"Desk User",
@@ -61,6 +66,7 @@ STARTER_ROLE_BUNDLES = {
 	],
 	"Branch Manager": [
 		ROLE_BRANCH_MANAGER,
+		"VetEdge Branch Manager",
 		"Desk User",
 		ROLE_ACCOUNTS_USER,
 		"Sales User",
