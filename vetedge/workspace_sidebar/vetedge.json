@@ -36,10 +36,10 @@
    "collapsible": 1,
    "icon": "database",
    "indent": 1,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Veterinary Records",
    "link_type": "DocType",
-   "show_arrow": 0,
+   "show_arrow": 1,
    "type": "Section Break"
   },
   {
@@ -168,10 +168,10 @@
    "collapsible": 1,
    "icon": "database",
    "indent": 1,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Veterinary Masters",
    "link_type": "DocType",
-   "show_arrow": 0,
+   "show_arrow": 1,
    "type": "Section Break"
   },
   {
@@ -300,10 +300,10 @@
    "collapsible": 1,
    "icon": "sparkles",
    "indent": 1,
-   "keep_closed": 0,
-   "label": "Pet Services",
+   "keep_closed": 1,
+   "label": "Pet Grooming",
    "link_type": "DocType",
-   "show_arrow": 0,
+   "show_arrow": 1,
    "type": "Section Break"
   },
   {
@@ -348,12 +348,88 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "receipt-text",
+   "icon": "sparkles",
    "indent": 1,
+   "keep_closed": 1,
+   "label": "Pet Boarding",
+   "link_type": "DocType",
+   "show_arrow": 1,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('VetEdge Branch Manager')",
+   "icon": "hotel",
+   "indent": 0,
    "keep_closed": 0,
-   "label": "Billing",
+   "label": "Pet Boarding Booking",
+   "link_to": "Pet Boarding Booking",
    "link_type": "DocType",
    "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('VetEdge Branch Manager')",
+   "icon": "bed-single",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Pet Boarding Stay",
+   "link_to": "Pet Boarding Stay",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('VetEdge Branch Manager')",
+   "icon": "clipboard-check",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Pet Boarding Care Record",
+   "link_to": "Pet Boarding Care Record",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('VetEdge Branch Manager')",
+   "icon": "warehouse",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Kennel",
+   "link_to": "Kennel",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('VetEdge Branch Manager')",
+   "icon": "chart",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Kennel Availability Board",
+   "link_to": "kennel-availability-board",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "receipt-text",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Billing",
+   "link_type": "DocType",
+   "show_arrow": 1,
    "type": "Section Break"
   },
   {
@@ -409,10 +485,10 @@
    "collapsible": 1,
    "icon": "settings",
    "indent": 1,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Setup",
    "link_type": "DocType",
-   "show_arrow": 0,
+   "show_arrow": 1,
    "type": "Section Break"
   },
   {

@@ -871,8 +871,9 @@ function show_vitals_entry_dialog(frm) {
 			},
 			{
 				fieldname: "capillary_refill_time",
-				fieldtype: "Data",
+				fieldtype: "Select",
 				label: __("Capillary Refill Time"),
+				options: "\nLess than 2 seconds\nGreater than 2 seconds",
 			},
 			{
 				fieldname: "pain_score",

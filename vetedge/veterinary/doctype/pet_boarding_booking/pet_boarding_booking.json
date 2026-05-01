@@ -1,0 +1,279 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-05-01 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "booking_section",
+  "patient",
+  "primary_owner",
+  "service_branch",
+  "kennel",
+  "column_break_booking",
+  "check_in_date",
+  "expected_check_out_date",
+  "actual_check_out_date",
+  "status",
+  "care_section",
+  "feeding_instructions",
+  "special_notes",
+  "notes",
+  "billing_section",
+  "billing_item",
+  "daily_rate",
+  "billable_days",
+  "total_boarding_charge",
+  "column_break_billing",
+  "linked_invoice",
+  "booking_invoices",
+  "linked_stay",
+  "system_section",
+  "created_by"
+ ],
+ "fields": [
+  {
+   "default": "PBB-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PBB-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "booking_section",
+   "fieldtype": "Section Break",
+   "label": "Pet Boarding Booking"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "primary_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Owner",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kennel",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Kennel",
+   "options": "Kennel"
+  },
+  {
+   "fieldname": "column_break_booking",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "check_in_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Check In Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "expected_check_out_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expected Check Out Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "actual_check_out_date",
+   "fieldtype": "Date",
+   "label": "Actual Check Out Date"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nReserved\nChecked In\nChecked Out\nCancelled",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "care_section",
+   "fieldtype": "Section Break",
+   "label": "Boarding Care Plan"
+  },
+  {
+   "fieldname": "feeding_instructions",
+   "fieldtype": "Small Text",
+   "label": "Feeding Instructions"
+  },
+  {
+   "fieldname": "special_notes",
+   "fieldtype": "Small Text",
+   "label": "Special Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "billing_section",
+   "fieldtype": "Section Break",
+   "label": "Billing"
+  },
+  {
+   "fieldname": "billing_item",
+   "fieldtype": "Link",
+   "label": "Billing Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "daily_rate",
+   "fieldtype": "Currency",
+   "label": "Daily Rate"
+  },
+  {
+   "fieldname": "billable_days",
+   "fieldtype": "Int",
+   "label": "Billable Days",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_boarding_charge",
+   "fieldtype": "Currency",
+   "label": "Total Boarding Charge",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_billing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "linked_invoice",
+   "fieldtype": "Link",
+   "label": "Linked Invoice",
+   "no_copy": 1,
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "booking_invoices",
+   "fieldtype": "Table",
+   "label": "Booking Invoices",
+   "no_copy": 1,
+   "options": "Boarding Invoice Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_stay",
+   "fieldtype": "Link",
+   "label": "Linked Stay",
+   "no_copy": 1,
+   "options": "Pet Boarding Stay",
+   "read_only": 1
+  },
+  {
+   "fieldname": "system_section",
+   "fieldtype": "Section Break",
+   "label": "System"
+  },
+  {
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Pet Boarding Booking",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Branch Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "patient,primary_owner,service_branch,kennel,status,linked_invoice,linked_stay",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "patient"
+}

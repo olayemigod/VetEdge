@@ -7,6 +7,13 @@ import frappe
 from frappe.modules.import_file import import_file_by_path
 
 
+SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
+
+
+def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
+	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
+
+
 FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "report", "branch_performance_summary", "branch_performance_summary.json"),
 	("veterinary", "number_card", "today_revenue", "today_revenue.json"),
@@ -20,6 +27,7 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
 	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "kennel_availability_board", "kennel_availability_board.json"),
 	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),
 )
@@ -45,10 +53,17 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 
-	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
-		return
+	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 
-	frappe.get_doc(_load_standard_doc("workspace_sidebar", "vetedge.json")).insert(ignore_permissions=True)
+	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
+		sidebar.update(_prepare_standard_sidebar_update_payload(standard_doc))
+		sidebar.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(standard_doc).insert(ignore_permissions=True)
+
+	if hasattr(frappe, "cache"):
+		frappe.cache.delete_key("bootinfo")
 
 
 def ensure_vetedge_desktop_icon() -> None:

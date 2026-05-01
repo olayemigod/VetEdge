@@ -1,0 +1,283 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-05-01 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "care_record_section",
+  "stay",
+  "booking",
+  "patient",
+  "primary_owner",
+  "service_branch",
+  "column_break_context",
+  "kennel",
+  "care_datetime",
+  "care_type",
+  "record_status",
+  "recorded_by",
+  "feeding_section",
+  "feeding_status",
+  "appetite_status",
+  "food_portion_percent",
+  "water_intake_ml",
+  "column_break_feeding",
+  "walk_status",
+  "walk_duration_minutes",
+  "elimination_status",
+  "mood_status",
+  "grooming_check_status",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "PBCR-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PBCR-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "care_record_section",
+   "fieldtype": "Section Break",
+   "label": "Pet Boarding Care Record"
+  },
+  {
+   "fieldname": "stay",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stay",
+   "options": "Pet Boarding Stay",
+   "reqd": 1
+  },
+  {
+   "fieldname": "booking",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Booking",
+   "options": "Pet Boarding Booking",
+   "read_only": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "primary_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Owner",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_context",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "kennel",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Kennel",
+   "options": "Kennel",
+   "read_only": 1
+  },
+  {
+   "fieldname": "care_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Care Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "care_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Care Type",
+   "options": "Routine Check\nFeeding\nHydration\nWalk / Exercise\nElimination\nGrooming Check\nComfort / Behavior\nCheck Out Prep",
+   "reqd": 1
+  },
+  {
+   "default": "Completed",
+   "fieldname": "record_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Record Status",
+   "options": "Completed\nSkipped\nNeeds Attention",
+   "reqd": 1
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "feeding_section",
+   "fieldtype": "Section Break",
+   "label": "Structured Care Data"
+  },
+  {
+   "fieldname": "feeding_status",
+   "fieldtype": "Select",
+   "label": "Feeding Status",
+   "options": "Not Applicable\nOffered\nPartially Eaten\nFully Eaten\nDeclined"
+  },
+  {
+   "fieldname": "appetite_status",
+   "fieldtype": "Select",
+   "label": "Appetite Status",
+   "options": "Not Assessed\nPoor\nFair\nGood\nExcellent"
+  },
+  {
+   "fieldname": "food_portion_percent",
+   "fieldtype": "Percent",
+   "label": "Food Portion Consumed (%)"
+  },
+  {
+   "fieldname": "water_intake_ml",
+   "fieldtype": "Float",
+   "label": "Water Intake (ml)"
+  },
+  {
+   "fieldname": "column_break_feeding",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "walk_status",
+   "fieldtype": "Select",
+   "label": "Walk Status",
+   "options": "Not Applicable\nCompleted\nSkipped\nNeeds Attention"
+  },
+  {
+   "fieldname": "walk_duration_minutes",
+   "fieldtype": "Int",
+   "label": "Walk Duration (Minutes)"
+  },
+  {
+   "fieldname": "elimination_status",
+   "fieldtype": "Select",
+   "label": "Elimination Status",
+   "options": "Not Observed\nNormal\nUrinated Only\nDefecated Only\nUrinated and Defecated\nNeeds Attention"
+  },
+  {
+   "fieldname": "mood_status",
+   "fieldtype": "Select",
+   "label": "Mood Status",
+   "options": "Calm\nPlayful\nAnxious\nRestless\nAggressive\nLethargic\nNeeds Attention"
+  },
+  {
+   "fieldname": "grooming_check_status",
+   "fieldtype": "Select",
+   "label": "Grooming Check Status",
+   "options": "Not Applicable\nClean\nNeeds Cleaning\nNeeds Attention"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Pet Boarding Care Record",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Branch Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "stay,booking,patient,primary_owner,service_branch,kennel,care_type,record_status",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "patient"
+}

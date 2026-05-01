@@ -65,6 +65,11 @@ class VeterinarySettings(Document):
 			set_if_field_exists(self, "require_grooming_appointment", 0)
 			set_if_field_exists(self, "allow_grooming_without_consultation", 1)
 
+		if not self.get("enable_boarding"):
+			set_if_field_exists(self, "default_boarding_billing_item", None)
+			set_if_field_exists(self, "default_boarding_daily_rate", None)
+			set_if_field_exists(self, "boarding_requires_payment_before_check_in", 0)
+
 		if not self.get("enable_consultations"):
 			set_if_field_exists(self, "enable_consultation_billing", 0)
 

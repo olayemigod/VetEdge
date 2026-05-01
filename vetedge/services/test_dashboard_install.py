@@ -76,3 +76,24 @@ class TestDashboardInstall(TestCase):
 
 		frappe_stub.get_doc.assert_not_called()
 		frappe_stub.db.set_value.assert_called_once()
+
+
+	def test_ensure_vetedge_workspace_sidebar_updates_existing_sidebar(self):
+		sidebar = SimpleNamespace(update=Mock(), save=Mock())
+		exists = Mock(side_effect=lambda doctype, name: (doctype, name) in {("DocType", "Workspace Sidebar"), ("Workspace Sidebar", "VetEdge")})
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists),
+			get_doc=Mock(return_value=sidebar),
+			cache=SimpleNamespace(delete_key=Mock()),
+		)
+
+		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
+			dashboard,
+			"_load_standard_doc",
+			return_value={"doctype": "Workspace Sidebar", "name": "VetEdge", "items": [{"label": "Setup", "keep_closed": 1}]},
+		):
+			dashboard.ensure_vetedge_workspace_sidebar()
+
+		frappe_stub.get_doc.assert_called_once_with("Workspace Sidebar", "VetEdge")
+		sidebar.update.assert_called_once()
+		sidebar.save.assert_called_once_with(ignore_permissions=True)

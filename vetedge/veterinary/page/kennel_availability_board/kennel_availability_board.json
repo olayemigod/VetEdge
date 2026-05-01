@@ -1,0 +1,35 @@
+{
+ "content": null,
+ "creation": "2026-05-01 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-05-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Veterinary",
+ "name": "kennel-availability-board",
+ "owner": "Administrator",
+ "page_name": "kennel-availability-board",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Branch Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Kennel Availability Board"
+}

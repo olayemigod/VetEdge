@@ -29,38 +29,205 @@
   "notes"
  ],
  "fields": [
-  {"default": "VVS-.YYYY.-.#####", "fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "VVS-.YYYY.-.#####", "reqd": 1},
-  {"fieldname": "vitals_title", "fieldtype": "Data", "hidden": 1, "label": "Vitals Title", "no_copy": 1, "read_only": 1},
-  {"fieldname": "context_section", "fieldtype": "Section Break", "label": "Context"},
-  {"fieldname": "patient", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "reqd": 1, "search_index": 1},
-  {"fieldname": "consultation", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Consultation", "options": "Veterinary Consultation"},
-  {"fieldname": "service_branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Service Branch", "options": "Branch", "reqd": 1},
-  {"default": "Now", "fieldname": "recorded_on", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Recorded On", "no_copy": 1, "reqd": 1, "search_index": 1},
-  {"fieldname": "recorded_by", "fieldtype": "Link", "label": "Recorded By", "no_copy": 1, "options": "User", "read_only": 1},
-  {"fieldname": "metrics_section", "fieldtype": "Section Break", "label": "Vitals"},
-  {"fieldname": "temperature", "fieldtype": "Float", "label": "Temperature"},
-  {"fieldname": "weight", "fieldtype": "Float", "label": "Weight"},
-  {"fieldname": "heart_rate", "fieldtype": "Int", "label": "Heart Rate"},
-  {"fieldname": "respiratory_rate", "fieldtype": "Int", "label": "Respiratory Rate"},
-  {"fieldname": "column_break_metrics", "fieldtype": "Column Break"},
-  {"fieldname": "body_condition_score", "fieldtype": "Select", "label": "Body Condition Score", "options": "\n1\n2\n3\n4\n5\n6\n7\n8\n9"},
-  {"fieldname": "hydration_status", "fieldtype": "Select", "label": "Hydration Status", "options": "\nNormal\nMild Dehydration\nModerate Dehydration\nSevere Dehydration"},
-  {"fieldname": "mucous_membrane", "fieldtype": "Select", "label": "Mucous Membrane", "options": "\nPink\nPale\nIcteric\nCyanotic\nCongested"},
-  {"fieldname": "capillary_refill_time", "fieldtype": "Data", "label": "Capillary Refill Time"},
-  {"fieldname": "pain_score", "fieldtype": "Select", "label": "Pain Score", "options": "\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10"},
-  {"fieldname": "appetite_status", "fieldtype": "Select", "label": "Appetite Status", "options": "\nNormal\nReduced\nAbsent\nIncreased\nUnknown"},
-  {"fieldname": "notes", "fieldtype": "Text", "label": "Notes"}
+  {
+   "default": "VVS-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "VVS-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "vitals_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Vitals Title",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Context"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "consultation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Consultation",
+   "options": "Veterinary Consultation"
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "recorded_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Recorded On",
+   "no_copy": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "metrics_section",
+   "fieldtype": "Section Break",
+   "label": "Vitals"
+  },
+  {
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature"
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "label": "Weight"
+  },
+  {
+   "fieldname": "heart_rate",
+   "fieldtype": "Int",
+   "label": "Heart Rate"
+  },
+  {
+   "fieldname": "respiratory_rate",
+   "fieldtype": "Int",
+   "label": "Respiratory Rate"
+  },
+  {
+   "fieldname": "column_break_metrics",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "body_condition_score",
+   "fieldtype": "Select",
+   "label": "Body Condition Score",
+   "options": "\n1\n2\n3\n4\n5\n6\n7\n8\n9"
+  },
+  {
+   "fieldname": "hydration_status",
+   "fieldtype": "Select",
+   "label": "Hydration Status",
+   "options": "\nNormal\nMild Dehydration\nModerate Dehydration\nSevere Dehydration"
+  },
+  {
+   "fieldname": "mucous_membrane",
+   "fieldtype": "Select",
+   "label": "Mucous Membrane",
+   "options": "\nPink\nPale\nIcteric\nCyanotic\nCongested"
+  },
+  {
+   "fieldname": "capillary_refill_time",
+   "fieldtype": "Select",
+   "label": "Capillary Refill Time",
+   "options": "\nLess than 2 seconds\nGreater than 2 seconds"
+  },
+  {
+   "fieldname": "pain_score",
+   "fieldtype": "Select",
+   "label": "Pain Score",
+   "options": "\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10"
+  },
+  {
+   "fieldname": "appetite_status",
+   "fieldtype": "Select",
+   "label": "Appetite Status",
+   "options": "\nNormal\nReduced\nAbsent\nIncreased\nUnknown"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
  ],
  "module": "Veterinary",
  "name": "Veterinary Vital Signs",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
-  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1, "write": 1},
-  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Veterinary Nurse", "share": 1, "write": 1},
-  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Branch Manager", "share": 1}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Doctor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Veterinary Nurse",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1
+  }
  ],
  "search_fields": "patient,consultation,service_branch,recorded_by",
  "show_title_field_in_link": 1,

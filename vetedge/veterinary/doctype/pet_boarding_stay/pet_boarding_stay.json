@@ -1,0 +1,203 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-05-01 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "boarding_stay_title",
+  "stay_section",
+  "booking",
+  "patient",
+  "primary_owner",
+  "service_branch",
+  "column_break_stay",
+  "kennel",
+  "check_in_datetime",
+  "check_out_datetime",
+  "status",
+  "notes_section",
+  "feeding_instructions",
+  "special_notes"
+ ],
+ "fields": [
+  {
+   "default": "PBS-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PBS-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "boarding_stay_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Boarding Stay Title",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "stay_section",
+   "fieldtype": "Section Break",
+   "label": "Pet Boarding Stay"
+  },
+  {
+   "fieldname": "booking",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Booking",
+   "options": "Pet Boarding Booking"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "primary_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Owner",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_stay",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "kennel",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Kennel",
+   "options": "Kennel",
+   "reqd": 1
+  },
+  {
+   "fieldname": "check_in_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Check In Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "check_out_datetime",
+   "fieldtype": "Datetime",
+   "label": "Check Out Datetime"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nCompleted",
+   "reqd": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Care Notes"
+  },
+  {
+   "fieldname": "feeding_instructions",
+   "fieldtype": "Small Text",
+   "label": "Feeding Instructions"
+  },
+  {
+   "fieldname": "special_notes",
+   "fieldtype": "Small Text",
+   "label": "Special Notes"
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Pet Boarding Stay",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Branch Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "booking,patient,primary_owner,service_branch,kennel,status,boarding_stay_title",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "boarding_stay_title"
+}

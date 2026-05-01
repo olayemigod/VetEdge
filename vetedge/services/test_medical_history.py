@@ -203,7 +203,7 @@ def get_list_for_history(doctype, filters=None, fields=None, **kwargs):
 				body_condition_score="5",
 				hydration_status="Normal",
 				mucous_membrane="Pink",
-				capillary_refill_time="2 sec",
+				capillary_refill_time="Less than 2 seconds",
 				pain_score="1",
 				appetite_status="Reduced",
 				notes="Alert",

@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-05-01 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "kennel_availability_title",
+  "snapshot_section",
+  "snapshot_date",
+  "service_branch",
+  "kennel",
+  "column_break_snapshot",
+  "availability_status",
+  "capacity",
+  "occupied_slots",
+  "available_slots",
+  "details_section",
+  "reserved_bookings",
+  "active_stays",
+  "next_expected_release_date"
+ ],
+ "fields": [
+  {
+   "default": "KAV-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "KAV-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kennel_availability_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Kennel Availability Title",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "Kennel Availability"
+  },
+  {
+   "fieldname": "snapshot_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Snapshot Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kennel",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Kennel",
+   "options": "Kennel",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_snapshot",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "availability_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Availability Status",
+   "options": "Available\nLimited\nFull\nInactive",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "capacity",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Capacity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "occupied_slots",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Occupied Slots",
+   "read_only": 1
+  },
+  {
+   "fieldname": "available_slots",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Available Slots",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Snapshot Details"
+  },
+  {
+   "fieldname": "reserved_bookings",
+   "fieldtype": "Int",
+   "label": "Reserved Bookings",
+   "read_only": 1
+  },
+  {
+   "fieldname": "active_stays",
+   "fieldtype": "Int",
+   "label": "Active Stays",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_expected_release_date",
+   "fieldtype": "Date",
+   "label": "Next Expected Release Date",
+   "read_only": 1
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Kennel Availability",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Branch Manager",
+   "share": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "snapshot_date,service_branch,kennel,availability_status",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "kennel_availability_title"
+}
