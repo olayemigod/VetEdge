@@ -149,6 +149,7 @@ def validate_grooming_appointment(doc) -> None:
 	if not doc.status:
 		doc.status = "Scheduled"
 	validate_grooming_appointment_status(doc, previous)
+	validate_grooming_appointment_completion(doc, previous)
 	resolve_grooming_context(doc)
 	if not doc.scheduled_datetime:
 		frappe.throw("Scheduled Datetime is required for Pet Grooming Appointment.", frappe.ValidationError)
@@ -171,6 +172,32 @@ def validate_grooming_appointment_status(doc, previous=None) -> None:
 			frappe.ValidationError,
 		)
 	can_manage_grooming_appointments(get_current_user(), doc, raise_exception=True)
+
+
+def validate_grooming_appointment_completion(doc, previous=None) -> None:
+	if doc.status != "Completed":
+		return
+	if previous and previous.status == "Completed":
+		return
+	if not doc.name or str(doc.name).startswith("new-"):
+		frappe.throw(
+			"A Grooming Appointment can only be completed through a completed Pet Grooming Session.",
+			frappe.ValidationError,
+		)
+
+	completed_session = frappe.get_all(
+		GROOMING_SESSION_DOCTYPE,
+		filters={"appointment": doc.name, "status": "Completed"},
+		fields=["name"],
+		limit=1,
+	)
+	if completed_session:
+		return
+
+	frappe.throw(
+		"A Grooming Appointment can only be completed through a completed Pet Grooming Session.",
+		frappe.ValidationError,
+	)
 
 
 
@@ -439,7 +466,7 @@ def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 
 def emit_grooming_appointment_event(doc, event: str, previous_status: str | None = None) -> dict:
 	return emit_notification_event(
-		event=event,
+		event_key=event,
 		reference_doctype=GROOMING_APPOINTMENT_DOCTYPE,
 		reference_name=doc.name,
 		payload={
@@ -460,7 +487,7 @@ def emit_grooming_appointment_event(doc, event: str, previous_status: str | None
 
 def emit_grooming_session_event(doc, event: str, previous_status: str | None = None) -> dict:
 	return emit_notification_event(
-		event=event,
+		event_key=event,
 		reference_doctype=GROOMING_SESSION_DOCTYPE,
 		reference_name=doc.name,
 		payload={
@@ -624,6 +651,7 @@ def create_or_update_grooming_invoice(session: str) -> dict:
 		doc.status = get_grooming_session_workflow_status(doc)
 	doc.save(ignore_permissions=True)
 	if created and invoice_name:
+		invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 		emit_notification_event(
 			"grooming_invoice_created",
 			GROOMING_SESSION_DOCTYPE,
@@ -636,6 +664,7 @@ def create_or_update_grooming_invoice(session: str) -> dict:
 				"service_branch": doc.service_branch,
 				"grooming_service": doc.grooming_service,
 				"invoice": invoice_name,
+				"amount": invoice_doc.grand_total,
 			},
 		)
 	return {"name": doc.name, "invoice": invoice_name, "status": doc.status}

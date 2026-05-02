@@ -388,8 +388,12 @@ def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBilli
 	payload = {
 		"consultation": doc.name,
 		"invoice": invoice.name,
+		"patient": doc.patient,
+		"patient_name": frappe.db.get_value("Veterinary Patient", doc.patient, "patient_name") if doc.patient else None,
+		"primary_owner": doc.primary_owner,
 		"customer": invoice.customer,
 		"branch": doc.service_branch,
+		"amount": invoice.grand_total,
 		"requires_payment_before_treatment": settings.requires_payment_before_treatment,
 		"allow_doctor_collect_payment": settings.allow_doctor_collect_payment,
 	}
@@ -484,6 +488,8 @@ def update_single_consultation_payment_status(consultation, invoice) -> None:
 	frappe.db.set_value("Veterinary Consultation", consultation.name, values, update_modified=False)
 
 	if new_payment_status == PAID_STATUS and consultation.payment_status != PAID_STATUS:
+		if not consultation_doc:
+			consultation_doc = frappe.get_doc("Veterinary Consultation", consultation.name)
 		emit_notification_event(
 			"payment_received",
 			"Sales Invoice",
@@ -491,8 +497,14 @@ def update_single_consultation_payment_status(consultation, invoice) -> None:
 			{
 				"consultation": consultation.name,
 				"invoice": invoice.name,
+				"patient": consultation_doc.patient,
+				"patient_name": frappe.db.get_value("Veterinary Patient", consultation_doc.patient, "patient_name")
+				if consultation_doc.patient
+				else None,
+				"primary_owner": consultation_doc.primary_owner,
 				"customer": invoice.customer,
-				"branch": frappe.db.get_value("Veterinary Consultation", consultation.name, "service_branch"),
+				"branch": consultation_doc.service_branch,
+				"amount": invoice.grand_total,
 			},
 		)
 		if values.get("status") == "Pending Dispensary":

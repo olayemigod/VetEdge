@@ -1,0 +1,342 @@
+[
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Appointment Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Created for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>An appointment has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Appointment Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Practitioner</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ practitioner }}</td></tr>\n</table>\n<p>Please contact the clinic if you need to reschedule or cancel this appointment.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "appointment_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Appointment Confirmed",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Confirmed for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>Your appointment for <strong>{{ patient_name }}</strong> has been confirmed.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<p>Please arrive on time for your appointment.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "appointment_confirmed"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Appointment Rescheduled",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Rescheduled for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>Your appointment for <strong>{{ patient_name }}</strong> has been rescheduled.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>New Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "appointment_rescheduled"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Appointment Cancelled",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Cancelled for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>The appointment for <strong>{{ patient_name }}</strong> scheduled for <strong>{{ appointment_datetime }}</strong> has been cancelled.</p>\n<p>If this was unexpected, please contact the clinic.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "appointment_cancelled"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Appointment Reminder",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Reminder for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>This is a reminder that <strong>{{ patient_name }}</strong> has an upcoming appointment.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "appointment_reminder"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Guest Booking Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - New Guest Booking Request",
+    "response": "<p>A new guest booking request has been received.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Owner Name</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ owner_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Pet Name</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Preferred Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<p>Reason: {{ reason }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "guest_booking_received"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Consultation Invoice Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Invoice Created for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>An invoice has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<p>You may view or pay this invoice from your owner portal.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "consultation_invoice_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Payment Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Payment Received for {{ invoice }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>We have received payment for your invoice.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount Paid</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Pet</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "payment_received"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Payment Pending",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Payment Pending for {{ invoice }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>Payment is still pending for the following invoice:</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount Due</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Pet</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n</table>\n<p>Please complete payment to continue the service where required.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "payment_pending"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Consultation Ready for Treatment",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Consultation Ready for Treatment",
+    "response": "<p>Consultation <strong>{{ consultation }}</strong> for <strong>{{ patient_name }}</strong> is ready for treatment.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Practitioner</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ practitioner }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "consultation_ready_for_treatment"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Lab Order Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Lab Order Created for {{ patient_name }}",
+    "response": "<p>A lab order has been created.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Lab Order</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ lab_order }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Requested By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ practitioner }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "lab_order_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Lab Sample Collected",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Lab Sample Collected for {{ lab_order }}",
+    "response": "<p>Lab sample has been collected.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Lab Order</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ lab_order }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Collected By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ staff_name }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "lab_sample_collected"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Lab Result Entered",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Lab Result Entered for {{ lab_order }}",
+    "response": "<p>Lab result has been entered.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Lab Order</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ lab_order }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Entered By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ staff_name }}</td></tr>\n</table>\n<p>Doctor review may now be required.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "lab_result_entered"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Lab Result Ready for Review",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Lab Result Ready for Review",
+    "response": "<p>Lab result is ready for review.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Lab Order</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ lab_order }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "lab_result_ready_for_review"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Dispensary Request Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Dispensary Request Created",
+    "response": "<p>A dispensary request has been created.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Consultation</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ consultation }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Requested By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ practitioner }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "dispensary_request_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Dispensary Confirmed",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Dispensary Confirmed for {{ patient_name }}",
+    "response": "<p>Dispensary confirmation has been completed.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Consultation</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ consultation }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Confirmed By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ staff_name }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "dispensary_confirmed"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Stock Issue Failed",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Stock Issue Failed for {{ item }}",
+    "response": "<p>Stock issue failed.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Item</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ item }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Patient</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Reason</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ reason }}</td></tr>\n</table>\n<p>Please review stock availability and warehouse setup.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "stock_issue_failed"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Expired Stock Blocked",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Expired Stock Blocked",
+    "response": "<p>Expired stock was blocked during dispensary confirmation.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Item</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ item }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Batch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ batch_no }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Expiry Date</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ expiry_date }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Warehouse</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ warehouse }}</td></tr>\n</table>\n<p>This batch must not be dispensed.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "expired_stock_blocked"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Insufficient Non-Expired Stock",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Insufficient Valid Stock for {{ item }}",
+    "response": "<p>Insufficient non-expired stock.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Item</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ item }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Required Qty</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ required_qty }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Available Valid Qty</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ available_qty }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Warehouse</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ warehouse }}</td></tr>\n</table>\n<p>Please replenish or transfer valid stock.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "insufficient_non_expired_stock"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Vaccination Administered",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Vaccination Recorded for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>A vaccination has been recorded for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Vaccine</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ vaccine }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Administered On</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ administered_on }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Next Due Date</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ next_due_date }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "vaccination_administered"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Vaccination Due Soon",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Vaccination Due Soon for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p><strong>{{ patient_name }}</strong> has a vaccination due soon.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Vaccine</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ vaccine }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Due Date</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ next_due_date }}</td></tr>\n</table>\n<p>Please contact the clinic to schedule the vaccination.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "vaccination_due_soon"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Vaccination Overdue",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Vaccination Overdue for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p><strong>{{ patient_name }}</strong> has an overdue vaccination.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Vaccine</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ vaccine }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Due Date</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ next_due_date }}</td></tr>\n</table>\n<p>Please contact the clinic as soon as possible.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "vaccination_overdue"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Grooming Booking Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Grooming Booking Created for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>A grooming booking has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Service</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ grooming_service }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Date/Time</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ appointment_datetime }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "grooming_booking_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Grooming Completed",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Grooming Completed for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>The grooming service for <strong>{{ patient_name }}</strong> has been completed.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Service</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ grooming_service }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Completed By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ staff_name }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "grooming_completed"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Boarding Reserved",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Boarding Reserved for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>A boarding reservation has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Check-In</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ check_in_date }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Expected Check-Out</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ expected_check_out_date }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "boarding_reserved"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Boarding Checked In",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Boarding Check-In for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p><strong>{{ patient_name }}</strong> has been checked in for boarding.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Check-In</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ check_in_date }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Kennel</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ kennel }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "boarding_checked_in"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Boarding Checked Out",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Boarding Check-Out for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p><strong>{{ patient_name }}</strong> has been checked out from boarding.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Check-Out</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ actual_check_out_date }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "boarding_checked_out"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Boarding Invoice Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Boarding Invoice Created for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>A boarding invoice has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "boarding_invoice_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Owner Complaint Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - New Owner Complaint Received",
+    "response": "<p>A new owner complaint/support request has been received.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Owner</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ owner_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Pet</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Subject</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ complaint_subject }}</td></tr>\n</table>\n<p>Please review and respond.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "owner_complaint_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Invoice PDF Available",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Invoice {{ invoice }} Available",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>Your invoice is available for download.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Pet</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ patient_name }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n</table>\n<p>You can download it from your owner portal.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "invoice_pdf_available"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Registration Invoice Created",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Registration Invoice Created for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>A registration invoice has been created for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Branch</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ branch }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "registration_invoice_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Registration Payment Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Registration Payment Received for {{ patient_name }}",
+    "response": "<p>Hello {{ owner_name }},</p>\n<p>Registration payment has been received for <strong>{{ patient_name }}</strong>.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Invoice</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ invoice }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Amount Paid</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ amount }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "registration_payment_received"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Role Bundle Applied",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - VetEdge Role Bundle Applied",
+    "response": "<p>A VetEdge role bundle has been applied.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>User</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ user }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Role Bundle</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ role_bundle }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Applied By</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ applied_by }}</td></tr>\n</table>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "role_bundle_applied"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Unauthorized Action Blocked",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Unauthorized Action Blocked",
+    "response": "<p>An unauthorized action was blocked.</p>\n<table style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>User</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ user }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Action</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ action }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Record</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ record }}</td></tr>\n<tr><td style=\"padding:8px;border:1px solid #ddd;\"><strong>Reason</strong></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ reason }}</td></tr>\n</table>\n<p>Please review if this was unexpected.</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br>\nPowered by VetEdge<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "unauthorized_action_blocked"
+  }
+]

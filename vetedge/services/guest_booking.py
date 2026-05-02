@@ -93,7 +93,7 @@ def create_guest_booking_request(**values) -> dict:
 		doc.db_set("linked_appointment", appointment.name, update_modified=False)
 
 	emit_notification_event(
-		event="registration_request_received",
+		event_key="registration_request_received",
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
 		payload={
@@ -108,7 +108,7 @@ def create_guest_booking_request(**values) -> dict:
 	)
 	if doc.appointment_requested:
 		emit_notification_event(
-			event="guest_appointment_request_received",
+			event_key="guest_appointment_request_received",
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
 			payload={
@@ -175,7 +175,7 @@ def confirm_guest_registration(booking_request: str) -> dict:
 	move_awaiting_registration_appointment_to_owner_requested(request)
 
 	emit_notification_event(
-		event="registration_confirmed",
+		event_key="registration_confirmed",
 		reference_doctype=request.doctype,
 		reference_name=request.name,
 		payload={
@@ -235,7 +235,7 @@ def create_appointment_from_booking_request(booking_request: str) -> dict:
 	request.save()
 
 	emit_notification_event(
-		event="appointment_booked",
+		event_key="appointment_booked",
 		reference_doctype=appointment.doctype,
 		reference_name=appointment.name,
 		payload={
@@ -262,7 +262,7 @@ def move_awaiting_registration_appointment_to_owner_requested(request) -> object
 	appointment.status = "Owner Requested"
 	appointment.save()
 	emit_notification_event(
-		event="guest_appointment_ready_for_approval",
+		event_key="guest_appointment_ready_for_approval",
 		reference_doctype=appointment.doctype,
 		reference_name=appointment.name,
 		payload={

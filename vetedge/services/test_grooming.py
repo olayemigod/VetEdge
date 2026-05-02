@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import frappe
+
 from vetedge.services import grooming
 
 
@@ -24,6 +26,19 @@ class GroomingWorkflowStatusTestCase(unittest.TestCase):
 		doc = SimpleNamespace(status="In Progress", linked_invoice="SINV-001")
 		with patch.object(grooming, "is_grooming_billing_enabled", return_value=True):
 			self.assertEqual(grooming.get_grooming_session_workflow_status(doc), "In Progress")
+
+	def test_completed_appointment_without_completed_session_is_blocked(self):
+		doc = SimpleNamespace(name="PGAP-2026-00001", status="Completed")
+		previous = SimpleNamespace(status="In Progress")
+		with patch.object(grooming.frappe, "get_all", return_value=[]):
+			with self.assertRaises(frappe.ValidationError):
+				grooming.validate_grooming_appointment_completion(doc, previous)
+
+	def test_completed_appointment_with_completed_session_is_allowed(self):
+		doc = SimpleNamespace(name="PGAP-2026-00001", status="Completed")
+		previous = SimpleNamespace(status="In Progress")
+		with patch.object(grooming.frappe, "get_all", return_value=[{"name": "PGS-0001"}]):
+			grooming.validate_grooming_appointment_completion(doc, previous)
 
 
 if __name__ == "__main__":

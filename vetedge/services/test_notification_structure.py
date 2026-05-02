@@ -11,6 +11,7 @@ from vetedge.services.notification_events import (
 
 
 APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
+EMAIL_TEMPLATE_FIXTURE = Path("/home/olayemigod/frappe-bench/apps/vetedge/fixtures/vetedge_email_templates.json")
 
 
 class TestNotificationStructure(TestCase):
@@ -37,6 +38,23 @@ class TestNotificationStructure(TestCase):
 			"grooming_completed",
 		):
 			self.assertTrue(EMAIL_TEMPLATE_MAPPINGS.get(key))
+
+	def test_all_seeded_email_templates_are_mapped_to_events(self):
+		fixture_rows = json.loads(EMAIL_TEMPLATE_FIXTURE.read_text())
+		fixture_event_keys = {row["event_key"] for row in fixture_rows}
+		for event_key in fixture_event_keys:
+			self.assertIn(event_key, NOTIFICATION_EVENT_REGISTRY)
+			self.assertTrue(EMAIL_TEMPLATE_MAPPINGS.get(event_key))
+
+	def test_all_non_empty_registry_email_templates_exist_in_fixture(self):
+		fixture_rows = json.loads(EMAIL_TEMPLATE_FIXTURE.read_text())
+		fixture_names = {row["name"] for row in fixture_rows}
+		for event_key, template_name in EMAIL_TEMPLATE_MAPPINGS.items():
+			self.assertIn(
+				template_name,
+				fixture_names,
+				msg=f"{event_key} maps to unseeded template {template_name}",
+			)
 
 	def test_settings_fields_exist(self):
 		settings_json = json.loads(

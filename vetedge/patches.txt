@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 vetedge.patches.ensure_vetedge_workspace_sidebar
 vetedge.patches.move_follow_up_appointment_links
+vetedge.patches.sync_vetedge_email_templates

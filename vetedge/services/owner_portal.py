@@ -236,7 +236,7 @@ def create_owner_appointment_request(
 	appointment.insert(ignore_permissions=True)
 
 	emit_notification_event(
-		event="owner_appointment_request_received",
+		event_key="owner_appointment_request_received",
 		reference_doctype=appointment.doctype,
 		reference_name=appointment.name,
 		payload={
@@ -586,7 +586,7 @@ def request_owner_appointment_change(appointment: str, action: str, appointment_
 		appointment_doc.status = "Rescheduled"
 		appointment_doc.save(ignore_permissions=True)
 		emit_notification_event(
-			event="appointment_rescheduled",
+			event_key="appointment_rescheduled",
 			reference_doctype=appointment_doc.doctype,
 			reference_name=appointment_doc.name,
 			payload={

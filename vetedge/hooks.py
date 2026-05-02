@@ -259,7 +259,10 @@ doc_events = {
 scheduler_events = {
 	"hourly": [
 		"vetedge.services.notifications.send_due_appointment_reminders",
-		"vetedge.services.vaccination.emit_due_vaccination_events",
+	],
+	"daily": [
+		"vetedge.services.notifications.send_due_vaccination_notifications",
+		"vetedge.services.notifications.send_payment_pending_reminders",
 	],
 }
 

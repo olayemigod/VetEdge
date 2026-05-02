@@ -851,7 +851,11 @@ def create_boarding_invoice_doc(booking_doc) -> dict:
     booking_doc.linked_invoice = invoice.name
     sync_boarding_invoice_references(booking_doc, all_invoices)
     booking_doc.save(ignore_permissions=True)
-    emit_boarding_event(booking_doc, "boarding_invoice_created", extra={"invoice": invoice.name})
+    emit_boarding_event(
+        booking_doc,
+        "boarding_invoice_created",
+        extra={"invoice": invoice.name, "amount": invoice.grand_total},
+    )
     return {"name": booking_doc.name, "invoice": invoice.name, "created": True, "adjustment": bool(invoices)}
 
 

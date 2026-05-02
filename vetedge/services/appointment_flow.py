@@ -349,7 +349,7 @@ def emit_appointment_status_notification(appointment_doc, previous_status: str |
 
 def emit_appointment_event(appointment_doc, event: str, previous_status: str | None = None) -> dict:
 	return emit_notification_event(
-		event=event,
+		event_key=event,
 		reference_doctype="Veterinary Appointment",
 		reference_name=appointment_doc.name,
 		payload={

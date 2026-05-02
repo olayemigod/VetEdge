@@ -6,11 +6,18 @@ from unittest.mock import patch
 
 import frappe
 
+from vetedge.services.notification_backends.local_backend import LocalNotificationBackend
+from vetedge.services.notification_backends.processedge_core_backend import (
+	ProcessEdgeCoreNotificationBackend,
+)
 from vetedge.services.notifications import (
 	dispatch_notification_event,
 	emit_notification_event,
 	parse_notification_channels,
+	query_due_vaccination_notifications,
+	send_due_vaccination_notifications,
 	send_due_appointment_reminders,
+	send_payment_pending_reminders,
 )
 
 
@@ -22,6 +29,19 @@ class TestNotifications(TestCase):
 		)
 
 	def test_notification_event_returns_stubbed_queue_payload(self):
+		backend = SimpleNamespace(
+			dispatch=lambda **kwargs: [
+				{
+					"channel": "Email",
+					"recipient": "owner@example.com",
+					"audience_type": "Owner",
+					"status": "Queued",
+					"backend_mode": "local",
+					"provider_reference": "VetEdge - Appointment Created",
+					"error_message": None,
+				}
+			]
+		)
 		with (
 			patch(
 				"vetedge.services.notifications.get_notification_settings",
@@ -29,43 +49,37 @@ class TestNotifications(TestCase):
 					"enabled": True,
 					"channels": ["Email"],
 					"notify_on_appointment_create": True,
+					"notification_backend_mode": "local",
 				},
 			),
-			patch("vetedge.services.notifications.frappe.logger", return_value=SimpleNamespace(info=lambda payload: None)),
 			patch(
-				"vetedge.services.notifications.dispatch_notification_event",
-				return_value={"Email": {"queued": True, "recipients": ["owner@example.com"]}},
+				"vetedge.services.notifications.resolve_notification_recipients",
+				return_value=[
+					{
+						"identifier": "CUST-001",
+						"address": "owner@example.com",
+						"audience_type": "Owner",
+						"preference_key": "CUST-001",
+					}
+				],
 			),
+			patch("vetedge.services.notifications.get_notification_backend", return_value=backend),
+			patch("vetedge.services.notifications.frappe.logger", return_value=SimpleNamespace(info=lambda payload: None)),
 		):
 			result = emit_notification_event(
-				"appointment_created",
-				"Veterinary Appointment",
-				"VAPT-001",
-				{"patient": "VP-001"},
+				event_key="appointment_created",
+				reference_doctype="Veterinary Appointment",
+				reference_name="VAPT-001",
+				context={"patient": "VP-001"},
 			)
 
 		self.assertTrue(result["queued"])
 		self.assertEqual(result["channels"], ["Email"])
-		self.assertTrue(result["delivery"]["Email"]["queued"])
+		self.assertEqual(result["delivery"]["attempts"][0]["status"], "Queued")
 
-	def test_email_dispatch_queues_frappe_email(self):
-		sent = []
-		event_payload = {
-			"event": "invoice_created",
-			"reference_doctype": "Sales Invoice",
-			"reference_name": "SINV-001",
-			"payload": {"customer": "CUST-001", "invoice": "SINV-001"},
-		}
-
-		with (
-			patch("vetedge.services.notifications.get_email_recipients", return_value=["owner@example.com"]),
-			patch("vetedge.services.notifications.frappe.sendmail", side_effect=lambda **kwargs: sent.append(kwargs)),
-		):
-			result = dispatch_notification_event(event_payload, {"channels": ["Email"]})
-
-		self.assertTrue(result["Email"]["queued"])
-		self.assertEqual(sent[0]["recipients"], ["owner@example.com"])
-		self.assertEqual(sent[0]["reference_doctype"], "Sales Invoice")
+	def test_invalid_event_key_raises_validation_error(self):
+		with self.assertRaises(frappe.ValidationError):
+			emit_notification_event("not_a_real_event")
 
 	def test_disabled_event_does_not_queue(self):
 		with patch(
@@ -80,6 +94,163 @@ class TestNotifications(TestCase):
 
 		self.assertFalse(result["queued"])
 		self.assertEqual(result["reason"], "event_disabled")
+
+	def test_disabled_global_notifications_skip(self):
+		with patch(
+			"vetedge.services.notifications.get_notification_settings",
+			return_value={"enabled": False, "channels": ["Email"]},
+		):
+			result = emit_notification_event("appointment_created", "Veterinary Appointment", "VAPT-001")
+
+		self.assertFalse(result["queued"])
+		self.assertEqual(result["reason"], "notifications_disabled")
+
+	def test_disabled_email_channel_skips_email(self):
+		with patch(
+			"vetedge.services.notifications.get_notification_settings",
+			return_value={"enabled": True, "channels": ["SMS"], "notify_on_appointment_create": True},
+		):
+			result = emit_notification_event("appointment_created", "Veterinary Appointment", "VAPT-001")
+
+		self.assertFalse(result["queued"])
+		self.assertEqual(result["reason"], "no_channels_configured")
+
+	def test_preference_disables_channel(self):
+		backend = SimpleNamespace(dispatch=lambda **kwargs: [])
+		with (
+			patch(
+				"vetedge.services.notifications.resolve_notification_recipients",
+				return_value=[
+					{
+						"identifier": "CUST-001",
+						"address": "owner@example.com",
+						"audience_type": "Owner",
+						"preference_key": "CUST-001",
+					}
+				],
+			),
+			patch(
+				"vetedge.services.notifications.get_notification_settings",
+				return_value={
+					"enabled": True,
+					"channels": ["Email"],
+					"notify_on_appointment_create": True,
+					"notification_backend_mode": "local",
+				},
+			),
+			patch(
+				"vetedge.services.notifications.get_notification_preference",
+				return_value={"email_enabled": 0, "sms_enabled": 0, "whatsapp_enabled": 0},
+			),
+			patch("vetedge.services.notifications.get_notification_backend", return_value=backend),
+		):
+			result = emit_notification_event("appointment_created", "Veterinary Appointment", "VAPT-001")
+
+		self.assertFalse(result["queued"])
+		self.assertEqual(result["delivery"]["attempts"][0]["status"], "Skipped")
+
+	def test_local_backend_uses_email_template_mapping(self):
+		sent = []
+		backend = LocalNotificationBackend()
+		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
+		with (
+			patch("vetedge.services.notification_backends.local_backend.frappe.db.exists", return_value=True),
+			patch(
+				"vetedge.services.notification_backends.local_backend.frappe.get_doc",
+				return_value=SimpleNamespace(
+					get_formatted_subject=lambda context: "Payment Received",
+					get_formatted_response=lambda context: "<p>Paid</p>",
+				),
+			),
+			patch(
+				"vetedge.services.notification_backends.local_backend.frappe.sendmail",
+				side_effect=lambda **kwargs: sent.append(kwargs),
+			),
+		):
+			result = backend.dispatch(
+				event_definition=event_definition,
+				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
+				channels=["Email"],
+				context={"clinic_name": "VetEdge"},
+				settings={},
+				reference_doctype="Sales Invoice",
+				reference_name="SINV-001",
+			)
+
+		self.assertEqual(result[0]["provider_reference"], "VetEdge - Payment Received")
+		self.assertEqual(sent[0]["subject"], "Payment Received")
+		self.assertTrue(sent[0]["raw_html"])
+
+	def test_missing_template_fallback_works(self):
+		sent = []
+		backend = LocalNotificationBackend()
+		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
+		with (
+			patch("vetedge.services.notification_backends.local_backend.frappe.db.exists", return_value=False),
+			patch(
+				"vetedge.services.notification_backends.local_backend.frappe.sendmail",
+				side_effect=lambda **kwargs: sent.append(kwargs),
+			),
+		):
+			result = backend.dispatch(
+				event_definition=event_definition,
+				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
+				channels=["Email"],
+				context={"clinic_name": "VetEdge", "notes": "sensitive"},
+				settings={},
+				reference_doctype="Sales Invoice",
+				reference_name="SINV-001",
+			)
+
+		self.assertIsNone(result[0]["provider_reference"])
+		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
+
+	def test_blank_rendered_template_falls_back_to_generated_email(self):
+		sent = []
+		backend = LocalNotificationBackend()
+		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
+		with (
+			patch("vetedge.services.notification_backends.local_backend.frappe.db.exists", return_value=True),
+			patch(
+				"vetedge.services.notification_backends.local_backend.frappe.get_doc",
+				return_value=SimpleNamespace(
+					get_formatted_subject=lambda context: "",
+					get_formatted_response=lambda context: "",
+				),
+			),
+			patch(
+				"vetedge.services.notification_backends.local_backend.frappe.sendmail",
+				side_effect=lambda **kwargs: sent.append(kwargs),
+			),
+		):
+			result = backend.dispatch(
+				event_definition=event_definition,
+				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
+				channels=["Email"],
+				context={"clinic_name": "VetEdge", "invoice": "SINV-001"},
+				settings={},
+				reference_doctype="Sales Invoice",
+				reference_name="SINV-001",
+			)
+
+		self.assertIsNone(result[0]["provider_reference"])
+		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
+		self.assertIn("SINV-001", sent[0]["message"])
+
+	def test_processedge_core_mode_returns_pending_safely(self):
+		backend = ProcessEdgeCoreNotificationBackend()
+		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
+		result = backend.dispatch(
+			event_definition=event_definition,
+			recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
+			channels=["Email"],
+			context={"clinic_name": "VetEdge"},
+			settings={"processedge_core_notification_endpoint": None, "processedge_core_notification_api_key": None},
+			reference_doctype="Sales Invoice",
+			reference_name="SINV-001",
+		)
+		self.assertEqual(result[0]["backend_mode"], "processedge_core")
+		self.assertEqual(result[0]["status"], "Skipped")
 
 	def test_due_reminders_emit_stub_and_mark_sent(self):
 		set_values = []
@@ -122,3 +293,42 @@ class TestNotifications(TestCase):
 
 		self.assertEqual(results, [{"queued": True}])
 		self.assertEqual(set_values[0][0][0], "Veterinary Appointment")
+
+	def test_vaccination_due_window_logic(self):
+		rows = [
+			frappe._dict(name="VACC-1", next_due_date="2026-04-20", patient="VP-1", primary_owner="CUST-1", vaccine="Rabies", service_branch="Main"),
+			frappe._dict(name="VACC-2", next_due_date="2026-04-18", patient="VP-2", primary_owner="CUST-2", vaccine="Booster", service_branch="Main"),
+			frappe._dict(name="VACC-3", next_due_date="2026-05-10", patient="VP-3", primary_owner="CUST-3", vaccine="Booster", service_branch="Main"),
+		]
+		with (
+			patch("vetedge.services.notifications.frappe.get_all", return_value=rows),
+			patch("vetedge.services.notifications.getdate", side_effect=lambda value=None: frappe.utils.getdate("2026-04-19" if value is None else value)),
+			patch("vetedge.services.notifications.add_days", side_effect=lambda date_obj, days: frappe.utils.add_days(date_obj, days)),
+		):
+			result = query_due_vaccination_notifications(due_soon_days=7)
+
+		self.assertEqual(len(result), 2)
+		self.assertEqual(result[0]["due_state"], "Due Soon")
+		self.assertEqual(result[1]["due_state"], "Overdue")
+
+	def test_payment_reminder_outstanding_invoice_logic(self):
+		with (
+			patch(
+				"vetedge.services.notifications.get_notification_settings",
+				return_value={"enabled": True, "payment_reminder_days": 3, "channels": ["Email"], "notify_on_payment_received": True},
+			),
+			patch(
+				"vetedge.services.notifications.frappe.get_all",
+				return_value=[
+					frappe._dict(name="SINV-1", customer="CUST-1", outstanding_amount=500, due_date="2026-04-19", branch="Main"),
+					frappe._dict(name="SINV-2", customer="CUST-2", outstanding_amount=300, due_date="2026-05-30", branch="Main"),
+				],
+			),
+			patch("vetedge.services.notifications.already_notified_recently", return_value=False),
+			patch("vetedge.services.notifications.emit_notification_event", side_effect=lambda **kwargs: {"queued": True, "reference_name": kwargs["reference_name"]}),
+			patch("vetedge.services.notifications.getdate", side_effect=lambda value=None: frappe.utils.getdate("2026-04-19" if value is None else value)),
+			patch("vetedge.services.notifications.add_days", side_effect=lambda date_obj, days: frappe.utils.add_days(date_obj, days)),
+		):
+			result = send_payment_pending_reminders()
+
+		self.assertEqual(len(result), 1)

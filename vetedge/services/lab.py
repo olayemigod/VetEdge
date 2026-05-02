@@ -566,6 +566,7 @@ def create_lab_order_invoice(lab_order: str) -> dict:
 			"customer": order.primary_owner,
 			"branch": order.service_branch,
 			"lab_order": order.name,
+			"amount": invoice.grand_total,
 		},
 	)
 	return {"lab_order": order.name, "invoice": invoice.name}

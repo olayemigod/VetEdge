@@ -54,7 +54,7 @@ def initiate_payment(
 	result = normalize_payment_response(response, context)
 
 	emit_notification_event(
-		event="payment_initiated",
+		event_key="payment_initiated",
 		reference_doctype="Sales Invoice",
 		reference_name=invoice.name,
 		payload={

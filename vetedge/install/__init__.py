@@ -6,6 +6,7 @@ from vetedge.install.custom_fields import ensure_custom_fields
 from vetedge.install.dashboard import ensure_financial_dashboard
 from vetedge.install.print_formats import ensure_print_formats
 from vetedge.seed.master_data import seed_master_data
+from vetedge.setup.email_templates import sync_vetedge_email_templates
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
 from vetedge.services.portal_access import normalize_owner_portal_users
 from vetedge.services.role_bundles import (
@@ -32,6 +33,7 @@ def setup_foundation() -> None:
 	normalize_owner_portal_users()
 	ensure_print_formats()
 	seed_master_data()
+	sync_vetedge_email_templates()
 	ensure_financial_dashboard()
 
 
