@@ -26,6 +26,11 @@ class VeterinarySettings(Document):
 					"allow_owner_reschedule_appointment",
 					"enable_portal_payments",
 					"enable_notifications",
+					"enable_email_notifications",
+					"enable_sms_notifications",
+					"enable_whatsapp_notifications",
+					"notification_backend_mode",
+					"processedge_core_notifications_enabled",
 					"notify_on_appointment_create",
 					"notify_on_appointment_status_change",
 					"notify_on_appointment_reminder",
@@ -35,6 +40,9 @@ class VeterinarySettings(Document):
 					"notify_on_guest_appointment_request",
 					"notify_on_reschedule",
 					"notify_on_cancellation",
+					"appointment_reminder_hours",
+					"vaccination_due_reminder_days",
+					"payment_reminder_days",
 					"enable_treatment_billing",
 					"enable_dispensary_flow",
 					"enforce_strict_expiry_control",
@@ -81,6 +89,9 @@ class VeterinarySettings(Document):
 			clear_fields(
 				self,
 				[
+					"enable_email_notifications",
+					"enable_sms_notifications",
+					"enable_whatsapp_notifications",
 					"notify_on_appointment_create",
 					"notify_on_appointment_status_change",
 					"notify_on_appointment_reminder",
@@ -93,9 +104,39 @@ class VeterinarySettings(Document):
 					"notify_on_invoice_created",
 					"notify_on_payment_received",
 					"notify_on_accounts_action_required",
+					"processedge_core_notifications_enabled",
 				],
 			)
 			set_if_field_exists(self, "notification_channels", None)
+			set_if_field_exists(self, "notification_backend_mode", "local")
+			set_if_field_exists(self, "processedge_core_notification_endpoint", None)
+			set_if_field_exists(self, "processedge_core_notification_api_key", None)
+
+		if self.get("enable_notifications"):
+			if self.meta.has_field("appointment_reminder_hours") and self.get("appointment_reminder_hours"):
+				set_if_field_exists(self, "appointment_reminder_hours_before", self.get("appointment_reminder_hours"))
+			elif self.meta.has_field("appointment_reminder_hours_before") and self.get("appointment_reminder_hours_before"):
+				set_if_field_exists(self, "appointment_reminder_hours", self.get("appointment_reminder_hours_before"))
+
+			if any(
+				self.get(fieldname)
+				for fieldname in ("enable_email_notifications", "enable_sms_notifications", "enable_whatsapp_notifications")
+			):
+				primary_channel = None
+				if self.get("enable_email_notifications"):
+					primary_channel = "Email"
+				elif self.get("enable_sms_notifications"):
+					primary_channel = "SMS"
+				elif self.get("enable_whatsapp_notifications"):
+					primary_channel = "WhatsApp"
+				set_if_field_exists(self, "notification_channels", primary_channel)
+			elif self.get("notification_channels"):
+				set_if_field_exists(self, "enable_email_notifications", self.get("notification_channels") == "Email")
+				set_if_field_exists(self, "enable_sms_notifications", self.get("notification_channels") == "SMS")
+				set_if_field_exists(self, "enable_whatsapp_notifications", self.get("notification_channels") == "WhatsApp")
+
+			if self.meta.has_field("notification_backend_mode") and not self.get("notification_backend_mode"):
+				self.set("notification_backend_mode", "local")
 
 		if not self.get("enable_dispensary_flow"):
 			set_if_field_exists(self, "enforce_strict_expiry_control", 1)

@@ -886,6 +886,45 @@
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
+   "icon": "bell-ring",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "VetEdge Notification Event Registry",
+   "link_to": "VetEdge Notification Event Registry",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
+   "icon": "logs",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "VetEdge Notification Log",
+   "link_to": "VetEdge Notification Log",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
+   "icon": "user-cog",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "VetEdge Notification Preference",
+   "link_to": "VetEdge Notification Preference",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
   }
  ],
  "modified": "2026-04-18 00:00:00.000000",

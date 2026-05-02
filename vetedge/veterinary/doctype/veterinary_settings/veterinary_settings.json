@@ -82,6 +82,13 @@
   "notifications_tab",
   "notifications_section",
   "enable_notifications",
+  "enable_email_notifications",
+  "enable_sms_notifications",
+  "enable_whatsapp_notifications",
+  "notification_backend_mode",
+  "processedge_core_notifications_enabled",
+  "processedge_core_notification_endpoint",
+  "processedge_core_notification_api_key",
   "notify_on_appointment_create",
   "notify_on_appointment_status_change",
   "notify_on_appointment_reminder",
@@ -97,7 +104,10 @@
   "notify_on_accounts_action_required",
   "notify_on_lab_updates",
   "notification_channels",
+  "appointment_reminder_hours",
   "appointment_reminder_hours_before",
+  "vaccination_due_reminder_days",
+  "payment_reminder_days",
   "admin_controls_tab",
   "demo_data_section",
   "enable_demo_tools",
@@ -610,6 +620,54 @@
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "enable_email_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Email Notifications"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "enable_sms_notifications",
+   "fieldtype": "Check",
+   "label": "Enable SMS Notifications"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "enable_whatsapp_notifications",
+   "fieldtype": "Check",
+   "label": "Enable WhatsApp Notifications"
+  },
+  {
+   "default": "local",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "notification_backend_mode",
+   "fieldtype": "Select",
+   "label": "Notification Backend Mode",
+   "options": "local\nprocessedge_core"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
+   "fieldname": "processedge_core_notifications_enabled",
+   "fieldtype": "Check",
+   "label": "Enable ProcessEdge Core Notifications"
+  },
+  {
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
+   "fieldname": "processedge_core_notification_endpoint",
+   "fieldtype": "Data",
+   "label": "ProcessEdge Core Notification Endpoint"
+  },
+  {
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
+   "fieldname": "processedge_core_notification_api_key",
+   "fieldtype": "Password",
+   "label": "ProcessEdge Core Notification API Key"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_appointment_create",
    "fieldtype": "Check",
    "label": "Notify on Appointment Create"
@@ -707,15 +765,38 @@
    "description": "Select the primary notification channel for the foundation phase. Multi-channel routing can move to a child table when providers are added.",
    "fieldname": "notification_channels",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Notification Channel",
    "options": "\nEmail\nSMS\nWhatsApp"
   },
   {
    "default": "24",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
+   "fieldname": "appointment_reminder_hours",
+   "fieldtype": "Int",
+   "label": "Appointment Reminder Hours"
+  },
+  {
+   "default": "24",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
    "fieldname": "appointment_reminder_hours_before",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Appointment Reminder Hours Before"
+  },
+  {
+   "default": "7",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "vaccination_due_reminder_days",
+   "fieldtype": "Int",
+   "label": "Vaccination Due Reminder Days"
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "payment_reminder_days",
+   "fieldtype": "Int",
+   "label": "Payment Reminder Days"
   },
   {
    "fieldname": "admin_controls_tab",

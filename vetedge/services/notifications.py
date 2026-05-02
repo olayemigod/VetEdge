@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+
 import frappe
 from frappe.utils import escape_html
 from frappe.utils import add_to_date, now_datetime
 
 from vetedge.services.branding import get_clinic_brand_name
+from vetedge.services.notification_events import get_notification_event_definition
 
 
 SUPPORTED_CHANNELS = {"Email", "SMS", "WhatsApp"}
@@ -159,6 +162,7 @@ def emit_notification_event(
 		"reference_doctype": reference_doctype,
 		"reference_name": reference_name,
 		"channels": settings["channels"],
+		"backend_mode": settings.get("notification_backend_mode", "local"),
 		"payload": payload or {},
 	}
 	delivery = dispatch_notification_event(event_payload, settings)
@@ -182,12 +186,36 @@ def dispatch_notification_event(event_payload: dict, settings: dict | None = Non
 				reference_name=event_payload["reference_name"],
 			)
 			delivery["Email"] = {"queued": True, "recipients": recipients}
+			for recipient in recipients:
+				log_notification_attempt(
+					event_payload=event_payload,
+					channel="Email",
+					recipient=recipient,
+					status="Queued",
+					settings=settings,
+				)
 		else:
 			delivery["Email"] = {"queued": False, "reason": "no_recipients", "recipients": []}
+			log_notification_attempt(
+				event_payload=event_payload,
+				channel="Email",
+				recipient=None,
+				status="Skipped",
+				error_message="No recipients resolved for the notification event.",
+				settings=settings,
+			)
 
 	for channel in settings.get("channels", []):
 		if channel != "Email":
 			delivery[channel] = {"queued": False, "reason": "provider_not_configured"}
+			log_notification_attempt(
+				event_payload=event_payload,
+				channel=channel,
+				recipient=None,
+				status="Skipped",
+				error_message="Provider routing is not configured yet for this channel.",
+				settings=settings,
+			)
 
 	return delivery
 
@@ -297,14 +325,38 @@ def get_notification_settings() -> dict:
 	meta = frappe.get_meta("Veterinary Settings")
 
 	enabled = bool(getattr(settings, "enable_vetedge", 0) and getattr(settings, "enable_notifications", 0))
-	channels = parse_notification_channels(
-		settings.get("notification_channels") if meta.has_field("notification_channels") else None
-	)
+	channels = resolve_notification_channels(settings, meta)
 
 	result = {
 		"enabled": enabled,
 		"channels": channels,
+		"enable_email_notifications": "Email" in channels,
+		"enable_sms_notifications": "SMS" in channels,
+		"enable_whatsapp_notifications": "WhatsApp" in channels,
+		"notification_backend_mode": settings.get("notification_backend_mode")
+		if meta.has_field("notification_backend_mode")
+		else "local",
+		"processedge_core_notifications_enabled": settings.get("processedge_core_notifications_enabled")
+		if meta.has_field("processedge_core_notifications_enabled")
+		else 0,
+		"processedge_core_notification_endpoint": settings.get("processedge_core_notification_endpoint")
+		if meta.has_field("processedge_core_notification_endpoint")
+		else None,
+		"processedge_core_notification_api_key": settings.get("processedge_core_notification_api_key")
+		if meta.has_field("processedge_core_notification_api_key")
+		else None,
+		"appointment_reminder_hours": settings.get("appointment_reminder_hours")
+		if meta.has_field("appointment_reminder_hours")
+		else settings.get("appointment_reminder_hours_before")
+		if meta.has_field("appointment_reminder_hours_before")
+		else 24,
 		"appointment_reminder_hours_before": 24,
+		"vaccination_due_reminder_days": settings.get("vaccination_due_reminder_days")
+		if meta.has_field("vaccination_due_reminder_days")
+		else 7,
+		"payment_reminder_days": settings.get("payment_reminder_days")
+		if meta.has_field("payment_reminder_days")
+		else 3,
 		"notify_on_appointment_create": False,
 		"notify_on_appointment_status_change": False,
 		"notify_on_appointment_reminder": False,
@@ -326,6 +378,9 @@ def get_notification_settings() -> dict:
 		if meta.has_field(fieldname):
 			result[fieldname] = settings.get(fieldname)
 
+	if meta.has_field("appointment_reminder_hours") and result.get("appointment_reminder_hours"):
+		result["appointment_reminder_hours_before"] = result["appointment_reminder_hours"]
+
 	return result
 
 
@@ -333,7 +388,17 @@ def default_notification_settings() -> dict:
 	return {
 		"enabled": False,
 		"channels": [],
+		"enable_email_notifications": False,
+		"enable_sms_notifications": False,
+		"enable_whatsapp_notifications": False,
+		"notification_backend_mode": "local",
+		"processedge_core_notifications_enabled": 0,
+		"processedge_core_notification_endpoint": None,
+		"processedge_core_notification_api_key": None,
+		"appointment_reminder_hours": 24,
 		"appointment_reminder_hours_before": 24,
+		"vaccination_due_reminder_days": 7,
+		"payment_reminder_days": 3,
 		"notify_on_appointment_create": False,
 		"notify_on_appointment_status_change": False,
 		"notify_on_appointment_reminder": False,
@@ -362,6 +427,71 @@ def parse_notification_channels(value: str | None) -> list[str]:
 	return channels
 
 
+def resolve_notification_channels(settings, meta) -> list[str]:
+	channels = []
+	for fieldname, channel in (
+		("enable_email_notifications", "Email"),
+		("enable_sms_notifications", "SMS"),
+		("enable_whatsapp_notifications", "WhatsApp"),
+	):
+		if meta.has_field(fieldname) and settings.get(fieldname):
+			channels.append(channel)
+	if channels:
+		return channels
+
+	return parse_notification_channels(
+		settings.get("notification_channels") if meta.has_field("notification_channels") else None
+	)
+
+
+def log_notification_attempt(
+	event_payload: dict,
+	channel: str,
+	recipient: str | None,
+	status: str,
+	settings: dict | None = None,
+	error_message: str | None = None,
+) -> None:
+	try:
+		if not frappe.db.exists("DocType", "VetEdge Notification Log"):
+			return
+		event_definition = get_notification_event_definition(event_payload["event"])
+		doc = frappe.get_doc(
+			{
+				"doctype": "VetEdge Notification Log",
+				"event_key": event_payload["event"],
+				"channel": channel,
+				"recipient": recipient,
+				"audience_type": event_definition.audience if event_definition else None,
+				"reference_doctype": event_payload.get("reference_doctype"),
+				"reference_name": event_payload.get("reference_name"),
+				"status": status,
+				"backend_mode": (settings or {}).get("notification_backend_mode")
+				or event_payload.get("backend_mode")
+				or "local",
+				"error_message": error_message,
+				"created_on": now_datetime(),
+				"sent_on": now_datetime() if status == "Sent" else None,
+				"payload_preview": build_payload_preview(event_payload.get("payload") or {}),
+			}
+		)
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		pass
+
+
+def build_payload_preview(payload: dict) -> str:
+	if not payload:
+		return ""
+
+	preview = {}
+	for key, value in payload.items():
+		if any(marker in key.lower() for marker in ("note", "notes", "medical", "diagnosis")):
+			continue
+		preview[key] = value
+	return json.dumps(preview, default=str, ensure_ascii=True)[:1400]
+
+
 def is_event_enabled(event: str, settings: dict) -> bool:
 	setting_field = EVENT_SETTING_FIELDS.get(event)
 	if not setting_field:
@@ -375,7 +505,9 @@ def send_due_appointment_reminders() -> list[dict]:
 	if not settings["enabled"] or not settings.get("notify_on_appointment_reminder"):
 		return []
 
-	cutoff = add_to_date(now_datetime(), hours=int(settings.get("appointment_reminder_hours_before") or 24))
+	cutoff = add_to_date(
+		now_datetime(), hours=int(settings.get("appointment_reminder_hours") or settings.get("appointment_reminder_hours_before") or 24)
+	)
 	appointments = frappe.get_all(
 		"Veterinary Appointment",
 		filters={
