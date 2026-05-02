@@ -1,0 +1,34 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Grooming Report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Pet Grooming Session",
+ "report_name": "Grooming Report",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Branch Manager"
+  },
+  {
+   "role": "VetEdge Groomer"
+  }
+ ]
+}

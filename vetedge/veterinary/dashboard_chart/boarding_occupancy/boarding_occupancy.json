@@ -1,0 +1,18 @@
+{
+ "chart_name": "Boarding Occupancy",
+ "chart_type": "Report",
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\": \"boarding_occupancy\"}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Veterinary",
+ "name": "Boarding Occupancy",
+ "owner": "Administrator",
+ "report_name": "Boarding Report",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 1,
+ "y_axis": []
+}

@@ -1,0 +1,42 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Veterinary",
+ "name": "vetedge-lab-dashboard",
+ "owner": "Administrator",
+ "page_name": "vetedge-lab-dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "VetEdge Nurse"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Branch Manager"
+  },
+  {
+   "role": "Lab Technician"
+  },
+  {
+   "role": "VetEdge Lab Technician"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Lab Dashboard"
+}

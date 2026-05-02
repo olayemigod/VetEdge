@@ -1,0 +1,18 @@
+{
+ "chart_name": "Daily Revenue",
+ "chart_type": "Report",
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\": \"daily_revenue\"}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Veterinary",
+ "name": "Daily Revenue",
+ "owner": "Administrator",
+ "report_name": "Revenue Summary",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Line",
+ "use_report_chart": 1,
+ "y_axis": []
+}

@@ -1,0 +1,37 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Vaccination Report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Veterinary Vaccination Record",
+ "report_name": "Vaccination Report",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "VetEdge Nurse"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Branch Manager"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Veterinary",
+ "name": "vetedge-vaccination-dashboard",
+ "owner": "Administrator",
+ "page_name": "vetedge-vaccination-dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "VetEdge Nurse"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Branch Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Vaccination Dashboard"
+}

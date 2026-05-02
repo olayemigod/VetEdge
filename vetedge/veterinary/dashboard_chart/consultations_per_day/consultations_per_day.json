@@ -1,0 +1,18 @@
+{
+ "chart_name": "Consultations per Day",
+ "chart_type": "Report",
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\": \"consultations_per_day\"}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Veterinary",
+ "name": "Consultations per Day",
+ "owner": "Administrator",
+ "report_name": "Consultation Register",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Line",
+ "use_report_chart": 1,
+ "y_axis": []
+}

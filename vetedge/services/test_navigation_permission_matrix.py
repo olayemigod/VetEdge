@@ -99,10 +99,9 @@ class TestNavigationPermissionMatrix(TestCase):
 			{
 				"System Manager",
 				"VetEdge Administrator",
-				"VetEdge Doctor",
-				"VetEdge Front Desk",
-				"Dispensary User",
 				"Branch Manager",
+				"VetEdge Branch Manager",
+				"VetEdge Accounts/Cashier",
 				"Accounts/Cashier",
 				"Accounts Manager",
 				"Sales Manager",
@@ -117,9 +116,9 @@ class TestNavigationPermissionMatrix(TestCase):
 			if item.get("display_depends_on")
 		}
 
-		self.assertIn("VetEdge Dispensary User", display_rules["Veterinary Financial Dashboard"])
-		self.assertIn("VetEdge Branch Manager", display_rules["Veterinary Financial Dashboard"])
-		self.assertIn("VetEdge Accounts/Cashier", display_rules["Veterinary Financial Dashboard"])
+		self.assertIn("VetEdge Branch Manager", display_rules["Financial Dashboard"])
+		self.assertIn("VetEdge Accounts/Cashier", display_rules["Financial Dashboard"])
+		self.assertNotIn("VetEdge Front Desk", display_rules["Financial Dashboard"])
 		self.assertIn("VetEdge Lab Technician", display_rules["Veterinary Lab Order"])
 		self.assertIn("VetEdge Branch Manager", display_rules["Veterinary Lab Order"])
 		self.assertIn("VetEdge Lab Technician", display_rules["Veterinary Lab Test"])

@@ -55,7 +55,7 @@
   {"fieldname": "service_branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Service Branch", "options": "Branch", "reqd": 1},
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
   {"fieldname": "column_break_patient", "fieldtype": "Column Break"},
-  {"fieldname": "consulting_practitioner", "fieldtype": "Link", "label": "Consulting Practitioner User", "options": "User"},
+  {"fieldname": "consulting_practitioner", "fieldtype": "Link", "label": "Consulting Practitioner User", "options": "User", "reqd": 1},
   {"fetch_from": "consulting_practitioner.full_name", "fieldname": "consulting_practitioner_name", "fieldtype": "Data", "in_list_view": 1, "label": "Consulting Practitioner", "read_only": 1},
   {"description": "Optional. The appointment being served by this consultation. Only Confirmed or Checked In appointments can start a consultation.", "fieldname": "linked_appointment", "fieldtype": "Link", "label": "Service Appointment", "no_copy": 1, "options": "Veterinary Appointment"},
   {"description": "System-filled when a follow-up appointment is created from this consultation.", "fieldname": "follow_up_appointment", "fieldtype": "Link", "label": "Follow-up Appointment", "no_copy": 1, "options": "Veterinary Appointment", "read_only": 1},

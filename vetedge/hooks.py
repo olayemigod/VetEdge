@@ -34,6 +34,8 @@ portal_menu_items = [
 # app_include_css = "/assets/vetedge/css/vetedge.css"
 app_include_js = [
 	"/assets/vetedge/js/invoice_summary_dialog.js",
+	"/assets/vetedge/js/report_pdf_patch.js",
+	"/assets/vetedge/js/report_visibility.js",
 ]
 
 # include js, css files in header of web template
@@ -157,6 +159,7 @@ has_permission = {
 
 doc_events = {
 	"Sales Invoice": {
+		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_invoice_branch",
 		"on_update": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
@@ -197,7 +200,56 @@ doc_events = {
 		],
 	},
 	"Stock Entry": {
+		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_stock_entry_branch",
 		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",
+	},
+	"Veterinary Consultation": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Veterinary Lab Order": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Veterinary Vaccination Record": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Veterinary Appointment": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Pet Grooming Appointment": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Pet Grooming Session": {
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Pet Boarding Booking": {
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Pet Boarding Stay": {
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Pet Boarding Care Record": {
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Kennel": {
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
 	},
 }
 

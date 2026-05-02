@@ -1,0 +1,18 @@
+{
+ "chart_name": "Vaccinations Due",
+ "chart_type": "Report",
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\": \"vaccinations_due\"}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Veterinary",
+ "name": "Vaccinations Due",
+ "owner": "Administrator",
+ "report_name": "Vaccination Report",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 1,
+ "y_axis": []
+}

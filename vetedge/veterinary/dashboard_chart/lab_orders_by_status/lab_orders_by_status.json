@@ -1,0 +1,18 @@
+{
+ "chart_name": "Lab Orders by Status",
+ "chart_type": "Report",
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{\"chart\": \"lab_orders_by_status\"}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Veterinary",
+ "name": "Lab Orders by Status",
+ "owner": "Administrator",
+ "report_name": "Lab Order Report",
+ "roles": [],
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 1,
+ "y_axis": []
+}

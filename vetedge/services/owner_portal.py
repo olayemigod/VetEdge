@@ -482,7 +482,9 @@ def download_owner_invoice_pdf(invoice_name: str, print_format: str | None = Non
 
 	frappe.local.response.filename = f"{invoice_name}.pdf"
 	frappe.local.response.filecontent = pdf_content
-	frappe.local.response.type = "pdf"
+	frappe.local.response.content_type = "application/pdf"
+	frappe.local.response.display_content_as = "attachment"
+	frappe.local.response.type = "download"
 
 
 def generate_owner_invoice_pdf(invoice_name: str, print_format: str) -> bytes:

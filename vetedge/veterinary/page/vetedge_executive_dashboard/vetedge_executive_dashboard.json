@@ -1,0 +1,21 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Veterinary",
+ "name": "vetedge-executive-dashboard",
+ "owner": "Administrator",
+ "page_name": "vetedge-executive-dashboard",
+ "roles": [
+ {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "VetEdge Executive Dashboard"
+}

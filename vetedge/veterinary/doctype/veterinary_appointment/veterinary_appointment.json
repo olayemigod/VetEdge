@@ -40,7 +40,7 @@
   {"fieldname": "primary_owner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Primary Owner", "options": "Customer", "read_only": 1},
   {"fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Branch", "options": "Branch", "reqd": 1},
   {"fieldname": "column_break_patient", "fieldtype": "Column Break"},
-  {"fieldname": "practitioner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Practitioner User", "options": "User"},
+  {"fieldname": "practitioner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Practitioner User", "mandatory_depends_on": "eval:!['Awaiting Registration', 'Owner Requested'].includes(doc.status)", "options": "User"},
   {"fetch_from": "practitioner.full_name", "fieldname": "practitioner_name", "fieldtype": "Data", "in_list_view": 1, "label": "Practitioner", "read_only": 1},
   {"fieldname": "appointment_type", "fieldtype": "Select", "label": "Appointment Type", "options": "\nConsultation\nFollow Up\nVaccination\nGrooming\nBoarding\nOther"},
   {"fieldname": "source_section", "fieldtype": "Section Break", "label": "Consultation Links"},

@@ -128,7 +128,9 @@ class TestOwnerPortal(TestCase):
 		self.assertEqual(print_calls[0][1]["letterhead"], "Clinic Letterhead")
 		self.assertEqual(response.filename, "SINV-001.pdf")
 		self.assertEqual(response.filecontent, b"PDF")
-		self.assertEqual(response.type, "pdf")
+		self.assertEqual(response.content_type, "application/pdf")
+		self.assertEqual(response.display_content_as, "attachment")
+		self.assertEqual(response.type, "download")
 
 	def test_owner_cannot_download_unowned_invoice_pdf(self):
 		frappe_stub = make_frappe_stub(

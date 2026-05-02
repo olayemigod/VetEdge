@@ -108,7 +108,8 @@
    "fieldname": "groomer",
    "fieldtype": "Link",
    "label": "Groomer",
-   "options": "User"
+   "options": "User",
+   "reqd": 1
   },
   {
    "fieldname": "groomer_name",
