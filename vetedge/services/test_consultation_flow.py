@@ -390,6 +390,53 @@ class TestConsultationFlow(TestCase):
 		):
 			validate_consultation(doc)
 
+		validate_gate.assert_not_called()
+
+	def test_registration_payment_gate_runs_when_consultation_starts(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner="doctor@example.com",
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch="Branch B",
+			consultation_datetime="2026-04-18 10:00:00",
+			status="In Progress",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+			linked_appointment=None,
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Ada Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			)
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation") as validate_gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			validate_consultation(doc)
+
 		validate_gate.assert_called_once_with("VP-001", current_consultation=None)
 
 	def test_ready_for_treatment_consultation_blocks_new_treatment_items(self):

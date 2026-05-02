@@ -143,6 +143,8 @@ permission_query_conditions = {
 	"Pet Grooming Session": "vetedge.services.permissions.get_pet_grooming_session_query",
 	"Veterinary Guest Booking Request": "vetedge.services.permissions.get_veterinary_guest_booking_request_query",
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
+	"VetEdge Notification Log": "vetedge.services.permissions.get_notification_admin_only_query",
+	"VetEdge Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query",
 }
 
 has_permission = {
@@ -151,6 +153,9 @@ has_permission = {
 	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 	"Pet Grooming Appointment": "vetedge.services.permissions.has_pet_grooming_appointment_permission",
 	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
+	"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
+	"VetEdge Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
+	"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission",
 }
 
 # Document Events

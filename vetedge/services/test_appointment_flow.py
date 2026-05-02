@@ -282,6 +282,7 @@ class TestAppointmentFlow(TestCase):
 		with (
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.now_datetime", return_value="2026-04-20 10:00:00"),
+			patch("vetedge.services.appointment_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			result = create_consultation_from_appointment("VAPT-001")
@@ -308,6 +309,24 @@ class TestAppointmentFlow(TestCase):
 				validate_start_consultation_from_appointment,
 				appointment,
 			)
+
+	def test_start_consultation_from_appointment_runs_registration_payment_gate(self):
+		appointment = make_appointment_doc(
+			name="VAPT-001",
+			status="Checked In",
+			linked_consultation=None,
+			patient="VP-001",
+			branch="Branch B",
+		)
+		frappe_stub = make_frappe_stub()
+
+		with (
+			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
+			patch("vetedge.services.appointment_flow.validate_registration_payment_before_first_consultation") as validate_gate,
+		):
+			validate_start_consultation_from_appointment(appointment)
+
+		validate_gate.assert_called_once_with("VP-001")
 
 	def test_transition_appointment_status_uses_server_validation(self):
 		saved = []

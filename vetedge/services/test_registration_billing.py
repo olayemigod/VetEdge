@@ -8,6 +8,7 @@ import frappe
 
 from vetedge.services.registration_billing import (
 	AWAITING_PAYMENT_STATUS,
+	PAID_STATUS,
 	REGISTERED_STATUS,
 	RegistrationBillingRule,
 	create_manual_registration_invoice,
@@ -352,8 +353,61 @@ class TestRegistrationBilling(TestCase):
 			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
 			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
 			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch("vetedge.services.registration_billing.get_active_registration_invoice_name", return_value="SINV-001"),
+			patch(
+				"vetedge.services.registration_billing.frappe.get_doc",
+				return_value=frappe._dict(name="SINV-001", docstatus=1, status="Paid", outstanding_amount=0),
+			),
+			patch("vetedge.services.registration_billing.update_patient_registration_payment_status"),
 		):
 			validate_registration_payment_before_first_consultation("VP-001")
+
+	def test_registration_payment_gate_blocks_missing_invoice_even_if_status_is_paid(self):
+		patient_doc = frappe._dict(
+			name="VP-001",
+			default_branch="Main",
+			registration_status=PAID_STATUS,
+			registration_invoice=None,
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch("vetedge.services.registration_billing.get_active_registration_invoice_name", return_value=None),
+			patch("vetedge.services.registration_billing.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_registration_payment_before_first_consultation,
+				"VP-001",
+			)
+
+	def test_registration_payment_gate_uses_invoice_truth_before_paid_status(self):
+		patient_doc = frappe._dict(
+			name="VP-001",
+			default_branch="Main",
+			registration_status=PAID_STATUS,
+			registration_invoice="SINV-001",
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+		invoice = frappe._dict(name="SINV-001", docstatus=1, status="Unpaid", outstanding_amount=100)
+
+		with (
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch("vetedge.services.registration_billing.get_active_registration_invoice_name", return_value="SINV-001"),
+			patch("vetedge.services.registration_billing.frappe.get_doc", return_value=invoice),
+			patch("vetedge.services.registration_billing.update_patient_registration_payment_status"),
+			patch("vetedge.services.registration_billing.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				validate_registration_payment_before_first_consultation,
+				"VP-001",
+			)
 
 	def test_first_consultation_check_ignores_cancelled_consultations(self):
 		with patch("vetedge.services.registration_billing.frappe.get_all", return_value=[]):

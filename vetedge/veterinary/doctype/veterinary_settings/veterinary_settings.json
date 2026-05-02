@@ -603,40 +603,46 @@
   {
    "fieldname": "notifications_tab",
    "fieldtype": "Tab Break",
-   "label": "Notifications"
+   "label": "Notifications",
+   "permlevel": 1
   },
   {
    "fieldname": "notifications_section",
    "fieldtype": "Section Break",
-   "label": "Notifications Feature Control"
+   "label": "Notifications Feature Control",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge",
    "fieldname": "enable_notifications",
    "fieldtype": "Check",
-   "label": "Enable Notifications"
+   "label": "Enable Notifications",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "enable_email_notifications",
    "fieldtype": "Check",
-   "label": "Enable Email Notifications"
+   "label": "Enable Email Notifications",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "enable_sms_notifications",
    "fieldtype": "Check",
-   "label": "Enable SMS Notifications"
+   "label": "Enable SMS Notifications",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "enable_whatsapp_notifications",
    "fieldtype": "Check",
-   "label": "Enable WhatsApp Notifications"
+   "label": "Enable WhatsApp Notifications",
+   "permlevel": 1
   },
   {
    "default": "local",
@@ -644,121 +650,139 @@
    "fieldname": "notification_backend_mode",
    "fieldtype": "Select",
    "label": "Notification Backend Mode",
-   "options": "local\nprocessedge_core"
+   "options": "local\nprocessedge_core",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
    "fieldname": "processedge_core_notifications_enabled",
    "fieldtype": "Check",
-   "label": "Enable ProcessEdge Core Notifications"
+   "label": "Enable ProcessEdge Core Notifications",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
    "fieldname": "processedge_core_notification_endpoint",
    "fieldtype": "Data",
-   "label": "ProcessEdge Core Notification Endpoint"
+   "label": "ProcessEdge Core Notification Endpoint",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notification_backend_mode=='processedge_core'",
    "fieldname": "processedge_core_notification_api_key",
    "fieldtype": "Password",
-   "label": "ProcessEdge Core Notification API Key"
+   "label": "ProcessEdge Core Notification API Key",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_appointment_create",
    "fieldtype": "Check",
-   "label": "Notify on Appointment Create"
+   "label": "Notify on Appointment Create",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_appointment_status_change",
    "fieldtype": "Check",
-   "label": "Notify on Appointment Status Change"
+   "label": "Notify on Appointment Status Change",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_appointment_reminder",
    "fieldtype": "Check",
-   "label": "Notify on Appointment Reminder"
+   "label": "Notify on Appointment Reminder",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_owner_portal_appointment_request",
    "fieldtype": "Check",
-   "label": "Notify on Owner Portal Appointment Request"
+   "label": "Notify on Owner Portal Appointment Request",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_guest_registration_request",
    "fieldtype": "Check",
-   "label": "Notify on Guest Registration Request"
+   "label": "Notify on Guest Registration Request",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_guest_registration_confirmed",
    "fieldtype": "Check",
-   "label": "Notify on Guest Registration Confirmed"
+   "label": "Notify on Guest Registration Confirmed",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_guest_appointment_request",
    "fieldtype": "Check",
-   "label": "Notify on Guest Appointment Request"
+   "label": "Notify on Guest Appointment Request",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_invoice_created",
    "fieldtype": "Check",
-   "label": "Notify on Invoice Created"
+   "label": "Notify on Invoice Created",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_payment_received",
    "fieldtype": "Check",
-   "label": "Notify on Payment Received"
+   "label": "Notify on Payment Received",
+   "permlevel": 1
   },
   {
    "fieldname": "column_break_notifications",
-   "fieldtype": "Column Break"
+   "fieldtype": "Column Break",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_reschedule",
    "fieldtype": "Check",
-   "label": "Notify on Reschedule"
+   "label": "Notify on Reschedule",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_cancellation",
    "fieldtype": "Check",
-   "label": "Notify on Cancellation"
+   "label": "Notify on Cancellation",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_accounts_action_required",
    "fieldtype": "Check",
-   "label": "Notify on Accounts Action Required"
+   "label": "Notify on Accounts Action Required",
+   "permlevel": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "notify_on_lab_updates",
    "fieldtype": "Check",
-   "label": "Notify on Lab Updates"
+   "label": "Notify on Lab Updates",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
@@ -767,14 +791,16 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Notification Channel",
-   "options": "\nEmail\nSMS\nWhatsApp"
+   "options": "\nEmail\nSMS\nWhatsApp",
+   "permlevel": 1
   },
   {
    "default": "24",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
    "fieldname": "appointment_reminder_hours",
    "fieldtype": "Int",
-   "label": "Appointment Reminder Hours"
+   "label": "Appointment Reminder Hours",
+   "permlevel": 1
   },
   {
    "default": "24",
@@ -782,21 +808,24 @@
    "fieldname": "appointment_reminder_hours_before",
    "fieldtype": "Int",
    "hidden": 1,
-   "label": "Appointment Reminder Hours Before"
+   "label": "Appointment Reminder Hours Before",
+   "permlevel": 1
   },
   {
    "default": "7",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "vaccination_due_reminder_days",
    "fieldtype": "Int",
-   "label": "Vaccination Due Reminder Days"
+   "label": "Vaccination Due Reminder Days",
+   "permlevel": 1
   },
   {
    "default": "3",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "payment_reminder_days",
    "fieldtype": "Int",
-   "label": "Payment Reminder Days"
+   "label": "Payment Reminder Days",
+   "permlevel": 1
   },
   {
    "fieldname": "admin_controls_tab",
@@ -861,6 +890,28 @@
   {
    "email": 1,
    "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "permlevel": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "permlevel": 1,
    "print": 1,
    "read": 1,
    "report": 1,

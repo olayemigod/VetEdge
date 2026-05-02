@@ -15,6 +15,7 @@ from vetedge.services.feature_flags import is_enabled
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.permissions import can_access_consultation, validate_doctor_user
 from vetedge.services.portal_access import require_internal_user
+from vetedge.services.registration_billing import validate_registration_payment_before_first_consultation
 
 
 APPOINTMENT_STATUSES = {
@@ -398,6 +399,8 @@ def validate_start_consultation_from_appointment(appointment_doc) -> None:
 
 	if not appointment_doc.branch:
 		frappe.throw("Appointment must have a branch before starting consultation.", frappe.ValidationError)
+
+	validate_registration_payment_before_first_consultation(appointment_doc.patient)
 
 
 @frappe.whitelist()

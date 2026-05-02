@@ -878,6 +878,7 @@
   {
    "child": 1,
    "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "settings",
    "indent": 0,
    "keep_closed": 0,

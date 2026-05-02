@@ -71,13 +71,18 @@ def validate_consultation(doc) -> None:
 	normalize_consultation_appointment_links(doc)
 	apply_linked_appointment_context(doc)
 	resolve_consultation_context(doc)
-	validate_registration_payment_before_first_consultation(doc.patient, current_consultation=getattr(doc, "name", None))
+	if consultation_requires_registration_payment_gate(doc):
+		validate_registration_payment_before_first_consultation(doc.patient, current_consultation=getattr(doc, "name", None))
 	validate_linked_appointment(doc)
 	set_consultation_title(doc)
 	validate_service_branch_access(doc)
 	validate_consultation_children(doc)
 	sync_consultation_dispensary_state(doc)
 	validate_completion_requirements(doc)
+
+
+def consultation_requires_registration_payment_gate(doc) -> bool:
+	return (getattr(doc, "status", None) or "Draft") not in {"Draft", "Cancelled"}
 
 
 def validate_consultation_status(doc) -> None:

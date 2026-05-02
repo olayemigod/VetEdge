@@ -240,19 +240,30 @@ def validate_registration_payment_before_first_consultation(
 	if not is_first_consultation_for_patient(patient, current_consultation=current_consultation):
 		return
 
-	if patient_doc.registration_status == PAID_STATUS:
-		return
+	active_invoice_name = get_active_registration_invoice_name(patient_doc.name)
+	if active_invoice_name:
+		invoice = frappe.get_doc("Sales Invoice", active_invoice_name)
+		update_patient_registration_payment_status(patient_doc.name, invoice)
+		if is_invoice_paid(invoice):
+			return
+
+		frappe.throw(
+			_("Registration invoice {0} must be paid before the first consultation can proceed.").format(
+				active_invoice_name
+			),
+			frappe.ValidationError,
+		)
 
 	if patient_doc.registration_invoice:
 		frappe.throw(
-			_("Registration invoice {0} must be paid before the first consultation can proceed.").format(
+			_("Registration invoice {0} must be created again and paid before the first consultation can proceed.").format(
 				patient_doc.registration_invoice
 			),
 			frappe.ValidationError,
 		)
 
 	frappe.throw(
-		_("Registration payment is required before the first consultation can proceed."),
+		_("A registration invoice must be created and paid before the first consultation can proceed."),
 		frappe.ValidationError,
 	)
 

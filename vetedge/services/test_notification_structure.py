@@ -15,6 +15,8 @@ EMAIL_TEMPLATE_FIXTURE = Path("/home/olayemigod/frappe-bench/apps/vetedge/fixtur
 
 
 class TestNotificationStructure(TestCase):
+	ADMIN_ROLES = {"System Manager", "VetEdge Administrator"}
+
 	def test_registry_contains_known_events(self):
 		for key in (
 			"appointment_created",
@@ -83,6 +85,93 @@ class TestNotificationStructure(TestCase):
 			).read_text()
 		)
 		self.assertEqual(doctype_json["name"], "VetEdge Notification Log")
+
+	def test_notification_doctypes_are_admin_only(self):
+		for path in (
+			APP_ROOT / "veterinary/doctype/vetedge_notification_log/vetedge_notification_log.json",
+			APP_ROOT / "veterinary/doctype/vetedge_notification_preference/vetedge_notification_preference.json",
+		):
+			doctype_json = json.loads(path.read_text())
+			roles = {row.get("role") for row in doctype_json.get("permissions", []) if row.get("role")}
+			self.assertEqual(roles - self.ADMIN_ROLES, set(), msg=f"Unexpected roles in {path.name}: {roles}")
+
+	def test_notification_log_sensitive_fields_are_admin_permlevel(self):
+		doctype_json = json.loads(
+			(
+				APP_ROOT
+				/ "veterinary/doctype/vetedge_notification_log/vetedge_notification_log.json"
+			).read_text()
+		)
+		fields = {field.get("fieldname"): field for field in doctype_json["fields"]}
+		for fieldname in ("provider_reference", "error_message", "payload_preview"):
+			self.assertEqual(fields[fieldname].get("permlevel"), 1)
+
+	def test_notification_settings_fields_are_admin_permlevel(self):
+		settings_json = json.loads(
+			(APP_ROOT / "veterinary/doctype/veterinary_settings/veterinary_settings.json").read_text()
+		)
+		fields = {field.get("fieldname"): field for field in settings_json["fields"]}
+		for fieldname in (
+			"notifications_tab",
+			"notifications_section",
+			"enable_notifications",
+			"enable_email_notifications",
+			"enable_sms_notifications",
+			"enable_whatsapp_notifications",
+			"notification_backend_mode",
+			"processedge_core_notifications_enabled",
+			"processedge_core_notification_endpoint",
+			"processedge_core_notification_api_key",
+			"notify_on_appointment_create",
+			"notify_on_appointment_status_change",
+			"notify_on_appointment_reminder",
+			"notify_on_owner_portal_appointment_request",
+			"notify_on_guest_registration_request",
+			"notify_on_guest_registration_confirmed",
+			"notify_on_guest_appointment_request",
+			"notify_on_invoice_created",
+			"notify_on_payment_received",
+			"notify_on_reschedule",
+			"notify_on_cancellation",
+			"notify_on_accounts_action_required",
+			"notify_on_lab_updates",
+			"notification_channels",
+			"appointment_reminder_hours",
+			"appointment_reminder_hours_before",
+			"vaccination_due_reminder_days",
+			"payment_reminder_days",
+		):
+			self.assertEqual(fields[fieldname].get("permlevel"), 1)
+
+	def test_notification_admin_permission_hooks_are_registered(self):
+		hooks_py = (APP_ROOT / "hooks.py").read_text()
+		self.assertIn('"VetEdge Notification Log": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
+		self.assertIn('"VetEdge Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
+		self.assertIn('"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertIn('"VetEdge Notification Preference": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertIn('"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+
+	def test_notification_workspace_links_are_admin_only(self):
+		workspace_json = json.loads((APP_ROOT / "workspace_sidebar/vetedge.json").read_text())
+
+		def collect_links(rows):
+			links = {}
+			for row in rows or []:
+				if row.get("type") == "Link" and row.get("label"):
+					links[row["label"]] = row
+				links.update(collect_links(row.get("items")))
+			return links
+
+		links = collect_links(workspace_json.get("items"))
+		for label in (
+			"Veterinary Settings",
+			"VetEdge Notification Event Registry",
+			"VetEdge Notification Log",
+			"VetEdge Notification Preference",
+		):
+			depends_on = links[label].get("display_depends_on", "")
+			self.assertIn("System Manager", depends_on)
+			self.assertIn("VetEdge Administrator", depends_on)
 
 	def test_backend_mode_default_is_local(self):
 		settings_json = json.loads(

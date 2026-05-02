@@ -75,6 +75,7 @@ INTERNAL_ROLES = {
 	ROLE_ACCOUNTS_USER,
 }
 PORTAL_ALLOWED_PERMISSION_TYPES = {"read", "print"}
+NOTIFICATION_ADMIN_ROLES = {ROLE_SYSTEM_MANAGER, *_role_group(ROLE_VETEDGE_ADMINISTRATOR)}
 
 
 def get_current_user() -> str | None:
@@ -94,6 +95,13 @@ def get_user_roles(user: str | None = None) -> set[str]:
 
 def user_has_any_role(user: str | None, roles: set[str]) -> bool:
 	return bool(get_user_roles(user) & set(roles))
+
+
+def is_notification_admin(user: str | None = None) -> bool:
+	user = user or get_current_user()
+	if not user or user == "Guest":
+		return False
+	return user_has_any_role(user, NOTIFICATION_ADMIN_ROLES)
 
 
 def is_portal_owner_user(user: str | None = None) -> bool:
@@ -1101,6 +1109,10 @@ def get_sales_invoice_query(user: str | None = None) -> str | None:
 	return None
 
 
+def get_notification_admin_only_query(user: str | None = None) -> str | None:
+	return None if is_notification_admin(user) else "1=0"
+
+
 def has_veterinary_patient_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
@@ -1193,6 +1205,12 @@ def has_sales_invoice_permission(doc, user: str | None = None, permission_type: 
 
 	result = has_document_permission(doc, "Sales Invoice", "branch", permission_type=permission_type, user=user)
 	return True if result is None else result
+
+
+def has_notification_admin_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	if permission_type == "create":
+		return is_notification_admin(user)
+	return is_notification_admin(user)
 
 
 def _validate_branch_assignment_duplicate(doctype: str, current_name: str | None, filters: dict, label: str) -> None:

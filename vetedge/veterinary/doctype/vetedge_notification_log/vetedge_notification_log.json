@@ -33,22 +33,24 @@
   {"fieldname": "audience_section", "fieldtype": "Section Break", "label": "Audience"},
   {"fieldname": "recipient", "fieldtype": "Data", "in_list_view": 1, "label": "Recipient"},
   {"fieldname": "audience_type", "fieldtype": "Data", "label": "Audience Type"},
-  {"fieldname": "provider_reference", "fieldtype": "Data", "label": "Provider Reference"},
+  {"fieldname": "provider_reference", "fieldtype": "Data", "label": "Provider Reference", "permlevel": 1},
   {"fieldname": "timing_section", "fieldtype": "Section Break", "label": "Timing"},
   {"fieldname": "created_on", "fieldtype": "Datetime", "in_list_view": 1, "label": "Created On", "read_only": 1},
   {"fieldname": "sent_on", "fieldtype": "Datetime", "label": "Sent On", "read_only": 1},
   {"fieldname": "reference_section", "fieldtype": "Section Break", "label": "Reference"},
   {"fieldname": "reference_doctype", "fieldtype": "Link", "label": "Reference DocType", "options": "DocType"},
   {"fieldname": "reference_name", "fieldtype": "Dynamic Link", "label": "Reference Name", "options": "reference_doctype"},
-  {"fieldname": "error_message", "fieldtype": "Small Text", "label": "Error Message", "read_only": 1},
-  {"fieldname": "payload_preview", "fieldtype": "Long Text", "label": "Payload Preview", "read_only": 1}
+  {"fieldname": "error_message", "fieldtype": "Small Text", "label": "Error Message", "permlevel": 1, "read_only": 1},
+  {"fieldname": "payload_preview", "fieldtype": "Long Text", "label": "Payload Preview", "permlevel": 1, "read_only": 1}
  ],
  "module": "Veterinary",
  "name": "VetEdge Notification Log",
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
-  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "VetEdge Administrator"}
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "VetEdge Administrator"},
+  {"permlevel": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"permlevel": 1, "read": 1, "write": 1, "role": "VetEdge Administrator"}
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
