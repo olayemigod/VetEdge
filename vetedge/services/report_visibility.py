@@ -95,6 +95,11 @@ REPORT_ROLE_MAP = {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
 	},
+	"Branch Performance Summary": {
+		*ADMIN_REPORTING_ROLES,
+		*BRANCH_MANAGER_REPORTING_ROLES,
+		*FINANCE_REPORTING_ROLES,
+	},
 	"Revenue Summary": {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
@@ -212,8 +217,10 @@ BRANCH_SCOPED_ROLES = {
 BRANCH_FILTERED_REPORTS = {
 	"Consultation Register",
 	"Patient Register",
+	"Owner Register",
 	"Practitioner Performance Report",
 	"Branch Performance Report",
+	"Branch Performance Summary",
 	"Revenue Summary",
 	"Unpaid Invoice Report",
 	"Dispensary Activity Report",
@@ -268,6 +275,8 @@ def normalize_scope_filters(scope_name: str, filters=None, scope_type: str = "re
 
 	if scope_type == "dashboard":
 		validate_dashboard_access(scope_name, user=user)
+	elif scope_type == "report":
+		validate_report_access(scope_name, user=user)
 
 	if _is_branch_filtered_scope(scope_name, scope_type):
 		_apply_branch_default_and_restriction(filters, user)
@@ -276,6 +285,16 @@ def normalize_scope_filters(scope_name: str, filters=None, scope_type: str = "re
 		filters.practitioner = user
 
 	return filters
+
+
+def validate_report_access(report_name: str, user: str | None = None) -> None:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		frappe.throw(_("You are not permitted to access internal reports."), frappe.PermissionError)
+
+	allowed_roles = REPORT_ROLE_MAP.get(cstr(report_name or "").strip(), ALL_ROLES)
+	if allowed_roles and not (get_user_roles(user) & allowed_roles):
+		frappe.throw(_("You are not permitted to access this report."), frappe.PermissionError)
 
 
 def _apply_branch_default_and_restriction(filters, user: str | None) -> None:

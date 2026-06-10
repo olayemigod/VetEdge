@@ -51,7 +51,7 @@ class TestRoleBundles(TestCase):
 		)
 		self.assertEqual(
 			STARTER_ROLE_BUNDLES["Branch Manager"],
-			["Branch Manager", "VetEdge Branch Manager", "Desk User", "Accounts User", "Sales User", "Stock User"],
+			["Branch Manager", "Desk User", "Accounts User", "Sales User", "Stock User"],
 		)
 
 	def test_duplicate_roles_in_bundle_are_rejected(self):

@@ -2,7 +2,11 @@
  "add_total_row": 0,
  "columns": [],
  "doctype": "Report",
- "filters": [],
+ "filters": [
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
+  {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "Customer"},
+  {"default": "0", "fieldname": "outstanding_only", "fieldtype": "Check", "label": "Outstanding Only"}
+ ],
  "is_standard": "Yes",
  "module": "Veterinary",
  "name": "Owner Register",
@@ -12,20 +16,9 @@
  "report_name": "Owner Register",
  "report_type": "Script Report",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "VetEdge Administrator"
-  },
-  {
-   "role": "VetEdge Front Desk"
-  },
-  {
-   "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
-  }
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "VetEdge Front Desk"},
+  {"role": "Branch Manager"}
  ]
 }

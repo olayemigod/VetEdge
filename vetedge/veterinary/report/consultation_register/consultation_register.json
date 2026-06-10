@@ -2,7 +2,15 @@
  "add_total_row": 0,
  "columns": [],
  "doctype": "Report",
- "filters": [],
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
+  {"fieldname": "practitioner", "fieldtype": "Link", "label": "Practitioner", "options": "User"},
+  {"fieldname": "patient", "fieldtype": "Link", "label": "Patient", "options": "Veterinary Patient"},
+  {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "Customer"},
+  {"fieldname": "status", "fieldtype": "Data", "label": "Status"}
+ ],
  "is_standard": "Yes",
  "module": "Veterinary",
  "name": "Consultation Register",
@@ -12,29 +20,11 @@
  "report_name": "Consultation Register",
  "report_type": "Script Report",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "VetEdge Administrator"
-  },
-  {
-   "role": "VetEdge Doctor"
-  },
-  {
-   "role": "Veterinary Nurse"
-  },
-  {
-   "role": "VetEdge Nurse"
-  },
-  {
-   "role": "VetEdge Front Desk"
-  },
-  {
-   "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
-  }
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "VetEdge Doctor"},
+  {"role": "Veterinary Nurse"},
+  {"role": "VetEdge Front Desk"},
+  {"role": "Branch Manager"}
  ]
 }

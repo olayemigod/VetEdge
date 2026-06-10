@@ -2,7 +2,13 @@
  "add_total_row": 0,
  "columns": [],
  "doctype": "Report",
- "filters": [],
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer"},
+  {"fieldname": "age_range", "fieldtype": "Select", "label": "Age Range", "options": "\n0-30\n31-60\n61-90\n90+"}
+ ],
  "is_standard": "Yes",
  "module": "Veterinary",
  "name": "Unpaid Invoice Report",
@@ -12,29 +18,11 @@
  "report_name": "Unpaid Invoice Report",
  "report_type": "Script Report",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "VetEdge Administrator"
-  },
-  {
-   "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
-  },
-  {
-   "role": "VetEdge Accounts/Cashier"
-  },
-  {
-   "role": "Accounts/Cashier"
-  },
-  {
-   "role": "Accounts Manager"
-  },
-  {
-   "role": "Sales Manager"
-  }
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "Branch Manager"},
+  {"role": "Accounts/Cashier"},
+  {"role": "Accounts Manager"},
+  {"role": "Sales Manager"}
  ]
 }

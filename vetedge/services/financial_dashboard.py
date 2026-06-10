@@ -16,7 +16,12 @@ def get_today_revenue(filters=None):
 	require_read_permission("Sales Invoice")
 	today = nowdate()
 	return currency_card(
-		get_sales_invoice_total(today, today, get_filter_value(filters, "cost_center")),
+		get_sales_invoice_total(
+			today,
+			today,
+			get_filter_value(filters, "cost_center"),
+			get_filter_value(filters, "branch"),
+		),
 		{"from_date": today, "to_date": today},
 	)
 
@@ -27,7 +32,12 @@ def get_week_revenue(filters=None):
 	today = getdate(nowdate())
 	from_date = add_days(today, -today.weekday())
 	return currency_card(
-		get_sales_invoice_total(from_date, today, get_filter_value(filters, "cost_center")),
+		get_sales_invoice_total(
+			from_date,
+			today,
+			get_filter_value(filters, "cost_center"),
+			get_filter_value(filters, "branch"),
+		),
 		{"from_date": from_date, "to_date": today},
 	)
 
@@ -38,7 +48,12 @@ def get_month_revenue(filters=None):
 	today = nowdate()
 	from_date = get_first_day(today)
 	return currency_card(
-		get_sales_invoice_total(from_date, today, get_filter_value(filters, "cost_center")),
+		get_sales_invoice_total(
+			from_date,
+			today,
+			get_filter_value(filters, "cost_center"),
+			get_filter_value(filters, "branch"),
+		),
 		{"from_date": from_date, "to_date": today},
 	)
 
@@ -47,7 +62,7 @@ def get_month_revenue(filters=None):
 def get_outstanding_receivables(filters=None):
 	require_read_permission("Sales Invoice")
 	return currency_card(
-		get_outstanding_total(get_filter_value(filters, "cost_center")),
+		get_outstanding_total(get_filter_value(filters, "cost_center"), get_filter_value(filters, "branch")),
 		{"from_date": None, "to_date": None},
 	)
 
@@ -181,46 +196,56 @@ def default_date_range(filters=None) -> tuple[date, date]:
 	return from_date, to_date
 
 
-def get_sales_invoice_total(from_date, to_date, cost_center: str | None = None) -> float:
+def get_sales_invoice_total(from_date, to_date, cost_center: str | None = None, branch: str | None = None) -> float:
+	branch_condition = ""
+	if branch and frappe.get_meta("Sales Invoice").has_field("branch"):
+		branch_condition = "\n\t\t\t\tAND si.branch = %(branch)s"
 	if cost_center:
-		query = """
+		query = f"""
 			SELECT COALESCE(SUM(sii.base_net_amount), 0)
 			FROM `tabSales Invoice` si
 			INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 			WHERE si.docstatus = 1
 				AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 				AND sii.cost_center = %(cost_center)s
+				{branch_condition}
 		"""
 	else:
-		query = """
+		query = f"""
 			SELECT COALESCE(SUM(si.base_grand_total), 0)
 			FROM `tabSales Invoice` si
 			WHERE si.docstatus = 1
 				AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+				{branch_condition}
 		"""
 
 	return flt(
 		frappe.db.sql(
 			query,
-			{"from_date": from_date, "to_date": to_date, "cost_center": cost_center},
+			{"from_date": from_date, "to_date": to_date, "cost_center": cost_center, "branch": branch},
 		)[0][0],
 		2,
 	)
 
 
-def get_outstanding_total(cost_center: str | None = None) -> float:
+def get_outstanding_total(cost_center: str | None = None, branch: str | None = None) -> float:
 	if cost_center:
-		rows = get_branch_performance_data({"cost_center": cost_center})
+		rows = get_branch_performance_data({"cost_center": cost_center, "branch": branch})
 		return flt(sum(row.get("outstanding_amount") for row in rows), 2)
 
+	branch_condition = ""
+	if branch and frappe.get_meta("Sales Invoice").has_field("branch"):
+		branch_condition = "\n\t\t\t\tAND si.branch = %(branch)s"
 	return flt(
 		frappe.db.sql(
-			"""
+			f"""
 			SELECT COALESCE(SUM(si.outstanding_amount), 0)
 			FROM `tabSales Invoice` si
 			WHERE si.docstatus = 1
 				AND si.outstanding_amount > 0
-			"""
+				{branch_condition}
+			""",
+			{"branch": branch},
 		)[0][0],
 		2,
 	)
@@ -251,6 +276,9 @@ def get_branch_performance_data(filters=None) -> list[frappe._dict]:
 	if filters.get("cost_center"):
 		conditions.append("sii.cost_center = %(cost_center)s")
 		params["cost_center"] = filters.get("cost_center")
+	if filters.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
+		conditions.append("si.branch = %(branch)s")
+		params["branch"] = filters.get("branch")
 
 	where_clause = " AND ".join(conditions)
 	rows = frappe.db.sql(
@@ -346,6 +374,9 @@ def get_daily_revenue_chart(filters=None) -> dict:
 	else:
 		revenue_expression = "SUM(si.base_grand_total)"
 		join_clause = ""
+	if filters.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
+		conditions.append("si.branch = %(branch)s")
+		params["branch"] = filters.get("branch")
 
 	rows = frappe.db.sql(
 		f"""
@@ -412,6 +443,9 @@ def get_revenue_by_service_type(filters=None) -> list[frappe._dict]:
 	if filters.get("cost_center"):
 		conditions.append("sii.cost_center = %(cost_center)s")
 		params["cost_center"] = filters.get("cost_center")
+	if filters.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
+		conditions.append("si.branch = %(branch)s")
+		params["branch"] = filters.get("branch")
 
 	rows = frappe.db.sql(
 		f"""

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from vetedge.services.financial_dashboard import get_financial_dashboard_view
+from vetedge.services.financial_dashboard import get_branch_performance_data, get_financial_dashboard_view
 
 
 class TestFinancialDashboard(TestCase):
@@ -116,3 +116,20 @@ class TestFinancialDashboard(TestCase):
 		self.assertIn("payment_method_breakdown", [chart["key"] for chart in view["charts"]])
 		self.assertEqual(len(view["shortcuts"]), 4)
 		self.assertTrue(view["capabilities"]["can_read_payment_entry"])
+
+	def test_branch_performance_data_applies_branch_filter_when_available(self):
+		captured = {}
+		frappe_stub = SimpleNamespace(
+			_dict=lambda value=None: value or {},
+			db=SimpleNamespace(
+				sql=lambda query, params=None, as_dict=None: captured.update({"query": query, "params": params}) or [],
+				table_exists=lambda table: False,
+			),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "branch"),
+		)
+
+		with patch("vetedge.services.financial_dashboard.frappe", frappe_stub):
+			get_branch_performance_data({"from_date": "2026-05-01", "to_date": "2026-05-06", "branch": "Main"})
+
+		self.assertIn("si.branch = %(branch)s", captured["query"])
+		self.assertEqual(captured["params"]["branch"], "Main")

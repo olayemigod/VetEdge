@@ -321,6 +321,27 @@ def _owner_register(filters):
     query_filters = {}
     if filters.get("owner"):
         query_filters["name"] = filters.get("owner")
+
+    branch_owner_names = None
+    if filters.get("branch") and frappe.db.exists("DocType", "Veterinary Patient"):
+        owner_field = _existing_field("Veterinary Patient", ["primary_owner", "owner"])
+        branch_field = _existing_field("Veterinary Patient", ["default_branch", "branch", "service_branch"])
+        if owner_field and branch_field:
+            branch_owner_names = {
+                cstr(owner_name).strip()
+                for owner_name in frappe.get_all(
+                    "Veterinary Patient",
+                    filters={branch_field: filters.get("branch")},
+                    pluck=owner_field,
+                )
+                if cstr(owner_name).strip()
+            }
+            if filters.get("owner"):
+                if cstr(filters.get("owner")).strip() not in branch_owner_names:
+                    branch_owner_names = set()
+            elif branch_owner_names:
+                query_filters["name"] = ("in", sorted(branch_owner_names))
+
     customers = frappe.get_all("Customer", filters=query_filters, fields=customer_fields, order_by="customer_name asc")
 
     pet_counts = defaultdict(int)
@@ -335,9 +356,12 @@ def _owner_register(filters):
                 pet_counts[row.get(owner_field)] = cint(row.get("pet_count"))
 
     outstanding = defaultdict(float)
+    invoice_filters = {"docstatus": 1, "outstanding_amount": (">", 0)}
+    if filters.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
+        invoice_filters["branch"] = filters.get("branch")
     for row in frappe.get_all(
         "Sales Invoice",
-        filters={"docstatus": 1, "outstanding_amount": (">", 0)},
+        filters=invoice_filters,
         fields=["customer", {"SUM": "outstanding_amount", "as": "outstanding_amount"}],
         group_by="customer",
     ):
@@ -345,6 +369,8 @@ def _owner_register(filters):
 
     data = []
     for customer in customers:
+        if branch_owner_names is not None and cstr(customer.name).strip() not in branch_owner_names:
+            continue
         amount = flt(outstanding.get(customer.name))
         if cint(filters.get("outstanding_only")) and amount <= 0:
             continue

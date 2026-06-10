@@ -11,6 +11,7 @@ frappe.query_reports["Vaccination Report"] = {
 		{ fieldname: "due_status", label: __("Due Status"), fieldtype: "Select", options: ["", "Due Soon", "Overdue", "Administered"] },
 		{ fieldname: "patient", label: __("Patient"), fieldtype: "Link", options: "Veterinary Patient" },
 		{ fieldname: "owner", label: __("Owner"), fieldtype: "Link", options: "Customer" },
+		{ fieldname: "practitioner", label: __("Practitioner"), fieldtype: "Link", options: "User" },
 		{ fieldname: "chart", label: __("Chart"), fieldtype: "Data", hidden: 1 },
 	],
 };

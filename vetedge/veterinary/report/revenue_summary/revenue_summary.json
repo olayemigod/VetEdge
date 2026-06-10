@@ -2,7 +2,15 @@
  "add_total_row": 0,
  "columns": [],
  "doctype": "Report",
- "filters": [],
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
+  {"fieldname": "cost_center", "fieldtype": "Link", "label": "Cost Center", "options": "Cost Center"},
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer"},
+  {"fieldname": "status", "fieldtype": "Data", "label": "Status"},
+  {"fieldname": "service_category", "fieldtype": "Data", "label": "Service Category"}
+ ],
  "is_standard": "Yes",
  "module": "Veterinary",
  "name": "Revenue Summary",
@@ -12,29 +20,11 @@
  "report_name": "Revenue Summary",
  "report_type": "Script Report",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "VetEdge Administrator"
-  },
-  {
-   "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
-  },
-  {
-   "role": "VetEdge Accounts/Cashier"
-  },
-  {
-   "role": "Accounts/Cashier"
-  },
-  {
-   "role": "Accounts Manager"
-  },
-  {
-   "role": "Sales Manager"
-  }
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "Branch Manager"},
+  {"role": "Accounts/Cashier"},
+  {"role": "Accounts Manager"},
+  {"role": "Sales Manager"}
  ]
 }

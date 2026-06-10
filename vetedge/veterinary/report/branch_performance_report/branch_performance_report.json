@@ -2,7 +2,11 @@
  "add_total_row": 0,
  "columns": [],
  "doctype": "Report",
- "filters": [],
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"}
+ ],
  "is_standard": "Yes",
  "module": "Veterinary",
  "name": "Branch Performance Report",
@@ -12,17 +16,8 @@
  "report_name": "Branch Performance Report",
  "report_type": "Script Report",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "VetEdge Administrator"
-  },
-  {
-   "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
-  }
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "Branch Manager"}
  ]
 }

@@ -20,54 +20,42 @@ EXPECTED_PAGE_ROLES = {
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/veterinary_financial_dashboard/veterinary_financial_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
-		"VetEdge Accounts/Cashier",
 		"Accounts/Cashier",
 		"Accounts Manager",
 		"Sales Manager",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_inventory_dispensary_dashboard/vetedge_inventory_dispensary_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"Dispensary User",
-		"VetEdge Dispensary User",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_lab_dashboard/vetedge_lab_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"Lab Technician",
-		"VetEdge Lab Technician",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_vaccination_dashboard/vetedge_vaccination_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_boarding_dashboard/vetedge_boarding_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_grooming_dashboard/vetedge_grooming_dashboard.json": {
 		"System Manager",
@@ -75,20 +63,17 @@ EXPECTED_PAGE_ROLES = {
 		"VetEdge Front Desk",
 		"VetEdge Groomer",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_practitioner_performance_dashboard/vetedge_practitioner_performance_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"page/vetedge_branch_performance_dashboard/vetedge_branch_performance_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 }
 
@@ -98,110 +83,96 @@ EXPECTED_REPORT_ROLES = {
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/patient_register/patient_register.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/owner_register/owner_register.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/practitioner_performance_report/practitioner_performance_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/branch_performance_report/branch_performance_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"Branch Manager",
-		"VetEdge Branch Manager",
+	},
+	"report/branch_performance_summary/branch_performance_summary.json": {
+		"System Manager",
+		"VetEdge Administrator",
+		"Branch Manager",
+		"Accounts/Cashier",
+		"Accounts Manager",
+		"Sales Manager",
 	},
 	"report/revenue_summary/revenue_summary.json": {
 		"System Manager",
 		"VetEdge Administrator",
-		"VetEdge Accounts/Cashier",
+		"Branch Manager",
 		"Accounts/Cashier",
 		"Accounts Manager",
 		"Sales Manager",
-		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/unpaid_invoice_report/unpaid_invoice_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
-		"VetEdge Accounts/Cashier",
+		"Branch Manager",
 		"Accounts/Cashier",
 		"Accounts Manager",
 		"Sales Manager",
-		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/dispensary_activity_report/dispensary_activity_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"Dispensary User",
-		"VetEdge Dispensary User",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/stock_usage_summary/stock_usage_summary.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"Dispensary User",
-		"VetEdge Dispensary User",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/lab_order_report/lab_order_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"Lab Technician",
-		"VetEdge Lab Technician",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/vaccination_report/vaccination_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Doctor",
 		"Veterinary Nurse",
-		"VetEdge Nurse",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/boarding_report/boarding_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/kennel_availability_report/kennel_availability_report.json": {
 		"System Manager",
 		"VetEdge Administrator",
 		"VetEdge Front Desk",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
 	"report/grooming_report/grooming_report.json": {
 		"System Manager",
@@ -209,22 +180,57 @@ EXPECTED_REPORT_ROLES = {
 		"VetEdge Front Desk",
 		"VetEdge Groomer",
 		"Branch Manager",
-		"VetEdge Branch Manager",
 	},
+}
+
+EXPECTED_REPORT_FILTER_FIELDS = {
+	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "patient", "owner", "status"},
+	"report/patient_register/patient_register.json": {"branch", "owner", "species", "registration_status"},
+	"report/owner_register/owner_register.json": {"branch", "owner", "outstanding_only"},
+	"report/practitioner_performance_report/practitioner_performance_report.json": {"from_date", "to_date", "branch", "practitioner"},
+	"report/branch_performance_report/branch_performance_report.json": {"from_date", "to_date", "branch"},
+	"report/branch_performance_summary/branch_performance_summary.json": {"from_date", "to_date", "branch", "cost_center", "chart"},
+	"report/revenue_summary/revenue_summary.json": {"from_date", "to_date", "branch", "cost_center", "customer", "status", "service_category"},
+	"report/unpaid_invoice_report/unpaid_invoice_report.json": {"from_date", "to_date", "branch", "customer", "age_range"},
+	"report/dispensary_activity_report/dispensary_activity_report.json": {"from_date", "to_date", "branch", "warehouse", "item"},
+	"report/stock_usage_summary/stock_usage_summary.json": {"from_date", "to_date", "branch", "warehouse", "item"},
+	"report/lab_order_report/lab_order_report.json": {"from_date", "to_date", "branch", "patient", "practitioner", "status"},
+	"report/vaccination_report/vaccination_report.json": {"from_date", "to_date", "branch", "patient", "owner", "vaccine", "practitioner", "status", "due_status"},
+	"report/boarding_report/boarding_report.json": {"from_date", "to_date", "branch", "patient", "owner", "kennel", "status"},
+	"report/kennel_availability_report/kennel_availability_report.json": {"from_date", "to_date", "branch", "kennel", "status"},
+	"report/grooming_report/grooming_report.json": {"from_date", "to_date", "branch", "patient", "owner", "assigned_staff", "status"},
 }
 
 EXPECTED_WORKSPACE_RULE_SNIPPETS = {
 	"VetEdge Executive Dashboard": ["VetEdge Administrator", "System Manager"],
-	"Financial Dashboard": ["VetEdge Accounts/Cashier", "Accounts/Cashier", "Branch Manager"],
-	"Inventory / Dispensary Dashboard": ["VetEdge Dispensary User", "Dispensary User"],
-	"Practitioner Performance Dashboard": ["VetEdge Doctor", "VetEdge Branch Manager"],
-	"Revenue Summary": ["VetEdge Accounts/Cashier", "Accounts/Cashier"],
-	"Unpaid Invoice Report": ["VetEdge Accounts/Cashier", "Accounts/Cashier"],
+	"Financial Dashboard": ["Accounts/Cashier", "Accounts Manager", "Branch Manager"],
+	"Inventory / Dispensary Dashboard": ["Dispensary User", "Branch Manager"],
+	"Practitioner Performance Dashboard": ["VetEdge Doctor", "Branch Manager"],
+	"Revenue Summary": ["Accounts/Cashier", "Accounts Manager"],
+	"Unpaid Invoice Report": ["Accounts/Cashier", "Accounts Manager"],
 	"Grooming Report": ["VetEdge Groomer", "VetEdge Front Desk"],
+	"Veterinary Patient": ["VetEdge Front Desk", "VetEdge Doctor", "Lab Technician"],
+	"Veterinary Consultation": ["VetEdge Front Desk", "VetEdge Doctor", "Dispensary User"],
+	"Veterinary Appointment": ["VetEdge Front Desk", "VetEdge Doctor", "Veterinary Nurse"],
+	"Veterinary Guest Booking Request": ["VetEdge Front Desk", "VetEdge Doctor", "Branch Manager"],
+	"Veterinary Appointment Queue": ["VetEdge Front Desk", "VetEdge Doctor", "Dispensary User"],
+	"Veterinary Medical History": ["VetEdge Doctor", "Veterinary Nurse", "Branch Manager"],
+	"Veterinary Vital Signs": ["VetEdge Doctor", "Veterinary Nurse", "Branch Manager"],
+	"Veterinary Species": ["VetEdge Front Desk", "VetEdge Doctor", "Veterinary Nurse"],
+	"Veterinary Service Type": ["VetEdge Doctor", "Dispensary User", "Branch Manager"],
+	"Veterinary Vaccine": ["VetEdge Front Desk", "VetEdge Doctor", "Veterinary Nurse"],
+	"Sales Invoice": ["VetEdge Front Desk", "VetEdge Doctor", "Accounts/Cashier"],
+	"Payment Entry": ["Accounts/Cashier", "Accounts Manager", "Branch Manager"],
+	"Cost Center": ["Accounts/Cashier", "Accounts Manager", "Sales Manager"],
+	"Item": ["VetEdge Doctor", "Veterinary Nurse", "Dispensary User"],
+	"Branch": ["VetEdge Administrator", "Branch Manager"],
+	"VetEdge License Profile": ["System Manager"],
 }
 
 REPORT_JS_WITH_DEFAULTS = {
+	"report/branch_performance_summary/branch_performance_summary.js": "Branch Performance Summary",
 	"report/consultation_register/consultation_register.js": "Consultation Register",
+	"report/owner_register/owner_register.js": "Owner Register",
 	"report/patient_register/patient_register.js": "Patient Register",
 	"report/practitioner_performance_report/practitioner_performance_report.js": "Practitioner Performance Report",
 	"report/revenue_summary/revenue_summary.js": "Revenue Summary",
@@ -234,6 +240,21 @@ REPORT_JS_WITH_DEFAULTS = {
 	"report/vaccination_report/vaccination_report.js": "Vaccination Report",
 	"report/boarding_report/boarding_report.js": "Boarding Report",
 	"report/grooming_report/grooming_report.js": "Grooming Report",
+}
+
+EXPECTED_REPORT_JS_FILTER_FIELDS = {
+	"report/branch_performance_summary/branch_performance_summary.js": {"from_date", "to_date", "branch", "cost_center", "chart"},
+	"report/consultation_register/consultation_register.js": {"from_date", "to_date", "branch", "practitioner", "patient", "owner", "status"},
+	"report/owner_register/owner_register.js": {"branch", "owner", "outstanding_only"},
+	"report/patient_register/patient_register.js": {"branch", "species", "owner", "registration_status"},
+	"report/practitioner_performance_report/practitioner_performance_report.js": {"from_date", "to_date", "branch", "practitioner"},
+	"report/revenue_summary/revenue_summary.js": {"from_date", "to_date", "branch", "cost_center", "customer", "status", "service_category"},
+	"report/unpaid_invoice_report/unpaid_invoice_report.js": {"from_date", "to_date", "branch", "customer", "age_range"},
+	"report/dispensary_activity_report/dispensary_activity_report.js": {"from_date", "to_date", "branch", "warehouse", "item"},
+	"report/lab_order_report/lab_order_report.js": {"from_date", "to_date", "branch", "patient", "practitioner", "status"},
+	"report/vaccination_report/vaccination_report.js": {"from_date", "to_date", "branch", "patient", "owner", "vaccine", "practitioner", "status", "due_status"},
+	"report/boarding_report/boarding_report.js": {"from_date", "to_date", "branch", "patient", "owner", "kennel", "status"},
+	"report/grooming_report/grooming_report.js": {"from_date", "to_date", "branch", "patient", "owner", "assigned_staff", "status"},
 }
 
 
@@ -250,6 +271,12 @@ class TestReportingVisibilityMatrix(TestCase):
 				data = json.loads((VETERINARY_ROOT / relative_path).read_text())
 				self.assertEqual({row["role"] for row in data.get("roles", [])}, expected_roles)
 
+	def test_report_definitions_expose_expected_filters(self):
+		for relative_path, expected_filters in EXPECTED_REPORT_FILTER_FIELDS.items():
+			with self.subTest(target=relative_path):
+				data = json.loads((VETERINARY_ROOT / relative_path).read_text())
+				self.assertEqual({row["fieldname"] for row in data.get("filters", [])}, expected_filters)
+
 	def test_workspace_visibility_rules_match_role_model(self):
 		data = json.loads(WORKSPACE_PATH.read_text())
 		display_rules = {
@@ -263,12 +290,31 @@ class TestReportingVisibilityMatrix(TestCase):
 				for snippet in snippets:
 					self.assertIn(snippet, rule)
 
+	def test_workspace_rules_no_longer_use_alias_role_snippets(self):
+		source = WORKSPACE_PATH.read_text()
+		for alias in (
+			"VetEdge Nurse",
+			"VetEdge Branch Manager",
+			"VetEdge Accounts/Cashier",
+			"VetEdge Dispensary User",
+			"VetEdge Lab Technician",
+		):
+			with self.subTest(alias=alias):
+				self.assertNotIn(alias, source)
+
 	def test_reports_apply_visibility_default_helper(self):
 		for relative_path, report_name in REPORT_JS_WITH_DEFAULTS.items():
 			with self.subTest(target=relative_path):
 				source = (VETERINARY_ROOT / relative_path).read_text()
 				self.assertIn("window.vetedgeReportVisibility?.apply", source)
 				self.assertIn(report_name, source)
+
+	def test_report_js_exposes_expected_filter_fields(self):
+		for relative_path, expected_fieldnames in EXPECTED_REPORT_JS_FILTER_FIELDS.items():
+			with self.subTest(target=relative_path):
+				source = (VETERINARY_ROOT / relative_path).read_text()
+				for fieldname in expected_fieldnames:
+					self.assertIn(f'fieldname: "{fieldname}"', source)
 
 	def test_shared_assets_include_report_visibility_helper(self):
 		hooks_source = (VETERINARY_ROOT.parent / "hooks.py").read_text()

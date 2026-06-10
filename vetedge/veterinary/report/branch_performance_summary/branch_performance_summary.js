@@ -1,4 +1,7 @@
 frappe.query_reports["Branch Performance Summary"] = {
+	onload(report) {
+		window.vetedgeReportVisibility?.apply(report, "Branch Performance Summary");
+	},
 	filters: [
 		{
 			fieldname: "from_date",
@@ -13,6 +16,12 @@ frappe.query_reports["Branch Performance Summary"] = {
 			fieldtype: "Date",
 			default: frappe.datetime.now_date(),
 			reqd: 1,
+		},
+		{
+			fieldname: "branch",
+			label: __("Branch"),
+			fieldtype: "Link",
+			options: "Branch",
 		},
 		{
 			fieldname: "cost_center",

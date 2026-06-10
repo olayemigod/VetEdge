@@ -18,9 +18,6 @@
    "role": "VetEdge Administrator"
   },
   {
-   "role": "VetEdge Accounts/Cashier"
-  },
-  {
    "role": "Accounts Manager"
   },
   {
@@ -31,9 +28,6 @@
   },
   {
    "role": "Branch Manager"
-  },
-  {
-   "role": "VetEdge Branch Manager"
   }
  ],
  "script": null,

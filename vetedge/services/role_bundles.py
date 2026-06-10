@@ -66,7 +66,6 @@ STARTER_ROLE_BUNDLES = {
 	],
 	"Branch Manager": [
 		ROLE_BRANCH_MANAGER,
-		"VetEdge Branch Manager",
 		"Desk User",
 		ROLE_ACCOUNTS_USER,
 		"Sales User",

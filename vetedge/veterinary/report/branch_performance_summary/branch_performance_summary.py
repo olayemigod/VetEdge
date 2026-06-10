@@ -8,10 +8,12 @@ from vetedge.services.financial_dashboard import (
 	get_report_chart,
 	require_read_permission,
 )
+from vetedge.services.report_visibility import normalize_report_filters
 
 
 def execute(filters=None):
 	require_read_permission("Sales Invoice")
+	filters = normalize_report_filters("Branch Performance Summary", filters)
 
 	columns = get_columns()
 	data = get_branch_performance_data(filters)

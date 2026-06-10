@@ -1,5 +1,10 @@
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
+
+import frappe
+
+frappe._ = lambda value: value
 
 from vetedge.services import reporting_structure
 
@@ -64,6 +69,40 @@ class TestReportingStructure(unittest.TestCase):
             _, data, _, _, _ = reporting_structure._kennel_availability_report({"from_date": "2026-05-01", "to_date": "2026-05-07"})
         self.assertEqual(data[0]["kennel"], "KEN-001")
         self.assertEqual(data[0]["status"], "Occupied")
+
+    def test_owner_register_respects_branch_filter(self):
+        def get_all(doctype, filters=None, fields=None, order_by=None, group_by=None, pluck=None):
+            if doctype == "Veterinary Patient":
+                if pluck == "primary_owner" and isinstance(filters, dict) and filters.get("default_branch") == "Main":
+                    return ["CUST-001"]
+                if fields and group_by:
+                    return [{"primary_owner": "CUST-001", "pet_count": 1}]
+            if doctype == "Customer":
+                return [
+                    SimpleNamespace(name="CUST-001", customer_name="Jane Owner", get=lambda field: None),
+                    SimpleNamespace(name="CUST-002", customer_name="John Owner", get=lambda field: None),
+                ]
+            if doctype == "Sales Invoice":
+                self.assertEqual(filters["branch"], "Main")
+                return [{"customer": "CUST-001", "outstanding_amount": 150}]
+            return []
+
+        frappe_stub = SimpleNamespace(
+            db=SimpleNamespace(exists=lambda doctype, name: doctype == "DocType" and name == "Veterinary Patient"),
+            get_all=get_all,
+            get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "branch"),
+            unscrub=lambda value: value.replace("_", " ").title(),
+        )
+
+        with (
+            patch.object(reporting_structure, "frappe", frappe_stub),
+            patch.object(reporting_structure, "_existing_field", side_effect=lambda doctype, fields: fields[0]),
+        ):
+            _, data, _, _, _ = reporting_structure._owner_register({"branch": "Main"})
+
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["owner"], "CUST-001")
+        self.assertEqual(data[0]["outstanding_amount"], 150)
 
 
 if __name__ == "__main__":
