@@ -1,0 +1,154 @@
+.veterinary-notification-nav-item {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.veterinary-notification-button {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 34px;
+	min-height: 34px;
+	padding: 6px 8px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+
+.veterinary-notification-button:hover,
+.veterinary-notification-button:focus {
+	background: var(--control-bg, rgba(0, 0, 0, 0.04));
+	border-radius: 6px;
+	outline: none;
+}
+
+.veterinary-notification-bell svg {
+	display: block;
+	fill: currentColor;
+}
+
+.veterinary-notification-badge {
+	position: absolute;
+	top: 1px;
+	right: 0;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background: var(--red-500, #e03131);
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 16px;
+	text-align: center;
+	box-shadow: 0 0 0 2px var(--navbar-bg, #fff);
+}
+
+.veterinary-notification-badge.hidden {
+	display: none;
+}
+
+.veterinary-notification-dialog .modal-dialog {
+	max-width: min(760px, calc(100vw - 24px));
+}
+
+.veterinary-notification-dialog .modal-body {
+	padding: 0;
+}
+
+.veterinary-notification-list {
+	max-height: min(68vh, 680px);
+	overflow: auto;
+}
+
+.veterinary-notification-item {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 12px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--border-color, #e5e7eb);
+	background: var(--card-bg, #fff);
+}
+
+.veterinary-notification-item.is-unread {
+	background: color-mix(in srgb, var(--blue-50, #eff6ff) 65%, #fff);
+	border-left: 3px solid var(--blue-500, #2563eb);
+	padding-left: 13px;
+}
+
+.veterinary-notification-title {
+	font-size: 14px;
+	font-weight: 650;
+	line-height: 1.35;
+	color: var(--text-color, #1f2937);
+}
+
+.veterinary-notification-message {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--text-muted, #6b7280);
+}
+
+.veterinary-notification-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+	font-size: 11px;
+	color: var(--text-muted, #6b7280);
+}
+
+.veterinary-notification-chip,
+.veterinary-notification-priority,
+.veterinary-notification-status {
+	display: inline-flex;
+	align-items: center;
+	min-height: 20px;
+	padding: 2px 7px;
+	border-radius: 6px;
+	background: var(--control-bg, #f3f4f6);
+	color: var(--text-color, #374151);
+	font-weight: 600;
+}
+
+.veterinary-notification-priority.priority-high,
+.veterinary-notification-priority.priority-urgent {
+	background: #fff1f2;
+	color: #be123c;
+}
+
+.veterinary-notification-priority.priority-low {
+	background: #f0fdf4;
+	color: #15803d;
+}
+
+.veterinary-notification-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	align-content: flex-start;
+	gap: 6px;
+	min-width: 148px;
+}
+
+.veterinary-notification-empty {
+	padding: 28px 18px;
+	color: var(--text-muted, #6b7280);
+	text-align: center;
+}
+
+@media (max-width: 640px) {
+	.veterinary-notification-item {
+		grid-template-columns: 1fr;
+	}
+
+	.veterinary-notification-actions {
+		justify-content: flex-start;
+		min-width: 0;
+	}
+}
