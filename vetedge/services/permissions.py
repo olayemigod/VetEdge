@@ -76,6 +76,7 @@ INTERNAL_ROLES = {
 }
 PORTAL_ALLOWED_PERMISSION_TYPES = {"read", "print"}
 NOTIFICATION_ADMIN_ROLES = {ROLE_SYSTEM_MANAGER, *_role_group(ROLE_VETEDGE_ADMINISTRATOR)}
+OWNER_READ_PERMISSION_TYPES = {None, "read", "print", "email", "report"}
 
 
 def get_current_user() -> str | None:
@@ -1039,6 +1040,25 @@ def has_document_permission(doc, doctype: str, branch_field: str, permission_typ
 	return branch in branches
 
 
+def is_document_owner(doc, doctype: str, user: str | None = None) -> bool:
+	user = user or get_current_user()
+	if not user or user == "Guest":
+		return False
+
+	if not isinstance(doc, str):
+		owner = getattr(doc, "owner", None)
+		if owner:
+			return owner == user
+		name = getattr(doc, "name", None)
+	else:
+		name = doc
+
+	if not name:
+		return False
+
+	return frappe.db.get_value(doctype, name, "owner") == user
+
+
 def get_veterinary_patient_query(user: str | None = None) -> str | None:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
@@ -1170,6 +1190,8 @@ def has_veterinary_vaccination_record_permission(doc, user: str | None = None, p
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
 		return False
+	if user_has_global_branch_access(user):
+		return True
 
 	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
 	if permission_type == "create":
@@ -1177,6 +1199,8 @@ def has_veterinary_vaccination_record_permission(doc, user: str | None = None, p
 	if _is_unsaved_document(doc, "Veterinary Vaccination Record", name):
 		return True
 	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Vaccination Record", user=user):
 		return True
 
 	return has_document_permission(doc, "Veterinary Vaccination Record", "service_branch", permission_type=permission_type, user=user)
@@ -1205,6 +1229,31 @@ def has_sales_invoice_permission(doc, user: str | None = None, permission_type: 
 
 	result = has_document_permission(doc, "Sales Invoice", "branch", permission_type=permission_type, user=user)
 	return True if result is None else result
+
+
+def get_veterinary_notification_item_query(user: str | None = None) -> str | None:
+	user = user or get_current_user()
+	if is_notification_admin(user):
+		return None
+	if not user or user == "Guest":
+		return "1=0"
+	return f"`tabVeterinary Notification Item`.`recipient_user` = {frappe.db.escape(user)}"
+
+
+def has_veterinary_notification_item_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	user = user or get_current_user()
+	if is_notification_admin(user):
+		return True
+	if not user or user == "Guest":
+		return False
+	if permission_type == "create":
+		return False
+	if permission_type == "delete":
+		return False
+	recipient_user = getattr(doc, "recipient_user", None)
+	if isinstance(doc, str):
+		recipient_user = frappe.db.get_value("Veterinary Notification Item", doc, "recipient_user")
+	return recipient_user == user
 
 
 def has_notification_admin_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:

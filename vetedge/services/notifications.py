@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 
 import frappe
 from frappe import _
@@ -16,6 +17,15 @@ from vetedge.services.permissions import get_assigned_branches
 
 
 SUPPORTED_CHANNELS = {"Email", "SMS", "WhatsApp"}
+NOTIFICATION_ITEM_DOCTYPE = "Veterinary Notification Item"
+NOTIFICATION_ITEM_STATUSES = {"Unread", "Read", "Acknowledged", "Done", "Dismissed", "Archived"}
+NOTIFICATION_ITEM_STATUS_TIMESTAMPS = {
+	"Read": "read_on",
+	"Acknowledged": "acknowledged_on",
+	"Done": "completed_on",
+	"Dismissed": "dismissed_on",
+	"Archived": "archived_on",
+}
 
 OWNER_EVENTS = {
 	"appointment_created",
@@ -171,6 +181,263 @@ def notify_appointment_event(appointment, event: str) -> dict:
 			"status": appointment.status,
 		},
 	)
+
+
+def create_notification_item(
+	event_key: str,
+	recipient_user: str,
+	notification_title: str,
+	message: str | None = None,
+	reference_doctype: str | None = None,
+	reference_name: str | None = None,
+	action_url: str | None = None,
+	priority: str = "Normal",
+	payload: dict | None = None,
+	idempotency_key: str | None = None,
+) -> dict:
+	"""Create one in-app notification item without invoking delivery channels."""
+	if not frappe.db.exists("DocType", NOTIFICATION_ITEM_DOCTYPE):
+		frappe.throw("Veterinary Notification Item is not installed.", frappe.ValidationError)
+
+	idempotency_key = idempotency_key or build_notification_item_idempotency_key(
+		event_key=event_key,
+		recipient_user=recipient_user,
+		reference_doctype=reference_doctype,
+		reference_name=reference_name,
+		notification_title=notification_title,
+		message=message,
+	)
+	existing_name = frappe.db.get_value(
+		NOTIFICATION_ITEM_DOCTYPE,
+		{"idempotency_key": idempotency_key},
+		"name",
+	)
+	if existing_name:
+		return {
+			"created": False,
+			"name": existing_name,
+			"idempotency_key": idempotency_key,
+		}
+
+	doc = frappe.get_doc(
+		{
+			"doctype": NOTIFICATION_ITEM_DOCTYPE,
+			"event_key": event_key,
+			"recipient_user": recipient_user,
+			"notification_title": notification_title,
+			"message": message,
+			"status": "Unread",
+			"priority": priority or "Normal",
+			"created_on": now_datetime(),
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+			"action_url": action_url,
+			"idempotency_key": idempotency_key,
+			"payload_json": json.dumps(payload or {}, sort_keys=True, default=str) if payload else None,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return {
+		"created": True,
+		"name": doc.name,
+		"idempotency_key": idempotency_key,
+	}
+
+
+def build_notification_item_idempotency_key(
+	event_key: str,
+	recipient_user: str,
+	reference_doctype: str | None = None,
+	reference_name: str | None = None,
+	notification_title: str | None = None,
+	message: str | None = None,
+) -> str:
+	parts = [
+		cstr(event_key),
+		cstr(recipient_user),
+		cstr(reference_doctype),
+		cstr(reference_name),
+		cstr(notification_title),
+		cstr(message),
+	]
+	return sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
+def get_notification_request_user(requested_user: str | None = None) -> str | None:
+	session_user = getattr(getattr(frappe, "session", None), "user", None)
+	if requested_user and not session_user:
+		return requested_user
+	if not requested_user or requested_user == session_user:
+		return session_user
+
+	from vetedge.services.permissions import is_notification_admin
+
+	if is_notification_admin(session_user):
+		return requested_user
+	frappe.throw("Not permitted to access another user's notifications.", frappe.PermissionError)
+	return None
+
+
+@frappe.whitelist()
+def get_unread_notification_count(user: str | None = None) -> int:
+	user = get_notification_request_user(user)
+	if not user or user == "Guest":
+		return 0
+	return frappe.db.count(
+		NOTIFICATION_ITEM_DOCTYPE,
+		{
+			"recipient_user": user,
+			"status": "Unread",
+		},
+	)
+
+
+@frappe.whitelist()
+def mark_notification_read(notification_item: str, user: str | None = None) -> dict:
+	return set_notification_item_status(notification_item, "Read", user=user)
+
+
+@frappe.whitelist()
+def mark_notification_unread(notification_item: str, user: str | None = None) -> dict:
+	return set_notification_item_status(notification_item, "Unread", user=user)
+
+
+@frappe.whitelist()
+def acknowledge_notification(notification_item: str | None = None, notification_name: str | None = None, user: str | None = None) -> dict:
+	notification_item = notification_item or notification_name
+	if not notification_item:
+		frappe.throw("Notification is required.", frappe.ValidationError)
+	return set_notification_item_status(notification_item, "Acknowledged", user=user)
+
+
+@frappe.whitelist()
+def mark_notification_done(notification_item: str | None = None, notification_name: str | None = None, user: str | None = None) -> dict:
+	notification_item = notification_item or notification_name
+	if not notification_item:
+		frappe.throw("Notification is required.", frappe.ValidationError)
+	return set_notification_item_status(notification_item, "Done", user=user)
+
+
+@frappe.whitelist()
+def dismiss_notification(notification_item: str | None = None, notification_name: str | None = None, user: str | None = None) -> dict:
+	notification_item = notification_item or notification_name
+	if not notification_item:
+		frappe.throw("Notification is required.", frappe.ValidationError)
+	return set_notification_item_status(notification_item, "Dismissed", user=user)
+
+
+@frappe.whitelist()
+def archive_notification(notification_item: str | None = None, notification_name: str | None = None, user: str | None = None) -> dict:
+	notification_item = notification_item or notification_name
+	if not notification_item:
+		frappe.throw("Notification is required.", frappe.ValidationError)
+	return set_notification_item_status(notification_item, "Archived", user=user)
+
+
+@frappe.whitelist()
+def mark_all_notifications_read(user: str | None = None) -> dict:
+	user = get_notification_request_user(user)
+	if not user or user == "Guest":
+		frappe.throw("User is required.", frappe.PermissionError)
+
+	names = frappe.get_all(
+		NOTIFICATION_ITEM_DOCTYPE,
+		filters={"recipient_user": user, "status": "Unread"},
+		pluck="name",
+	)
+	for name in names:
+		frappe.db.set_value(
+			NOTIFICATION_ITEM_DOCTYPE,
+			name,
+			{
+				"status": "Read",
+				"read_on": now_datetime(),
+			},
+			update_modified=True,
+		)
+	return {"updated": len(names)}
+
+
+@frappe.whitelist()
+def get_notification_feed(
+	user: str | None = None,
+	status: str | None = None,
+	include_archived: bool = False,
+	limit: int = 50,
+) -> list[dict]:
+	user = get_notification_request_user(user)
+	if not user or user == "Guest":
+		return []
+	if status and status not in NOTIFICATION_ITEM_STATUSES:
+		frappe.throw(f"Unsupported notification status: {status}", frappe.ValidationError)
+
+	filters = {"recipient_user": user}
+	if status:
+		filters["status"] = status
+	elif not include_archived:
+		filters["status"] = ["!=", "Archived"]
+
+	try:
+		limit = max(1, min(int(limit or 50), 200))
+	except Exception:
+		limit = 50
+
+	return frappe.get_all(
+		NOTIFICATION_ITEM_DOCTYPE,
+		filters=filters,
+		fields=[
+			"name",
+			"notification_title",
+			"message",
+			"status",
+			"priority",
+			"event_key",
+			"created_on",
+			"read_on",
+			"acknowledged_on",
+			"completed_on",
+			"dismissed_on",
+			"archived_on",
+			"reference_doctype",
+			"reference_name",
+			"action_url",
+		],
+		order_by="created_on desc",
+		limit_page_length=limit,
+	)
+
+
+def set_notification_item_status(notification_item: str, status: str, user: str | None = None) -> dict:
+	if status not in NOTIFICATION_ITEM_STATUSES:
+		frappe.throw(f"Unsupported notification status: {status}", frappe.ValidationError)
+
+	user = get_notification_request_user(user)
+	if not can_update_notification_item(notification_item, user=user):
+		frappe.throw("Not permitted to update this notification.", frappe.PermissionError)
+
+	values = {"status": status}
+	if status == "Unread":
+		for timestamp_field in NOTIFICATION_ITEM_STATUS_TIMESTAMPS.values():
+			values[timestamp_field] = None
+	else:
+		timestamp_field = NOTIFICATION_ITEM_STATUS_TIMESTAMPS.get(status)
+		if timestamp_field:
+			values[timestamp_field] = now_datetime()
+
+	frappe.db.set_value(NOTIFICATION_ITEM_DOCTYPE, notification_item, values, update_modified=True)
+	return {"name": notification_item, "status": status}
+
+
+def can_update_notification_item(notification_item: str, user: str | None = None) -> bool:
+	from vetedge.services.permissions import is_notification_admin
+
+	user = user or getattr(getattr(frappe, "session", None), "user", None)
+	if not user or user == "Guest":
+		return False
+	if is_notification_admin(user):
+		return True
+	recipient_user = frappe.db.get_value(NOTIFICATION_ITEM_DOCTYPE, notification_item, "recipient_user")
+	return recipient_user == user
 
 
 def emit_notification_event(

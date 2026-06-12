@@ -145,6 +145,7 @@ permission_query_conditions = {
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
 	"VetEdge Notification Log": "vetedge.services.permissions.get_notification_admin_only_query",
 	"VetEdge Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query",
+	"Veterinary Notification Item": "vetedge.services.permissions.get_veterinary_notification_item_query",
 }
 
 has_permission = {
@@ -155,6 +156,7 @@ has_permission = {
 	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
 	"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
 	"VetEdge Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
+	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
 	"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission",
 }
 
