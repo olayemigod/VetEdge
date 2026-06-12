@@ -445,7 +445,7 @@ def _unpaid_invoice_report(filters):
                 "due_date": row.get("due_date"),
                 "outstanding_amount": flt(row.get("outstanding_amount")),
                 "age_days": age_days,
-                "branch": context.get("branch") or row.get("branch"),
+                "branch": row_branch,
                 "cost_center": context.get("cost_center") or row.get("cost_center"),
                 "linked_patient": patient_titles.get(context.get("patient")) or context.get("patient"),
             }
@@ -762,8 +762,6 @@ def _get_sales_invoice_rows(filters, unpaid_only=False):
     cost_center_field = _existing_field(doctype, ["cost_center"])
     status_field = _existing_field(doctype, ["status"]) or "status"
     query_filters = _date_filter_dict("posting_date", filters, 30)
-    if filters.get("branch") and branch_field:
-        query_filters[branch_field] = filters.get("branch")
     if filters.get("cost_center") and cost_center_field:
         query_filters[cost_center_field] = filters.get("cost_center")
     if filters.get("status") and status_field:
@@ -788,6 +786,9 @@ def _build_revenue_summary_rows(filters):
     data = []
     for row in rows:
         context = invoice_context.get(row["name"], {})
+        row_branch = context.get("branch") or row.get("branch")
+        if filters.get("branch") and cstr(row_branch) != cstr(filters.get("branch")):
+            continue
         service_category = context.get("service_category") or _("General")
         if filters.get("service_category") and service_category != filters.get("service_category"):
             continue
@@ -796,7 +797,7 @@ def _build_revenue_summary_rows(filters):
                 "invoice": row.get("name"),
                 "posting_date": row.get("posting_date"),
                 "customer": row.get("customer"),
-                "branch": context.get("branch") or row.get("branch"),
+                "branch": row_branch,
                 "cost_center": context.get("cost_center") or row.get("cost_center"),
                 "service_category": service_category,
                 "grand_total": flt(row.get("grand_total")),

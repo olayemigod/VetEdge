@@ -105,5 +105,47 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(data[0]["outstanding_amount"], 150)
 
 
+    def test_revenue_summary_branch_filter_uses_derived_invoice_context(self):
+        invoice_rows = [
+            {
+                "name": "SINV-0001",
+                "posting_date": "2026-05-01",
+                "customer": "CUST-001",
+                "branch": "",
+                "cost_center": "",
+                "grand_total": 100,
+                "outstanding_amount": 25,
+                "docstatus": 1,
+                "status": "Unpaid",
+            },
+            {
+                "name": "SINV-0002",
+                "posting_date": "2026-05-01",
+                "customer": "CUST-002",
+                "branch": "",
+                "cost_center": "",
+                "grand_total": 200,
+                "outstanding_amount": 0,
+                "docstatus": 1,
+                "status": "Paid",
+            },
+        ]
+        invoice_context = {
+            "SINV-0001": {"branch": "Branch A", "service_category": "Consultation"},
+            "SINV-0002": {"branch": "Branch B", "service_category": "Consultation"},
+        }
+
+        with (
+            patch.object(reporting_structure, "_get_sales_invoice_rows", return_value=invoice_rows),
+            patch.object(reporting_structure, "_build_invoice_context_map", return_value=invoice_context),
+        ):
+            data = reporting_structure._build_revenue_summary_rows({"branch": "Branch A"})
+
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["invoice"], "SINV-0001")
+        self.assertEqual(data[0]["branch"], "Branch A")
+        self.assertEqual(data[0]["grand_total"], 100)
+
+
 if __name__ == "__main__":
     unittest.main()
