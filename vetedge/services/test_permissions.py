@@ -27,6 +27,7 @@ from vetedge.services.permissions import (
 	get_veterinary_patient_query,
 	has_veterinary_consultation_permission,
 	has_veterinary_lab_order_permission,
+	has_veterinary_vaccination_record_permission,
 	has_sales_invoice_permission,
 	can_initiate_payment,
 	validate_branch_user_assignment,
@@ -179,6 +180,88 @@ class TestPermissions(TestCase):
 				has_veterinary_patient_permission(
 					patient,
 					user="doctor@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_system_manager_can_read_vaccination_record(self):
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			owner="doctor@example.com",
+			service_branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
+		):
+			self.assertTrue(
+				has_veterinary_vaccination_record_permission(
+					record,
+					user="Administrator",
+					permission_type="read",
+				)
+			)
+
+	def test_vaccination_record_creator_can_read_immediately(self):
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			owner="doctor@example.com",
+			service_branch="Branch B",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+		):
+			self.assertTrue(
+				has_veterinary_vaccination_record_permission(
+					record,
+					user="doctor@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_same_branch_user_can_read_vaccination_record(self):
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			owner="other@example.com",
+			service_branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertTrue(
+				has_veterinary_vaccination_record_permission(
+					record,
+					user="manager@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_unrelated_branch_user_cannot_read_vaccination_record(self):
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			owner="other@example.com",
+			service_branch="Branch B",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertFalse(
+				has_veterinary_vaccination_record_permission(
+					record,
+					user="manager@example.com",
 					permission_type="read",
 				)
 			)
