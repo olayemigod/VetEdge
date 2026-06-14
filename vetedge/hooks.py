@@ -31,14 +31,11 @@ portal_menu_items = [
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = [
-	"/assets/vetedge/css/veterinary_notification_center.css",
-]
+app_include_css = []
 app_include_js = [
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
-	"/assets/vetedge/js/veterinary_notification_center.js",
 ]
 
 # include js, css files in header of web template
@@ -138,6 +135,7 @@ after_migrate = "vetedge.install.after_migrate"
 permission_query_conditions = {
 	"Veterinary Patient": "vetedge.services.permissions.get_veterinary_patient_query",
 	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
+	"Veterinary Missed Appointment": "vetedge.services.permissions.get_veterinary_missed_appointment_query",
 	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
 	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
 	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
@@ -155,6 +153,7 @@ has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
+	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
 	"Pet Grooming Appointment": "vetedge.services.permissions.has_pet_grooming_appointment_permission",
 	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
 	"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
@@ -267,8 +266,14 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
+	"cron": {
+		"*/5 * * * *": [
+			"vetedge.services.appointment_notifications.run_appointment_notification_checks",
+		],
+	},
 	"hourly": [
 		"vetedge.services.notifications.send_due_appointment_reminders",
+		"vetedge.services.appointment_flow.sync_missed_appointments",
 	],
 	"daily": [
 		"vetedge.services.notifications.send_due_vaccination_notifications",

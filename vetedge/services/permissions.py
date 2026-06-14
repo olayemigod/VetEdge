@@ -1087,6 +1087,10 @@ def get_veterinary_appointment_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Appointment", "branch", user=user)
 
 
+def get_veterinary_missed_appointment_query(user: str | None = None) -> str | None:
+	return get_branch_scoped_query_condition("Veterinary Missed Appointment", "branch", user=user)
+
+
 def get_veterinary_consultation_query(user: str | None = None) -> str | None:
 	return get_branch_scoped_query_condition("Veterinary Consultation", "service_branch", user=user)
 
@@ -1169,6 +1173,10 @@ def has_veterinary_patient_permission(doc, user: str | None = None, permission_t
 
 def has_veterinary_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
 	return has_document_permission(doc, "Veterinary Appointment", "branch", permission_type=permission_type, user=user)
+
+
+def has_veterinary_missed_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+	return has_document_permission(doc, "Veterinary Missed Appointment", "branch", permission_type=permission_type, user=user)
 
 
 def has_veterinary_consultation_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:

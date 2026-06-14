@@ -17,6 +17,10 @@ def _install_frappe_stub() -> None:
 		frappe.PermissionError = Exception
 		frappe.throw = Mock(side_effect=Exception("blocked"))
 		frappe._ = lambda value, *args, **kwargs: value
+		frappe.scrub = lambda value: str(value).lower().replace(" ", "_")
+		frappe.publish_realtime = Mock()
+		frappe.log_error = Mock()
+		frappe.get_traceback = lambda: "traceback"
 		frappe.whitelist = lambda *args, **kwargs: (lambda fn: fn) if args == () else args[0]
 		frappe.validate_and_sanitize_search_inputs = lambda fn: fn
 		frappe.db = SimpleNamespace()
@@ -74,12 +78,14 @@ class TestNotificationItemStructure(TestCase):
 
 class TestNotificationItemService(TestCase):
 	def test_create_notification_item_reuses_existing_idempotency_key(self):
+		existing = SimpleNamespace(name="VNI-001", frappe_notification_log="NOTIF-001", get=lambda key, default=None: getattr(existing, key, default))
 		frappe_stub = SimpleNamespace(
 			ValidationError=Exception,
 			db=SimpleNamespace(
 				exists=Mock(return_value=True),
 				get_value=Mock(return_value="VNI-001"),
 			),
+			get_doc=Mock(return_value=existing),
 		)
 
 		with patch.object(notifications, "frappe", frappe_stub):
@@ -93,17 +99,35 @@ class TestNotificationItemService(TestCase):
 
 		self.assertFalse(result["created"])
 		self.assertEqual(result["name"], "VNI-001")
+		frappe_stub.get_doc.assert_called_once_with("Veterinary Notification Item", "VNI-001")
 
 	def test_create_notification_item_inserts_when_key_is_new(self):
 		inserted = []
-		doc = SimpleNamespace(name="VNI-002", insert=lambda **kwargs: inserted.append(kwargs))
+		docs = []
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				inserted.append((self.doctype, kwargs))
+				if self.doctype == "Veterinary Notification Item":
+					self.name = "VNI-002"
+				if self.doctype == "Notification Log":
+					self.name = "NOTIF-001"
+				docs.append(self)
+
 		frappe_stub = SimpleNamespace(
 			ValidationError=Exception,
+			session=SimpleNamespace(user="test.com"),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
 			db=SimpleNamespace(
 				exists=Mock(return_value=True),
 				get_value=Mock(return_value=None),
+				set_value=Mock(),
 			),
-			get_doc=Mock(return_value=doc),
+			get_doc=Mock(side_effect=lambda value, name=None: Doc(**value) if isinstance(value, dict) else docs[0]),
 		)
 
 		with patch.object(notifications, "frappe", frappe_stub):
@@ -118,10 +142,21 @@ class TestNotificationItemService(TestCase):
 			)
 
 		self.assertTrue(result["created"])
-		self.assertEqual(result["name"], "VNI-002")
-		self.assertEqual(inserted, [{"ignore_permissions": True}])
-		frappe_stub.get_doc.assert_called_once()
-		self.assertEqual(frappe_stub.get_doc.call_args.args[0]["status"], "Unread")
+		self.assertEqual(result["name"], docs[0].name)
+		self.assertEqual(inserted[0], ("Veterinary Notification Item", {"ignore_permissions": True}))
+		self.assertEqual(inserted[1], ("Notification Log", {"ignore_permissions": True}))
+		self.assertEqual(docs[0].status, "Unread")
+		self.assertEqual(docs[1].for_user, "doctor@example.com")
+		self.assertEqual(docs[1].subject, "Lab order created")
+		self.assertEqual(docs[1].document_type, "Veterinary Lab Order")
+		self.assertEqual(docs[1].document_name, "VLAB-001")
+		frappe_stub.db.set_value.assert_called_once_with(
+			"Veterinary Notification Item",
+			docs[0].name,
+			"frappe_notification_log",
+			"NOTIF-001",
+			update_modified=False,
+		)
 
 	def test_unread_count_is_scoped_to_current_user(self):
 		frappe_stub = SimpleNamespace(
@@ -171,14 +206,29 @@ class TestNotificationItemService(TestCase):
 
 	def test_duplicate_idempotency_key_skips_second_db_insert(self):
 		inserted = []
-		doc = SimpleNamespace(name="VNI-DB-001", insert=lambda **kwargs: inserted.append(kwargs))
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				inserted.append(self.doctype)
+				if self.doctype == "Notification Log":
+					self.name = "NOTIF-001"
+
+		item = Doc(name="VNI-DB-001", frappe_notification_log="NOTIF-001")
 		frappe_stub = SimpleNamespace(
 			ValidationError=Exception,
 			db=SimpleNamespace(
 				exists=Mock(return_value=True),
 				get_value=Mock(side_effect=[None, "VNI-DB-001"]),
+				set_value=Mock(),
 			),
-			get_doc=Mock(return_value=doc),
+			get_doc=Mock(side_effect=lambda value, name=None: item if not isinstance(value, dict) else Doc(name="VNI-DB-001", **value)),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
+			log_error=Mock(),
+			get_traceback=lambda: "traceback",
 		)
 
 		with patch.object(notifications, "frappe", frappe_stub):
@@ -198,8 +248,85 @@ class TestNotificationItemService(TestCase):
 		self.assertTrue(first["created"])
 		self.assertFalse(second["created"])
 		self.assertEqual(second["name"], "VNI-DB-001")
-		frappe_stub.get_doc.assert_called_once()
-		self.assertEqual(len(inserted), 1)
+		self.assertEqual(inserted.count("Veterinary Notification Item"), 1)
+		self.assertEqual(inserted.count("Notification Log"), 1)
+
+	def test_frappe_notification_log_falls_back_to_veterinary_item_reference(self):
+		inserted = []
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				if self.doctype == "Notification Log":
+					self.name = "NOTIF-FALLBACK"
+				inserted.append(self)
+
+		item = Doc(
+			doctype="Veterinary Notification Item",
+			name="VNI-003",
+			recipient_user="doctor@example.com",
+			notification_title="Veterinary reminder",
+			message="Reminder",
+			reference_doctype=None,
+			reference_name=None,
+			action_url=None,
+			frappe_notification_log=None,
+		)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True), set_value=Mock()),
+			get_doc=Mock(side_effect=lambda value, name=None: item if not isinstance(value, dict) else Doc(**value)),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
+		)
+
+		with patch.object(notifications, "frappe", frappe_stub):
+			name = notifications.ensure_frappe_notification_log("VNI-003")
+
+		self.assertEqual(name, "NOTIF-FALLBACK")
+		log = inserted[0]
+		self.assertEqual(log.document_type, "Veterinary Notification Item")
+		self.assertEqual(log.document_name, "VNI-003")
+		self.assertEqual(log.link, "/app/veterinary-notification-item/VNI-003")
+
+	def test_frappe_notification_log_failure_does_not_block_item_creation(self):
+		inserted = []
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				inserted.append(self.doctype)
+				if self.doctype == "Notification Log":
+					raise Exception("native bell unavailable")
+
+		frappe_stub = SimpleNamespace(
+			ValidationError=Exception,
+			db=SimpleNamespace(
+				exists=Mock(return_value=True),
+				get_value=Mock(return_value=None),
+				set_value=Mock(),
+			),
+			get_doc=Mock(side_effect=lambda value, name=None: Doc(name="VNI-004", **value) if isinstance(value, dict) else None),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
+			log_error=Mock(),
+			get_traceback=lambda: "traceback",
+		)
+
+		with patch.object(notifications, "frappe", frappe_stub):
+			result = notifications.create_notification_item(
+				event_key="lab_order_created",
+				recipient_user="doctor@example.com",
+				notification_title="Veterinary lab order",
+			)
+
+		self.assertTrue(result["created"])
+		self.assertEqual(inserted[0], "Veterinary Notification Item")
+		self.assertIn("Notification Log", inserted)
+		frappe_stub.log_error.assert_called_once()
 
 	def test_operational_status_actions_set_matching_timestamp_only(self):
 		set_value = Mock()
