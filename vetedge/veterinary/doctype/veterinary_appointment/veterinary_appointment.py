@@ -3,7 +3,11 @@ from __future__ import annotations
 from frappe.model.document import Document
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
-from vetedge.services.appointment_flow import validate_appointment
+from vetedge.services.appointment_flow import sync_missed_appointment_from_source, validate_appointment
+from vetedge.services.appointment_notifications import (
+	notify_appointment_checked_in,
+	notify_appointment_completed,
+)
 from vetedge.services.notifications import notify_appointment_event
 
 
@@ -17,6 +21,7 @@ class VeterinaryAppointment(Document):
 
 	def on_update(self) -> None:
 		previous = self.get_doc_before_save()
+		sync_missed_appointment_from_source(self)
 		if not previous or previous.status == self.status:
 			return
 
@@ -26,3 +31,7 @@ class VeterinaryAppointment(Document):
 			notify_appointment_event(self, "appointment_rescheduled")
 		elif self.status == "Cancelled":
 			notify_appointment_event(self, "appointment_cancelled")
+		elif self.status == "Checked In":
+			notify_appointment_checked_in(self)
+		elif self.status == "Completed":
+			notify_appointment_completed(self)
