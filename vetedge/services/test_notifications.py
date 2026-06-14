@@ -15,6 +15,7 @@ from vetedge.services.notifications import (
 	emit_notification_event,
 	parse_notification_channels,
 	query_due_vaccination_notifications,
+	resolve_notification_recipients,
 	send_due_vaccination_notifications,
 	send_due_appointment_reminders,
 	send_payment_pending_reminders,
@@ -22,6 +23,155 @@ from vetedge.services.notifications import (
 
 
 class TestNotifications(TestCase):
+	def test_transaction_routing_does_not_broadcast_to_doctor_role(self):
+		def exists(doctype, name=None):
+			if doctype == "User":
+				return name in {"doctor.a@example.com", "owner@example.com"}
+			if doctype == "DocType" and name == "Portal User":
+				return True
+			return False
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Customer" and name == "CUST-001" and fieldname == "email_id":
+				return "owner@example.com"
+			if doctype == "User" and fieldname == "enabled":
+				return 1
+			if doctype == "User" and fieldname == "email":
+				return name
+			return None
+
+		def get_all(doctype, **kwargs):
+			if doctype == "Has Role":
+				raise AssertionError("Ordinary transaction notifications must not expand Doctor roles.")
+			if doctype == "Portal User":
+				return ["owner@example.com"]
+			return []
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=get_value),
+			get_all=get_all,
+		)
+
+		with patch("vetedge.services.notifications.frappe", frappe_stub):
+			recipients = resolve_notification_recipients(
+				"appointment_created",
+				{
+					"primary_owner": "CUST-001",
+					"document_owner": "doctor.a@example.com",
+					"branch": "Main",
+				},
+			)
+
+		addresses = {recipient["address"] for recipient in recipients}
+		self.assertIn("doctor.a@example.com", addresses)
+		self.assertIn("owner@example.com", addresses)
+		self.assertNotIn("doctor.b@example.com", addresses)
+
+	def test_assigned_practitioner_is_notified_only_when_present(self):
+		def exists(doctype, name=None):
+			return doctype == "User" and name in {"creator@example.com", "practitioner@example.com"}
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "User" and fieldname == "enabled":
+				return 1
+			if doctype == "User" and fieldname == "email":
+				return name
+			return None
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=get_value),
+			get_all=lambda *args, **kwargs: [],
+		)
+
+		with patch("vetedge.services.notifications.frappe", frappe_stub):
+			without_practitioner = resolve_notification_recipients(
+				"consultation_ready_for_treatment",
+				{"document_owner": "creator@example.com"},
+			)
+			with_practitioner = resolve_notification_recipients(
+				"consultation_ready_for_treatment",
+				{
+					"document_owner": "creator@example.com",
+					"practitioner_user": "practitioner@example.com",
+				},
+			)
+
+		self.assertEqual({recipient["address"] for recipient in without_practitioner}, {"creator@example.com"})
+		self.assertEqual(
+			{recipient["address"] for recipient in with_practitioner},
+			{"creator@example.com", "practitioner@example.com"},
+		)
+
+	def test_duplicate_and_disabled_connected_users_are_filtered(self):
+		def exists(doctype, name=None):
+			if doctype == "User":
+				return name in {"creator@example.com", "disabled@example.com"}
+			if doctype == "DocType" and name == "Portal User":
+				return True
+			return False
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Customer" and name == "CUST-001" and fieldname == "email_id":
+				return "owner@example.com"
+			if doctype == "User" and fieldname == "enabled":
+				return 0 if name == "disabled@example.com" else 1
+			if doctype == "User" and fieldname == "email":
+				return name
+			return None
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=get_value),
+			get_all=lambda doctype, **kwargs: ["owner@example.com"] if doctype == "Portal User" else [],
+		)
+
+		with patch("vetedge.services.notifications.frappe", frappe_stub):
+			recipients = resolve_notification_recipients(
+				"appointment_rescheduled",
+				{
+					"primary_owner": "CUST-001",
+					"document_owner": "creator@example.com",
+					"practitioner_user": "creator@example.com",
+					"assigned_to": "disabled@example.com",
+				},
+			)
+
+		addresses = [recipient["address"] for recipient in recipients]
+		self.assertEqual(addresses.count("creator@example.com"), 1)
+		self.assertEqual(addresses.count("owner@example.com"), 1)
+		self.assertNotIn("disabled@example.com", addresses)
+
+	def test_admin_escalation_intentionally_uses_manager_role_routing_with_branch_scope(self):
+		def get_all(doctype, **kwargs):
+			if doctype == "Has Role":
+				return ["manager.main@example.com", "manager.other@example.com"]
+			return []
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "User" and fieldname == "enabled":
+				return 1
+			if doctype == "User" and fieldname == "email":
+				return name
+			return None
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(
+				exists=lambda doctype, name=None: doctype == "User" or (doctype == "DocType" and name == "Branch User Assignment"),
+				get_value=get_value,
+			),
+			get_all=get_all,
+		)
+
+		with (
+			patch("vetedge.services.notifications.frappe", frappe_stub),
+			patch("vetedge.services.notifications.get_assigned_branches", side_effect=lambda user: ["Main"] if user == "manager.main@example.com" else ["Other"]),
+		):
+			recipients = resolve_notification_recipients(
+				"unauthorized_action_blocked",
+				{"branch": "Main", "document_owner": "doctor.a@example.com"},
+			)
+
+		self.assertEqual({recipient["address"] for recipient in recipients}, {"manager.main@example.com"})
+
 	def test_parse_notification_channels_filters_supported_channels(self):
 		self.assertEqual(
 			parse_notification_channels("Email\nSMS\nSignal\nWhatsApp"),
@@ -324,6 +474,7 @@ class TestNotifications(TestCase):
 					frappe._dict(name="SINV-2", customer="CUST-2", outstanding_amount=300, due_date="2026-05-30", branch="Main"),
 				],
 			),
+			patch("vetedge.services.notifications.frappe.get_meta", return_value=SimpleNamespace(has_field=lambda fieldname: fieldname == "branch")),
 			patch("vetedge.services.notifications.already_notified_recently", return_value=False),
 			patch("vetedge.services.notifications.emit_notification_event", side_effect=lambda **kwargs: {"queued": True, "reference_name": kwargs["reference_name"]}),
 			patch("vetedge.services.notifications.getdate", side_effect=lambda value=None: frappe.utils.getdate("2026-04-19" if value is None else value)),

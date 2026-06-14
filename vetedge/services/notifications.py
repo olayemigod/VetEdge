@@ -110,6 +110,64 @@ GROOMING_NOTIFICATION_ROLES = {
 	"VetEdge Administrator",
 }
 
+SYSTEM_NOTIFICATION_USERS = {"Guest", "Administrator"}
+
+ADMIN_ESCALATION_EVENTS = {
+	"role_bundle_applied",
+	"unauthorized_action_blocked",
+	"branch_access_blocked",
+	"patient_access_blocked",
+	"owner_patient_access_blocked",
+	"owner_consultation_access_blocked",
+	"medical_history_access_blocked",
+	"lab_order_access_blocked",
+	"invoice_access_blocked",
+	"internal_payment_access_blocked",
+	"dispensary_access_blocked",
+	"lab_request_blocked",
+	"lab_result_entry_blocked",
+	"lab_result_review_blocked",
+	"grooming_appointment_access_blocked",
+	"grooming_session_create_blocked",
+	"grooming_session_progress_blocked",
+	"grooming_billing_blocked",
+	"role_bundle_management_blocked",
+	"role_bundle_apply_blocked",
+}
+
+MANAGER_ESCALATION_EVENTS = {
+	"accounts_action_required",
+	"stock_issue_failed",
+	"dispensary_stock_issue_failed",
+	"expired_stock_blocked",
+	"dispensary_expired_stock_blocked",
+	"insufficient_non_expired_stock",
+	"dispensary_insufficient_non_expired_stock",
+}
+
+DOCUMENT_CONNECTED_USER_FIELDS = (
+	"created_by",
+	"document_owner",
+	"owner",
+	"requested_by",
+	"requested_user",
+	"requester",
+	"assigned_to",
+	"assigned_user",
+	"handler",
+	"handler_user",
+	"front_desk_user",
+	"responsible_user",
+	"staff_user",
+	"practitioner_user",
+	"consulting_practitioner",
+	"practitioner",
+	"administered_by",
+	"groomer",
+	"applied_by",
+	"user",
+)
+
 EVENT_SETTING_FIELDS = {
 	"appointment_created": "notify_on_appointment_create",
 	"appointment_booked": "notify_on_appointment_create",
@@ -213,6 +271,7 @@ def create_notification_item(
 		"name",
 	)
 	if existing_name:
+		ensure_frappe_notification_log(existing_name)
 		return {
 			"created": False,
 			"name": existing_name,
@@ -237,11 +296,75 @@ def create_notification_item(
 		}
 	)
 	doc.insert(ignore_permissions=True)
+	ensure_frappe_notification_log(doc.name, notification_item=doc)
 	return {
 		"created": True,
 		"name": doc.name,
 		"idempotency_key": idempotency_key,
 	}
+
+
+def ensure_frappe_notification_log(notification_item_name: str, notification_item=None) -> str | None:
+	if not frappe.db.exists("DocType", "Notification Log"):
+		return None
+	try:
+		item = notification_item or frappe.get_doc(NOTIFICATION_ITEM_DOCTYPE, notification_item_name)
+		if item.get("frappe_notification_log"):
+			return item.get("frappe_notification_log")
+
+		document_type = item.get("reference_doctype") or NOTIFICATION_ITEM_DOCTYPE
+		document_name = item.get("reference_name") or item.name
+		link = item.get("action_url") or _build_notification_log_link(document_type, document_name)
+		log = frappe.get_doc(
+			{
+				"doctype": "Notification Log",
+				"subject": item.get("notification_title"),
+				"for_user": item.get("recipient_user"),
+				"type": "Alert",
+				"email_content": item.get("message"),
+				"document_type": document_type,
+				"document_name": document_name,
+				"from_user": "Administrator",
+				"link": link,
+				"read": 0,
+			}
+		)
+		log.insert(ignore_permissions=True)
+		frappe.db.set_value(
+			NOTIFICATION_ITEM_DOCTYPE,
+			item.name,
+			"frappe_notification_log",
+			log.name,
+			update_modified=False,
+		)
+		item.frappe_notification_log = log.name
+		_publish_native_notification_update(item.get("recipient_user"))
+		return log.name
+	except Exception:
+		if getattr(frappe, "log_error", None):
+			frappe.log_error(
+				title="Veterinary Notification Log Mirror Failed",
+				message=frappe.get_traceback() if getattr(frappe, "get_traceback", None) else "Notification Log mirror failed.",
+			)
+		return None
+
+
+def _build_notification_log_link(document_type: str | None, document_name: str | None) -> str | None:
+	if not document_type or not document_name:
+		return None
+	return "/app/{0}/{1}".format(
+		frappe.scrub(document_type).replace("_", "-"),
+		document_name,
+	)
+
+
+def _publish_native_notification_update(user: str | None) -> None:
+	if not user or not getattr(frappe, "publish_realtime", None):
+		return
+	try:
+		frappe.publish_realtime("notification", user=user)
+	except Exception:
+		pass
 
 
 def build_notification_item_idempotency_key(
@@ -597,14 +720,14 @@ def resolve_notification_recipients(
 	explicit_recipients: list | None = None,
 ) -> list[dict]:
 	if explicit_recipients:
-		return normalize_explicit_recipients(explicit_recipients)
+		return filter_notification_recipients(normalize_explicit_recipients(explicit_recipients))
 
 	recipients: list[dict] = []
 	if event_key in OWNER_EVENTS:
 		recipients.extend(get_owner_recipients(context))
 
 	recipients.extend(get_internal_recipients(event_key, context))
-	return deduplicate_recipients(recipients)
+	return filter_notification_recipients(deduplicate_recipients(recipients))
 
 
 def normalize_explicit_recipients(explicit_recipients: list) -> list[dict]:
@@ -649,82 +772,104 @@ def get_owner_recipients(context: dict) -> list[dict]:
 
 def get_internal_recipients(event_key: str, context: dict) -> list[dict]:
 	branch = context.get("service_branch") or context.get("branch")
-	if event_key == "lab_result_ready_for_review":
-		recipients = get_practitioner_recipients(context)
-		if recipients:
-			return recipients
-		return get_role_recipients(LAB_REVIEW_NOTIFICATION_ROLES, branch=branch, audience_type="Doctor")
+	if event_key in ADMIN_ESCALATION_EVENTS:
+		return resolve_admin_escalation_recipients(branch=branch)
+	if event_key in MANAGER_ESCALATION_EVENTS:
+		return resolve_manager_escalation_recipients(branch=branch)
+	return get_document_connected_recipients(context)
 
-	if event_key in {"lab_order_created", "lab_sample_collected", "lab_result_entered"}:
-		return get_role_recipients(LAB_NOTIFICATION_ROLES, branch=branch, audience_type="Lab")
 
-	if event_key in {
-		"accounts_action_required",
-		"consultation_awaiting_payment",
-		"payment_received",
-		"payment_pending",
-		"consultation_invoice_created",
-		"invoice_created",
-		"boarding_invoice_created",
-		"grooming_invoice_created",
-	}:
-		return get_role_recipients(ACCOUNTS_NOTIFICATION_ROLES, branch=branch, audience_type="Accounts")
+def resolve_admin_escalation_recipients(branch: str | None = None) -> list[dict]:
+	"""Role broadcast is reserved for explicit admin/security escalation events."""
+	return get_role_recipients(
+		{"System Manager", "VetEdge Administrator", "Branch Manager", "VetEdge Branch Manager"},
+		branch=branch,
+		audience_type="Admin Escalation",
+	)
 
-	if event_key in {
-		"dispensary_request_created",
-		"consultation_sent_to_dispensary",
-		"dispensary_confirmed",
-		"dispensary_confirmation_completed",
-		"dispensary_stock_issue_failed",
-		"stock_issue_failed",
-		"dispensary_expired_stock_blocked",
-		"expired_stock_blocked",
-		"dispensary_insufficient_non_expired_stock",
-		"insufficient_non_expired_stock",
-	}:
-		return get_role_recipients(DISPENSARY_NOTIFICATION_ROLES, branch=branch, audience_type="Dispensary")
 
-	if event_key.startswith("boarding_"):
-		return get_role_recipients(BOARDING_NOTIFICATION_ROLES, branch=branch, audience_type="Boarding")
+def resolve_manager_escalation_recipients(branch: str | None = None) -> list[dict]:
+	return get_role_recipients(
+		{"VetEdge Administrator", "Branch Manager", "VetEdge Branch Manager", "Accounts Manager"},
+		branch=branch,
+		audience_type="Manager Escalation",
+	)
 
-	if event_key.startswith("grooming_"):
-		recipients = get_groomer_recipients(context)
-		if recipients:
-			return recipients
-		return get_role_recipients(GROOMING_NOTIFICATION_ROLES, branch=branch, audience_type="Grooming")
 
-	if event_key in {
-		"owner_appointment_request_received",
-		"guest_appointment_request_received",
-		"guest_appointment_ready_for_approval",
-		"registration_request_received",
-		"role_bundle_applied",
-		"unauthorized_action_blocked",
-		"branch_access_blocked",
-		"patient_access_blocked",
-		"owner_patient_access_blocked",
-		"owner_consultation_access_blocked",
-		"medical_history_access_blocked",
-		"lab_order_access_blocked",
-		"invoice_access_blocked",
-		"internal_payment_access_blocked",
-		"dispensary_access_blocked",
-		"lab_request_blocked",
-		"lab_result_entry_blocked",
-		"lab_result_review_blocked",
-		"grooming_appointment_access_blocked",
-		"grooming_session_create_blocked",
-		"grooming_session_progress_blocked",
-		"grooming_billing_blocked",
-		"role_bundle_management_blocked",
-		"role_bundle_apply_blocked",
-	}:
-		return get_role_recipients(STAFF_NOTIFICATION_ROLES | {"System Manager", "VetEdge Administrator"}, branch=branch, audience_type="Internal Staff")
+def get_document_connected_recipients(context: dict) -> list[dict]:
+	recipients = []
+	for fieldname in DOCUMENT_CONNECTED_USER_FIELDS:
+		for user in _split_user_values(context.get(fieldname)):
+			recipient = get_user_recipient(user, audience_type=_audience_type_for_user_field(fieldname))
+			if recipient:
+				recipients.append(recipient)
+	return recipients
 
-	if event_key == "consultation_ready_for_treatment":
-		return get_practitioner_recipients(context) or get_role_recipients(STAFF_NOTIFICATION_ROLES, branch=branch, audience_type="Internal Staff")
 
-	return get_role_recipients(STAFF_NOTIFICATION_ROLES, branch=branch, audience_type="Internal Staff")
+def _split_user_values(value) -> list[str]:
+	if value in (None, ""):
+		return []
+	if isinstance(value, (list, tuple, set)):
+		values = value
+	else:
+		values = [value]
+	users = []
+	for raw_value in values:
+		for user in cstr(raw_value).replace("\n", ",").split(","):
+			user = user.strip()
+			if user:
+				users.append(user)
+	return users
+
+
+def _audience_type_for_user_field(fieldname: str) -> str:
+	if fieldname in {"created_by", "document_owner", "owner"}:
+		return "Creator"
+	if fieldname in {"practitioner_user", "consulting_practitioner", "practitioner", "administered_by"}:
+		return "Practitioner"
+	if fieldname == "groomer":
+		return "Grooming"
+	if fieldname in {"front_desk_user", "handler", "handler_user", "responsible_user", "assigned_to", "assigned_user"}:
+		return "Assigned Staff"
+	return "Internal Staff"
+
+
+def get_user_recipient(user: str | None, audience_type: str = "Internal Staff", allow_system: bool = False) -> dict | None:
+	user = cstr(user).strip()
+	if not user:
+		return None
+	if not allow_system and user in SYSTEM_NOTIFICATION_USERS:
+		return None
+	if not is_notification_user_enabled(user):
+		return None
+	email = get_user_email(user)
+	if not email:
+		return None
+	return {
+		"identifier": user,
+		"address": email,
+		"audience_type": audience_type,
+		"preference_key": user,
+		"user": user,
+	}
+
+
+def is_notification_user_enabled(user: str | None) -> bool:
+	user = cstr(user).strip()
+	if not user:
+		return False
+	if user == "Guest":
+		return False
+	try:
+		if not frappe.db.exists("User", user):
+			return "@" in user and user != "Administrator"
+	except Exception:
+		pass
+	try:
+		enabled = frappe.db.get_value("User", user, "enabled")
+		return bool(enabled)
+	except Exception:
+		return user != "Administrator"
 
 
 def get_practitioner_recipients(context: dict) -> list[dict]:
@@ -733,36 +878,20 @@ def get_practitioner_recipients(context: dict) -> list[dict]:
 		practitioner = frappe.db.get_value("Veterinary Consultation", context["consultation"], "consulting_practitioner")
 	if not practitioner:
 		return []
-	email = get_user_email(practitioner)
-	if not email:
+	recipient = get_user_recipient(practitioner, audience_type="Practitioner")
+	if not recipient:
 		return []
-	return [
-		{
-			"identifier": practitioner,
-			"address": email,
-			"audience_type": "Practitioner",
-			"preference_key": practitioner,
-			"user": practitioner,
-		}
-	]
+	return [recipient]
 
 
 def get_groomer_recipients(context: dict) -> list[dict]:
 	groomer = context.get("groomer")
 	if not groomer:
 		return []
-	email = get_user_email(groomer)
-	if not email:
+	recipient = get_user_recipient(groomer, audience_type="Grooming")
+	if not recipient:
 		return []
-	return [
-		{
-			"identifier": groomer,
-			"address": email,
-			"audience_type": "Grooming",
-			"preference_key": groomer,
-			"user": groomer,
-		}
-	]
+	return [recipient]
 
 
 def get_role_recipients(roles: set[str], branch: str | None = None, audience_type: str = "Internal Staff") -> list[dict]:
@@ -777,7 +906,7 @@ def get_role_recipients(roles: set[str], branch: str | None = None, audience_typ
 	users = [
 		user
 		for user in users
-		if frappe.db.get_value("User", user, "enabled")
+		if is_notification_user_enabled(user)
 	]
 	if branch and frappe.db.exists("DocType", "Branch User Assignment"):
 		branch_users = [
@@ -788,18 +917,9 @@ def get_role_recipients(roles: set[str], branch: str | None = None, audience_typ
 
 	recipients = []
 	for user in users:
-		email = get_user_email(user)
-		if not email:
-			continue
-		recipients.append(
-			{
-				"identifier": user,
-				"address": email,
-				"audience_type": audience_type,
-				"preference_key": user,
-				"user": user,
-			}
-		)
+		recipient = get_user_recipient(user, audience_type=audience_type, allow_system=True)
+		if recipient:
+			recipients.append(recipient)
 	return recipients
 
 
@@ -807,16 +927,31 @@ def deduplicate_recipients(recipients: list[dict]) -> list[dict]:
 	deduped = []
 	seen = set()
 	for recipient in recipients:
-		key = (
-			recipient.get("preference_key") or recipient.get("identifier"),
-			recipient.get("address"),
-			recipient.get("audience_type"),
-		)
+		key = cstr(recipient.get("address") or recipient.get("preference_key") or recipient.get("user") or recipient.get("identifier")).lower()
 		if key in seen:
 			continue
 		seen.add(key)
 		deduped.append(recipient)
 	return deduped
+
+
+def filter_notification_recipients(recipients: list[dict]) -> list[dict]:
+	filtered = []
+	for recipient in recipients:
+		user = recipient.get("user")
+		identifier = recipient.get("identifier")
+		if not user and identifier in SYSTEM_NOTIFICATION_USERS:
+			continue
+		if user and not is_notification_user_enabled(user):
+			continue
+		if not user and identifier and "@" in cstr(identifier):
+			try:
+				if frappe.db.exists("User", identifier) and not is_notification_user_enabled(identifier):
+					continue
+			except Exception:
+				pass
+		filtered.append(recipient)
+	return filtered
 
 
 def get_owner_email_recipients(payload: dict) -> set[str]:
@@ -838,13 +973,13 @@ def get_owner_email_recipients(payload: dict) -> set[str]:
 		recipients.add(customer_email)
 
 	if frappe.db.exists("DocType", "Portal User"):
-		recipients.update(
-			frappe.get_all(
-				"Portal User",
-				filters={"parenttype": "Customer", "parent": customer},
-				pluck="user",
-			)
-		)
+		for user in frappe.get_all(
+			"Portal User",
+			filters={"parenttype": "Customer", "parent": customer},
+			pluck="user",
+		):
+			if is_notification_user_enabled(user):
+				recipients.add(user)
 
 	return recipients
 
@@ -928,6 +1063,14 @@ def hydrate_reference_context(
 		return context
 	if not frappe.db.exists(reference_doctype, reference_name):
 		return context
+	if context.get("document_owner") in (None, ""):
+		try:
+			document_owner = frappe.db.get_value(reference_doctype, reference_name, "owner")
+			if document_owner:
+				context["document_owner"] = document_owner
+				context.setdefault("created_by", document_owner)
+		except Exception:
+			pass
 
 	field_map = {
 		"Sales Invoice": (
@@ -1367,7 +1510,12 @@ def send_due_appointment_reminders() -> list[dict]:
 	results = []
 	for row in appointments:
 		appointment = frappe.get_doc("Veterinary Appointment", row.name)
-		result = notify_appointment_event(appointment, "appointment_reminder")
+		try:
+			result = notify_appointment_event(appointment, "appointment_reminder")
+		except Exception as exc:
+			_notify_appointment_reminder_failed_safely(appointment, reason=cstr(exc))
+			results.append({"queued": False, "reason": "appointment_reminder_failed", "appointment": appointment.name})
+			continue
 		results.append(result)
 		if result.get("queued"):
 			frappe.db.set_value(
@@ -1376,8 +1524,29 @@ def send_due_appointment_reminders() -> list[dict]:
 				{"reminder_sent": 1, "reminder_sent_on": now_datetime()},
 				update_modified=False,
 			)
+			_notify_appointment_reminder_sent_safely(appointment)
+		else:
+			_notify_appointment_reminder_failed_safely(appointment, reason=result.get("reason"))
 
 	return results
+
+
+def _notify_appointment_reminder_sent_safely(appointment) -> None:
+	try:
+		from vetedge.services.appointment_notifications import notify_appointment_reminder_sent
+
+		notify_appointment_reminder_sent(appointment)
+	except Exception:
+		pass
+
+
+def _notify_appointment_reminder_failed_safely(appointment, reason: str | None = None) -> None:
+	try:
+		from vetedge.services.appointment_notifications import notify_appointment_reminder_failed
+
+		notify_appointment_reminder_failed(appointment, reason=reason)
+	except Exception:
+		pass
 
 
 def send_due_vaccination_notifications() -> list[dict]:
