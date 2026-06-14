@@ -15,6 +15,7 @@ from vetedge.services.billing import (
 )
 from vetedge.services.feature_flags import is_enabled
 from vetedge.services.notifications import emit_notification_event
+from vetedge.services.payment_gate import assert_consultation_can_proceed
 from vetedge.services.registration_billing import validate_registration_payment_before_first_consultation
 from vetedge.services.permissions import (
 	DOCTOR_ROLES,
@@ -166,8 +167,7 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	validate_consultation_status_transition(doc.status, status)
-	validate_consultation_invoice_before_progress(doc, status)
-	validate_consultation_payment_before_treatment(doc, status)
+	assert_consultation_can_proceed(doc, status)
 	previous = SimpleNamespace(status=doc.status)
 	doc.status = status
 	validate_paid_consultation_cancellation(doc, previous)
@@ -597,8 +597,7 @@ def validate_enabled_item(item: str | None) -> None:
 
 
 def validate_completion_requirements(doc) -> None:
-	validate_consultation_invoice_before_progress(doc)
-	validate_consultation_payment_before_treatment(doc)
+	assert_consultation_can_proceed(doc, doc.status)
 	validate_consultation_dispensary_requirements(doc)
 
 	if doc.status != "Completed":

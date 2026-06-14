@@ -27,6 +27,7 @@
   "column_break_consultation_billing",
   "allow_doctor_collect_payment",
   "consultation_requires_payment_before_treatment",
+  "consultation_payment_gate",
   "vitals_section",
   "enable_vitals",
   "require_vitals_before_completion",
@@ -255,6 +256,14 @@
    "fieldname": "consultation_requires_payment_before_treatment",
    "fieldtype": "Check",
    "label": "Consultation Requires Payment Before Treatment"
+  },
+  {
+   "default": "Full Payment Required",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations && doc.enable_consultation_billing",
+   "fieldname": "consultation_payment_gate",
+   "fieldtype": "Select",
+   "label": "Consultation Payment Gate",
+   "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
   },
   {
    "fieldname": "vitals_section",

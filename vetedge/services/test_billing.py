@@ -159,6 +159,11 @@ class TestConsultationBilling(TestCase):
 
 		with (
 			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.user_has_any_role", return_value=False),
+			patch(
+				"vetedge.services.billing.frappe.get_doc",
+				return_value=frappe._dict(docstatus=1, outstanding_amount=1000, grand_total=1000),
+			),
 			patch("vetedge.services.billing.frappe.throw", side_effect=frappe.ValidationError),
 		):
 			self.assertRaises(
@@ -185,6 +190,11 @@ class TestConsultationBilling(TestCase):
 
 		with (
 			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.user_has_any_role", return_value=False),
+			patch(
+				"vetedge.services.billing.frappe.get_doc",
+				return_value=frappe._dict(docstatus=1, outstanding_amount=1000, grand_total=1000),
+			),
 			patch("vetedge.services.billing.frappe.throw", side_effect=frappe.ValidationError),
 		):
 			self.assertRaises(
@@ -327,6 +337,7 @@ def make_frappe_stub(set_values=None, get_doc=None, get_value=None):
 			set_value=lambda *args, **kwargs: set_values.append(args),
 		),
 		get_doc=get_doc,
+		get_all=lambda *args, **kwargs: [],
 		get_roles=lambda *args, **kwargs: ["VetEdge Front Desk"],
 		get_meta=lambda *args, **kwargs: SimpleNamespace(has_field=lambda field: True),
 		session=SimpleNamespace(user="staff@example.com"),

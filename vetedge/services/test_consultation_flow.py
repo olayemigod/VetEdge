@@ -26,7 +26,10 @@ class TestConsultationFlow(TestCase):
 		doc = frappe._dict(patient="VP-001")
 
 		with (
-			patch("vetedge.services.consultation_flow.frappe", make_frappe_stub()),
+			patch(
+				"vetedge.services.consultation_flow.frappe",
+				make_frappe_stub(db=SimpleNamespace(exists=lambda *args, **kwargs: True)),
+			),
 			patch("vetedge.services.consultation_flow.is_enabled", return_value=False),
 		):
 			self.assertRaises(frappe.ValidationError, validate_consultation, doc)
@@ -383,6 +386,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
 			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation") as validate_gate,
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -430,6 +434,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
 			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation") as validate_gate,
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
@@ -589,7 +594,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.require_internal_user"),
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
-			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress", side_effect=frappe.ValidationError),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 		):
 			self.assertRaises(
@@ -608,7 +613,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.require_internal_user"),
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
-			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment", side_effect=frappe.ValidationError),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError),
 		):
 			self.assertRaises(
 				frappe.ValidationError,
@@ -661,6 +666,7 @@ class TestConsultationFlow(TestCase):
 		with (
 			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 		):
@@ -916,7 +922,7 @@ class TestConsultationFlow(TestCase):
 			sync_service_appointment_status_from_consultation(doc)
 
 		self.assertEqual(updates[0][0], ("Veterinary Appointment", "VAPT-001", "status", "Completed"))
-		self.assertEqual(emit.call_args.kwargs["event"], "appointment_completed")
+		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_completed")
 
 	def test_cancelled_consultation_marks_service_appointment_cancelled(self):
 		doc = frappe._dict(
@@ -948,7 +954,7 @@ class TestConsultationFlow(TestCase):
 			sync_service_appointment_status_from_consultation(doc)
 
 		self.assertEqual(updates[0][0], ("Veterinary Appointment", "VAPT-001", "status", "Cancelled"))
-		self.assertEqual(emit.call_args.kwargs["event"], "appointment_cancelled")
+		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_cancelled")
 
 	def test_branch_assignment_is_enforced_when_assignment_doctype_exists(self):
 		frappe_stub = make_frappe_stub(
