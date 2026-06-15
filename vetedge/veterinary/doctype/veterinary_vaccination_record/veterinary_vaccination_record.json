@@ -23,6 +23,7 @@
   "dose",
   "route",
   "next_due_date",
+  "next_vaccination_appointment",
   "expiry_date",
   "batch_no",
   "notes",
@@ -159,6 +160,14 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Next Due Date"
+  },
+  {
+   "fieldname": "next_vaccination_appointment",
+   "fieldtype": "Link",
+   "label": "Next Vaccination Appointment",
+   "no_copy": 1,
+   "options": "Veterinary Appointment",
+   "read_only": 1
   },
   {
    "fieldname": "expiry_date",
