@@ -239,6 +239,8 @@ def apply_linked_appointment_context(doc) -> None:
 		doc.service_branch = appointment.branch
 	if appointment.practitioner and not doc.consulting_practitioner:
 		doc.consulting_practitioner = appointment.practitioner
+	if not getattr(doc, "consultation_type", None):
+		doc.consultation_type = get_consultation_type_from_appointment(appointment)
 	if appointment.notes and not doc.presenting_complaint:
 		doc.presenting_complaint = appointment.notes
 
@@ -377,12 +379,38 @@ def emit_service_appointment_status_event(appointment, status: str) -> dict | No
 
 
 def get_linked_appointment_data(appointment: str):
+	fields = [
+		"name",
+		"patient",
+		"status",
+		"branch",
+		"practitioner",
+		"appointment_type",
+		"notes",
+		"linked_consultation",
+		"follow_up_reference",
+	]
+	if frappe.get_meta("Veterinary Appointment").has_field("consultation_type"):
+		fields.append("consultation_type")
+
 	return frappe.db.get_value(
 		"Veterinary Appointment",
 		appointment,
-		["name", "patient", "status", "branch", "practitioner", "notes", "linked_consultation", "follow_up_reference"],
+		fields,
 		as_dict=True,
 	)
+
+
+def get_consultation_type_from_appointment(appointment) -> str | None:
+	consultation_type = getattr(appointment, "consultation_type", None)
+	if consultation_type:
+		return consultation_type
+
+	appointment_type = getattr(appointment, "appointment_type", None)
+	if appointment_type and frappe.db.exists("Consultation Type", appointment_type):
+		return appointment_type
+
+	return None
 
 
 @frappe.whitelist()
