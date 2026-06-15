@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import frappe
 
+from vetedge.seed.master_data import CONSULTATION_TYPES
 from vetedge.services.consultation_flow import (
 	claim_linked_appointment_for_consultation,
 	get_next_daily_consultation_number,
@@ -24,6 +25,42 @@ from vetedge.services.consultation_flow import (
 
 
 class TestConsultationFlow(TestCase):
+	def test_consultation_type_master_doctype_is_defined(self):
+		doctype_path = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "consultation_type"
+			/ "consultation_type.json"
+		)
+		doctype = json.loads(doctype_path.read_text())
+		field = next(
+			field for field in doctype["fields"] if field.get("fieldname") == "consultation_type"
+		)
+
+		self.assertEqual(doctype["name"], "Consultation Type")
+		self.assertEqual(doctype["module"], "Veterinary")
+		self.assertEqual(doctype["autoname"], "field:consultation_type")
+		self.assertEqual(doctype["title_field"], "consultation_type")
+		self.assertEqual(field["fieldtype"], "Data")
+		self.assertTrue(field["reqd"])
+		self.assertTrue(field["unique"])
+
+	def test_default_consultation_types_include_house_call(self):
+		default_names = {record["consultation_type"] for record in CONSULTATION_TYPES}
+
+		self.assertIn("General Consultation", default_names)
+		self.assertIn("Follow-up Consultation", default_names)
+		self.assertIn("Emergency Consultation", default_names)
+		self.assertIn("House Call", default_names)
+		self.assertIn("Vaccination Consultation", default_names)
+		self.assertIn("Surgery Review", default_names)
+		self.assertIn("Grooming Consultation", default_names)
+		self.assertIn("Boarding Review", default_names)
+		self.assertIn("Hospitalisation", default_names)
+		house_call = next(record for record in CONSULTATION_TYPES if record["consultation_type"] == "House Call")
+		self.assertEqual(house_call["is_house_call"], 1)
+
 	def test_consultation_type_field_is_defined_on_consultation_doctype(self):
 		doctype_path = (
 			Path(__file__).resolve().parents[1]
@@ -166,7 +203,7 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(doc.consulting_practitioner, "assigned.doctor@example.com")
 		self.assertEqual(doc.consulting_practitioner_name, "Dr Assigned Vet")
 
-	def test_linked_appointment_appointment_type_copies_to_consultation_type_when_master_exists(self):
+	def test_linked_appointment_appointment_type_maps_to_consultation_type_when_master_exists(self):
 		doc = frappe._dict(
 			patient="VP-001",
 			primary_owner=None,
@@ -204,7 +241,7 @@ class TestConsultationFlow(TestCase):
 			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
 
 		def exists(doctype, name=None, **kwargs):
-			return (doctype, name) == ("Consultation Type", "Consultation")
+			return (doctype, name) == ("Consultation Type", "General Consultation")
 
 		frappe_stub = make_frappe_stub(
 			db=SimpleNamespace(
@@ -229,9 +266,74 @@ class TestConsultationFlow(TestCase):
 		):
 			validate_consultation(doc)
 
-		self.assertEqual(doc.consultation_type, "Consultation")
+		self.assertEqual(doc.consultation_type, "General Consultation")
 
-	def test_existing_consultation_type_is_preserved_during_validation(self):
+	def test_linked_appointment_house_call_maps_to_seeded_consultation_type(self):
+		doc = frappe._dict(
+			patient="VP-001",
+			primary_owner=None,
+			consulting_practitioner=None,
+			consulting_practitioner_name=None,
+			daily_consultation_number=None,
+			service_branch=None,
+			consultation_datetime="2026-04-18 10:00:00",
+			status="Draft",
+			company="Test Company",
+			symptoms=[],
+			diagnoses=[],
+			planned_treatments=[],
+			linked_appointment="VAPT-001",
+			consultation_type=None,
+		)
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if doctype == "User" and fields == "full_name":
+				return "Dr Assigned Vet"
+			if fields == "patient_name":
+				return "Buddy"
+			if doctype == "Veterinary Appointment":
+				return frappe._dict(
+					name="VAPT-001",
+					patient="VP-001",
+					status="Confirmed",
+					branch="Branch B",
+					practitioner="assigned.doctor@example.com",
+					appointment_type="House Call",
+					notes=None,
+					linked_consultation=None,
+					follow_up_reference=None,
+				)
+			return frappe._dict(primary_owner="CUST-001", default_branch="Branch A")
+
+		def exists(doctype, name=None, **kwargs):
+			return (doctype, name) == ("Consultation Type", "House Call")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=exists,
+			),
+			session=SimpleNamespace(user="doctor@example.com"),
+			get_roles=lambda *args, **kwargs: ["VetEdge Doctor"],
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.validate_doctor_user"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+			patch("vetedge.services.consultation_flow.apply_planned_treatment_defaults"),
+			patch("vetedge.services.consultation_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
+			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
+			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
+			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+		):
+			validate_consultation(doc)
+
+		self.assertEqual(doc.consultation_type, "House Call")
+
+	def test_veterinary_consultation_allows_house_call_consultation_type(self):
 		doc = frappe._dict(
 			patient="VP-001",
 			primary_owner=None,
@@ -246,7 +348,7 @@ class TestConsultationFlow(TestCase):
 			diagnoses=[],
 			planned_treatments=[],
 			linked_appointment=None,
-			consultation_type="Emergency",
+			consultation_type="House Call",
 		)
 
 		def get_value(doctype, name, fields=None, **kwargs):
@@ -277,7 +379,7 @@ class TestConsultationFlow(TestCase):
 		):
 			validate_consultation(doc)
 
-		self.assertEqual(doc.consultation_type, "Emergency")
+		self.assertEqual(doc.consultation_type, "House Call")
 
 	def test_consultation_resolves_owner_and_allows_cross_branch_service(self):
 		doc = frappe._dict(

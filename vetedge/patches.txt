@@ -7,3 +7,4 @@
 vetedge.patches.ensure_vetedge_workspace_sidebar
 vetedge.patches.move_follow_up_appointment_links
 vetedge.patches.sync_vetedge_email_templates
+vetedge.patches.remove_clinic_visit_consultation_type

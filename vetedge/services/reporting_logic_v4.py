@@ -66,6 +66,7 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
             payload["charts"].append(_consultation_chart(_rows("Consultation Register", month_filters)))
         payload["charts"].extend([
             _consultation_by_branch_chart(_rows("Consultation Register", month_filters)),
+            _consultation_type_chart(_rows("Consultation Register", month_filters)),
             _daily_revenue_chart(_rows("Revenue Summary", month_filters)),
             _branch_revenue_chart(_rows("Revenue Summary", month_filters)),
         ])
@@ -259,6 +260,15 @@ def _consultation_by_branch_chart(rows):
     grouped = _group_count(rows, "service_branch")
     labels = sorted(grouped)
     return _chart(_("Consultations by Branch"), "bar", labels, [grouped[label] for label in labels], "#0ea5e9")
+
+
+def _consultation_type_chart(rows):
+    grouped = {}
+    for row in rows:
+        consultation_type = cstr(row.get("consultation_type") or _("Unspecified")).strip() or _("Unspecified")
+        grouped[consultation_type] = grouped.get(consultation_type, 0) + 1
+    labels = sorted(grouped)
+    return _chart(_("Consultations by Type"), "donut", labels, [grouped[label] for label in labels], "#6366f1")
 
 
 def _unpaid_status_chart(rows):

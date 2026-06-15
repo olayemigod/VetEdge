@@ -64,6 +64,16 @@ CONSULTATION_SCOPE_LOCKED_STATUSES = {
 	"Cancelled",
 }
 
+APPOINTMENT_TYPE_CONSULTATION_TYPE_MAP = {
+	"Consultation": "General Consultation",
+	"Follow Up": "Follow-up Consultation",
+	"Vaccination": "Vaccination Consultation",
+	"Grooming": "Grooming Consultation",
+	"Boarding": "Boarding Review",
+	"House Call": "House Call",
+	"Hospitalisation": "Hospitalisation",
+}
+
 
 def validate_consultation(doc) -> None:
 	ensure_consultations_enabled()
@@ -409,6 +419,10 @@ def get_consultation_type_from_appointment(appointment) -> str | None:
 	appointment_type = getattr(appointment, "appointment_type", None)
 	if appointment_type and frappe.db.exists("Consultation Type", appointment_type):
 		return appointment_type
+
+	mapped_consultation_type = APPOINTMENT_TYPE_CONSULTATION_TYPE_MAP.get(appointment_type)
+	if mapped_consultation_type and frappe.db.exists("Consultation Type", mapped_consultation_type):
+		return mapped_consultation_type
 
 	return None
 

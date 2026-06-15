@@ -184,7 +184,7 @@ EXPECTED_REPORT_ROLES = {
 }
 
 EXPECTED_REPORT_FILTER_FIELDS = {
-	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "patient", "owner", "status"},
+	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status"},
 	"report/patient_register/patient_register.json": {"branch", "owner", "species", "registration_status"},
 	"report/owner_register/owner_register.json": {"branch", "owner", "outstanding_only"},
 	"report/practitioner_performance_report/practitioner_performance_report.json": {"from_date", "to_date", "branch", "practitioner"},
@@ -244,7 +244,7 @@ REPORT_JS_WITH_DEFAULTS = {
 
 EXPECTED_REPORT_JS_FILTER_FIELDS = {
 	"report/branch_performance_summary/branch_performance_summary.js": {"from_date", "to_date", "branch", "cost_center", "chart"},
-	"report/consultation_register/consultation_register.js": {"from_date", "to_date", "branch", "practitioner", "patient", "owner", "status"},
+	"report/consultation_register/consultation_register.js": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status"},
 	"report/owner_register/owner_register.js": {"branch", "owner", "outstanding_only"},
 	"report/patient_register/patient_register.js": {"branch", "species", "owner", "registration_status"},
 	"report/practitioner_performance_report/practitioner_performance_report.js": {"from_date", "to_date", "branch", "practitioner"},

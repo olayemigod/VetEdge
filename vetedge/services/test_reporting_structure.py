@@ -7,6 +7,7 @@ import frappe
 frappe._ = lambda value: value
 
 from vetedge.services import reporting_structure
+from vetedge.services import reporting_logic_v4
 
 
 class TestReportingStructure(unittest.TestCase):
@@ -145,6 +146,141 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(data[0]["invoice"], "SINV-0001")
         self.assertEqual(data[0]["branch"], "Branch A")
         self.assertEqual(data[0]["grand_total"], 100)
+
+    def test_consultation_register_includes_consultation_type_column_and_unspecified(self):
+        rows = [
+            {
+                "name": "VCON-001",
+                "consultation_date": "2026-06-15",
+                "patient": "VP-001",
+                "owner": "CUST-001",
+                "practitioner": "Dr Ada",
+                "practitioner_user": "doctor@example.com",
+                "service_branch": "Main",
+                "consultation_type": "",
+                "status": "Completed",
+                "linked_invoice": None,
+            },
+            {
+                "name": "VCON-002",
+                "consultation_date": "2026-06-15",
+                "patient": "VP-002",
+                "owner": "CUST-002",
+                "practitioner": "Dr Ben",
+                "practitioner_user": "doctor2@example.com",
+                "service_branch": "Main",
+                "consultation_type": "House Call",
+                "status": "Completed",
+                "linked_invoice": None,
+            },
+        ]
+
+        with (
+            patch.object(reporting_structure, "_get_consultation_rows", return_value=rows),
+            patch.object(reporting_structure, "_get_patient_title_map", return_value={}),
+            patch.object(reporting_structure, "_get_user_full_name_map", return_value={}),
+        ):
+            columns, data, _, _, _ = reporting_structure._consultation_register({})
+
+        self.assertIn("consultation_type", {column["fieldname"] for column in columns})
+        self.assertEqual(data[0]["consultation_type"], "Unspecified")
+        self.assertEqual(data[1]["consultation_type"], "House Call")
+
+    def test_get_consultation_rows_applies_consultation_type_and_branch_filters(self):
+        captured = {}
+
+        def get_all(doctype, filters=None, fields=None, order_by=None):
+            captured["doctype"] = doctype
+            captured["filters"] = filters
+            captured["fields"] = fields
+            return [
+                {
+                    "name": "VCON-001",
+                    "consultation_datetime": "2026-06-15 09:00:00",
+                    "patient": "VP-001",
+                    "primary_owner": "CUST-001",
+                    "consulting_practitioner": "doctor@example.com",
+                    "consulting_practitioner_name": "Dr Ada",
+                    "service_branch": "Main",
+                    "consultation_type": "House Call",
+                    "status": "Completed",
+                    "linked_invoice": None,
+                }
+            ]
+
+        consultation_fields = {
+            "consultation_datetime",
+            "patient",
+            "primary_owner",
+            "consulting_practitioner",
+            "consulting_practitioner_name",
+            "service_branch",
+            "consultation_type",
+            "status",
+            "linked_invoice",
+        }
+        meta = SimpleNamespace(get_field=lambda fieldname: fieldname in consultation_fields)
+        frappe_stub = SimpleNamespace(
+            db=SimpleNamespace(exists=lambda doctype, name=None: doctype == "DocType" and name == "Veterinary Consultation"),
+            get_meta=lambda doctype: meta,
+            get_all=get_all,
+        )
+
+        with patch.object(reporting_structure, "frappe", frappe_stub):
+            rows = reporting_structure._get_consultation_rows(
+                {"from_date": "2026-06-01", "to_date": "2026-06-30", "branch": "Main", "consultation_type": "House Call"}
+            )
+
+        self.assertEqual(captured["doctype"], "Veterinary Consultation")
+        self.assertEqual(captured["filters"]["service_branch"], "Main")
+        self.assertEqual(captured["filters"]["consultation_type"], "House Call")
+        self.assertIn("consultation_datetime", captured["fields"])
+        self.assertIn("consultation_type", captured["fields"])
+        self.assertEqual(rows[0]["consultation_type"], "House Call")
+
+    def test_executive_dashboard_includes_consultation_type_breakdown(self):
+        consultation_rows = [
+            {"consultation_date": "2026-06-15", "service_branch": "Main", "consultation_type": "General Consultation"},
+            {"consultation_date": "2026-06-15", "service_branch": "Main", "consultation_type": "House Call"},
+            {"consultation_date": "2026-06-15", "service_branch": "Branch B", "consultation_type": ""},
+        ]
+
+        def rows(report_name, filters):
+            if report_name == "Consultation Register":
+                if filters.get("branch") == "Main":
+                    return [row for row in consultation_rows if row["service_branch"] == "Main"]
+                return consultation_rows
+            return []
+
+        frappe_stub = SimpleNamespace(_dict=frappe._dict, format_value=lambda value, options: value)
+
+        with (
+            patch.object(reporting_logic_v4, "frappe", frappe_stub),
+            patch.object(reporting_logic_v4, "nowdate", return_value="2026-06-15"),
+            patch.object(reporting_logic_v4, "validate_dashboard_access"),
+            patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
+            patch.object(reporting_logic_v4, "_rows", side_effect=rows),
+            patch.object(reporting_logic_v4, "_appointments_today", return_value=0),
+            patch.object(reporting_logic_v4, "_active_patients", return_value=0),
+        ):
+            payload = reporting_logic_v4.get_dashboard_payload("executive", {"branch": "Main"})
+
+        chart = next(chart for chart in payload["charts"] if chart["title"] == "Consultations by Type")
+        self.assertEqual(chart["type"], "donut")
+        self.assertEqual(chart["data"]["labels"], ["General Consultation", "House Call"])
+        self.assertEqual(chart["data"]["datasets"][0]["values"], [1, 1])
+
+    def test_consultation_type_chart_groups_unspecified(self):
+        chart = reporting_logic_v4._consultation_type_chart(
+            [
+                {"consultation_type": "House Call"},
+                {"consultation_type": ""},
+                {"consultation_type": None},
+            ]
+        )
+
+        self.assertEqual(chart["data"]["labels"], ["House Call", "Unspecified"])
+        self.assertEqual(chart["data"]["datasets"][0]["values"], [1, 2])
 
 
 if __name__ == "__main__":

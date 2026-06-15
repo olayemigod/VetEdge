@@ -69,6 +69,18 @@ TREATMENT_TYPES = [
 	{"treatment_type_name": "Consumable", "treatment_category": "Consumable", "requires_dispensary": 1},
 ]
 
+CONSULTATION_TYPES = [
+	{"consultation_type": "General Consultation", "sort_order": 10},
+	{"consultation_type": "Follow-up Consultation", "sort_order": 20},
+	{"consultation_type": "Emergency Consultation", "sort_order": 30},
+	{"consultation_type": "House Call", "is_house_call": 1, "sort_order": 40},
+	{"consultation_type": "Vaccination Consultation", "sort_order": 50},
+	{"consultation_type": "Surgery Review", "sort_order": 60},
+	{"consultation_type": "Grooming Consultation", "sort_order": 70},
+	{"consultation_type": "Boarding Review", "sort_order": 80},
+	{"consultation_type": "Hospitalisation", "sort_order": 90},
+]
+
 
 def seed_master_data() -> None:
 	seed_records("Veterinary Species", SPECIES, ["species_name"])
@@ -78,6 +90,7 @@ def seed_master_data() -> None:
 	seed_records("Veterinary Diagnosis", DIAGNOSES, ["diagnosis_name"])
 	seed_records("Veterinary Service Type", SERVICE_TYPES, ["service_type_name"])
 	seed_records("Veterinary Treatment Type", TREATMENT_TYPES, ["treatment_type_name"])
+	seed_records("Consultation Type", CONSULTATION_TYPES, ["consultation_type"])
 
 
 def seed_records(doctype: str, records: list[dict], unique_fields: list[str]) -> None:

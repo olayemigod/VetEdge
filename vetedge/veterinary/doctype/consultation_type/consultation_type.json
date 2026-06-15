@@ -1,0 +1,34 @@
+{
+ "actions": [],
+ "autoname": "field:consultation_type",
+ "creation": "2026-06-15 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": ["consultation_type", "description", "is_house_call", "sort_order", "disabled"],
+ "fields": [
+  {"fieldname": "consultation_type", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Consultation Type", "reqd": 1, "search_index": 1, "unique": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"default": "0", "fieldname": "is_house_call", "fieldtype": "Check", "in_list_view": 1, "label": "Is House Call"},
+  {"fieldname": "sort_order", "fieldtype": "Int", "label": "Sort Order"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
+ ],
+ "module": "Veterinary",
+ "name": "Consultation Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Nurse", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Veterinary Nurse", "share": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1},
+  {"read": 1, "report": 1, "role": "Branch Manager"},
+  {"read": 1, "report": 1, "role": "VetEdge Branch Manager"}
+ ],
+ "search_fields": "consultation_type",
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "title_field": "consultation_type"
+}

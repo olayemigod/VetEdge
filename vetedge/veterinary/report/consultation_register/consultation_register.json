@@ -7,6 +7,7 @@
   {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
   {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
   {"fieldname": "practitioner", "fieldtype": "Link", "label": "Practitioner", "options": "User"},
+  {"fieldname": "consultation_type", "fieldtype": "Link", "label": "Consultation Type", "options": "Consultation Type"},
   {"fieldname": "patient", "fieldtype": "Link", "label": "Patient", "options": "Veterinary Patient"},
   {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "Customer"},
   {"fieldname": "status", "fieldtype": "Data", "label": "Status"}

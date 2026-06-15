@@ -138,6 +138,7 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
             payload["charts"].append(_consultations_per_day_chart(month_filters))
         payload["charts"].extend([
             _consultations_by_branch_chart(month_filters),
+            _consultations_by_type_chart(month_filters),
             _daily_revenue_chart(month_filters),
             _revenue_by_branch_chart(month_filters),
         ])
@@ -241,6 +242,7 @@ def _consultation_register(filters):
         _col("owner", "Link", "Customer"),
         _col("practitioner", "Data"),
         _col("service_branch", "Link", "Branch"),
+        _col("consultation_type", "Link", "Consultation Type", label=_("Consultation Type")),
         _col("status", "Data"),
         _col("linked_invoice", "Link", "Sales Invoice"),
     ]
@@ -254,6 +256,7 @@ def _consultation_register(filters):
                 "owner": row.get("owner"),
                 "practitioner": practitioner_names.get(row.get("practitioner_user")) or row.get("practitioner"),
                 "service_branch": row.get("service_branch"),
+                "consultation_type": _display_consultation_type(row.get("consultation_type")),
                 "status": row.get("status"),
                 "linked_invoice": row.get("linked_invoice"),
             }
@@ -712,12 +715,13 @@ def _get_consultation_rows(filters):
     doctype = "Veterinary Consultation"
     if not frappe.db.exists("DocType", doctype):
         return []
-    date_field = _existing_field(doctype, ["consultation_date", "service_date", "appointment_date", "creation"]) or "creation"
+    date_field = _existing_field(doctype, ["consultation_datetime", "consultation_date", "service_date", "appointment_date", "creation"]) or "creation"
     patient_field = _existing_field(doctype, ["patient"])
     owner_field = _existing_field(doctype, ["primary_owner", "owner"])
     practitioner_filter_field = _existing_field(doctype, ["consulting_practitioner", "practitioner", "doctor", "veterinarian"])
     practitioner_name_field = _existing_field(doctype, ["consulting_practitioner_name", "practitioner_name"])
     branch_field = _existing_field(doctype, ["service_branch", "branch"])
+    consultation_type_field = _existing_field(doctype, ["consultation_type"])
     status_field = _existing_field(doctype, ["status"])
     invoice_field = _existing_field(doctype, ["linked_invoice", "invoice", "sales_invoice"])
     query_filters = _date_filter_dict(date_field, filters, 30)
@@ -731,8 +735,20 @@ def _get_consultation_rows(filters):
         query_filters[patient_field] = filters.get("patient")
     if filters.get("owner") and owner_field:
         query_filters[owner_field] = filters.get("owner")
+    if filters.get("consultation_type") and consultation_type_field:
+        query_filters[consultation_type_field] = filters.get("consultation_type")
     fields = ["name"]
-    for fieldname in [date_field, patient_field, owner_field, practitioner_filter_field, practitioner_name_field, branch_field, status_field, invoice_field]:
+    for fieldname in [
+        date_field,
+        patient_field,
+        owner_field,
+        practitioner_filter_field,
+        practitioner_name_field,
+        branch_field,
+        consultation_type_field,
+        status_field,
+        invoice_field,
+    ]:
         if fieldname and fieldname not in fields:
             fields.append(fieldname)
     raw_rows = frappe.get_all(doctype, filters=query_filters, fields=fields, order_by=f"{date_field} desc")
@@ -747,6 +763,7 @@ def _get_consultation_rows(filters):
                 "practitioner": row.get(practitioner_name_field) or row.get(practitioner_filter_field),
                 "practitioner_user": row.get(practitioner_filter_field),
                 "service_branch": row.get(branch_field),
+                "consultation_type": row.get(consultation_type_field),
                 "status": row.get(status_field),
                 "linked_invoice": row.get(invoice_field),
             }
@@ -1352,6 +1369,7 @@ def _chart_for_report(report_key, filters, data):
         return None
     builders = {
         "consultations_per_day": lambda: _consultations_per_day_chart(filters),
+        "consultations_by_type": lambda: _consultations_by_type_chart(filters),
         "daily_revenue": lambda: _daily_revenue_chart(filters),
         "lab_orders_by_status": lambda: _lab_orders_by_status_chart(filters),
         "vaccinations_due": lambda: _vaccinations_due_chart(filters),
@@ -1430,6 +1448,19 @@ def _consultations_by_branch_chart(filters):
         grouped[branch] += 1
     labels = sorted(grouped)
     return _chart(_("Consultations by Branch"), "bar", labels, [grouped[label] for label in labels], "#0ea5e9")
+
+
+def _consultations_by_type_chart(filters):
+    rows = _get_consultation_rows(filters)
+    grouped = defaultdict(int)
+    for row in rows:
+        grouped[_display_consultation_type(row.get("consultation_type"))] += 1
+    labels = sorted(grouped)
+    return _chart(_("Consultations by Type"), "donut", labels, [grouped[label] for label in labels], "#6366f1")
+
+
+def _display_consultation_type(value):
+    return cstr(value or "").strip() or _("Unspecified")
 
 
 def _revenue_by_practitioner_chart(filters):
