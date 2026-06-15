@@ -79,17 +79,70 @@ class TestAppointmentNotificationsPhase1C(TestCase):
 			self.assertNotIn("VetEdge Doctor", roles)
 			return [_user_recipient("frontdesk@example.com", audience_type="Appointment Escalation")]
 
+		def exists(doctype, filters=None):
+			if doctype == "DocType" and filters == "Veterinary Missed Appointment":
+				return True
+			if doctype == "Veterinary Missed Appointment":
+				return "VMISS-001"
+			return None
+
 		with (
+			patch("vetedge.services.appointment_notifications.frappe.db.exists", side_effect=exists),
+			patch("vetedge.services.appointment_flow.upsert_missed_appointment", return_value="created") as upsert,
 			patch("vetedge.services.appointment_notifications.get_user_recipient", side_effect=_user_recipient),
 			patch("vetedge.services.appointment_notifications.get_role_recipients", side_effect=role_recipients),
 			patch("vetedge.services.appointment_notifications.create_notification_item", side_effect=create_item),
 		):
 			appointment_notifications.notify_missed_appointment(_appointment())
 
+		upsert.assert_called_once()
 		recipients = {row["recipient_user"] for row in created}
 		self.assertEqual(recipients, {"doctor.a@example.com", "creator@example.com", "frontdesk@example.com"})
 		self.assertNotIn("CUST-001", recipients)
 		self.assertTrue(all(row["priority"] == "High" for row in created))
+		self.assertTrue(all(row["reference_doctype"] == "Veterinary Missed Appointment" for row in created))
+		self.assertTrue(all(row["reference_name"] == "VMISS-001" for row in created))
+		self.assertTrue(all(row["action_url"] == "/app/veterinary-missed-appointment/VMISS-001" for row in created))
+		self.assertTrue(all(row["payload"]["appointment"] == "VAPT-2026-00001" for row in created))
+		self.assertTrue(all(row["payload"]["missed_appointment"] == "VMISS-001" for row in created))
+
+	def test_duplicate_missed_scheduler_runs_reuse_record_and_notification_idempotency(self):
+		seen_keys = set()
+		created = []
+
+		def create_item(**kwargs):
+			created.append(kwargs)
+			created_now = kwargs["idempotency_key"] not in seen_keys
+			seen_keys.add(kwargs["idempotency_key"])
+			return {"created": created_now, "name": kwargs["idempotency_key"]}
+
+		def exists(doctype, filters=None):
+			if doctype == "DocType":
+				return filters in {"Veterinary Appointment", "Veterinary Notification Item", "Veterinary Missed Appointment"}
+			if doctype == "Veterinary Missed Appointment":
+				return "VMISS-001"
+			return None
+
+		with (
+			patch("vetedge.services.appointment_notifications._appointment_notifications_available", return_value=True),
+			patch("vetedge.services.appointment_notifications.now_datetime", return_value="2026-06-14 11:00:00"),
+			patch("vetedge.services.appointment_notifications.frappe.get_all", return_value=[_appointment()]),
+			patch("vetedge.services.appointment_notifications.frappe.db.exists", side_effect=exists),
+			patch("vetedge.services.appointment_flow.upsert_missed_appointment", return_value="unchanged") as upsert,
+			patch("vetedge.services.appointment_notifications.get_user_recipient", side_effect=_user_recipient),
+			patch("vetedge.services.appointment_notifications.get_role_recipients", return_value=[]),
+			patch("vetedge.services.appointment_notifications.create_notification_item", side_effect=create_item),
+		):
+			first = appointment_notifications.send_missed_appointment_notifications()
+			second = appointment_notifications.send_missed_appointment_notifications()
+
+		self.assertEqual(len(first), 2)
+		self.assertEqual(len(second), 2)
+		self.assertEqual(upsert.call_count, 2)
+		self.assertEqual(created[0]["idempotency_key"], "missed_appointment::VAPT-2026-00001::doctor.a@example.com")
+		self.assertTrue(first[0]["created"])
+		self.assertFalse(second[0]["created"])
+		self.assertEqual({row["reference_name"] for row in created}, {"VMISS-001"})
 
 	def test_checked_in_event_creates_notification_only_on_actual_status_change(self):
 		changed_doc = _appointment(status="Checked In")

@@ -11,6 +11,7 @@ from vetedge.services.notifications import (
 
 
 APPOINTMENT_DOCTYPE = "Veterinary Appointment"
+MISSED_APPOINTMENT_DOCTYPE = "Veterinary Missed Appointment"
 TERMINAL_APPOINTMENT_STATUSES = {"Completed", "Cancelled", "No Show"}
 MISSED_APPOINTMENT_STATUSES = {"Awaiting Registration", "Owner Requested", "Scheduled"}
 DUE_SOON_STATUSES = {"Scheduled", "Confirmed"}
@@ -109,6 +110,9 @@ def create_appointment_notifications(event_key: str, appointment, **kwargs) -> l
 
 	results = []
 	try:
+		reference = resolve_appointment_notification_reference(event_key, appointment)
+		if event_key == "missed_appointment" and not reference.get("reference_name"):
+			return []
 		recipients = resolve_appointment_notification_recipients(appointment, event_key)
 		for recipient_user in recipients:
 			results.append(
@@ -117,13 +121,14 @@ def create_appointment_notifications(event_key: str, appointment, **kwargs) -> l
 					recipient_user=recipient_user,
 					notification_title=config["title"],
 					message=build_appointment_notification_message(event_key, appointment, **kwargs),
-					reference_doctype=APPOINTMENT_DOCTYPE,
-					reference_name=appointment.get("name"),
-					action_url=get_appointment_action_url(appointment),
+					reference_doctype=reference["reference_doctype"],
+					reference_name=reference["reference_name"],
+					action_url=reference["action_url"],
 					priority=config["priority"],
 					payload={
 						"category": config["category"],
 						"appointment": appointment.get("name"),
+						"missed_appointment": reference.get("missed_appointment"),
 						"patient": appointment.get("patient"),
 						"branch": appointment.get("branch"),
 						"practitioner": appointment.get("practitioner"),
@@ -142,6 +147,35 @@ def create_appointment_notifications(event_key: str, appointment, **kwargs) -> l
 	except Exception:
 		_log_appointment_notification_error(event_key, appointment)
 	return results
+
+
+def resolve_appointment_notification_reference(event_key: str, appointment) -> dict:
+	if event_key == "missed_appointment":
+		missed_appointment = ensure_missed_appointment_record(appointment)
+		return {
+			"reference_doctype": MISSED_APPOINTMENT_DOCTYPE,
+			"reference_name": missed_appointment,
+			"action_url": get_missed_appointment_action_url(missed_appointment),
+			"missed_appointment": missed_appointment,
+		}
+	return {
+		"reference_doctype": APPOINTMENT_DOCTYPE,
+		"reference_name": appointment.get("name"),
+		"action_url": get_appointment_action_url(appointment),
+		"missed_appointment": None,
+	}
+
+
+def ensure_missed_appointment_record(appointment) -> str | None:
+	if not appointment.get("name"):
+		return None
+	if not frappe.db.exists("DocType", MISSED_APPOINTMENT_DOCTYPE):
+		return None
+
+	from vetedge.services.appointment_flow import upsert_missed_appointment
+
+	upsert_missed_appointment(appointment)
+	return frappe.db.exists(MISSED_APPOINTMENT_DOCTYPE, {"appointment": appointment.get("name")})
 
 
 def resolve_appointment_notification_recipients(appointment, event_key: str) -> list[str]:
@@ -203,6 +237,12 @@ def get_appointment_action_url(appointment) -> str | None:
 	if not appointment.get("name"):
 		return None
 	return f"/app/veterinary-appointment/{appointment.get('name')}"
+
+
+def get_missed_appointment_action_url(missed_appointment: str | None) -> str | None:
+	if not missed_appointment:
+		return None
+	return f"/app/veterinary-missed-appointment/{missed_appointment}"
 
 
 def run_appointment_notification_checks() -> dict:
