@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from datetime import date, datetime
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
@@ -51,7 +52,7 @@ def _install_stub_modules() -> None:
 				"amount": qty,
 				"cost_center": cost_center,
 			},
-			"create_consultation_invoice": lambda consultation: {"invoice": "SINV-CONS-001"},
+			"create_consultation_invoice": lambda consultation, update_status=1: {"invoice": "SINV-CONS-001"},
 			"get_consultation_billing_settings": lambda: SimpleNamespace(enabled=True, requires_payment_before_treatment=False),
 			"get_invoice_payment_status": lambda invoice: "Unpaid",
 			"validate_sales_item": lambda *args, **kwargs: None,
@@ -294,7 +295,24 @@ class VaccinationWorkflowTests(TestCase):
 			invoice_name = vaccination.create_vaccination_invoice(doc)
 
 		self.assertEqual(invoice_name, "SINV-CONS-001")
-		create_invoice.assert_called_once_with("CONS-001")
+		create_invoice.assert_called_once_with("CONS-001", update_status=0)
+
+	def test_consultation_vaccination_action_saves_dirty_consultation_before_creation(self):
+		script_path = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_consultation"
+			/ "veterinary_consultation.js"
+		)
+		script = script_path.read_text()
+
+		self.assertIn("if (frm.is_dirty())", script)
+		self.assertLess(
+			script.index("await frm.save();"),
+			script.index('method: "vetedge.services.vaccination.create_vaccination_from_consultation"'),
+		)
+		self.assertIn("frm.reload_doc();", script)
 
 	def test_payment_required_blocks_administer_for_non_manager(self):
 		doc = SimpleNamespace(status="Awaiting Payment", service_branch="Main Branch", linked_consultation="CONS-001", linked_invoice="SINV-001")

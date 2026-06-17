@@ -117,6 +117,23 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(result["status"], "Pending Dispensary")
 		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
 
+	def test_create_consultation_invoice_can_preserve_consultation_status(self):
+		consultation = make_consultation()
+		invoice = make_invoice()
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True)
+		set_values = []
+
+		with (
+			patched_invoice_context(consultation, invoice, settings, set_values),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+		):
+			result = create_consultation_invoice("VCON-001", update_status=0)
+
+		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertEqual(result["status"], "In Progress")
+		self.assertNotIn("status", set_values[0][2])
+		self.assertEqual(consultation.status, "In Progress")
+
 	def test_paid_invoice_status_sets_consultation_pending_dispensary_when_required(self):
 		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
 		consultation_doc = make_consultation()

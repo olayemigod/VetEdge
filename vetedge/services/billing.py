@@ -86,7 +86,7 @@ def get_consultation_billing_settings() -> ConsultationBillingSettings:
 
 
 @frappe.whitelist()
-def create_consultation_invoice(consultation: str) -> dict:
+def create_consultation_invoice(consultation: str, update_status: int = 1) -> dict:
 	require_internal_user()
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
@@ -114,6 +114,7 @@ def create_consultation_invoice(consultation: str) -> dict:
 		invoice,
 		settings,
 		billed_sources=billed_sources,
+		update_status=update_status,
 	)
 	if not draft_invoice_name:
 		emit_invoice_created_notifications(consultation_doc, invoice, settings)
@@ -122,7 +123,9 @@ def create_consultation_invoice(consultation: str) -> dict:
 		"consultation": consultation_doc.name,
 		"invoice": invoice.name,
 		"is_draft_update": bool(draft_invoice_name),
-		"status": get_consultation_status_after_invoice_created(consultation_doc, settings),
+		"status": get_consultation_status_after_invoice_created(consultation_doc, settings)
+		if cint(update_status)
+		else consultation_doc.status,
 	}
 
 
@@ -269,9 +272,10 @@ def update_consultation_after_invoice_created(
 	invoice,
 	settings: ConsultationBillingSettings,
 	billed_sources: list[dict] | None = None,
+	update_status: int = 1,
 ) -> None:
 	doc = get_latest_consultation_doc(doc)
-	status = get_consultation_status_after_invoice_created(doc, settings)
+	status = get_consultation_status_after_invoice_created(doc, settings) if cint(update_status) else None
 	values = {
 		"linked_invoice": invoice.name,
 		"payment_status": get_invoice_payment_status(invoice),

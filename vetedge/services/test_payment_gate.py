@@ -133,8 +133,14 @@ class TestConsultationPaymentGate(TestCase):
 		throw.assert_called_with(payment_gate.MISSING_INVOICE_MESSAGE, frappe.ValidationError)
 
 	def test_non_billable_consultation_can_proceed_without_invoice_or_payment(self):
+		doc = consultation()
+		doc.planned_treatments = [frappe._dict(name="PT-1", item="ITEM-1", qty=1)]
+		before = [dict(row) for row in doc.planned_treatments]
+
 		with patch.object(payment_gate, "is_billable_consultation", return_value=False):
-			payment_gate.assert_consultation_can_proceed(consultation(), "In Progress")
+			payment_gate.assert_consultation_can_proceed(doc, "In Progress")
+
+		self.assertEqual([dict(row) for row in doc.planned_treatments], before)
 
 	def _gate_context(self, invoice_doc, gate="Full Payment Required", payment_rows=None):
 		from contextlib import contextmanager

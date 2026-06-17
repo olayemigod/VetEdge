@@ -30,6 +30,21 @@ class TestMedicalHistory(TestCase):
 			page_js.index('[__("Treatment Plan"), "treatment_plan", format_treatment_plan]'),
 		)
 
+	def test_medical_history_does_not_mutate_consultation_treatment_rows(self):
+		service_code = Path(__file__).resolve().parents[0].joinpath("medical_history.py").read_text()
+		page_js = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "page"
+			/ "veterinary_medical_history"
+			/ "veterinary_medical_history.js"
+		).read_text()
+
+		for content in (service_code, page_js):
+			self.assertNotIn('clear_table("planned_treatments"', content)
+			self.assertNotIn("clear_table('planned_treatments'", content)
+			self.assertNotIn('set("planned_treatments"', content)
+
 	def test_medical_history_combines_consultations_and_vitals(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 

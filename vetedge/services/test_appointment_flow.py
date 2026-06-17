@@ -204,6 +204,7 @@ class TestAppointmentFlow(TestCase):
 					primary_owner="CUST-001",
 					service_branch="Branch B",
 					consulting_practitioner="doctor@example.com",
+					planned_treatments=[frappe._dict(name="PT-1", item="ITEM-1", qty=1)],
 				)
 			doc = frappe._dict(args[0])
 			doc.name = "VAPT-001"
@@ -214,7 +215,10 @@ class TestAppointmentFlow(TestCase):
 		frappe_stub = make_frappe_stub(
 			get_doc=get_doc,
 			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname == "follow_up_appointment"),
-			db=SimpleNamespace(set_value=lambda *args, **kwargs: set_values.append(args)),
+			db=SimpleNamespace(
+				exists=lambda *args, **kwargs: False,
+				set_value=lambda *args, **kwargs: set_values.append(args),
+			),
 		)
 
 		with (
@@ -230,7 +234,8 @@ class TestAppointmentFlow(TestCase):
 		self.assertEqual(inserted[0].follow_up_reference, "VCON-001")
 		self.assertIsNone(inserted[0].get("linked_consultation"))
 		self.assertEqual(set_values[0][2], "follow_up_appointment")
-		self.assertEqual(emit.call_args.kwargs["event"], "appointment_created")
+		self.assertNotIn("planned_treatments", {args[2] for args in set_values})
+		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_created")
 
 	def test_normalize_clears_old_follow_up_link_bug(self):
 		doc = make_appointment_doc(

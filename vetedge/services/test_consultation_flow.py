@@ -780,9 +780,17 @@ class TestConsultationFlow(TestCase):
 				frappe._dict(
 					item="CONSULT-ITEM",
 					qty=1,
+					rate=100,
 					service_type="Consultation",
 					treatment_type="Medication",
-				)
+				),
+				frappe._dict(
+					item="FOLLOWUP-ITEM",
+					qty=2,
+					rate=250,
+					service_type="Consultation",
+					treatment_type="Procedure",
+				),
 			],
 		)
 
@@ -802,6 +810,10 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.validate_consultation_clinical_permissions"),
 		):
 			validate_consultation_children(doc)
+
+		self.assertEqual([row.item for row in doc.planned_treatments], ["CONSULT-ITEM", "FOLLOWUP-ITEM"])
+		self.assertEqual(doc.planned_treatments[0].amount, 100)
+		self.assertEqual(doc.planned_treatments[1].amount, 500)
 
 	def test_completion_requires_vitals_when_setting_is_active(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")

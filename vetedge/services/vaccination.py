@@ -555,7 +555,7 @@ def create_vaccination_invoice(doc) -> str | None:
 		return None
 
 	if doc.linked_consultation:
-		result = create_consultation_invoice(doc.linked_consultation)
+		result = create_consultation_invoice(doc.linked_consultation, update_status=0)
 		return result.get("invoice")
 
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)

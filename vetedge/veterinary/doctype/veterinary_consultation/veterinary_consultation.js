@@ -1087,7 +1087,10 @@ function show_vaccination_dialog(frm) {
 			{ fieldtype: "Small Text", fieldname: "notes", label: __("Notes") },
 		],
 		primary_action_label: __("Save Vaccination"),
-		primary_action(values) {
+		async primary_action(values) {
+			if (frm.is_dirty()) {
+				await frm.save();
+			}
 			frappe.call({
 				method: "vetedge.services.vaccination.create_vaccination_from_consultation",
 				args: {
@@ -1107,6 +1110,7 @@ function show_vaccination_dialog(frm) {
 						message: __("Vaccination recorded"),
 						indicator: "green",
 					});
+					frm.reload_doc();
 				},
 			});
 		},
