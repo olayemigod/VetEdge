@@ -283,6 +283,7 @@ class TestAppointmentFlow(TestCase):
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.now_datetime", return_value="2026-04-20 10:00:00"),
 			patch("vetedge.services.appointment_flow.validate_registration_payment_before_first_consultation"),
+			patch("vetedge.services.appointment_flow.assert_consultation_can_proceed") as payment_gate,
 			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			result = create_consultation_from_appointment("VAPT-001")
@@ -293,7 +294,8 @@ class TestAppointmentFlow(TestCase):
 		self.assertEqual(appointment.linked_consultation, "VCON-001")
 		self.assertEqual(appointment.status, "In Consultation")
 		self.assertEqual(saved, [appointment])
-		self.assertEqual(emit.call_args.kwargs["event"], "appointment_started")
+		payment_gate.assert_called_once_with(inserted[0], "In Progress")
+		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_started")
 
 	def test_consultation_creation_from_appointment_rejects_duplicate_link(self):
 		appointment = make_appointment_doc(

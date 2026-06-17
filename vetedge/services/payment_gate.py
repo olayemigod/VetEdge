@@ -60,13 +60,13 @@ def ensure_billable_invoice_exists(doc) -> list[str]:
 def get_invoice_payment_state(invoice_name: str) -> dict:
 	invoice = frappe.get_doc("Sales Invoice", invoice_name)
 	allocated_amount = get_submitted_payment_entry_allocated_amount(invoice_name)
-	pos_paid_amount = get_pos_invoice_paid_amount(invoice)
+	invoice_payment_rows_paid_amount = get_invoice_payment_rows_paid_amount(invoice)
 	fallback_paid_amount = max(
 		flt(invoice.get("paid_amount")),
 		flt(invoice.get("grand_total")) - flt(invoice.get("outstanding_amount")),
 		0,
 	)
-	paid_amount = max(allocated_amount, pos_paid_amount, fallback_paid_amount)
+	paid_amount = max(allocated_amount, invoice_payment_rows_paid_amount, fallback_paid_amount)
 
 	return {
 		"invoice": invoice_name,
@@ -74,7 +74,7 @@ def get_invoice_payment_state(invoice_name: str) -> dict:
 		"grand_total": flt(invoice.get("grand_total")),
 		"outstanding_amount": flt(invoice.get("outstanding_amount")),
 		"allocated_amount": allocated_amount,
-		"pos_paid_amount": pos_paid_amount,
+		"invoice_payment_rows_paid_amount": invoice_payment_rows_paid_amount,
 		"paid_amount": paid_amount,
 		"has_payment": paid_amount > 0,
 		"is_fully_paid": cint(invoice.docstatus) == 1 and flt(invoice.get("outstanding_amount")) <= 0,
@@ -141,8 +141,8 @@ def get_submitted_payment_entry_allocated_amount(invoice_name: str) -> float:
 	return total
 
 
-def get_pos_invoice_paid_amount(invoice) -> float:
-	if not invoice.get("is_pos"):
+def get_invoice_payment_rows_paid_amount(invoice) -> float:
+	if cint(invoice.docstatus) != 1:
 		return 0
 
 	payments = invoice.get("payments") or []

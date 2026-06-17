@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
@@ -20,7 +22,7 @@ def consultation(linked_invoice=None):
 	)
 
 
-def invoice(docstatus=1, outstanding_amount=0, grand_total=1000, paid_amount=0, is_pos=0):
+def invoice(docstatus=1, outstanding_amount=0, grand_total=1000, paid_amount=0, is_pos=0, payments=None):
 	return frappe._dict(
 		name="SINV-001",
 		docstatus=docstatus,
@@ -28,7 +30,7 @@ def invoice(docstatus=1, outstanding_amount=0, grand_total=1000, paid_amount=0, 
 		grand_total=grand_total,
 		paid_amount=paid_amount,
 		is_pos=is_pos,
-		payments=[],
+		payments=payments or [],
 	)
 
 
@@ -39,21 +41,43 @@ class TestConsultationPaymentGate(TestCase):
 		with patch.object(payment_gate, "frappe", frappe_stub):
 			self.assertEqual(payment_gate.get_consultation_payment_gate(), "Full Payment Required")
 
+	def test_veterinary_settings_defines_consultation_payment_gate(self):
+		settings_path = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_settings"
+			/ "veterinary_settings.json"
+		)
+		settings = json.loads(settings_path.read_text())
+		fields = {field["fieldname"]: field for field in settings["fields"]}
+
+		self.assertIn("consultation_payment_gate", settings["field_order"])
+		self.assertEqual(fields["consultation_payment_gate"]["fieldtype"], "Select")
+		self.assertEqual(fields["consultation_payment_gate"]["default"], payment_gate.FULL_PAYMENT_REQUIRED)
+		self.assertEqual(
+			fields["consultation_payment_gate"]["options"],
+			"Full Payment Required\nPartial Payment Gate\nNo Payment Gate",
+		)
+
 	def test_billable_consultation_with_no_invoice_is_blocked(self):
 		with (
 			patch.object(payment_gate, "is_billable_consultation", return_value=True),
 			patch.object(payment_gate, "get_consultation_invoice_names_for_gate", return_value=[]),
-			patch.object(payment_gate.frappe, "throw", side_effect=frappe.ValidationError),
+			patch.object(payment_gate.frappe, "throw", side_effect=frappe.ValidationError) as throw,
 		):
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation(), "In Progress")
+		throw.assert_called_with(payment_gate.MISSING_INVOICE_MESSAGE, frappe.ValidationError)
 
 	def test_billable_consultation_with_draft_invoice_is_blocked(self):
-		with self._gate_context(invoice(docstatus=0), gate="No Payment Gate"):
+		with self._gate_context(invoice(docstatus=0), gate="No Payment Gate") as context:
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation("SINV-001"), "In Progress")
+		context["throw"].assert_called_with(payment_gate.DRAFT_INVOICE_MESSAGE, frappe.ValidationError)
 
 	def test_full_payment_required_blocks_unpaid_invoice(self):
-		with self._gate_context(invoice(docstatus=1, outstanding_amount=1000, grand_total=1000)):
+		with self._gate_context(invoice(docstatus=1, outstanding_amount=1000, grand_total=1000)) as context:
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation("SINV-001"), "Ready for Treatment")
+		context["throw"].assert_called_with(payment_gate.FULL_PAYMENT_REQUIRED_MESSAGE, frappe.ValidationError)
 
 	def test_full_payment_required_blocks_partially_paid_invoice(self):
 		with self._gate_context(invoice(docstatus=1, outstanding_amount=500, grand_total=1000)):
@@ -64,8 +88,9 @@ class TestConsultationPaymentGate(TestCase):
 			payment_gate.assert_consultation_can_proceed(consultation("SINV-001"), "Ready for Treatment")
 
 	def test_partial_payment_gate_blocks_unpaid_submitted_invoice(self):
-		with self._gate_context(invoice(docstatus=1, outstanding_amount=1000, grand_total=1000), gate="Partial Payment Gate"):
+		with self._gate_context(invoice(docstatus=1, outstanding_amount=1000, grand_total=1000), gate="Partial Payment Gate") as context:
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation("SINV-001"), "Ready for Treatment")
+		context["throw"].assert_called_with(payment_gate.PARTIAL_PAYMENT_REQUIRED_MESSAGE, frappe.ValidationError)
 
 	def test_partial_payment_gate_allows_partially_paid_submitted_invoice(self):
 		with self._gate_context(
@@ -79,20 +104,33 @@ class TestConsultationPaymentGate(TestCase):
 		with self._gate_context(invoice(docstatus=1, outstanding_amount=0, grand_total=1000), gate="Partial Payment Gate"):
 			payment_gate.assert_consultation_can_proceed(consultation("SINV-001"), "Ready for Treatment")
 
+	def test_partial_payment_gate_allows_direct_invoice_payment_rows(self):
+		with self._gate_context(
+			invoice(
+				docstatus=1,
+				outstanding_amount=700,
+				grand_total=1000,
+				payments=[frappe._dict(amount=300)],
+			),
+			gate="Partial Payment Gate",
+		):
+			payment_gate.assert_consultation_can_proceed(consultation("SINV-001"), "Ready for Treatment")
+
 	def test_no_payment_gate_allows_unpaid_submitted_invoice(self):
 		with self._gate_context(invoice(docstatus=1, outstanding_amount=1000, grand_total=1000), gate="No Payment Gate") as context:
 			payment_gate.assert_consultation_can_proceed(consultation("SINV-001"), "Ready for Treatment")
 
-		context["msgprint"].assert_called_once()
+		context["msgprint"].assert_called_once_with(payment_gate.NO_PAYMENT_GATE_WARNING, indicator="orange", alert=True)
 
 	def test_no_payment_gate_still_blocks_missing_invoice(self):
 		with (
 			patch.object(payment_gate, "is_billable_consultation", return_value=True),
 			patch.object(payment_gate, "get_consultation_invoice_names_for_gate", return_value=[]),
 			patch.object(payment_gate, "get_consultation_payment_gate", return_value="No Payment Gate"),
-			patch.object(payment_gate.frappe, "throw", side_effect=frappe.ValidationError),
+			patch.object(payment_gate.frappe, "throw", side_effect=frappe.ValidationError) as throw,
 		):
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation(), "Ready for Treatment")
+		throw.assert_called_with(payment_gate.MISSING_INVOICE_MESSAGE, frappe.ValidationError)
 
 	def test_non_billable_consultation_can_proceed_without_invoice_or_payment(self):
 		with patch.object(payment_gate, "is_billable_consultation", return_value=False):
@@ -127,6 +165,6 @@ class TestConsultationPaymentGate(TestCase):
 				patch.object(payment_gate, "get_consultation_invoice_names_for_gate", return_value=["SINV-001"]),
 				patch.object(payment_gate, "get_consultation_payment_gate", return_value=gate),
 			):
-				yield {"msgprint": msgprint}
+				yield {"msgprint": msgprint, "throw": frappe_stub.throw}
 
 		return manager()
