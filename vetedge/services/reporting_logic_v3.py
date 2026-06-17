@@ -15,7 +15,7 @@ def execute_structured_report(report_name: str, filters=None):
     if not branch:
         return columns, data, message, chart, summary
 
-    if report_name in {"Consultation Register", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
+    if report_name in {"Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
         data = [row for row in data if cstr(row.get("service_branch")) == branch]
     elif report_name == "Patient Register":
         data = [row for row in data if cstr(row.get("default_branch")) == branch]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -14,19 +15,36 @@ from vetedge.services.medical_history import (
 
 
 class TestMedicalHistory(TestCase):
+	def test_medical_history_page_sanitizes_assessment_and_places_treatment_plan_after_it(self):
+		page_js = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "page"
+			/ "veterinary_medical_history"
+			/ "veterinary_medical_history.js"
+		).read_text()
+
+		self.assertIn("sanitize_rich_text", page_js)
+		self.assertLess(
+			page_js.index('[__("Assessment"), "assessment_notes", format_rich_text]'),
+			page_js.index('[__("Treatment Plan"), "treatment_plan", format_treatment_plan]'),
+		)
+
 	def test_medical_history_combines_consultations_and_vitals(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
 			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			history = get_patient_medical_history("VP-001", from_date="2026-04-01", to_date="2026-04-30")
 
 		self.assertEqual([event["type"] for event in history], ["vaccination", "lab", "vitals", "consultation"])
-		self.assertEqual(history[2]["symptoms"][0]["value"], "Vomiting")
-		self.assertEqual(history[2]["diagnoses"][0]["value"], "Gastroenteritis")
+		consultation = next(event for event in history if event["type"] == "consultation")
+		self.assertEqual(consultation["symptoms"][0]["value"], "Vomiting")
+		self.assertEqual(consultation["diagnoses"][0]["value"], "Gastroenteritis")
 
 	def test_medical_history_view_returns_patient_sections_and_cross_branch_records(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
@@ -34,6 +52,7 @@ class TestMedicalHistory(TestCase):
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
 			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -44,7 +63,10 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["vitals"][0]["service_branch"], "Branch C")
 		self.assertEqual(view["diagnoses"][0]["diagnosis"], "Gastroenteritis")
 		self.assertEqual(view["symptoms"][0]["symptom"], "Vomiting")
+		self.assertEqual(view["consultations"][0]["treatment_plan"][0]["item"], "Fluid Therapy")
+		self.assertEqual(view["consultations"][0]["treatment_plan"][0]["amount"], 2500)
 		self.assertEqual(view["treatments"][0]["item"], "Fluid Therapy")
+		self.assertEqual(view["treatments"][0]["amount"], 2500)
 		self.assertEqual(view["labs"][0]["status"], "Reviewed")
 		self.assertIn("CBC", view["labs"][0]["tests_summary"])
 		self.assertIn("temperature", view["trends"])
@@ -56,6 +78,7 @@ class TestMedicalHistory(TestCase):
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
 			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -67,6 +90,40 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["treatments"], [])
 		self.assertEqual(view["labs"], [])
 		self.assertEqual(view["vaccinations"], [])
+
+	def test_consultation_history_preserves_rich_text_assessment_and_treatment_plan_rows(self):
+		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
+
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
+			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
+
+		consultation = view["consultations"][0]
+		self.assertEqual(consultation["assessment_notes"], "<p>Stable<br>Improving</p>")
+		self.assertEqual(consultation["treatment_plan_summary"], "<p>Fluids and monitoring</p>")
+		self.assertEqual(consultation["treatment_plan"][0]["item"], "Fluid Therapy")
+
+	def test_consultation_history_handles_missing_treatment_plan(self):
+		def get_all_without_treatments(doctype, filters=None, fields=None, **kwargs):
+			if doctype == "Planned Treatment Item":
+				return []
+			return get_all_for_history(doctype, filters=filters, fields=fields, **kwargs)
+
+		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_without_treatments)
+
+		with (
+			patch("vetedge.services.medical_history.frappe", frappe_stub),
+			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
+			patch("vetedge.services.medical_history.can_access_medical_history"),
+		):
+			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
+
+		self.assertEqual(view["consultations"][0]["treatment_plan"], [])
 
 	def test_history_date_range_is_applied_to_consultations_and_vitals(self):
 		calls = []
@@ -80,6 +137,7 @@ class TestMedicalHistory(TestCase):
 		with (
 			patch("vetedge.services.medical_history.frappe", frappe_stub),
 			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.vaccination.frappe", frappe_stub),
 			patch("vetedge.services.medical_history.can_access_medical_history"),
 		):
 			get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
@@ -178,8 +236,8 @@ def get_list_for_history(doctype, filters=None, fields=None, **kwargs):
 				consulting_practitioner_name="Dr Ada Vet",
 				status="Completed",
 				presenting_complaint="Vomiting",
-				assessment_notes="Stable",
-				treatment_plan_summary="Fluids",
+				assessment_notes="<p>Stable<br>Improving</p>",
+				treatment_plan_summary="<p>Fluids and monitoring</p>",
 			)
 		]
 	if doctype == "Veterinary Vital Signs":
@@ -244,6 +302,8 @@ def get_all_for_history(doctype, filters=None, fields=None, **kwargs):
 				item="Fluid Therapy",
 				qty=1,
 				uom="Nos",
+				rate=2500,
+				amount=2500,
 				service_type="Treatment",
 				treatment_type="Medication",
 				notes="SQ fluids",

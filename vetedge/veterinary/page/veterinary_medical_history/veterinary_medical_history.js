@@ -201,7 +201,8 @@ class VetEdgeMedicalHistory {
 			[__("Branch"), "service_branch"],
 			[__("Status"), "status"],
 			[__("Complaint"), "presenting_complaint"],
-			[__("Assessment"), "assessment_notes"],
+			[__("Assessment"), "assessment_notes", format_rich_text],
+			[__("Treatment Plan"), "treatment_plan", format_treatment_plan],
 		]);
 		this.render_table(sections, __("Vitals History"), data.vitals || [], [
 			[__("Recorded On"), "timestamp", format_datetime],
@@ -292,7 +293,10 @@ class VetEdgeMedicalHistory {
 			.map((row) => {
 				const cells = columns
 					.map(([, fieldname, formatter]) => {
-						const value = formatter ? formatter(row[fieldname]) : row[fieldname];
+						const value = formatter ? formatter(row[fieldname], row) : row[fieldname];
+						if (value && typeof value === "object" && value.html !== undefined) {
+							return `<td>${value.html}</td>`;
+						}
 						return `<td>${escape_html(value)}</td>`;
 					})
 					.join("");
@@ -386,6 +390,64 @@ function summary_item(label, value) {
 
 function format_datetime(value) {
 	return value ? frappe.datetime.str_to_user(value) : "";
+}
+
+function format_rich_text(value) {
+	return { html: sanitize_rich_text(value) || "" };
+}
+
+function format_treatment_plan(rows, row) {
+	const parts = [];
+	const summary = sanitize_rich_text(row?.treatment_plan_summary);
+	if (summary) {
+		parts.push(`<div class="mb-2">${summary}</div>`);
+	}
+
+	const treatments = Array.isArray(rows) ? rows : [];
+	if (treatments.length) {
+		const items = treatments
+			.map((treatment) => {
+				const item = escape_html(treatment.item || treatment.service_type || treatment.treatment_type || "");
+				const qty = treatment.qty ? ` ${escape_html(treatment.qty)}` : "";
+				const uom = treatment.uom ? ` ${escape_html(treatment.uom)}` : "";
+				const amount = treatment.amount ? ` - ${escape_html(format_currency(treatment.amount))}` : "";
+				const notes = treatment.notes ? `<div class="text-muted small">${escape_html(treatment.notes)}</div>` : "";
+				return `<li><div>${item}${qty}${uom}${amount}</div>${notes}</li>`;
+			})
+			.join("");
+		parts.push(`<ul class="mb-0 pl-3">${items}</ul>`);
+	}
+
+	if (!parts.length) {
+		return { html: `<span class="text-muted">${__("No treatment plan recorded")}</span>` };
+	}
+	return { html: parts.join("") };
+}
+
+function sanitize_rich_text(value) {
+	if (!value) {
+		return "";
+	}
+	const container = document.createElement("div");
+	container.innerHTML = String(value);
+	container.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((node) => node.remove());
+	container.querySelectorAll("*").forEach((node) => {
+		[...node.attributes].forEach((attribute) => {
+			const name = attribute.name.toLowerCase();
+			const val = attribute.value || "";
+			if (name.startsWith("on") || (["href", "src", "xlink:href"].includes(name) && /^\s*javascript:/i.test(val))) {
+				node.removeAttribute(attribute.name);
+			}
+		});
+	});
+	return container.innerHTML;
+}
+
+function format_currency(value) {
+	if (frappe.format) {
+		return frappe.format(value, { fieldtype: "Currency" });
+	}
+	return value;
 }
 
 function escape_html(value) {

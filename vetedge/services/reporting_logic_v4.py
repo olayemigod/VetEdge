@@ -189,7 +189,7 @@ def _rows(report_name, filters):
 def _dashboard_report_links(key):
     links = {
         "executive": ["Consultation Register", "Revenue Summary", "Branch Performance Report"],
-        "clinical": ["Consultation Register", "Lab Order Report", "Vaccination Report"],
+        "clinical": ["Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report"],
         "financial": ["Revenue Summary", "Unpaid Invoice Report"],
         "practitioner_performance": ["Practitioner Performance Report"],
         "branch_performance": ["Branch Performance Report"],

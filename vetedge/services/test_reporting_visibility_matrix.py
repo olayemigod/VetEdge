@@ -86,6 +86,14 @@ EXPECTED_REPORT_ROLES = {
 		"VetEdge Front Desk",
 		"Branch Manager",
 	},
+	"report/planned_treatment/planned_treatment.json": {
+		"System Manager",
+		"VetEdge Administrator",
+		"VetEdge Doctor",
+		"Veterinary Nurse",
+		"VetEdge Front Desk",
+		"Branch Manager",
+	},
 	"report/patient_register/patient_register.json": {
 		"System Manager",
 		"VetEdge Administrator",
@@ -185,6 +193,7 @@ EXPECTED_REPORT_ROLES = {
 
 EXPECTED_REPORT_FILTER_FIELDS = {
 	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status"},
+	"report/planned_treatment/planned_treatment.json": {"from_date", "to_date", "branch", "patient", "owner", "practitioner", "consultation_type", "item", "consultation_status"},
 	"report/patient_register/patient_register.json": {"branch", "owner", "species", "registration_status"},
 	"report/owner_register/owner_register.json": {"branch", "owner", "outstanding_only"},
 	"report/practitioner_performance_report/practitioner_performance_report.json": {"from_date", "to_date", "branch", "practitioner"},
@@ -208,6 +217,7 @@ EXPECTED_WORKSPACE_RULE_SNIPPETS = {
 	"Practitioner Performance Dashboard": ["VetEdge Doctor", "Branch Manager"],
 	"Revenue Summary": ["Accounts/Cashier", "Accounts Manager"],
 	"Unpaid Invoice Report": ["Accounts/Cashier", "Accounts Manager"],
+	"Planned Treatment": ["VetEdge Doctor", "Veterinary Nurse", "VetEdge Front Desk"],
 	"Grooming Report": ["VetEdge Groomer", "VetEdge Front Desk"],
 	"Veterinary Patient": ["VetEdge Front Desk", "VetEdge Doctor", "Lab Technician"],
 	"Veterinary Consultation": ["VetEdge Front Desk", "VetEdge Doctor", "Dispensary User"],
@@ -230,6 +240,7 @@ EXPECTED_WORKSPACE_RULE_SNIPPETS = {
 REPORT_JS_WITH_DEFAULTS = {
 	"report/branch_performance_summary/branch_performance_summary.js": "Branch Performance Summary",
 	"report/consultation_register/consultation_register.js": "Consultation Register",
+	"report/planned_treatment/planned_treatment.js": "Planned Treatment",
 	"report/owner_register/owner_register.js": "Owner Register",
 	"report/patient_register/patient_register.js": "Patient Register",
 	"report/practitioner_performance_report/practitioner_performance_report.js": "Practitioner Performance Report",
@@ -245,6 +256,7 @@ REPORT_JS_WITH_DEFAULTS = {
 EXPECTED_REPORT_JS_FILTER_FIELDS = {
 	"report/branch_performance_summary/branch_performance_summary.js": {"from_date", "to_date", "branch", "cost_center", "chart"},
 	"report/consultation_register/consultation_register.js": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status"},
+	"report/planned_treatment/planned_treatment.js": {"from_date", "to_date", "branch", "patient", "owner", "practitioner", "consultation_type", "item", "consultation_status"},
 	"report/owner_register/owner_register.js": {"branch", "owner", "outstanding_only"},
 	"report/patient_register/patient_register.js": {"branch", "species", "owner", "registration_status"},
 	"report/practitioner_performance_report/practitioner_performance_report.js": {"from_date", "to_date", "branch", "practitioner"},

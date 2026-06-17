@@ -282,6 +282,85 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(chart["data"]["labels"], ["House Call", "Unspecified"])
         self.assertEqual(chart["data"]["datasets"][0]["values"], [1, 2])
 
+    def test_planned_treatment_report_returns_quantities_amounts_and_totals(self):
+        consultation_rows = [
+            {
+                "name": "VCON-001",
+                "consultation_date": "2026-06-15 09:00:00",
+                "patient": "VP-001",
+                "owner": "CUST-001",
+                "practitioner": "Dr Ada",
+                "practitioner_user": "doctor@example.com",
+                "service_branch": "Main",
+                "consultation_type": "House Call",
+                "status": "Completed",
+            },
+            {
+                "name": "VCON-002",
+                "consultation_date": "2026-06-16 09:00:00",
+                "patient": "VP-001",
+                "owner": "CUST-001",
+                "practitioner": "Dr Ada",
+                "practitioner_user": "doctor@example.com",
+                "service_branch": "Main",
+                "consultation_type": "General Consultation",
+                "status": "Completed",
+            },
+        ]
+        treatment_rows = [
+            frappe._dict(parent="VCON-001", item="ITEM-001", qty=2, uom="Nos", rate=1000, amount=2000, notes="Dose A", service_type=None, treatment_type=None),
+            frappe._dict(parent="VCON-001", item="ITEM-002", qty=1, uom="Nos", rate=500, amount=0, notes="Dose B", service_type=None, treatment_type=None),
+            frappe._dict(parent="VCON-002", item="ITEM-003", qty=1, uom="Nos", rate=300, amount=300, notes="", service_type=None, treatment_type=None),
+        ]
+
+        frappe_stub = SimpleNamespace(
+            db=SimpleNamespace(exists=lambda doctype, name=None: (doctype, name) == ("DocType", "Planned Treatment Item")),
+            get_all=lambda *args, **kwargs: treatment_rows,
+            unscrub=lambda value: value.replace("_", " ").title(),
+        )
+
+        with (
+            patch.object(reporting_structure, "frappe", frappe_stub),
+            patch.object(reporting_structure, "_get_consultation_rows", return_value=consultation_rows),
+            patch.object(reporting_structure, "_get_patient_title_map", return_value={"VP-001": "Buddy"}),
+            patch.object(reporting_structure, "_get_user_full_name_map", return_value={"doctor@example.com": "Dr Ada Vet"}),
+        ):
+            columns, data, _, _, summary = reporting_structure._planned_treatment_report({"item": "ITEM-001"})
+
+        self.assertIn("consultation_total", {column["fieldname"] for column in columns})
+        self.assertEqual(data[0]["qty"], 2)
+        self.assertEqual(data[0]["amount"], 2000)
+        self.assertEqual(data[1]["amount"], 500)
+        self.assertEqual(data[0]["consultation_total"], 2500)
+        self.assertEqual(data[0]["patient_total"], 2800)
+        self.assertEqual(summary[0]["value"], 2800)
+
+    def test_planned_treatment_report_passes_filters_to_consultation_rows(self):
+        captured = {}
+
+        def get_consultation_rows(filters):
+            captured.update(filters)
+            return []
+
+        with patch.object(reporting_structure, "_get_consultation_rows", side_effect=get_consultation_rows):
+            reporting_structure._build_planned_treatment_rows(
+                {
+                    "from_date": "2026-06-01",
+                    "to_date": "2026-06-30",
+                    "branch": "Main",
+                    "practitioner": "doctor@example.com",
+                    "patient": "VP-001",
+                    "consultation_type": "House Call",
+                    "consultation_status": "Completed",
+                }
+            )
+
+        self.assertEqual(captured["branch"], "Main")
+        self.assertEqual(captured["practitioner"], "doctor@example.com")
+        self.assertEqual(captured["patient"], "VP-001")
+        self.assertEqual(captured["consultation_type"], "House Call")
+        self.assertEqual(captured["consultation_status"], "Completed")
+
 
 if __name__ == "__main__":
     unittest.main()

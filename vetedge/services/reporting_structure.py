@@ -36,6 +36,7 @@ REPORT_KEYS = {
     "Boarding Report": "boarding_report",
     "Kennel Availability Report": "kennel_availability_report",
     "Grooming Report": "grooming_report",
+    "Planned Treatment": "planned_treatment",
 }
 
 DASHBOARD_KEYS = {
@@ -86,6 +87,7 @@ def execute_structured_report(report_name: str, filters=None):
         "Boarding Report": _boarding_report,
         "Kennel Availability Report": _kennel_availability_report,
         "Grooming Report": _grooming_report,
+        "Planned Treatment": _planned_treatment_report,
     }
     if report_name not in dispatcher:
         return [], [], _("Unknown report: {0}").format(report_name), None, []
@@ -262,6 +264,36 @@ def _consultation_register(filters):
             }
         )
     return columns, data, None, _chart_for_report("consultation_register", filters, data), []
+
+
+def _planned_treatment_report(filters):
+    rows = _build_planned_treatment_rows(filters)
+    columns = [
+        _col("consultation", "Link", "Veterinary Consultation"),
+        _col("consultation_date", "Datetime"),
+        _col("service_branch", "Link", "Branch", label=_("Service Branch")),
+        _col("patient", "Data"),
+        _col("owner", "Link", "Customer"),
+        _col("practitioner", "Data"),
+        _col("consultation_type", "Link", "Consultation Type", label=_("Consultation Type")),
+        _col("item", "Link", "Item", label=_("Treatment Item / Service")),
+        _col("description", "Data", label=_("Description / Notes")),
+        _col("qty", "Float", label=_("Quantity")),
+        _col("uom", "Link", "UOM"),
+        _col("rate", "Currency"),
+        _col("amount", "Currency"),
+        _col("consultation_total", "Currency", label=_("Consultation Total")),
+        _col("patient_total", "Currency", label=_("Patient Total")),
+        _col("status", "Data"),
+    ]
+    summary = [
+        {
+            "label": _("Grand Total"),
+            "value": sum(flt(row.get("amount")) for row in rows),
+            "indicator": "Green",
+        }
+    ]
+    return columns, rows, None, None, summary
 
 
 def _patient_register(filters):
@@ -729,8 +761,9 @@ def _get_consultation_rows(filters):
         query_filters[branch_field] = filters.get("branch")
     if filters.get("practitioner") and practitioner_filter_field:
         query_filters[practitioner_filter_field] = filters.get("practitioner")
-    if filters.get("status") and status_field:
-        query_filters[status_field] = filters.get("status")
+    status_filter = filters.get("status") or filters.get("consultation_status")
+    if status_filter and status_field:
+        query_filters[status_field] = status_filter
     if filters.get("patient") and patient_field:
         query_filters[patient_field] = filters.get("patient")
     if filters.get("owner") and owner_field:
@@ -768,6 +801,66 @@ def _get_consultation_rows(filters):
                 "linked_invoice": row.get(invoice_field),
             }
         )
+    return rows
+
+
+def _build_planned_treatment_rows(filters):
+    consultation_rows = _get_consultation_rows(filters)
+    consultation_names = [row.get("name") for row in consultation_rows if row.get("name")]
+    if not consultation_names or not frappe.db.exists("DocType", "Planned Treatment Item"):
+        return []
+
+    treatment_filters = {"parent": ("in", consultation_names)}
+    if filters.get("item"):
+        treatment_filters["item"] = filters.get("item")
+
+    treatment_rows = frappe.get_all(
+        "Planned Treatment Item",
+        filters=treatment_filters,
+        fields=["parent", "item", "qty", "uom", "rate", "amount", "service_type", "treatment_type", "notes"],
+        order_by="parent asc, idx asc",
+    )
+    consultation_map = {row.get("name"): row for row in consultation_rows}
+    patient_titles = _get_patient_title_map(row.get("patient") for row in consultation_rows)
+    practitioner_names = _get_user_full_name_map(row.get("practitioner_user") for row in consultation_rows)
+
+    rows = []
+    for treatment in treatment_rows:
+        consultation = consultation_map.get(treatment.get("parent")) or {}
+        qty = flt(treatment.get("qty"))
+        rate = flt(treatment.get("rate"))
+        amount = flt(treatment.get("amount")) or flt(qty * rate)
+        rows.append(
+            {
+                "consultation": treatment.get("parent"),
+                "consultation_date": consultation.get("consultation_date"),
+                "service_branch": consultation.get("service_branch"),
+                "patient_id": consultation.get("patient"),
+                "patient": patient_titles.get(consultation.get("patient")) or consultation.get("patient"),
+                "owner": consultation.get("owner"),
+                "practitioner": practitioner_names.get(consultation.get("practitioner_user")) or consultation.get("practitioner"),
+                "consultation_type": _display_consultation_type(consultation.get("consultation_type")),
+                "item": treatment.get("item"),
+                "description": treatment.get("notes") or treatment.get("treatment_type") or treatment.get("service_type"),
+                "qty": qty,
+                "uom": treatment.get("uom"),
+                "rate": rate,
+                "amount": amount,
+                "status": consultation.get("status"),
+            }
+        )
+
+    consultation_totals = defaultdict(float)
+    patient_totals = defaultdict(float)
+    for row in rows:
+        consultation_totals[row.get("consultation")] += flt(row.get("amount"))
+        patient_totals[row.get("patient_id") or row.get("patient")] += flt(row.get("amount"))
+
+    for row in rows:
+        row["consultation_total"] = consultation_totals[row.get("consultation")]
+        row["patient_total"] = patient_totals[row.get("patient_id") or row.get("patient")]
+        row.pop("patient_id", None)
+
     return rows
 
 
@@ -1500,7 +1593,7 @@ def _stacked_practitioner_revenue_chart(rows):
 def _dashboard_report_links(key):
     links = {
         "executive": ["Consultation Register", "Revenue Summary", "Branch Performance Report"],
-        "clinical": ["Consultation Register", "Lab Order Report", "Vaccination Report"],
+        "clinical": ["Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report"],
         "financial": ["Revenue Summary", "Unpaid Invoice Report"],
         "practitioner_performance": ["Practitioner Performance Report", "Consultation Register"],
         "branch_performance": ["Branch Performance Report", "Revenue Summary"],

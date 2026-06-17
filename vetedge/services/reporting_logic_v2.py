@@ -15,7 +15,7 @@ def execute_structured_report(report_name: str, filters=None):
     columns, data, message, chart, summary = _base_execute_structured_report(report_name, filters)
     filters = _to_dict(filters)
 
-    if report_name in {"Consultation Register", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
+    if report_name in {"Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
         _replace_owner_from_patient(data, "patient", "owner")
 
     if report_name == "Unpaid Invoice Report" and filters.get("branch"):

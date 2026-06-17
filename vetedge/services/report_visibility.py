@@ -74,6 +74,13 @@ REPORT_ROLE_MAP = {
 		*NURSE_REPORTING_ROLES,
 		*FRONT_DESK_REPORTING_ROLES,
 	},
+	"Planned Treatment": {
+		*ADMIN_REPORTING_ROLES,
+		*BRANCH_MANAGER_REPORTING_ROLES,
+		*DOCTOR_REPORTING_ROLES,
+		*NURSE_REPORTING_ROLES,
+		*FRONT_DESK_REPORTING_ROLES,
+	},
 	"Patient Register": {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
@@ -216,6 +223,7 @@ BRANCH_SCOPED_ROLES = {
 
 BRANCH_FILTERED_REPORTS = {
 	"Consultation Register",
+	"Planned Treatment",
 	"Patient Register",
 	"Owner Register",
 	"Practitioner Performance Report",

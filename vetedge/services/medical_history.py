@@ -243,6 +243,11 @@ def get_consultation_history(
 		"diagnosis",
 		"notes",
 	)
+	treatments_by_consultation = get_child_rows_by_parent(
+		"Planned Treatment Item",
+		consultation_names,
+		["item", "qty", "uom", "rate", "amount", "service_type", "treatment_type", "notes"],
+	)
 
 	return [
 		{
@@ -256,6 +261,19 @@ def get_consultation_history(
 			"presenting_complaint": row.presenting_complaint,
 			"assessment_notes": row.assessment_notes,
 			"treatment_plan_summary": row.treatment_plan_summary,
+			"treatment_plan": [
+				{
+					"item": treatment.item,
+					"qty": treatment.qty,
+					"uom": treatment.uom,
+					"rate": treatment.rate,
+					"amount": treatment.amount,
+					"service_type": treatment.service_type,
+					"treatment_type": treatment.treatment_type,
+					"notes": treatment.notes,
+				}
+				for treatment in treatments_by_consultation.get(row.name, [])
+			],
 			"symptoms": symptoms_by_consultation.get(row.name, []),
 			"diagnoses": diagnoses_by_consultation.get(row.name, []),
 		}
@@ -378,7 +396,7 @@ def get_treatment_history(
 	rows = get_child_rows(
 		"Planned Treatment Item",
 		list(consultation_by_name),
-		["item", "qty", "uom", "service_type", "treatment_type", "notes"],
+		["item", "qty", "uom", "rate", "amount", "service_type", "treatment_type", "notes"],
 	)
 
 	return [
@@ -388,6 +406,8 @@ def get_treatment_history(
 			"item": row.item,
 			"qty": row.qty,
 			"uom": row.uom,
+			"rate": row.rate,
+			"amount": row.amount,
 			"service_type": row.service_type,
 			"treatment_type": row.treatment_type,
 			"notes": row.notes,
@@ -426,6 +446,14 @@ def get_child_rows(doctype: str, parent_names: list[str], fields: list[str]) -> 
 		fields=["parent", *fields],
 		order_by="parent asc, idx asc",
 	)
+
+
+def get_child_rows_by_parent(doctype: str, parent_names: list[str], fields: list[str]) -> dict[str, list]:
+	rows = get_child_rows(doctype, parent_names, fields)
+	grouped: dict[str, list] = {}
+	for row in rows:
+		grouped.setdefault(row.parent, []).append(row)
+	return grouped
 
 
 def get_child_values(

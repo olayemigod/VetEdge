@@ -1,0 +1,32 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [
+  {"fieldname": "from_date", "fieldtype": "Date", "label": "From Date"},
+  {"fieldname": "to_date", "fieldtype": "Date", "label": "To Date"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Service Branch", "options": "Branch"},
+  {"fieldname": "patient", "fieldtype": "Link", "label": "Patient", "options": "Veterinary Patient"},
+  {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "Customer"},
+  {"fieldname": "practitioner", "fieldtype": "Link", "label": "Practitioner", "options": "User"},
+  {"fieldname": "consultation_type", "fieldtype": "Link", "label": "Consultation Type", "options": "Consultation Type"},
+  {"fieldname": "item", "fieldtype": "Link", "label": "Treatment Item / Service", "options": "Item"},
+  {"fieldname": "consultation_status", "fieldtype": "Data", "label": "Consultation Status"}
+ ],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Planned Treatment",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Veterinary Consultation",
+ "report_name": "Planned Treatment",
+ "report_type": "Script Report",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "VetEdge Doctor"},
+  {"role": "Veterinary Nurse"},
+  {"role": "VetEdge Front Desk"},
+  {"role": "Branch Manager"}
+ ]
+}
