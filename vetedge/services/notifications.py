@@ -315,6 +315,18 @@ def ensure_frappe_notification_log(notification_item_name: str, notification_ite
 		document_type = item.get("reference_doctype") or NOTIFICATION_ITEM_DOCTYPE
 		document_name = item.get("reference_name") or item.name
 		link = item.get("action_url") or _build_notification_log_link(document_type, document_name)
+		existing_log = _find_existing_frappe_notification_log(item, document_type, document_name, link)
+		if existing_log:
+			frappe.db.set_value(
+				NOTIFICATION_ITEM_DOCTYPE,
+				item.name,
+				"frappe_notification_log",
+				existing_log,
+				update_modified=False,
+			)
+			item.frappe_notification_log = existing_log
+			return existing_log
+
 		log = frappe.get_doc(
 			{
 				"doctype": "Notification Log",
@@ -346,6 +358,24 @@ def ensure_frappe_notification_log(notification_item_name: str, notification_ite
 				title="Veterinary Notification Log Mirror Failed",
 				message=frappe.get_traceback() if getattr(frappe, "get_traceback", None) else "Notification Log mirror failed.",
 			)
+		return None
+
+
+def _find_existing_frappe_notification_log(item, document_type: str | None, document_name: str | None, link: str | None) -> str | None:
+	if not getattr(frappe.db, "get_value", None):
+		return None
+	filters = {
+		"for_user": item.get("recipient_user"),
+		"subject": item.get("notification_title"),
+		"type": "Alert",
+		"document_type": document_type,
+		"document_name": document_name,
+	}
+	if link:
+		filters["link"] = link
+	try:
+		return frappe.db.get_value("Notification Log", filters, "name")
+	except Exception:
 		return None
 
 

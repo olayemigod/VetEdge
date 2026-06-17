@@ -113,7 +113,7 @@ def create_appointment_notifications(event_key: str, appointment, **kwargs) -> l
 		reference = resolve_appointment_notification_reference(event_key, appointment)
 		if event_key == "missed_appointment" and not reference.get("reference_name"):
 			return []
-		recipients = resolve_appointment_notification_recipients(appointment, event_key)
+		recipients = _dedupe_users(resolve_appointment_notification_recipients(appointment, event_key))
 		for recipient_user in recipients:
 			results.append(
 				create_notification_item(

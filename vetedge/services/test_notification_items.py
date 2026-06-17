@@ -217,11 +217,22 @@ class TestNotificationItemService(TestCase):
 					self.name = "NOTIF-001"
 
 		item = Doc(name="VNI-DB-001", frappe_notification_log="NOTIF-001")
+
+		created_items = {"count": 0}
+
+		def get_value(doctype, filters, fieldname=None, *args, **kwargs):
+			if doctype == "Veterinary Notification Item":
+				created_items["count"] += 1
+				return None if created_items["count"] == 1 else "VNI-DB-001"
+			if doctype == "Notification Log":
+				return None
+			return None
+
 		frappe_stub = SimpleNamespace(
 			ValidationError=Exception,
 			db=SimpleNamespace(
 				exists=Mock(return_value=True),
-				get_value=Mock(side_effect=[None, "VNI-DB-001"]),
+				get_value=Mock(side_effect=get_value),
 				set_value=Mock(),
 			),
 			get_doc=Mock(side_effect=lambda value, name=None: item if not isinstance(value, dict) else Doc(name="VNI-DB-001", **value)),
@@ -289,6 +300,51 @@ class TestNotificationItemService(TestCase):
 		self.assertEqual(log.document_type, "Veterinary Notification Item")
 		self.assertEqual(log.document_name, "VNI-003")
 		self.assertEqual(log.link, "/app/veterinary-notification-item/VNI-003")
+
+	def test_frappe_notification_log_reuses_existing_native_log_when_item_link_is_missing(self):
+		inserted = []
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				inserted.append(self)
+
+		item = Doc(
+			doctype="Veterinary Notification Item",
+			name="VNI-005",
+			recipient_user="doctor@example.com",
+			notification_title="Veterinary appointment missed",
+			message="Missed",
+			reference_doctype="Veterinary Missed Appointment",
+			reference_name="VMISS-001",
+			action_url="/app/veterinary-missed-appointment/VMISS-001",
+			frappe_notification_log=None,
+		)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(
+				exists=Mock(return_value=True),
+				get_value=Mock(return_value="NOTIF-EXISTING"),
+				set_value=Mock(),
+			),
+			get_doc=Mock(side_effect=lambda value, name=None: item if not isinstance(value, dict) else Doc(**value)),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
+		)
+
+		with patch.object(notifications, "frappe", frappe_stub):
+			name = notifications.ensure_frappe_notification_log("VNI-005")
+
+		self.assertEqual(name, "NOTIF-EXISTING")
+		self.assertEqual(inserted, [])
+		frappe_stub.db.set_value.assert_called_once_with(
+			"Veterinary Notification Item",
+			"VNI-005",
+			"frappe_notification_log",
+			"NOTIF-EXISTING",
+			update_modified=False,
+		)
 
 	def test_frappe_notification_log_failure_does_not_block_item_creation(self):
 		inserted = []
