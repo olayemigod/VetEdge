@@ -53,6 +53,106 @@ class TestNotificationApi(TestCase):
 		self.assertEqual(result, {"unread_count": 3})
 		count.assert_called_once_with(user="doctor@example.com")
 
+	def test_veterinary_unread_bell_count_uses_session_user(self):
+		frappe_stub = SimpleNamespace(session=SimpleNamespace(user="doctor@example.com"), PermissionError=Exception)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "get_veterinary_unread_bell_count", return_value=4) as count,
+		):
+			result = notification_api.get_my_veterinary_unread_bell_count()
+
+		self.assertEqual(result, {"unread_count": 4})
+		count.assert_called_once_with("doctor@example.com")
+
+	def test_veterinary_unread_bell_count_uses_veterinary_item_lifecycle(self):
+		count = Mock(return_value=2)
+		frappe_stub = SimpleNamespace(db=SimpleNamespace(count=count))
+
+		with patch.object(notification_api, "frappe", frappe_stub):
+			result = notification_api.get_veterinary_unread_bell_count("doctor@example.com")
+
+		self.assertEqual(result, 2)
+		count.assert_called_once_with(
+			"Veterinary Notification Item",
+			{"recipient_user": "doctor@example.com", "status": "Unread"},
+		)
+
+	def test_veterinary_unread_bell_count_ignores_native_notification_log_read_state(self):
+		frappe_stub = SimpleNamespace(db=SimpleNamespace(count=Mock(return_value=0)))
+
+		with patch.object(notification_api, "frappe", frappe_stub):
+			count = notification_api.get_veterinary_unread_bell_count("doctor@example.com")
+
+		self.assertEqual(count, 0)
+		self.assertFalse(hasattr(frappe_stub.db, "sql"))
+
+	def test_mark_veterinary_notification_read_for_log_uses_linked_item(self):
+		frappe_stub = SimpleNamespace(
+			session=SimpleNamespace(user="doctor@example.com"),
+			PermissionError=Exception,
+			db=SimpleNamespace(get_value=Mock(return_value="VNI-001"), count=Mock(return_value=0)),
+		)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "mark_notification_read", return_value={"name": "VNI-001", "status": "Read"}) as mark_read,
+		):
+			result = notification_api.mark_my_veterinary_notification_read_for_log("LOG-001")
+
+		self.assertEqual(result, {"ok": True, "notification": "VNI-001", "unread_count": 0})
+		frappe_stub.db.get_value.assert_called_once_with(
+			"Veterinary Notification Item",
+			{"frappe_notification_log": "LOG-001", "recipient_user": "doctor@example.com"},
+			"name",
+		)
+		mark_read.assert_called_once_with("VNI-001", user="doctor@example.com")
+
+	def test_mark_veterinary_notification_read_for_log_falls_back_to_reference_match(self):
+		get_value = Mock(
+			side_effect=[
+				None,
+				{
+					"document_type": "Veterinary Missed Appointment",
+					"document_name": "VMISS-001",
+					"subject": "Veterinary appointment missed",
+					"link": "/app/veterinary-missed-appointment/VMISS-001",
+				},
+				"VNI-002",
+			]
+		)
+		frappe_stub = SimpleNamespace(
+			session=SimpleNamespace(user="doctor@example.com"),
+			PermissionError=Exception,
+			db=SimpleNamespace(get_value=get_value, count=Mock(return_value=1)),
+		)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "mark_notification_read", return_value={"name": "VNI-002", "status": "Read"}) as mark_read,
+		):
+			result = notification_api.mark_my_veterinary_notification_read_for_log("LOG-002")
+
+		self.assertEqual(result["notification"], "VNI-002")
+		self.assertEqual(result["unread_count"], 1)
+		mark_read.assert_called_once_with("VNI-002", user="doctor@example.com")
+		self.assertEqual(get_value.call_args_list[2].args[1]["recipient_user"], "doctor@example.com")
+		self.assertEqual(get_value.call_args_list[2].args[1]["reference_doctype"], "Veterinary Missed Appointment")
+
+	def test_mark_all_my_veterinary_notifications_read_uses_current_user_only(self):
+		frappe_stub = SimpleNamespace(session=SimpleNamespace(user="doctor@example.com"), PermissionError=Exception)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "mark_all_notifications_read", return_value={"updated": 2}) as mark_all,
+			patch.object(notification_api, "get_veterinary_unread_bell_count", return_value=0) as count,
+		):
+			result = notification_api.mark_all_my_veterinary_notifications_read()
+
+		self.assertEqual(result, {"ok": True, "updated": 2, "unread_count": 0})
+		mark_all.assert_called_once_with(user="doctor@example.com")
+		count.assert_called_once_with("doctor@example.com")
+
 	def test_recipient_user_can_fetch_own_feed(self):
 		rows = [
 			{

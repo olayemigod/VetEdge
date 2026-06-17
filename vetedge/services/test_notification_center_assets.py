@@ -7,6 +7,8 @@ from unittest import TestCase
 APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
 HOOKS_PATH = APP_ROOT / "hooks.py"
 ITEM_JSON = APP_ROOT / "veterinary/doctype/veterinary_notification_item/veterinary_notification_item.json"
+BADGE_JS = APP_ROOT / "public/js/veterinary_unread_badge.js"
+BADGE_CSS = APP_ROOT / "public/css/veterinary_unread_badge.css"
 
 
 class TestNotificationCenterAssets(TestCase):
@@ -14,6 +16,33 @@ class TestNotificationCenterAssets(TestCase):
 		hooks = HOOKS_PATH.read_text()
 		self.assertNotIn("/assets/vetedge/js/veterinary_notification_center.js", hooks)
 		self.assertNotIn("/assets/vetedge/css/veterinary_notification_center.css", hooks)
+
+	def test_veterinary_unread_badge_assets_are_registered_for_desk(self):
+		hooks = HOOKS_PATH.read_text()
+		self.assertIn("/assets/vetedge/js/veterinary_unread_badge.js", hooks)
+		self.assertIn("/assets/vetedge/css/veterinary_unread_badge.css", hooks)
+
+	def test_veterinary_unread_badge_js_is_lightweight_native_bell_badge(self):
+		source = BADGE_JS.read_text()
+		self.assertIn("veterinary-unread-bell-badge", source)
+		self.assertIn("get_my_veterinary_unread_bell_count", source)
+		self.assertIn("mark_my_veterinary_notification_read_for_log", source)
+		self.assertIn('frappe.realtime.on("notification"', source)
+		self.assertIn('.notification-item[data-name]', source)
+		self.assertIn("Veterinary", source)
+		self.assertIn(".sidebar-notification", source)
+		self.assertNotIn("VetEdge Notifications", source)
+		self.assertNotIn("openDrawer", source)
+		self.assertNotIn("new frappe.ui.Dialog", source)
+		self.assertNotIn("veterinary_notification_center", source)
+		self.assertNotIn("veterinary-patient", source)
+		self.assertNotIn("veterinary-appointment", source)
+		self.assertNotIn("window.location", source)
+
+	def test_veterinary_unread_badge_css_is_scoped(self):
+		source = BADGE_CSS.read_text()
+		self.assertIn("#veterinary-unread-bell-badge", source)
+		self.assertNotIn(".veterinary-notification-dialog", source)
 
 	def test_native_bell_backend_files_remain_available(self):
 		self.assertTrue((APP_ROOT / "services/notifications.py").exists())

@@ -86,6 +86,86 @@ def get_my_notification_count() -> dict:
 
 
 @frappe.whitelist()
+def get_my_veterinary_unread_bell_count() -> dict:
+	user = _session_user()
+	return {"unread_count": get_veterinary_unread_bell_count(user)}
+
+
+def get_veterinary_unread_bell_count(user: str) -> int:
+	if not user:
+		return 0
+	return frappe.db.count(
+		"Veterinary Notification Item",
+		{
+			"recipient_user": user,
+			"status": "Unread",
+		},
+	)
+
+
+@frappe.whitelist()
+def mark_my_veterinary_notification_read_for_log(notification_log: str) -> dict:
+	user = _session_user()
+	notification_item = get_veterinary_notification_item_for_log(notification_log, user)
+	if notification_item:
+		mark_notification_read(notification_item, user=user)
+	return {
+		"ok": True,
+		"notification": notification_item,
+		"unread_count": get_veterinary_unread_bell_count(user),
+	}
+
+
+@frappe.whitelist()
+def mark_all_my_veterinary_notifications_read() -> dict:
+	user = _session_user()
+	result = mark_all_notifications_read(user=user)
+	return {
+		"ok": True,
+		"updated": result.get("updated", 0),
+		"unread_count": get_veterinary_unread_bell_count(user),
+	}
+
+
+def get_veterinary_notification_item_for_log(notification_log: str | None, user: str) -> str | None:
+	if not notification_log or not user:
+		return None
+
+	item_name = frappe.db.get_value(
+		"Veterinary Notification Item",
+		{"frappe_notification_log": notification_log, "recipient_user": user},
+		"name",
+	)
+	if item_name:
+		return item_name
+
+	log = frappe.db.get_value(
+		"Notification Log",
+		{"name": notification_log, "for_user": user},
+		["document_type", "document_name", "subject", "link"],
+		as_dict=True,
+	)
+	if not log:
+		return None
+	if log.get("document_type") == "Veterinary Notification Item":
+		return frappe.db.get_value(
+			"Veterinary Notification Item",
+			{"name": log.get("document_name"), "recipient_user": user},
+			"name",
+		)
+
+	filters = {
+		"recipient_user": user,
+		"notification_title": log.get("subject"),
+		"reference_doctype": log.get("document_type"),
+		"reference_name": log.get("document_name"),
+	}
+	if log.get("link"):
+		filters["action_url"] = log.get("link")
+	return frappe.db.get_value("Veterinary Notification Item", filters, "name")
+
+
+@frappe.whitelist()
 def get_my_notifications(
 	status: str | None = None,
 	category: str | None = None,
