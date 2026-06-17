@@ -298,6 +298,70 @@ def send_missed_appointment_notifications(limit: int = 100) -> list[dict]:
 	return results
 
 
+def diagnose_missed_appointment_notifications(
+	appointment_name: str | None = None,
+	recipient_user: str | None = None,
+	limit: int = 200,
+) -> dict:
+	"""Return missed appointment notification/item mirror diagnostics for local support."""
+	item_filters = {"event_key": "missed_appointment"}
+	if appointment_name:
+		item_filters["idempotency_key"] = ["like", f"missed_appointment::{appointment_name}::%"]
+	if recipient_user:
+		item_filters["recipient_user"] = recipient_user
+
+	items = frappe.get_all(
+		"Veterinary Notification Item",
+		filters=item_filters,
+		fields=[
+			"name",
+			"idempotency_key",
+			"recipient_user",
+			"notification_title",
+			"reference_doctype",
+			"reference_name",
+			"action_url",
+			"frappe_notification_log",
+			"creation",
+		],
+		order_by="creation desc",
+		limit_page_length=limit,
+	)
+
+	rows = []
+	for item in items:
+		native_filters = {
+			"for_user": item.get("recipient_user"),
+			"subject": item.get("notification_title"),
+			"document_type": item.get("reference_doctype"),
+			"document_name": item.get("reference_name"),
+		}
+		if item.get("action_url"):
+			native_filters["link"] = item.get("action_url")
+		native_logs = frappe.get_all(
+			"Notification Log",
+			filters=native_filters,
+			fields=["name", "for_user", "subject", "document_type", "document_name", "link", "read", "creation"],
+			order_by="creation desc",
+			limit_page_length=limit,
+		)
+		rows.append(
+			{
+				"notification_item": item,
+				"matching_native_log_count": len(native_logs),
+				"matching_native_logs": native_logs,
+			}
+		)
+
+	return {
+		"event_key": "missed_appointment",
+		"appointment_name": appointment_name,
+		"recipient_user": recipient_user,
+		"veterinary_notification_item_count": len(items),
+		"rows": rows,
+	}
+
+
 def send_waiting_too_long_appointment_notifications(
 	threshold_minutes: int = DEFAULT_WAITING_THRESHOLD_MINUTES,
 	limit: int = 100,

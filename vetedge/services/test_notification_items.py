@@ -150,6 +150,7 @@ class TestNotificationItemService(TestCase):
 		self.assertEqual(docs[1].subject, "Lab order created")
 		self.assertEqual(docs[1].document_type, "Veterinary Lab Order")
 		self.assertEqual(docs[1].document_name, "VLAB-001")
+		frappe_stub.publish_realtime.assert_not_called()
 		frappe_stub.db.set_value.assert_called_once_with(
 			"Veterinary Notification Item",
 			docs[0].name,

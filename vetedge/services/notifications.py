@@ -350,7 +350,6 @@ def ensure_frappe_notification_log(notification_item_name: str, notification_ite
 			update_modified=False,
 		)
 		item.frappe_notification_log = log.name
-		_publish_native_notification_update(item.get("recipient_user"))
 		return log.name
 	except Exception:
 		if getattr(frappe, "log_error", None):
@@ -386,15 +385,6 @@ def _build_notification_log_link(document_type: str | None, document_name: str |
 		frappe.scrub(document_type).replace("_", "-"),
 		document_name,
 	)
-
-
-def _publish_native_notification_update(user: str | None) -> None:
-	if not user or not getattr(frappe, "publish_realtime", None):
-		return
-	try:
-		frappe.publish_realtime("notification", user=user)
-	except Exception:
-		pass
 
 
 def build_notification_item_idempotency_key(
