@@ -306,9 +306,11 @@ def update_consultation_after_invoice_created(
 
 
 def get_consultation_status_after_invoice_created(doc, settings: ConsultationBillingSettings) -> str:
+	if doc.status == "Draft":
+		return "In Progress"
 	if settings.requires_payment_before_treatment:
 		return "Awaiting Payment"
-	if doc.status in {"Draft", "In Progress", "Awaiting Payment"}:
+	if doc.status in {"In Progress", "Awaiting Payment"}:
 		return get_consultation_ready_status(doc)
 	return doc.status
 
@@ -488,6 +490,9 @@ def update_single_consultation_payment_status(consultation, invoice) -> None:
 	if new_payment_status == PAID_STATUS and consultation.status == "Awaiting Payment":
 		consultation_doc = frappe.get_doc("Veterinary Consultation", consultation.name)
 		values["status"] = get_consultation_ready_status(consultation_doc)
+	elif consultation.status in {"In Progress", "Awaiting Payment"} and can_advance_consultation_without_payment(invoice):
+		consultation_doc = frappe.get_doc("Veterinary Consultation", consultation.name)
+		values["status"] = get_post_invoice_consultation_status(consultation_doc)
 
 	frappe.db.set_value("Veterinary Consultation", consultation.name, values, update_modified=False)
 
@@ -525,6 +530,19 @@ def update_single_consultation_payment_status(consultation, invoice) -> None:
 				consultation.name,
 				{"invoice": invoice.name, "payment_status": new_payment_status},
 			)
+
+
+def can_advance_consultation_without_payment(invoice) -> bool:
+	if cint(invoice.docstatus) != 1:
+		return False
+
+	from vetedge.services.payment_gate import NO_PAYMENT_GATE, get_consultation_payment_gate
+
+	return get_consultation_payment_gate() == NO_PAYMENT_GATE
+
+
+def get_post_invoice_consultation_status(doc) -> str:
+	return get_consultation_ready_status(doc)
 
 
 def get_invoice_payment_status(invoice) -> str:

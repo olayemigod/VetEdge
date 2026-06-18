@@ -117,6 +117,18 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(result["status"], "Pending Dispensary")
 		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
 
+	def test_create_consultation_invoice_from_draft_moves_to_in_progress_not_awaiting_payment(self):
+		consultation = make_consultation(status="Draft")
+		invoice = make_invoice()
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+		set_values = []
+
+		with patched_invoice_context(consultation, invoice, settings, set_values):
+			result = create_consultation_invoice("VCON-001")
+
+		self.assertEqual(result["status"], "In Progress")
+		self.assertEqual(set_values[0][2]["status"], "In Progress")
+
 	def test_create_consultation_invoice_can_preserve_consultation_status(self):
 		consultation = make_consultation()
 		invoice = make_invoice()
@@ -162,6 +174,125 @@ class TestConsultationBilling(TestCase):
 
 		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
 		self.assertEqual(emit.call_args_list[1].args[0], "consultation_sent_to_dispensary")
+
+	def test_no_payment_gate_submitted_unpaid_invoice_sets_consultation_pending_dispensary_when_required(self):
+		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
+		consultation_doc = make_consultation()
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			outstanding_amount=1000,
+			grand_total=1000,
+			customer="CUST-001",
+		)
+		set_values = []
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.payment_gate.get_consultation_payment_gate", return_value="No Payment Gate"),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Pending Dispensary"),
+			patch("vetedge.services.billing.emit_notification_event") as emit,
+		):
+			update_single_consultation_payment_status(consultation, invoice)
+
+		self.assertEqual(set_values[0][2]["payment_status"], "Unpaid")
+		self.assertEqual(set_values[0][2]["status"], "Pending Dispensary")
+		emit.assert_not_called()
+
+	def test_no_payment_gate_submitted_unpaid_invoice_sets_consultation_ready_for_treatment_without_dispensary(self):
+		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
+		consultation_doc = make_consultation()
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			outstanding_amount=1000,
+			grand_total=1000,
+			customer="CUST-001",
+		)
+		set_values = []
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.payment_gate.get_consultation_payment_gate", return_value="No Payment Gate"),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+			patch("vetedge.services.billing.emit_notification_event") as emit,
+		):
+			update_single_consultation_payment_status(consultation, invoice)
+
+		self.assertEqual(set_values[0][2]["payment_status"], "Unpaid")
+		self.assertEqual(set_values[0][2]["status"], "Ready for Treatment")
+		emit.assert_not_called()
+
+	def test_no_payment_gate_submitted_unpaid_invoice_advances_in_progress_consultation(self):
+		consultation = frappe._dict(name="VCON-001", status="In Progress", payment_status="Unpaid")
+		consultation_doc = make_consultation(status="In Progress")
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			outstanding_amount=1000,
+			grand_total=1000,
+			customer="CUST-001",
+		)
+		set_values = []
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.payment_gate.get_consultation_payment_gate", return_value="No Payment Gate"),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+		):
+			update_single_consultation_payment_status(consultation, invoice)
+
+		self.assertEqual(set_values[0][2]["payment_status"], "Unpaid")
+		self.assertEqual(set_values[0][2]["status"], "Ready for Treatment")
+
+	def test_full_payment_required_submitted_unpaid_invoice_does_not_advance_consultation(self):
+		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment", payment_status="Unpaid")
+		consultation_doc = make_consultation()
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			outstanding_amount=1000,
+			grand_total=1000,
+			customer="CUST-001",
+		)
+		set_values = []
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.payment_gate.get_consultation_payment_gate", return_value="Full Payment Required"),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+		):
+			update_single_consultation_payment_status(consultation, invoice)
+
+		self.assertEqual(set_values[0][2], {"payment_status": "Unpaid"})
 
 	def test_consultation_requires_invoice_before_progress_when_billing_enabled(self):
 		consultation = make_consultation()
