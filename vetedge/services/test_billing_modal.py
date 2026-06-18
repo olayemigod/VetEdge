@@ -116,6 +116,82 @@ class TestBillingModal(TestCase):
 		self.assertEqual(result["invoice"], "SINV-001")
 		invoice.submit.assert_called_once()
 
+	def test_submit_modal_invoice_corrects_due_date_before_posting_date(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_invoice="SINV-001",
+			service_branch="Main",
+		)
+		invoice = make_invoice(docstatus=0)
+		invoice.posting_date = "2026-06-18"
+		invoice.due_date = "2026-06-01"
+
+		with modal_action_context(source, invoice):
+			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(str(invoice.due_date), "2026-06-18")
+		invoice.submit.assert_called_once()
+
+	def test_submit_modal_invoice_corrects_due_date_before_effective_submit_posting_date(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_invoice="SINV-001",
+			service_branch="Main",
+		)
+		invoice = make_invoice(docstatus=0)
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-05-30"
+		invoice.set_posting_time = 0
+
+		with (
+			modal_action_context(source, invoice),
+			patch.object(billing_modal, "nowdate", return_value="2026-06-18"),
+		):
+			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(str(invoice.due_date), "2026-06-18")
+		invoice.submit.assert_called_once()
+
+	def test_submit_modal_invoice_preserves_due_date_after_posting_date(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_invoice="SINV-001",
+			service_branch="Main",
+		)
+		invoice = make_invoice(docstatus=0)
+		invoice.posting_date = "2026-06-18"
+		invoice.due_date = "2026-07-18"
+
+		with modal_action_context(source, invoice):
+			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(invoice.due_date, "2026-07-18")
+		invoice.submit.assert_called_once()
+
+	def test_submit_modal_invoice_preserves_valid_payment_terms_due_date_after_effective_posting_date(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_invoice="SINV-001",
+			service_branch="Main",
+		)
+		invoice = make_invoice(docstatus=0)
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-07-18"
+		invoice.set_posting_time = 0
+
+		with (
+			modal_action_context(source, invoice),
+			patch.object(billing_modal, "nowdate", return_value="2026-06-18"),
+		):
+			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(invoice.due_date, "2026-07-18")
+		invoice.submit.assert_called_once()
+
 	def test_submit_modal_invoice_blocks_already_submitted_invoice(self):
 		source = frappe._dict(
 			doctype="Veterinary Consultation",
@@ -259,6 +335,9 @@ def make_invoice(docstatus=1, outstanding_amount=1000):
 		status="Draft" if docstatus == 0 else "Unpaid",
 		customer="CUST-001",
 		branch="Main",
+		posting_date="2026-06-18",
+		due_date="2026-06-18",
+		set_posting_time=1,
 		grand_total=1000,
 		paid_amount=0,
 		outstanding_amount=outstanding_amount,

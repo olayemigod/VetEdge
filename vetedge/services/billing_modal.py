@@ -347,6 +347,7 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 	if not frappe.has_permission("Sales Invoice", "submit", doc=invoice_doc):
 		frappe.throw("You do not have permission to submit this Sales Invoice.", frappe.PermissionError)
 
+	ensure_invoice_due_date_not_before_posting_date(invoice_doc)
 	invoice_doc.submit()
 	return {"invoice": invoice_doc.name, "state": get_billing_modal_state(source_doctype, source_name)}
 
@@ -428,6 +429,20 @@ def resolve_modal_invoice_name(doc, config: BillingSourceConfig, invoice: str | 
 	if not frappe.db.exists("Sales Invoice", invoice_name):
 		frappe.throw("The linked Sales Invoice could not be found.", frappe.ValidationError)
 	return invoice_name
+
+
+def ensure_invoice_due_date_not_before_posting_date(invoice) -> None:
+	posting_date = get_effective_invoice_submit_posting_date(invoice)
+	due_date = invoice.get("due_date")
+	if not due_date or getdate(due_date) < posting_date:
+		invoice.due_date = posting_date
+
+
+def get_effective_invoice_submit_posting_date(invoice):
+	posting_date = getdate(invoice.get("posting_date") or nowdate())
+	if cint(invoice.get("set_posting_time")):
+		return posting_date
+	return max(posting_date, getdate(nowdate()))
 
 
 def assert_invoice_is_linked_to_source(invoice_name: str, doc, config: BillingSourceConfig) -> None:
