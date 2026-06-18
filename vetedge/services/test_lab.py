@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 
 from vetedge.services.lab import (
+	create_lab_order_invoice,
 	create_lab_order_from_consultation,
 	get_consultation_lab_billing_items,
 	get_lab_history,
@@ -15,6 +17,69 @@ from vetedge.services.lab import (
 
 
 class TestLabWorkflow(TestCase):
+	def test_consultation_lab_order_action_uses_popup_not_route_after_create(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_consultation/veterinary_consultation.js"
+		script = script_path.read_text()
+
+		self.assertIn("open_lab_order_dialog_safely(frm)", script)
+		self.assertIn("show_lab_order_summary_dialog(frm, response.message.name)", script)
+		self.assertNotIn('frappe.set_route("Form", "Veterinary Lab Order", response.message.name)', script)
+
+	def test_create_lab_order_invoice_creates_invoice_when_none_exists(self):
+		order = make_lab_order()
+		created_invoice = make_sales_invoice("SINV-001", docstatus=0)
+		set_values = []
+
+		with lab_invoice_context(order, created_invoice, set_values):
+			result = create_lab_order_invoice("VLAB-001")
+
+		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertTrue(result["created"])
+		self.assertEqual(set_values[0], ("Veterinary Lab Order", "VLAB-001", "linked_invoice", "SINV-001"))
+		created_invoice.insert.assert_called_once()
+
+	def test_create_lab_order_invoice_updates_existing_draft_invoice_without_duplicate(self):
+		order = make_lab_order(linked_invoice="SINV-001")
+		draft_invoice = make_sales_invoice("SINV-001", docstatus=0)
+		set_values = []
+
+		with lab_invoice_context(order, draft_invoice, set_values):
+			result = create_lab_order_invoice("VLAB-001")
+
+		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertFalse(result["created"])
+		draft_invoice.save.assert_called_once()
+		draft_invoice.insert.assert_not_called()
+		self.assertEqual(len(draft_invoice["items"]), 1)
+
+	def test_create_lab_order_invoice_does_not_mutate_submitted_invoice(self):
+		order = make_lab_order(linked_invoice="SINV-001")
+		submitted_invoice = make_sales_invoice("SINV-001", docstatus=1)
+		set_values = []
+
+		with lab_invoice_context(order, submitted_invoice, set_values):
+			result = create_lab_order_invoice("VLAB-001")
+
+		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertTrue(result["submitted"])
+		submitted_invoice.save.assert_not_called()
+		submitted_invoice.insert.assert_not_called()
+		self.assertEqual(set_values, [])
+
+	def test_create_lab_order_invoice_replaces_cancelled_invoice_with_new_invoice(self):
+		order = make_lab_order(linked_invoice="SINV-CAN")
+		cancelled_invoice = make_sales_invoice("SINV-CAN", docstatus=2)
+		new_invoice = make_sales_invoice("SINV-NEW", docstatus=0)
+		set_values = []
+
+		with lab_invoice_context(order, cancelled_invoice, set_values, created_invoice=new_invoice):
+			result = create_lab_order_invoice("VLAB-001")
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertTrue(result["created"])
+		new_invoice.insert.assert_called_once()
+		self.assertEqual(set_values[0], ("Veterinary Lab Order", "VLAB-001", "linked_invoice", "SINV-NEW"))
+
 	def test_create_lab_order_from_consultation_creates_requested_order(self):
 		inserted = []
 		created = frappe._dict(
@@ -373,3 +438,101 @@ class TestLabWorkflow(TestCase):
 		):
 			with self.assertRaises(frappe.ValidationError):
 				validate_lab_order(doc)
+
+
+def make_lab_order(linked_invoice=None):
+	order = frappe._dict(
+		doctype="Veterinary Lab Order",
+		name="VLAB-001",
+		patient="VP-001",
+		primary_owner="CUST-001",
+		consultation=None,
+		service_branch="Main",
+		linked_invoice=linked_invoice,
+		lab_tests=[
+			frappe._dict(
+				lab_test_template="CBC",
+				billing_item="LAB-CBC",
+				get=lambda key, default=None: {"lab_test_template": "CBC", "billing_item": "LAB-CBC"}.get(key, default),
+			)
+		],
+	)
+	order.get = lambda key, default=None: order[key] if key in order else default
+	return order
+
+
+def make_sales_invoice(name, docstatus=0):
+	invoice = frappe._dict(
+		doctype="Sales Invoice",
+		name=name,
+		docstatus=docstatus,
+		customer="CUST-001",
+		grand_total=1000,
+		items=[],
+	)
+	invoice.insert = Mock(return_value=invoice)
+	invoice.save = Mock(return_value=invoice)
+	invoice.set = lambda fieldname, value: invoice.__setitem__(fieldname, value)
+	invoice.append = lambda fieldname, value: invoice[fieldname].append(value)
+	invoice.get = lambda key, default=None: invoice[key] if key in invoice else default
+	return invoice
+
+
+class lab_invoice_context:
+	def __init__(self, order, linked_invoice, set_values, created_invoice=None):
+		self.order = order
+		self.linked_invoice = linked_invoice
+		self.created_invoice = created_invoice or linked_invoice
+		self.set_values = set_values
+		self.stack = None
+
+	def __enter__(self):
+		from contextlib import ExitStack
+
+		self.stack = ExitStack()
+
+		def get_doc(arg1, arg2=None):
+			if arg1 == "Veterinary Lab Order":
+				return self.order
+			if arg1 == "Sales Invoice":
+				return self.linked_invoice
+			if isinstance(arg1, dict):
+				invoice = self.created_invoice or make_sales_invoice("SINV-001")
+				invoice.update(arg1)
+				return invoice
+			raise AssertionError(f"Unexpected get_doc call: {arg1} {arg2}")
+
+		frappe_stub = SimpleNamespace(
+			get_doc=get_doc,
+			db=SimpleNamespace(
+				exists=lambda doctype, name=None: doctype == "Sales Invoice" and name == self.linked_invoice.name,
+				get_value=lambda *args, **kwargs: 1000,
+				set_value=lambda doctype, name, field, value, **kwargs: self.set_values.append((doctype, name, field, value)),
+			),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: True),
+			utils=SimpleNamespace(nowdate=lambda: "2026-06-18"),
+			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
+			ValidationError=frappe.ValidationError,
+		)
+		self.stack.enter_context(patch("vetedge.services.lab.frappe", frappe_stub))
+		self.stack.enter_context(patch("vetedge.services.lab.require_internal_user"))
+		self.stack.enter_context(patch("vetedge.services.lab.can_access_lab_order"))
+		self.stack.enter_context(patch("vetedge.services.registration_billing.get_billing_cost_center", return_value="Main - CC"))
+		self.stack.enter_context(patch("vetedge.services.registration_billing.get_default_company", return_value="Test Company"))
+		self.stack.enter_context(patch("vetedge.services.billing.validate_sales_item"))
+		self.stack.enter_context(
+			patch(
+				"vetedge.services.billing.frappe",
+				SimpleNamespace(
+					db=SimpleNamespace(get_value=lambda *args, **kwargs: frappe._dict(stock_uom="Nos", standard_rate=1000)),
+					throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
+					ValidationError=frappe.ValidationError,
+				),
+			)
+		)
+		self.stack.enter_context(patch("vetedge.services.lab.emit_notification_event"))
+		return self
+
+	def __exit__(self, exc_type, exc, tb):
+		self.stack.close()
+		return False

@@ -444,6 +444,51 @@ def get_consultation_lab_orders_for_popup(consultation: str) -> list[dict]:
 
 
 @frappe.whitelist()
+def get_lab_order_popup_summary(lab_order: str) -> dict:
+	require_internal_user()
+	can_access_lab_order(get_current_user(), lab_order, raise_exception=True)
+	order = frappe.get_doc(LAB_ORDER_DOCTYPE, lab_order)
+	invoice = None
+	if order.get("linked_invoice") and frappe.db.exists("Sales Invoice", order.linked_invoice):
+		invoice_doc = frappe.get_doc("Sales Invoice", order.linked_invoice)
+		invoice = {
+			"name": invoice_doc.name,
+			"status": invoice_doc.get("status"),
+			"docstatus": cint(invoice_doc.docstatus),
+			"grand_total": flt(invoice_doc.get("grand_total")),
+			"paid_amount": flt(invoice_doc.get("paid_amount")),
+			"outstanding_amount": flt(invoice_doc.get("outstanding_amount")),
+			"currency": invoice_doc.get("currency"),
+		}
+
+	return {
+		"name": order.name,
+		"title": order.get("lab_order_title"),
+		"patient": order.get("patient"),
+		"primary_owner": order.get("primary_owner"),
+		"consultation": order.get("consultation"),
+		"requested_by": order.get("requested_by"),
+		"requested_on": order.get("requested_on"),
+		"service_branch": order.get("service_branch"),
+		"status": order.get("status"),
+		"sample_notes": order.get("sample_notes"),
+		"invoice": invoice,
+		"lab_tests": [
+			{
+				"lab_test_template": row.get("lab_test_template"),
+				"test_name": frappe.db.get_value(LAB_TEST_DOCTYPE, row.get("lab_test_template"), "test_name")
+				or row.get("lab_test_template"),
+				"billing_item": row.get("billing_item"),
+				"status": row.get("status"),
+				"result_status": row.get("result_status"),
+				"notes": row.get("notes"),
+			}
+			for row in order.get("lab_tests") or []
+		],
+	}
+
+
+@frappe.whitelist()
 def create_lab_test_from_dialog(values: dict | str | None = None) -> dict:
 	require_internal_user()
 	user = get_current_user()
@@ -511,15 +556,12 @@ def create_standalone_lab_order(
 
 @frappe.whitelist()
 def create_lab_order_invoice(lab_order: str) -> dict:
-	from vetedge.services.billing import build_invoice_item
-	from vetedge.services.registration_billing import get_billing_cost_center, get_default_company
+	from vetedge.services.registration_billing import get_billing_cost_center
 
 	require_internal_user()
 	can_access_lab_order(get_current_user(), lab_order, raise_exception=True)
 
 	order = frappe.get_doc(LAB_ORDER_DOCTYPE, lab_order)
-	if order.linked_invoice:
-		frappe.throw("This lab order already has a linked Sales Invoice.", frappe.ValidationError)
 	if order.consultation:
 		frappe.throw(
 			"Consultation-linked lab orders are billed through the consultation invoice flow.",
@@ -531,15 +573,48 @@ def create_lab_order_invoice(lab_order: str) -> dict:
 		frappe.throw("Lab order must have a service branch before billing.", frappe.ValidationError)
 
 	cost_center = get_billing_cost_center(order.service_branch, required=True)
+	items = build_lab_order_invoice_items(order, cost_center)
+	if not items:
+		frappe.throw("No billable lab items were found on this lab order.", frappe.ValidationError)
+
+	if order.linked_invoice and frappe.db.exists("Sales Invoice", order.linked_invoice):
+		linked_invoice = frappe.get_doc("Sales Invoice", order.linked_invoice)
+		if cint(linked_invoice.docstatus) == 0:
+			update_draft_lab_order_invoice(linked_invoice, order, items, cost_center)
+			return {"lab_order": order.name, "invoice": linked_invoice.name, "created": False}
+		if cint(linked_invoice.docstatus) == 1:
+			return {"lab_order": order.name, "invoice": linked_invoice.name, "created": False, "submitted": True}
+
+	invoice = create_lab_order_sales_invoice(order, items, cost_center)
+	frappe.db.set_value(LAB_ORDER_DOCTYPE, order.name, "linked_invoice", invoice.name, update_modified=False)
+	emit_notification_event(
+		"invoice_created",
+		"Sales Invoice",
+		invoice.name,
+		{
+			"customer": order.primary_owner,
+			"branch": order.service_branch,
+			"lab_order": order.name,
+			"amount": invoice.grand_total,
+		},
+	)
+	return {"lab_order": order.name, "invoice": invoice.name, "created": True}
+
+
+def build_lab_order_invoice_items(order, cost_center: str) -> list[dict]:
+	from vetedge.services.billing import build_invoice_item
+
 	items = []
 	for row in order.get("lab_tests") or []:
 		if not row.billing_item:
 			continue
 		default_rate = frappe.db.get_value(LAB_TEST_DOCTYPE, row.lab_test_template, "default_rate")
 		items.append(build_invoice_item(row.billing_item, 1, None, default_rate, cost_center))
+	return items
 
-	if not items:
-		frappe.throw("No billable lab items were found on this lab order.", frappe.ValidationError)
+
+def create_lab_order_sales_invoice(order, items: list[dict], cost_center: str):
+	from vetedge.services.registration_billing import get_default_company
 
 	invoice = frappe.get_doc(
 		{
@@ -557,19 +632,24 @@ def create_lab_order_invoice(lab_order: str) -> dict:
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = cost_center
 	invoice.insert(ignore_permissions=True)
-	frappe.db.set_value(LAB_ORDER_DOCTYPE, order.name, "linked_invoice", invoice.name, update_modified=False)
-	emit_notification_event(
-		"invoice_created",
-		"Sales Invoice",
-		invoice.name,
-		{
-			"customer": order.primary_owner,
-			"branch": order.service_branch,
-			"lab_order": order.name,
-			"amount": invoice.grand_total,
-		},
-	)
-	return {"lab_order": order.name, "invoice": invoice.name}
+	return invoice
+
+
+def update_draft_lab_order_invoice(invoice, order, items: list[dict], cost_center: str) -> None:
+	if invoice.customer and invoice.customer != order.primary_owner:
+		frappe.throw("Linked Invoice customer does not match the lab order owner.", frappe.ValidationError)
+	invoice.customer = order.primary_owner
+	invoice.posting_date = frappe.utils.nowdate()
+	invoice.due_date = frappe.utils.nowdate()
+	invoice.remarks = f"Lab billing for {order.name}"
+	if order.service_branch and frappe.get_meta("Sales Invoice").has_field("branch"):
+		invoice.branch = order.service_branch
+	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
+		invoice.cost_center = cost_center
+	invoice.set("items", [])
+	for item in items:
+		invoice.append("items", item)
+	invoice.save(ignore_permissions=True)
 
 
 def get_consultation_lab_billing_items(consultation_doc, cost_center: str, invoice_name: str | None = None) -> tuple[list[dict], list[dict]]:

@@ -692,7 +692,7 @@ function add_lab_actions(frm) {
 
 	if (!consultationScopeIsLocked(frm)) {
 		frm.add_custom_button(__("New Lab Order"), () => {
-			show_lab_order_dialog(frm);
+			open_lab_order_dialog_safely(frm);
 		}, __("Clinical"));
 	}
 
@@ -727,7 +727,7 @@ function show_consultation_lab_orders_dialog(frm) {
 							"Cancelled",
 						].join("\n"),
 						change() {
-							render_lab_order_results(dialog, orders);
+							render_lab_order_results(frm, dialog, orders);
 						},
 					},
 					{
@@ -735,7 +735,7 @@ function show_consultation_lab_orders_dialog(frm) {
 						fieldtype: "Data",
 						label: __("Search"),
 						change() {
-							render_lab_order_results(dialog, orders);
+							render_lab_order_results(frm, dialog, orders);
 						},
 					},
 					{
@@ -750,7 +750,7 @@ function show_consultation_lab_orders_dialog(frm) {
 			});
 
 			dialog.show();
-			render_lab_order_results(dialog, orders);
+			render_lab_order_results(frm, dialog, orders);
 		},
 	});
 }
@@ -813,7 +813,8 @@ function show_lab_order_dialog(frm) {
 								message: __("Lab order created"),
 								indicator: "green",
 							});
-							frappe.set_route("Form", "Veterinary Lab Order", response.message.name);
+							frm.reload_doc();
+							show_lab_order_summary_dialog(frm, response.message.name);
 						},
 					});
 				},
@@ -825,7 +826,7 @@ function show_lab_order_dialog(frm) {
 	});
 }
 
-function render_lab_order_results(dialog, orders) {
+function render_lab_order_results(frm, dialog, orders) {
 	const statusFilter = dialog.get_value("status_filter");
 	const searchText = (dialog.get_value("search_text") || "").trim().toLowerCase();
 	const rows = (orders || []).filter((row) => {
@@ -870,9 +871,20 @@ function render_lab_order_results(dialog, orders) {
 
 	wrapper.html(html);
 	wrapper.find(".lab-order-popup-row").on("click", function () {
-		dialog.hide();
-		frappe.set_route("Form", "Veterinary Lab Order", $(this).attr("data-name"));
+		show_lab_order_summary_dialog(frm, $(this).attr("data-name"), () => dialog.hide());
 	});
+}
+
+function open_lab_order_dialog_safely(frm) {
+	if (!frm.is_dirty()) {
+		show_lab_order_dialog(frm);
+		return;
+	}
+	frappe.confirm(
+		__("Save consultation changes before creating a lab order?"),
+		() => frm.save().then(() => show_lab_order_dialog(frm)),
+		() => frappe.msgprint(__("Please save or discard consultation changes before creating a lab order."))
+	);
 }
 
 function render_lab_test_picker(dialog, tests, state) {
@@ -963,6 +975,92 @@ function get_status_pill_class(status) {
 		Reviewed: "green",
 		Cancelled: "red",
 	}[status] || "gray";
+}
+
+function show_lab_order_summary_dialog(frm, labOrder, beforeOpen = null) {
+	frappe.call({
+		method: "vetedge.services.lab.get_lab_order_popup_summary",
+		args: { lab_order: labOrder },
+		freeze: true,
+		freeze_message: __("Loading lab order..."),
+		callback(result) {
+			const order = result.message;
+			if (!order) {
+				return;
+			}
+			if (beforeOpen) {
+				beforeOpen();
+			}
+			const dialog = new frappe.ui.Dialog({
+				title: __("Lab Order Details"),
+				size: "large",
+				fields: [{ fieldtype: "HTML", fieldname: "body" }],
+				primary_action_label: __("Close"),
+				primary_action() {
+					dialog.hide();
+				},
+			});
+			dialog.show();
+			render_lab_order_summary(dialog, order);
+			dialog.fields_dict.body.$wrapper.find("[data-action='refresh-lab-order']").on("click", () => {
+				dialog.hide();
+				show_lab_order_summary_dialog(frm, order.name);
+			});
+			dialog.fields_dict.body.$wrapper.find("[data-action='open-full-lab-order']").on("click", () => {
+				frappe.set_route("Form", "Veterinary Lab Order", order.name);
+			});
+		},
+	});
+}
+
+function render_lab_order_summary(dialog, order) {
+	const tests = order.lab_tests || [];
+	const invoice = order.invoice;
+	const requestedOn = order.requested_on ? frappe.datetime.str_to_user(order.requested_on) : "";
+	dialog.fields_dict.body.$wrapper.html(`
+		<div>
+			<div style="display: flex; justify-content: space-between; gap: 12px;">
+				<div>
+					<div style="font-weight: 600;">${frappe.utils.escape_html(order.title || order.name)}</div>
+					<div class="text-muted small">${frappe.utils.escape_html(order.name)}</div>
+				</div>
+				<div style="text-align: right;">
+					<div class="indicator-pill ${get_status_pill_class(order.status)}">${__(order.status)}</div>
+					<div class="text-muted small" style="margin-top: 6px;">${frappe.utils.escape_html(requestedOn)}</div>
+				</div>
+			</div>
+			<hr>
+			<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px;">
+				<div><strong>${__("Patient / Animal")}:</strong> ${frappe.utils.escape_html(order.patient || "")}</div>
+				<div><strong>${__("Owner / Customer")}:</strong> ${frappe.utils.escape_html(order.primary_owner || "")}</div>
+				<div><strong>${__("Consultation")}:</strong> ${frappe.utils.escape_html(order.consultation || "")}</div>
+				<div><strong>${__("Practitioner")}:</strong> ${frappe.utils.escape_html(order.requested_by || "")}</div>
+				<div><strong>${__("Service Branch")}:</strong> ${frappe.utils.escape_html(order.service_branch || "")}</div>
+			</div>
+			<div style="margin-top: 14px;">
+				<div class="small text-muted" style="margin-bottom: 8px;">${__("Requested Tests / Items")}</div>
+				${tests.length ? tests.map((test) => `
+					<div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+						<div style="font-weight: 600;">${frappe.utils.escape_html(test.test_name || test.lab_test_template)}</div>
+						<div class="text-muted small">${frappe.utils.escape_html(test.billing_item || __("No billing item"))}</div>
+						${test.notes ? `<div class="small">${frappe.utils.escape_html(test.notes)}</div>` : ""}
+					</div>
+				`).join("") : `<div class="text-muted small">${__("No lab tests recorded.")}</div>`}
+			</div>
+			<div style="margin-top: 14px;">
+				<div class="small text-muted" style="margin-bottom: 8px;">${__("Invoice / Payment")}</div>
+				${invoice ? `
+					<div><strong>${__("Invoice")}:</strong> ${frappe.utils.escape_html(invoice.name)}</div>
+					<div><strong>${__("Status")}:</strong> ${frappe.utils.escape_html(invoice.status || "")}</div>
+					<div><strong>${__("Outstanding")}:</strong> ${format_currency(invoice.outstanding_amount || 0, invoice.currency)}</div>
+				` : `<div class="text-muted small">${__("No linked invoice yet.")}</div>`}
+			</div>
+			<div style="display: flex; gap: 8px; margin-top: 16px;">
+				<button class="btn btn-default btn-sm" data-action="refresh-lab-order">${__("Refresh")}</button>
+				<button class="btn btn-default btn-sm" data-action="open-full-lab-order">${__("Open Full Lab Order")}</button>
+			</div>
+		</div>
+	`);
 }
 
 function create_consultation_invoice(frm) {
