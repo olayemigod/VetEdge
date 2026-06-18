@@ -854,7 +854,7 @@ def create_boarding_invoice_doc(booking_doc) -> dict:
     emit_boarding_event(
         booking_doc,
         "boarding_invoice_created",
-        extra={"invoice": invoice.name, "amount": invoice.grand_total},
+        extra={"invoice": invoice.name, "amount": getattr(invoice, "grand_total", item_payload.get("amount"))},
     )
     return {"name": booking_doc.name, "invoice": invoice.name, "created": True, "adjustment": bool(invoices)}
 

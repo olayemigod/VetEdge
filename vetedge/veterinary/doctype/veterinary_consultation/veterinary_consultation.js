@@ -160,17 +160,133 @@ frappe.ui.form.on("Veterinary Consultation", {
 });
 
 function add_appointment_link_actions(frm) {
-	if (frm.doc.linked_appointment) {
-		frm.add_custom_button(__("Open Service Appointment"), () => {
-			frappe.set_route("Form", "Veterinary Appointment", frm.doc.linked_appointment);
-		}, __("Appointment"));
+	if (frm.is_new()) {
+		return;
 	}
 
-	if (frm.doc.follow_up_appointment) {
-		frm.add_custom_button(__("Open Follow-up Appointment"), () => {
-			frappe.set_route("Form", "Veterinary Appointment", frm.doc.follow_up_appointment);
-		}, __("Appointment"));
+	frm.add_custom_button(__("View Appointments"), () => {
+		show_appointment_details_dialog(frm);
+	}, __("Appointment"));
+}
+
+function show_appointment_details_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Appointment Details"),
+		size: "large",
+		fields: [{ fieldtype: "HTML", fieldname: "body" }],
+		primary_action_label: __("Close"),
+		primary_action() {
+			dialog.hide();
+		},
+	});
+
+	function render_loading() {
+		dialog.fields_dict.body.$wrapper.html(`<div class="text-muted">${__("Loading appointment details...")}</div>`);
 	}
+
+	function render_empty(message) {
+		return `<div class="text-muted">${escape_consultation_history_html(message)}</div>`;
+	}
+
+	function detail_row(label, value) {
+		return `
+			<div class="ve-appointment-row">
+				<div class="text-muted">${escape_consultation_history_html(label)}</div>
+				<div>${escape_consultation_history_html(value || "-")}</div>
+			</div>
+		`;
+	}
+
+	function format_datetime(value) {
+		return value ? frappe.datetime.str_to_user(value) : "";
+	}
+
+	function render_appointment_section(title, appointment, empty_message, button_label) {
+		if (!appointment) {
+			return `
+				<div class="ve-appointment-section">
+					<h4>${escape_consultation_history_html(title)}</h4>
+					${render_empty(empty_message)}
+				</div>
+			`;
+		}
+
+		const type = [appointment.appointment_type, appointment.consultation_type].filter(Boolean).join(" / ");
+		return `
+			<div class="ve-appointment-section">
+				<h4>${escape_consultation_history_html(title)}</h4>
+				<div class="ve-appointment-grid">
+					${detail_row(__("Appointment ID"), appointment.name)}
+					${detail_row(__("Appointment Date/Time"), format_datetime(appointment.appointment_datetime))}
+					${detail_row(__("Status"), appointment.status)}
+					${detail_row(__("Patient / Animal"), appointment.patient_name || appointment.patient)}
+					${detail_row(__("Owner / Customer"), appointment.owner_name || appointment.primary_owner)}
+					${detail_row(__("Practitioner"), appointment.practitioner_name || appointment.practitioner)}
+					${detail_row(__("Service Branch"), appointment.service_branch)}
+					${detail_row(__("Appointment / Consultation Type"), type)}
+					${detail_row(__("Source Consultation"), appointment.source_consultation)}
+					${detail_row(__("Reason / Notes"), appointment.notes)}
+				</div>
+				<div class="ve-appointment-actions">
+					<button class="btn btn-default btn-sm" data-appointment="${escape_consultation_history_html(appointment.name)}">
+						${escape_consultation_history_html(button_label)}
+					</button>
+				</div>
+			</div>
+		`;
+	}
+
+	function render(summary) {
+		const dirtyWarning = frm.is_dirty() && frm.doc.follow_up_date
+			? `<div class="alert alert-warning">${__("This consultation has unsaved follow-up date changes. Save the consultation before relying on generated follow-up appointment details.")}</div>`
+			: "";
+		dialog.fields_dict.body.$wrapper.html(`
+			<style>
+				.ve-appointment-section { margin-bottom: 18px; }
+				.ve-appointment-section h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+				.ve-appointment-grid {
+					display: grid;
+					grid-template-columns: repeat(2, minmax(0, 1fr));
+					gap: 10px 18px;
+				}
+				.ve-appointment-row > div:last-child { font-weight: 500; word-break: break-word; }
+				.ve-appointment-actions { margin-top: 12px; }
+				@media (max-width: 767px) {
+					.ve-appointment-grid { grid-template-columns: 1fr; }
+				}
+			</style>
+			${dirtyWarning}
+			${render_appointment_section(
+				__("Service Appointment"),
+				summary.service_appointment,
+				__("No service appointment linked to this consultation."),
+				__("Open Appointment")
+			)}
+			${render_appointment_section(
+				__("Follow-up Appointment"),
+				summary.follow_up_appointment,
+				__("No follow-up appointment created yet."),
+				__("Open Follow-up Appointment")
+			)}
+		`);
+
+		dialog.fields_dict.body.$wrapper.find("[data-appointment]").on("click", function () {
+			const appointment = $(this).attr("data-appointment");
+			if (appointment) {
+				frappe.set_route("Form", "Veterinary Appointment", appointment);
+			}
+		});
+	}
+
+	dialog.show();
+	render_loading();
+	frappe.call({
+		method: "vetedge.services.consultation_flow.get_consultation_appointment_summary",
+		args: { consultation: frm.doc.name },
+		callback(result) {
+			render(result.message || {});
+		},
+	});
 }
 
 function show_medical_history_dialog(frm) {
@@ -558,17 +674,13 @@ function sync_dispensary_preview(frm, force = false) {
 }
 
 function add_billing_actions(frm) {
-	const invoices = getConsultationInvoices(frm);
-
-	if (invoices.length) {
-		frm.add_custom_button(__("View Invoices"), () => {
-			showConsultationInvoicesDialog(invoices);
-		}, __("Billing"));
-	}
-
 	if (!["Completed", "Cancelled"].includes(frm.doc.status)) {
-		frm.add_custom_button(__(frm.doc.linked_invoice ? "Update Invoice" : "Create Invoice"), () => {
-			create_consultation_invoice(frm);
+		frm.add_custom_button(__("Billing / Payment"), () => {
+			if (window.vetedgeBillingModal?.open) {
+				window.vetedgeBillingModal.open(frm);
+				return;
+			}
+			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 		}, __("Billing"));
 	}
 }

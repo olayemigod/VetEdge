@@ -36,6 +36,7 @@ app_include_css = [
 ]
 app_include_js = [
 	"/assets/vetedge/js/invoice_summary_dialog.js",
+	"/assets/vetedge/js/billing_modal.js",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
 	"/assets/vetedge/js/veterinary_unread_badge.js",

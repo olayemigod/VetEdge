@@ -51,17 +51,13 @@ function add_workflow_actions(frm) {
 	}
 
 	if (["Draft", "Awaiting Payment", "Pending Administration"].includes(frm.doc.status)) {
-		frm.add_custom_button(frm.doc.linked_invoice ? __("Update Invoice") : __("Create Invoice"), () => {
-			frappe.call({
-				method: "vetedge.services.vaccination.create_or_update_vaccination_invoice",
-				args: { record: frm.doc.name },
-				freeze: true,
-				freeze_message: __("Updating vaccination invoice..."),
-				callback() {
-					frm.reload_doc();
-				},
-			});
-		}, __("Workflow"));
+		frm.add_custom_button(__("Billing / Payment"), () => {
+			if (window.vetedgeBillingModal?.open) {
+				window.vetedgeBillingModal.open(frm);
+				return;
+			}
+			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
+		}, __("Billing"));
 
 		frm.add_custom_button(__("Administer Vaccination"), () => {
 			frappe.call({

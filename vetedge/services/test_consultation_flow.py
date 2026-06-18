@@ -11,6 +11,7 @@ import frappe
 from vetedge.seed.master_data import CONSULTATION_TYPES
 from vetedge.services.consultation_flow import (
 	claim_linked_appointment_for_consultation,
+	get_consultation_appointment_summary,
 	get_next_daily_consultation_number,
 	normalize_consultation_appointment_links,
 	sync_service_appointment_status_from_consultation,
@@ -1083,6 +1084,124 @@ class TestConsultationFlow(TestCase):
 		with patch("vetedge.services.consultation_flow.frappe", frappe_stub):
 			self.assertRaises(frappe.ValidationError, validate_linked_appointment, doc)
 
+	def test_consultation_appointment_summary_returns_service_appointment(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_appointment="VAPT-001",
+			follow_up_appointment=None,
+		)
+		appointment = make_appointment_doc("VAPT-001")
+
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda doctype, name: consultation if doctype == "Veterinary Consultation" else appointment,
+			has_permission=lambda *args, **kwargs: True,
+			get_meta=lambda doctype: SimpleNamespace(
+				has_field=lambda fieldname: False,
+				get_title_field=lambda: {
+					"Veterinary Patient": "patient_name",
+					"Customer": "customer_name",
+					"User": "full_name",
+				}.get(doctype, "name"),
+			),
+			db=SimpleNamespace(
+				exists=lambda doctype, name=None: doctype == "Veterinary Appointment",
+				get_value=lambda doctype, name, field=None, **kwargs: {
+					("Veterinary Patient", "VP-001", "patient_name"): "Buddy",
+					("Customer", "CUST-001", "customer_name"): "Ada Owner",
+					("User", "doctor@example.com", "full_name"): "Dr Vet",
+				}.get((doctype, name, field), name),
+			),
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+		):
+			result = get_consultation_appointment_summary("VCON-001")
+
+		self.assertEqual(result["service_appointment"]["name"], "VAPT-001")
+		self.assertEqual(result["service_appointment"]["patient_name"], "Buddy")
+		self.assertEqual(result["service_appointment"]["owner_name"], "Ada Owner")
+		self.assertIsNone(result["follow_up_appointment"])
+
+	def test_consultation_appointment_summary_returns_follow_up_appointment(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_appointment=None,
+			follow_up_appointment="VAPT-FU-001",
+		)
+		follow_up = make_appointment_doc(
+			"VAPT-FU-001",
+			appointment_type="Follow Up",
+			follow_up_reference="VCON-001",
+		)
+
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda doctype, name: consultation if doctype == "Veterinary Consultation" else follow_up,
+			has_permission=lambda *args, **kwargs: True,
+			db=SimpleNamespace(
+				exists=lambda doctype, name=None: doctype == "Veterinary Appointment",
+				get_value=lambda doctype, name, field=None, **kwargs: name,
+			),
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data"),
+		):
+			result = get_consultation_appointment_summary("VCON-001")
+
+		self.assertIsNone(result["service_appointment"])
+		self.assertEqual(result["follow_up_appointment"]["name"], "VAPT-FU-001")
+		self.assertEqual(result["follow_up_appointment"]["source_consultation"], "VCON-001")
+
+	def test_consultation_appointment_summary_returns_empty_state_without_appointments(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_appointment=None,
+			follow_up_appointment=None,
+		)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: consultation)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+		):
+			result = get_consultation_appointment_summary("VCON-001")
+
+		self.assertIsNone(result["service_appointment"])
+		self.assertIsNone(result["follow_up_appointment"])
+
+	def test_consultation_appointment_summary_respects_branch_restrictions(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			linked_appointment="VAPT-001",
+			follow_up_appointment=None,
+		)
+		appointment = make_appointment_doc("VAPT-001", branch="Restricted Branch")
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda doctype, name: consultation if doctype == "Veterinary Consultation" else appointment,
+			has_permission=lambda *args, **kwargs: True,
+			db=SimpleNamespace(exists=lambda doctype, name=None: doctype == "Veterinary Appointment"),
+		)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.require_internal_user"),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.can_access_branch_data", side_effect=frappe.PermissionError),
+		):
+			self.assertRaises(frappe.PermissionError, get_consultation_appointment_summary, "VCON-001")
+
 	def test_claim_linked_appointment_marks_it_in_consultation(self):
 		doc = frappe._dict(
 			name="VCON-001",
@@ -1305,3 +1424,23 @@ def make_frappe_stub(**overrides):
 	for key, value in overrides.items():
 		setattr(stub, key, value)
 	return stub
+
+
+def make_appointment_doc(name: str, **overrides):
+	values = {
+		"doctype": "Veterinary Appointment",
+		"name": name,
+		"appointment_datetime": "2026-04-18 10:00:00",
+		"status": "Confirmed",
+		"patient": "VP-001",
+		"primary_owner": "CUST-001",
+		"branch": "Main Branch",
+		"practitioner": "doctor@example.com",
+		"practitioner_name": "Dr Vet",
+		"appointment_type": "Consultation",
+		"notes": "Annual check",
+		"linked_consultation": None,
+		"follow_up_reference": None,
+	}
+	values.update(overrides)
+	return frappe._dict(values)

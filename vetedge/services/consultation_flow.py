@@ -189,6 +189,50 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 	}
 
 
+@frappe.whitelist()
+def get_consultation_appointment_summary(consultation: str) -> dict:
+	require_internal_user()
+	doc = frappe.get_doc("Veterinary Consultation", consultation)
+	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+
+	return {
+		"consultation": doc.name,
+		"service_appointment": get_appointment_summary(doc.get("linked_appointment")),
+		"follow_up_appointment": get_appointment_summary(doc.get("follow_up_appointment")),
+	}
+
+
+def get_appointment_summary(appointment_name: str | None) -> dict | None:
+	if not appointment_name:
+		return None
+	if not frappe.db.exists("Veterinary Appointment", appointment_name):
+		return None
+	if not frappe.has_permission("Veterinary Appointment", "read", appointment_name):
+		frappe.throw("You do not have permission to view this appointment.", frappe.PermissionError)
+
+	appointment = frappe.get_doc("Veterinary Appointment", appointment_name)
+	can_access_branch_data(frappe.session.user, appointment.get("branch"), raise_exception=True)
+	return {
+		"name": appointment.name,
+		"appointment_datetime": appointment.get("appointment_datetime"),
+		"status": appointment.get("status"),
+		"patient": appointment.get("patient"),
+		"patient_name": get_document_title("Veterinary Patient", appointment.get("patient")),
+		"primary_owner": appointment.get("primary_owner"),
+		"owner_name": get_document_title("Customer", appointment.get("primary_owner")),
+		"practitioner": appointment.get("practitioner"),
+		"practitioner_name": appointment.get("practitioner_name")
+		or get_document_title("User", appointment.get("practitioner")),
+		"service_branch": appointment.get("branch"),
+		"appointment_type": appointment.get("appointment_type"),
+		"consultation_type": appointment.get("consultation_type")
+		if frappe.get_meta("Veterinary Appointment").has_field("consultation_type")
+		else None,
+		"notes": appointment.get("notes"),
+		"source_consultation": appointment.get("follow_up_reference") or appointment.get("linked_consultation"),
+	}
+
+
 def ensure_consultations_enabled() -> None:
 	if not frappe.db.exists("DocType", "Veterinary Settings"):
 		return

@@ -56,16 +56,12 @@ function toggleTerminalGroomingSessionReadOnly(frm) {
 
 function addGroomingSessionActions(frm) {
 	if (["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)) {
-		frm.add_custom_button(frm.doc.linked_invoice ? __("Update Invoice") : __("Create Invoice"), () => {
-			frappe.call({
-				method: "vetedge.services.grooming.create_or_update_grooming_invoice",
-				args: { session: frm.doc.name },
-				freeze: true,
-				freeze_message: __("Updating grooming invoice..."),
-				callback() {
-					frm.reload_doc();
-				},
-			});
+		frm.add_custom_button(__("Billing / Payment"), () => {
+			if (window.vetedgeBillingModal?.open) {
+				window.vetedgeBillingModal.open(frm);
+				return;
+			}
+			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 		}, __("Billing"));
 	}
 
@@ -79,13 +75,13 @@ function addGroomingSessionActions(frm) {
 		frm.add_custom_button(__("Cancel Session"), () => transitionGroomingSession(frm, "Cancelled"), __("Workflow"));
 	}
 
-	if (frm.doc.linked_invoice) {
-		frm.add_custom_button(__("View Invoice"), () => {
-			if (window.vetedgeInvoiceSummary?.open) {
-				window.vetedgeInvoiceSummary.open(frm.doc.linked_invoice);
+	if (frm.doc.linked_invoice && !["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)) {
+		frm.add_custom_button(__("Billing / Payment"), () => {
+			if (window.vetedgeBillingModal?.open) {
+				window.vetedgeBillingModal.open(frm);
 				return;
 			}
-			frappe.msgprint(__("Invoice summary helper is not available. Please refresh the page."));
+			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 		}, __("Billing"));
 	}
 }

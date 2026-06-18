@@ -62,14 +62,12 @@ function addBoardingBookingActions(frm) {
 		frm.add_custom_button(__("Cancel"), () => transitionBoardingBooking(frm, "vetedge.services.boarding.cancel_boarding_booking", __("Cancelling boarding booking...")), __("Workflow"));
 	}
 	if (frm.doc.status !== "Cancelled") {
-		frm.add_custom_button(__(frm.doc.linked_invoice ? "Update Invoice" : "Create Invoice"), () => {
-			frappe.call({
-				method: "vetedge.services.boarding.create_boarding_invoice",
-				args: { booking: frm.doc.name },
-				freeze: true,
-				freeze_message: __("Creating boarding invoice..."),
-				callback() { frm.reload_doc(); },
-			});
+		frm.add_custom_button(__("Billing / Payment"), () => {
+			if (window.vetedgeBillingModal?.open) {
+				window.vetedgeBillingModal.open(frm);
+				return;
+			}
+			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 		}, __("Billing"));
 	}
 	frm.add_custom_button(__("View Availability Board"), () => {

@@ -36,31 +36,14 @@ frappe.ui.form.on("Veterinary Lab Order", {
 			}, __("Clinical"));
 		}
 
-		if (!frm.is_new() && frm.doc.linked_invoice) {
-			frm.add_custom_button(__("Open Invoice"), () => {
-				vetedgeInvoiceSummary.open(frm.doc.linked_invoice);
+		if (!frm.is_new() && (frm.doc.linked_invoice || !frm.doc.consultation)) {
+			frm.add_custom_button(__("Billing / Payment"), () => {
+				if (window.vetedgeBillingModal?.open) {
+					window.vetedgeBillingModal.open(frm);
+					return;
+				}
+				frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 			}, __("Billing"));
-		} else if (!frm.is_new() && !frm.doc.consultation) {
-			frm.add_custom_button(__("Create Invoice"), () => {
-				frappe.call({
-					method: "vetedge.services.lab.create_lab_order_invoice",
-					args: {
-						lab_order: frm.doc.name,
-					},
-					freeze: true,
-					freeze_message: __("Creating invoice..."),
-					callback(result) {
-						if (!result.message?.invoice) {
-							return;
-						}
-						frappe.show_alert({
-							message: __("Invoice created"),
-							indicator: "green",
-						});
-					frm.reload_doc();
-				},
-			});
-		}, __("Billing"));
 		}
 
 		add_status_actions(frm);
