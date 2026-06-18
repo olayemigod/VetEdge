@@ -924,6 +924,23 @@ class TestConsultationFlow(TestCase):
 			self.assertEqual(result["status"], "Ready for Treatment")
 		self.assertEqual(saved, [doc])
 
+	def test_start_consultation_from_draft_uses_valid_transition_without_gate_block(self):
+		saved = []
+		doc = frappe._dict(name="VCON-001", status="Draft")
+		doc.save = lambda: saved.append(doc)
+		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: doc)
+
+		with (
+			patch("vetedge.services.consultation_flow.frappe", frappe_stub),
+			patch("vetedge.services.consultation_flow.can_access_consultation"),
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed") as gate,
+		):
+			result = transition_consultation_status("VCON-001", "In Progress")
+
+		self.assertEqual(result["status"], "In Progress")
+		self.assertEqual(saved, [doc])
+		gate.assert_called_once_with(doc, "In Progress")
+
 	def test_transition_consultation_status_blocks_when_feature_disabled(self):
 		doc = frappe._dict(name="VCON-001", status="In Progress")
 		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: doc)

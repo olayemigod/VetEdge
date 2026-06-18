@@ -13,7 +13,6 @@ CONSULTATION_PAYMENT_GATE_OPTIONS = {
 	NO_PAYMENT_GATE,
 }
 CONSULTATION_PROCEED_STATUSES = {
-	"In Progress",
 	"Pending Dispensary",
 	"Ready for Treatment",
 	"Completed",

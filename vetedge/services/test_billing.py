@@ -399,11 +399,11 @@ class TestConsultationBilling(TestCase):
 		self.assertTrue(summary["can_open_full_form"])
 
 
-def make_consultation(linked_invoice=None):
+def make_consultation(linked_invoice=None, status="In Progress"):
 	return frappe._dict(
 		doctype="Veterinary Consultation",
 		name="VCON-001",
-		status="In Progress",
+		status=status,
 		patient="VP-001",
 		primary_owner="CUST-001",
 		service_branch="Main",

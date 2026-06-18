@@ -123,9 +123,7 @@ def create_consultation_invoice(consultation: str, update_status: int = 1) -> di
 		"consultation": consultation_doc.name,
 		"invoice": invoice.name,
 		"is_draft_update": bool(draft_invoice_name),
-		"status": get_consultation_status_after_invoice_created(consultation_doc, settings)
-		if cint(update_status)
-		else consultation_doc.status,
+		"status": consultation_doc.status,
 	}
 
 
