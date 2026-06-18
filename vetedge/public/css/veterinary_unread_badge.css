@@ -39,3 +39,106 @@
 	font-size: 10px;
 	font-weight: 700;
 }
+
+#veterinary-unread-badge-drawer {
+	position: fixed;
+	max-width: calc(100vw - 24px);
+	max-height: min(520px, calc(100vh - 96px));
+	border: 1px solid var(--border-color, #d1d5db);
+	border-radius: 8px;
+	background: var(--card-bg, #fff);
+	box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+	z-index: 1050;
+	overflow: hidden;
+}
+
+#veterinary-unread-badge-drawer.hidden {
+	display: none;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--border-color, #e5e7eb);
+	background: var(--fg-color, #f8fafc);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-title {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--text-color, #1f2937);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-body {
+	max-height: min(460px, calc(100vh - 150px));
+	overflow: auto;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-item {
+	padding: 11px 12px;
+	border-bottom: 1px solid var(--border-color, #edf2f7);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-item.is-unread {
+	border-left: 3px solid var(--blue-500, #2563eb);
+	background: color-mix(in srgb, var(--blue-50, #eff6ff) 65%, #fff);
+	padding-left: 9px;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-item-title {
+	font-size: 13px;
+	font-weight: 650;
+	line-height: 1.35;
+	color: var(--text-color, #1f2937);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-message {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--text-muted, #6b7280);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 7px;
+	font-size: 11px;
+	color: var(--text-muted, #6b7280);
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 9px;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-action {
+	min-height: 24px;
+	padding: 3px 7px;
+	border: 1px solid var(--border-color, #d1d5db);
+	border-radius: 6px;
+	background: var(--card-bg, #fff);
+	color: var(--text-color, #1f2937);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-action:hover,
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-action:focus {
+	background: var(--control-bg, #f3f4f6);
+	outline: none;
+}
+
+#veterinary-unread-badge-drawer .veterinary-unread-badge-drawer-empty {
+	padding: 22px 14px;
+	color: var(--text-muted, #6b7280);
+	font-size: 12px;
+	text-align: center;
+}
