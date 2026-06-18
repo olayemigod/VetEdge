@@ -41,6 +41,9 @@ frappe.ui.form.on("Veterinary Consultation", {
 		configure_planned_treatments_grid(frm);
 		configure_dispensary_grid(frm);
 		sync_dispensary_preview(frm);
+		frm.add_custom_button(__("View Medical History"), () => {
+			show_medical_history_dialog(frm);
+		}, __("Clinical"));
 
 		if (!frm.is_new() && frm.doc.patient && frm.doc.service_branch) {
 			add_appointment_link_actions(frm);
@@ -168,6 +171,231 @@ function add_appointment_link_actions(frm) {
 			frappe.set_route("Form", "Veterinary Appointment", frm.doc.follow_up_appointment);
 		}, __("Appointment"));
 	}
+}
+
+function show_medical_history_dialog(frm) {
+	if (!frm.doc.patient) {
+		frappe.msgprint(__("Select a patient/animal before viewing medical history."));
+		return;
+	}
+
+	const dialog = new frappe.ui.Dialog({
+		title: __("Veterinary Medical History"),
+		size: "extra-large",
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "history_html",
+				options: `<p class="text-muted">${__("Loading medical history...")}</p>`,
+			},
+		],
+	});
+
+	dialog.show();
+
+	frappe.call({
+		method: "vetedge.services.medical_history.get_patient_medical_history_view",
+		args: {
+			patient: frm.doc.patient,
+			limit: 20,
+		},
+		freeze: true,
+		freeze_message: __("Loading medical history..."),
+		callback(response) {
+			const data = response?.message || {};
+			dialog.fields_dict.history_html.$wrapper.html(render_consultation_medical_history(data));
+		},
+		error() {
+			dialog.fields_dict.history_html.$wrapper.html(
+				`<p class="text-danger">${__("Unable to load medical history.")}</p>`
+			);
+		},
+	});
+}
+
+function render_consultation_medical_history(data) {
+	const summary = data.summary || {};
+	return `
+		<div class="vetedge-consultation-history-popup">
+			<div class="mb-3">
+				<h5>${escape_consultation_history_html(summary.patient_name || data.patient || __("Patient"))}</h5>
+				<div class="row">
+					${history_summary_item(__("Species"), summary.species)}
+					${history_summary_item(__("Breed"), summary.breed)}
+					${history_summary_item(__("Owner"), summary.primary_owner)}
+					${history_summary_item(__("Default Branch"), summary.default_branch)}
+				</div>
+			</div>
+			${history_consultation_section(data.consultations || [])}
+			${history_simple_section(__("Vaccinations"), data.vaccinations || [], [
+				[__("Date/Time"), "timestamp", format_history_datetime],
+				[__("Vaccine"), "vaccine"],
+				[__("Status"), "status"],
+				[__("Next Due"), "next_due_date"],
+			])}
+			${history_simple_section(__("Lab History"), data.labs || [], [
+				[__("Requested On"), "timestamp", format_history_datetime],
+				[__("Order"), "name"],
+				[__("Status"), "status"],
+				[__("Tests"), "tests_summary"],
+				[__("Results"), "results_summary"],
+			])}
+			${history_simple_section(__("Treatment History"), data.treatments || [], [
+				[__("Date/Time"), "timestamp", format_history_datetime],
+				[__("Item"), "item"],
+				[__("Qty"), "qty"],
+				[__("UOM"), "uom"],
+				[__("Branch"), "service_branch"],
+			])}
+		</div>
+	`;
+}
+
+function history_summary_item(label, value) {
+	return `
+		<div class="col-md-3 mb-2">
+			<div class="text-muted">${label}</div>
+			<div>${escape_consultation_history_html(value || __("Not Set"))}</div>
+		</div>
+	`;
+}
+
+function history_consultation_section(rows) {
+	if (!rows.length) {
+		return history_empty_section(__("Previous Consultations"));
+	}
+	return `
+		<div class="mb-4">
+			<h5>${__("Previous Consultations")}</h5>
+			${rows
+				.map(
+					(row) => `
+						<div class="border rounded p-3 mb-3">
+							<div class="d-flex flex-wrap justify-content-between gap-2">
+								<strong>${escape_consultation_history_html(row.title || row.name)}</strong>
+								<span class="text-muted">${escape_consultation_history_html(format_history_datetime(row.timestamp))}</span>
+							</div>
+							<div class="text-muted mb-2">
+								${escape_consultation_history_html(row.practitioner || __("Not Set"))}
+								${row.service_branch ? ` | ${escape_consultation_history_html(row.service_branch)}` : ""}
+								${row.status ? ` | ${escape_consultation_history_html(row.status)}` : ""}
+							</div>
+							${history_rich_block(__("Assessment"), row.assessment_notes)}
+							${history_treatment_plan_block(row)}
+							${row.follow_up_date ? `<div><strong>${__("Follow-up")}</strong>: ${escape_consultation_history_html(row.follow_up_date)}</div>` : ""}
+						</div>`
+				)
+				.join("")}
+		</div>
+	`;
+}
+
+function history_treatment_plan_block(row) {
+	const parts = [];
+	const summary = sanitize_consultation_history_rich_text(row.treatment_plan_summary);
+	if (summary) {
+		parts.push(`<div class="mb-2">${summary}</div>`);
+	}
+	const treatments = Array.isArray(row.treatment_plan) ? row.treatment_plan : [];
+	if (treatments.length) {
+		parts.push(`
+			<ul class="mb-0 pl-3">
+				${treatments
+					.map((treatment) => {
+						const item = escape_consultation_history_html(treatment.item || treatment.service_type || treatment.treatment_type || __("Treatment"));
+						const qty = treatment.qty ? ` ${escape_consultation_history_html(treatment.qty)}` : "";
+						const uom = treatment.uom ? ` ${escape_consultation_history_html(treatment.uom)}` : "";
+						const notes = treatment.notes ? `<div class="text-muted small">${escape_consultation_history_html(treatment.notes)}</div>` : "";
+						return `<li><div>${item}${qty}${uom}</div>${notes}</li>`;
+					})
+					.join("")}
+			</ul>
+		`);
+	}
+	return `
+		<div class="mb-2">
+			<strong>${__("Treatment Plan")}</strong>
+			<div>${parts.join("") || `<span class="text-muted">${__("No treatment plan recorded")}</span>`}</div>
+		</div>
+	`;
+}
+
+function history_rich_block(label, value) {
+	const html = sanitize_consultation_history_rich_text(value);
+	return `
+		<div class="mb-2">
+			<strong>${label}</strong>
+			<div>${html || `<span class="text-muted">${__("Not Set")}</span>`}</div>
+		</div>
+	`;
+}
+
+function history_simple_section(title, rows, columns) {
+	if (!rows.length) {
+		return history_empty_section(title);
+	}
+	const header = columns.map(([label]) => `<th>${label}</th>`).join("");
+	const body = rows
+		.map((row) => {
+			const cells = columns
+				.map(([, fieldname, formatter]) => {
+					const value = formatter ? formatter(row[fieldname], row) : row[fieldname];
+					return `<td>${escape_consultation_history_html(value || "")}</td>`;
+				})
+				.join("");
+			return `<tr>${cells}</tr>`;
+		})
+		.join("");
+	return `
+		<div class="mb-4">
+			<h5>${title}</h5>
+			<div class="table-responsive">
+				<table class="table table-bordered table-sm">
+					<thead><tr>${header}</tr></thead>
+					<tbody>${body}</tbody>
+				</table>
+			</div>
+		</div>
+	`;
+}
+
+function history_empty_section(title) {
+	return `
+		<div class="mb-4">
+			<h5>${title}</h5>
+			<p class="text-muted">${__("No records found.")}</p>
+		</div>
+	`;
+}
+
+function format_history_datetime(value) {
+	return value ? frappe.datetime.str_to_user(value) : "";
+}
+
+function sanitize_consultation_history_rich_text(value) {
+	if (!value) {
+		return "";
+	}
+	const container = document.createElement("div");
+	container.innerHTML = String(value);
+	container.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((node) => node.remove());
+	container.querySelectorAll("*").forEach((node) => {
+		[...node.attributes].forEach((attribute) => {
+			const name = attribute.name.toLowerCase();
+			const val = attribute.value || "";
+			if (name.startsWith("on") || (["href", "src", "xlink:href"].includes(name) && /^\s*javascript:/i.test(val))) {
+				node.removeAttribute(attribute.name);
+			}
+		});
+	});
+	return container.innerHTML;
+}
+
+function escape_consultation_history_html(value) {
+	if (value === undefined || value === null) {
+		return "";
+	}
+	return frappe.utils.escape_html(String(value));
 }
 
 function applyCurrentDoctorPractitionerDefault(frm) {

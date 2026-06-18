@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, cstr, date_diff, flt, get_datetime, getdate, nowdate
+
+from vetedge.services.permissions import can_access_branch_data
 
 
 STANDARD_FIELDS = {
@@ -237,30 +240,64 @@ def _consultation_register(filters):
     rows = _get_consultation_rows(filters)
     patient_titles = _get_patient_title_map(row.get("patient") for row in rows)
     practitioner_names = _get_user_full_name_map(row.get("practitioner_user") for row in rows)
+    invoice_map = _get_consultation_invoice_map(row.get("name") for row in rows)
+    invoice_names = sorted(
+        {
+            invoice_name
+            for row in rows
+            for invoice_name in ([row.get("linked_invoice")] + invoice_map.get(row.get("name"), []))
+            if invoice_name
+        }
+    )
+    invoice_statuses = _get_invoice_status_map(invoice_names)
+    planned_totals = _get_consultation_planned_totals(row.get("name") for row in rows)
+    vaccination_counts = _get_consultation_vaccination_counts(row.get("name") for row in rows)
     columns = [
         _col("consultation", "Link", "Veterinary Consultation"),
-        _col("consultation_date", "Date"),
-        _col("patient", "Data"),
-        _col("owner", "Link", "Customer"),
+        _col("consultation_datetime", "Datetime", label=_("Consultation Date/Time")),
+        _col("service_branch", "Link", "Branch", label=_("Service Branch")),
+        _col("patient", "Data", label=_("Patient / Animal")),
+        _col("owner", "Link", "Customer", label=_("Owner / Customer")),
         _col("practitioner", "Data"),
-        _col("service_branch", "Link", "Branch"),
         _col("consultation_type", "Link", "Consultation Type", label=_("Consultation Type")),
-        _col("status", "Data"),
-        _col("linked_invoice", "Link", "Sales Invoice"),
+        _col("linked_appointment", "Link", "Veterinary Appointment", label=_("Appointment")),
+        _col("status", "Data", label=_("Status / Workflow State")),
+        _col("invoice", "Link", "Sales Invoice"),
+        _col("invoice_status", "Data", label=_("Invoice Status")),
+        _col("payment_status", "Data", label=_("Payment Status")),
+        _col("planned_treatment_total", "Currency", label=_("Planned Treatment Total")),
+        _col("vaccination_count", "Int", label=_("Vaccination Count")),
+        _col("has_vaccination", "Data", label=_("Has Vaccination")),
+        _col("follow_up_date", "Date", label=_("Follow-up Date")),
+        _col("next_appointment", "Link", "Veterinary Appointment", label=_("Next Appointment")),
+        _col("outcome_assessment_summary", "Data", label=_("Outcome / Assessment Summary")),
+        _col("created_by", "Data", label=_("Created By")),
     ]
     data = []
     for row in rows:
+        invoice = row.get("linked_invoice") or _first(invoice_map.get(row.get("name")))
+        vaccination_count = cint(vaccination_counts.get(row.get("name")))
         data.append(
             {
                 "consultation": row.get("name"),
-                "consultation_date": row.get("consultation_date"),
-                "patient": patient_titles.get(row.get("patient")) or row.get("patient"),
-                "owner": row.get("owner"),
-                "practitioner": practitioner_names.get(row.get("practitioner_user")) or row.get("practitioner"),
-                "service_branch": row.get("service_branch"),
+                "consultation_datetime": row.get("consultation_date"),
+                "service_branch": _display_link(row.get("service_branch")),
+                "patient": patient_titles.get(row.get("patient")) or row.get("patient") or _("Not Set"),
+                "owner": _display_link(row.get("owner")),
+                "practitioner": practitioner_names.get(row.get("practitioner_user")) or row.get("practitioner") or _("Not Set"),
                 "consultation_type": _display_consultation_type(row.get("consultation_type")),
-                "status": row.get("status"),
-                "linked_invoice": row.get("linked_invoice"),
+                "linked_appointment": _display_link(row.get("linked_appointment")),
+                "status": row.get("status") or _("Not Set"),
+                "invoice": _display_link(invoice),
+                "invoice_status": invoice_statuses.get(invoice) or _("Not Billed"),
+                "payment_status": row.get("payment_status") or _("Not Billed"),
+                "planned_treatment_total": flt(planned_totals.get(row.get("name"))),
+                "vaccination_count": vaccination_count,
+                "has_vaccination": _("Yes") if vaccination_count else _("No"),
+                "follow_up_date": row.get("follow_up_date") or _("Not Set"),
+                "next_appointment": _display_link(row.get("follow_up_appointment")),
+                "outcome_assessment_summary": _plain_text(row.get("assessment_notes")) or _("Not Set"),
+                "created_by": row.get("created_by") or _("Not Set"),
             }
         )
     return columns, data, None, _chart_for_report("consultation_register", filters, data), []
@@ -472,6 +509,7 @@ def _unpaid_invoice_report(filters):
             if age_range == "90+" and age_days < 91:
                 continue
         context = invoice_context.get(row["name"], {})
+        row_branch = _resolve_invoice_report_branch(row, context)
         data.append(
             {
                 "invoice": row.get("name"),
@@ -756,6 +794,12 @@ def _get_consultation_rows(filters):
     consultation_type_field = _existing_field(doctype, ["consultation_type"])
     status_field = _existing_field(doctype, ["status"])
     invoice_field = _existing_field(doctype, ["linked_invoice", "invoice", "sales_invoice"])
+    appointment_field = _existing_field(doctype, ["linked_appointment", "appointment"])
+    payment_status_field = _existing_field(doctype, ["payment_status"])
+    follow_up_date_field = _existing_field(doctype, ["follow_up_date"])
+    follow_up_appointment_field = _existing_field(doctype, ["follow_up_appointment", "next_appointment"])
+    assessment_field = _existing_field(doctype, ["assessment_notes", "assessment", "outcome"])
+    created_by_field = "owner"
     query_filters = _date_filter_dict(date_field, filters, 30)
     if filters.get("branch") and branch_field:
         query_filters[branch_field] = filters.get("branch")
@@ -770,6 +814,10 @@ def _get_consultation_rows(filters):
         query_filters[owner_field] = filters.get("owner")
     if filters.get("consultation_type") and consultation_type_field:
         query_filters[consultation_type_field] = filters.get("consultation_type")
+    if filters.get("payment_status") and payment_status_field:
+        query_filters[payment_status_field] = filters.get("payment_status")
+    if filters.get("created_by"):
+        query_filters[created_by_field] = filters.get("created_by")
     fields = ["name"]
     for fieldname in [
         date_field,
@@ -781,12 +829,25 @@ def _get_consultation_rows(filters):
         consultation_type_field,
         status_field,
         invoice_field,
+        appointment_field,
+        payment_status_field,
+        follow_up_date_field,
+        follow_up_appointment_field,
+        assessment_field,
+        created_by_field,
     ]:
         if fieldname and fieldname not in fields:
             fields.append(fieldname)
     raw_rows = frappe.get_all(doctype, filters=query_filters, fields=fields, order_by=f"{date_field} desc")
     rows = []
     for row in raw_rows:
+        if branch_field and row.get(branch_field) and not _can_access_report_branch(row.get(branch_field)):
+            continue
+        has_follow_up = bool(row.get(follow_up_date_field) or row.get(follow_up_appointment_field))
+        if filters.get("has_follow_up") in (1, "1", "Yes") and not has_follow_up:
+            continue
+        if filters.get("has_follow_up") in (0, "0", "No") and has_follow_up:
+            continue
         rows.append(
             {
                 "name": row.get("name"),
@@ -799,8 +860,22 @@ def _get_consultation_rows(filters):
                 "consultation_type": row.get(consultation_type_field),
                 "status": row.get(status_field),
                 "linked_invoice": row.get(invoice_field),
+                "linked_appointment": row.get(appointment_field),
+                "payment_status": row.get(payment_status_field),
+                "follow_up_date": row.get(follow_up_date_field),
+                "follow_up_appointment": row.get(follow_up_appointment_field),
+                "assessment_notes": row.get(assessment_field),
+                "created_by": row.get(created_by_field),
             }
         )
+    if filters.get("has_vaccination") in (1, "1", "Yes", 0, "0", "No"):
+        vaccination_counts = _get_consultation_vaccination_counts(row.get("name") for row in rows)
+        wants_vaccination = filters.get("has_vaccination") in (1, "1", "Yes")
+        rows = [
+            row
+            for row in rows
+            if bool(cint(vaccination_counts.get(row.get("name")))) == wants_vaccination
+        ]
     return rows
 
 
@@ -896,7 +971,7 @@ def _build_revenue_summary_rows(filters):
     data = []
     for row in rows:
         context = invoice_context.get(row["name"], {})
-        row_branch = context.get("branch") or row.get("branch")
+        row_branch = _resolve_invoice_report_branch(row, context)
         if filters.get("branch") and cstr(row_branch) != cstr(filters.get("branch")):
             continue
         service_category = context.get("service_category") or _("General")
@@ -1428,7 +1503,105 @@ def _build_invoice_context_map(invoice_names):
                 context[invoice_name]["patient"] = row.get(patient_field)
             if not context[invoice_name].get("service_category"):
                 context[invoice_name]["service_category"] = service_category
+
+    for invoice_name, child_context in _get_consultation_invoice_context(invoice_names).items():
+        for key in ("branch", "patient", "service_category"):
+            if child_context.get(key) and not context[invoice_name].get(key):
+                context[invoice_name][key] = child_context.get(key)
+
+    for invoice_name, payment_branch in _get_invoice_payment_branch_map(invoice_names).items():
+        if payment_branch and not context[invoice_name].get("payment_branch"):
+            context[invoice_name]["payment_branch"] = payment_branch
     return context
+
+
+def _get_consultation_invoice_context(invoice_names):
+    if not invoice_names or not frappe.db.exists("DocType", "Consultation Invoice Reference"):
+        return {}
+    rows = frappe.get_all(
+        "Consultation Invoice Reference",
+        filters={"sales_invoice": ("in", invoice_names), "parenttype": "Veterinary Consultation"},
+        fields=["parent", "sales_invoice"],
+    )
+    consultation_names = sorted({row.get("parent") for row in rows if row.get("parent")})
+    if not consultation_names:
+        return {}
+
+    consultation_fields = ["name"]
+    for fieldname in ("service_branch", "branch", "patient"):
+        if _existing_field("Veterinary Consultation", [fieldname]) and fieldname not in consultation_fields:
+            consultation_fields.append(fieldname)
+    consultations = {
+        row.get("name"): row
+        for row in frappe.get_all(
+            "Veterinary Consultation",
+            filters={"name": ("in", consultation_names)},
+            fields=consultation_fields,
+        )
+    }
+    context = {}
+    for row in rows:
+        consultation = consultations.get(row.get("parent")) or {}
+        context[row.get("sales_invoice")] = {
+            "branch": consultation.get("service_branch") or consultation.get("branch"),
+            "patient": consultation.get("patient"),
+            "service_category": "Consultation",
+        }
+    return context
+
+
+def _get_invoice_payment_branch_map(invoice_names):
+    if not invoice_names or not frappe.db.exists("DocType", "Payment Entry Reference"):
+        return {}
+    if not frappe.db.exists("DocType", "Payment Entry"):
+        return {}
+    branch_field = _existing_field("Payment Entry", ["service_branch", "branch"])
+    if not branch_field:
+        return {}
+    refs = frappe.get_all(
+        "Payment Entry Reference",
+        filters={"reference_doctype": "Sales Invoice", "reference_name": ("in", invoice_names)},
+        fields=["parent", "reference_name"],
+    )
+    payment_names = sorted({row.get("parent") for row in refs if row.get("parent")})
+    if not payment_names:
+        return {}
+    payments = {
+        row.get("name"): row.get(branch_field)
+        for row in frappe.get_all(
+            "Payment Entry",
+            filters={"name": ("in", payment_names), "docstatus": 1},
+            fields=["name", branch_field],
+        )
+        if row.get(branch_field)
+    }
+    branch_by_invoice = {}
+    for ref in refs:
+        if payments.get(ref.get("parent")) and not branch_by_invoice.get(ref.get("reference_name")):
+            branch_by_invoice[ref.get("reference_name")] = payments.get(ref.get("parent"))
+    return branch_by_invoice
+
+
+def _resolve_invoice_report_branch(invoice_row, context):
+    branch = (
+        context.get("branch")
+        or invoice_row.get("branch")
+        or context.get("payment_branch")
+        or _branch_from_cost_center(context.get("cost_center") or invoice_row.get("cost_center"))
+    )
+    return cstr(branch or "").strip() or _("Unassigned")
+
+
+def _branch_from_cost_center(cost_center):
+    cost_center = cstr(cost_center or "").strip()
+    if not cost_center:
+        return ""
+    try:
+        from vetedge.services.financial_dashboard import get_branch_by_cost_center
+
+        return get_branch_by_cost_center().get(cost_center) or ""
+    except Exception:
+        return ""
 
 
 def _get_sales_invoice_item_rows(invoice_names):
@@ -1454,6 +1627,73 @@ def _get_sales_invoice_item_rows(invoice_names):
             }
         )
     return data
+
+
+def _get_consultation_invoice_map(consultation_names):
+    consultation_names = sorted({cstr(name).strip() for name in (consultation_names or []) if cstr(name).strip()})
+    if not consultation_names or not frappe.db.exists("DocType", "Consultation Invoice Reference"):
+        return {}
+    rows = frappe.get_all(
+        "Consultation Invoice Reference",
+        filters={"parent": ("in", consultation_names), "parenttype": "Veterinary Consultation"},
+        fields=["parent", "sales_invoice"],
+        order_by="idx asc",
+    )
+    invoice_map = defaultdict(list)
+    for row in rows:
+        if row.get("sales_invoice"):
+            invoice_map[row.get("parent")].append(row.get("sales_invoice"))
+    return invoice_map
+
+
+def _get_invoice_status_map(invoice_names):
+    invoice_names = sorted({cstr(name).strip() for name in (invoice_names or []) if cstr(name).strip()})
+    if not invoice_names:
+        return {}
+    rows = frappe.get_all(
+        "Sales Invoice",
+        filters={"name": ("in", invoice_names)},
+        fields=["name", "status", "docstatus", "outstanding_amount"],
+    )
+    return {row.get("name"): row.get("status") or _invoice_status_from_row(row) for row in rows}
+
+
+def _get_consultation_planned_totals(consultation_names):
+    consultation_names = sorted({cstr(name).strip() for name in (consultation_names or []) if cstr(name).strip()})
+    if not consultation_names or not frappe.db.exists("DocType", "Planned Treatment Item"):
+        return {}
+    totals = defaultdict(float)
+    rows = frappe.get_all(
+        "Planned Treatment Item",
+        filters={"parent": ("in", consultation_names), "parenttype": "Veterinary Consultation"},
+        fields=["parent", "qty", "rate", "amount"],
+    )
+    for row in rows:
+        totals[row.get("parent")] += flt(row.get("amount")) or flt(row.get("qty")) * flt(row.get("rate"))
+    return totals
+
+
+def _get_consultation_vaccination_counts(consultation_names):
+    consultation_names = sorted({cstr(name).strip() for name in (consultation_names or []) if cstr(name).strip()})
+    if not consultation_names or not frappe.db.exists("DocType", "Veterinary Vaccination Record"):
+        return {}
+    link_field = _existing_field(
+        "Veterinary Vaccination Record",
+        ["consultation", "linked_consultation", "source_consultation", "source_name"],
+    )
+    if not link_field:
+        return {}
+    filters = {link_field: ("in", consultation_names)}
+    source_doctype_field = _existing_field("Veterinary Vaccination Record", ["source_doctype"])
+    if link_field == "source_name" and source_doctype_field:
+        filters[source_doctype_field] = "Veterinary Consultation"
+    rows = frappe.get_all(
+        "Veterinary Vaccination Record",
+        filters=filters,
+        fields=[link_field, {"COUNT": "name", "as": "vaccination_count"}],
+        group_by=link_field,
+    )
+    return {row.get(link_field): cint(row.get("vaccination_count")) for row in rows}
 
 
 def _chart_for_report(report_key, filters, data):
@@ -1554,6 +1794,35 @@ def _consultations_by_type_chart(filters):
 
 def _display_consultation_type(value):
     return cstr(value or "").strip() or _("Unspecified")
+
+
+def _display_link(value):
+    return cstr(value or "").strip() or _("Not Set")
+
+
+def _plain_text(value):
+    text = cstr(value or "")
+    if not text:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _first(values):
+    for value in values or []:
+        if value:
+            return value
+    return None
+
+
+def _can_access_report_branch(branch):
+    try:
+        session = getattr(frappe, "session", None)
+        user = getattr(session, "user", None)
+        return can_access_branch_data(user, branch)
+    except Exception:
+        return True
 
 
 def _revenue_by_practitioner_chart(filters):

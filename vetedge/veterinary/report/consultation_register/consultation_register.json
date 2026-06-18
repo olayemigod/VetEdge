@@ -10,7 +10,11 @@
   {"fieldname": "consultation_type", "fieldtype": "Link", "label": "Consultation Type", "options": "Consultation Type"},
   {"fieldname": "patient", "fieldtype": "Link", "label": "Patient", "options": "Veterinary Patient"},
   {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "Customer"},
-  {"fieldname": "status", "fieldtype": "Data", "label": "Status"}
+  {"fieldname": "status", "fieldtype": "Data", "label": "Status"},
+  {"fieldname": "payment_status", "fieldtype": "Select", "label": "Payment Status", "options": "\nNot Billed\nUnpaid\nPartly Paid\nPaid\nCancelled"},
+  {"fieldname": "has_follow_up", "fieldtype": "Select", "label": "Has Follow-up", "options": "\nYes\nNo"},
+  {"fieldname": "has_vaccination", "fieldtype": "Select", "label": "Has Vaccination", "options": "\nYes\nNo"},
+  {"fieldname": "created_by", "fieldtype": "Link", "label": "Created By", "options": "User"}
  ],
  "is_standard": "Yes",
  "module": "Veterinary",

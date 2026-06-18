@@ -147,6 +147,56 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(data[0]["branch"], "Branch A")
         self.assertEqual(data[0]["grand_total"], 100)
 
+    def test_revenue_summary_uses_cost_center_branch_when_invoice_branch_missing(self):
+        invoice_rows = [
+            {
+                "name": "SINV-15000",
+                "posting_date": "2026-06-09",
+                "customer": "CUST-001",
+                "branch": "",
+                "cost_center": "",
+                "grand_total": 15000,
+                "outstanding_amount": 0,
+                "docstatus": 1,
+                "status": "Paid",
+            }
+        ]
+        invoice_context = {"SINV-15000": {"cost_center": "Main - VED"}}
+
+        with (
+            patch.object(reporting_structure, "_get_sales_invoice_rows", return_value=invoice_rows),
+            patch.object(reporting_structure, "_build_invoice_context_map", return_value=invoice_context),
+            patch.object(reporting_structure, "_branch_from_cost_center", return_value="Main Branch"),
+        ):
+            data = reporting_structure._build_revenue_summary_rows({"from_date": "2026-06-01", "to_date": "2026-06-18"})
+
+        self.assertEqual(data[0]["branch"], "Main Branch")
+        self.assertEqual(data[0]["grand_total"], 15000)
+
+    def test_revenue_summary_keeps_genuinely_branchless_invoice_unassigned(self):
+        invoice_rows = [
+            {
+                "name": "SINV-BRANCHLESS",
+                "posting_date": "2026-06-09",
+                "customer": "CUST-001",
+                "branch": "",
+                "cost_center": "",
+                "grand_total": 500,
+                "outstanding_amount": 0,
+                "docstatus": 1,
+                "status": "Paid",
+            }
+        ]
+
+        with (
+            patch.object(reporting_structure, "_get_sales_invoice_rows", return_value=invoice_rows),
+            patch.object(reporting_structure, "_build_invoice_context_map", return_value={}),
+            patch.object(reporting_structure, "_branch_from_cost_center", return_value=""),
+        ):
+            data = reporting_structure._build_revenue_summary_rows({})
+
+        self.assertEqual(data[0]["branch"], "Unassigned")
+
     def test_consultation_register_includes_consultation_type_column_and_unspecified(self):
         rows = [
             {
@@ -160,6 +210,12 @@ class TestReportingStructure(unittest.TestCase):
                 "consultation_type": "",
                 "status": "Completed",
                 "linked_invoice": None,
+                "linked_appointment": "VAPT-001",
+                "payment_status": "Paid",
+                "follow_up_date": None,
+                "follow_up_appointment": None,
+                "assessment_notes": "<p>Stable patient</p>",
+                "created_by": "doctor@example.com",
             },
             {
                 "name": "VCON-002",
@@ -172,6 +228,12 @@ class TestReportingStructure(unittest.TestCase):
                 "consultation_type": "House Call",
                 "status": "Completed",
                 "linked_invoice": None,
+                "linked_appointment": None,
+                "payment_status": "Not Billed",
+                "follow_up_date": "2026-06-20",
+                "follow_up_appointment": "VAPT-002",
+                "assessment_notes": None,
+                "created_by": "doctor2@example.com",
             },
         ]
 
@@ -179,12 +241,21 @@ class TestReportingStructure(unittest.TestCase):
             patch.object(reporting_structure, "_get_consultation_rows", return_value=rows),
             patch.object(reporting_structure, "_get_patient_title_map", return_value={}),
             patch.object(reporting_structure, "_get_user_full_name_map", return_value={}),
+            patch.object(reporting_structure, "_get_consultation_invoice_map", return_value={}),
+            patch.object(reporting_structure, "_get_invoice_status_map", return_value={}),
+            patch.object(reporting_structure, "_get_consultation_planned_totals", return_value={"VCON-001": 2500}),
+            patch.object(reporting_structure, "_get_consultation_vaccination_counts", return_value={"VCON-001": 1}),
         ):
             columns, data, _, _, _ = reporting_structure._consultation_register({})
 
         self.assertIn("consultation_type", {column["fieldname"] for column in columns})
+        self.assertIn("payment_status", {column["fieldname"] for column in columns})
+        self.assertIn("outcome_assessment_summary", {column["fieldname"] for column in columns})
         self.assertEqual(data[0]["consultation_type"], "Unspecified")
         self.assertEqual(data[1]["consultation_type"], "House Call")
+        self.assertEqual(data[0]["planned_treatment_total"], 2500)
+        self.assertEqual(data[0]["has_vaccination"], "Yes")
+        self.assertEqual(data[0]["outcome_assessment_summary"], "Stable patient")
 
     def test_get_consultation_rows_applies_consultation_type_and_branch_filters(self):
         captured = {}
@@ -205,6 +276,12 @@ class TestReportingStructure(unittest.TestCase):
                     "consultation_type": "House Call",
                     "status": "Completed",
                     "linked_invoice": None,
+                    "linked_appointment": "VAPT-001",
+                    "payment_status": "Paid",
+                    "follow_up_date": None,
+                    "follow_up_appointment": None,
+                    "assessment_notes": "Stable",
+                    "owner": "doctor@example.com",
                 }
             ]
 
@@ -218,6 +295,12 @@ class TestReportingStructure(unittest.TestCase):
             "consultation_type",
             "status",
             "linked_invoice",
+            "linked_appointment",
+            "payment_status",
+            "follow_up_date",
+            "follow_up_appointment",
+            "assessment_notes",
+            "owner",
         }
         meta = SimpleNamespace(get_field=lambda fieldname: fieldname in consultation_fields)
         frappe_stub = SimpleNamespace(
@@ -228,12 +311,21 @@ class TestReportingStructure(unittest.TestCase):
 
         with patch.object(reporting_structure, "frappe", frappe_stub):
             rows = reporting_structure._get_consultation_rows(
-                {"from_date": "2026-06-01", "to_date": "2026-06-30", "branch": "Main", "consultation_type": "House Call"}
+                {
+                    "from_date": "2026-06-01",
+                    "to_date": "2026-06-30",
+                    "branch": "Main",
+                    "consultation_type": "House Call",
+                    "payment_status": "Paid",
+                    "created_by": "doctor@example.com",
+                }
             )
 
         self.assertEqual(captured["doctype"], "Veterinary Consultation")
         self.assertEqual(captured["filters"]["service_branch"], "Main")
         self.assertEqual(captured["filters"]["consultation_type"], "House Call")
+        self.assertEqual(captured["filters"]["payment_status"], "Paid")
+        self.assertEqual(captured["filters"]["owner"], "doctor@example.com")
         self.assertIn("consultation_datetime", captured["fields"])
         self.assertIn("consultation_type", captured["fields"])
         self.assertEqual(rows[0]["consultation_type"], "House Call")
