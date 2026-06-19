@@ -1,0 +1,139 @@
+{
+ "actions": [],
+ "creation": "2026-06-19 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "activity_datetime",
+  "activity_type",
+  "performed_by",
+  "clinical_notes",
+  "billing_section",
+  "billable",
+  "billing_status",
+  "item",
+  "qty",
+  "uom",
+  "stock_section",
+  "stock_affecting",
+  "stock_status",
+  "linkage_section",
+  "linked_doctype",
+  "linked_document"
+ ],
+ "fields": [
+  {
+   "default": "Now",
+   "fieldname": "activity_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Activity Date/Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "activity_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Activity Type",
+   "options": "Vitals\nMedication\nVaccination\nFluid Therapy\nFeeding\nNursing Note\nWound Care\nLab\nImaging\nProcedure\nOxygen / Nebulisation\nOwner Communication\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "performed_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Performed By",
+   "options": "User"
+  },
+  {
+   "fieldname": "clinical_notes",
+   "fieldtype": "Text Editor",
+   "label": "Clinical Notes"
+  },
+  {
+   "fieldname": "billing_section",
+   "fieldtype": "Section Break",
+   "label": "Billing Prep"
+  },
+  {
+   "default": "0",
+   "fieldname": "billable",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Billable"
+  },
+  {
+   "default": "Not Billable",
+   "fieldname": "billing_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Billing Status",
+   "options": "Not Billable\nPending Charge\nCharged\nCancelled",
+   "read_only": 1
+  },
+  {
+   "description": "Optional in H3A. Used later by the charge sheet/invoice sync flow.",
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "stock_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Prep"
+  },
+  {
+   "default": "0",
+   "fieldname": "stock_affecting",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Stock Affecting"
+  },
+  {
+   "default": "Not Applicable",
+   "fieldname": "stock_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Stock Status",
+   "options": "Not Applicable\nPending\nPosted\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linkage_section",
+   "fieldtype": "Section Break",
+   "label": "Optional Linkage"
+  },
+  {
+   "fieldname": "linked_doctype",
+   "fieldtype": "Data",
+   "label": "Linked DocType"
+  },
+  {
+   "fieldname": "linked_document",
+   "fieldtype": "Dynamic Link",
+   "label": "Linked Document",
+   "options": "linked_doctype"
+  }
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Hospitalisation Activity",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

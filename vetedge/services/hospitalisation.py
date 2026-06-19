@@ -57,6 +57,27 @@ def validate_hospitalisation(doc) -> None:
 	if doc.is_new():
 		assert_hospitalisation_enabled()
 	sync_hospitalisation_title(doc)
+	normalize_hospitalisation_activities(doc)
+
+
+def normalize_hospitalisation_activities(doc) -> None:
+	for row in doc.get("activities") or []:
+		if not row.get("performed_by"):
+			row.performed_by = getattr(frappe.session, "user", None)
+
+		if cint(row.get("billable")):
+			if row.get("billing_status") in (None, "", "Not Billable"):
+				row.billing_status = "Pending Charge"
+		else:
+			if row.get("billing_status") in (None, "", "Pending Charge"):
+				row.billing_status = "Not Billable"
+
+		if cint(row.get("stock_affecting")):
+			if row.get("stock_status") in (None, "", "Not Applicable"):
+				row.stock_status = "Pending"
+		else:
+			if row.get("stock_status") in (None, "", "Pending"):
+				row.stock_status = "Not Applicable"
 
 
 def sync_hospitalisation_title(doc) -> None:

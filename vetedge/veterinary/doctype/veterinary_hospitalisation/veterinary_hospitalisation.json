@@ -24,6 +24,9 @@
   "care_location_type",
   "care_location",
   "isolation_required",
+  "activities_tab",
+  "activities_section",
+  "activities",
   "billing_section",
   "sales_invoice",
   "invoice_status",
@@ -173,6 +176,23 @@
    "fieldname": "isolation_required",
    "fieldtype": "Check",
    "label": "Isolation Required"
+  },
+  {
+   "fieldname": "activities_tab",
+   "fieldtype": "Tab Break",
+   "label": "Activities"
+  },
+  {
+   "fieldname": "activities_section",
+   "fieldtype": "Section Break",
+   "label": "Clinical Activities"
+  },
+  {
+   "description": "Record clinical activity during hospitalisation. Billing and stock sync will be handled by a later charge sheet/invoice flow.",
+   "fieldname": "activities",
+   "fieldtype": "Table",
+   "label": "Activities",
+   "options": "Veterinary Hospitalisation Activity"
   },
   {
    "collapsible": 1,

@@ -2,6 +2,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 	refresh(frm) {
 		set_discharge_fields_visibility(frm);
 		set_location_help(frm);
+		set_activity_help(frm);
 		add_hospitalisation_action_buttons(frm);
 	},
 	status(frm) {
@@ -25,6 +26,29 @@ function set_location_help(frm) {
 		"description",
 		"Optional. Link a Kennel only when hospital care is tied to an existing kennel record."
 	);
+}
+
+function set_activity_help(frm) {
+	frm.set_df_property(
+		"activities",
+		"description",
+		"Record hospitalisation activities here. Billing and stock sync will be handled through a later charge sheet/invoice flow."
+	);
+}
+
+frappe.ui.form.on("Veterinary Hospitalisation Activity", {
+	billable(frm, cdt, cdn) {
+		set_activity_row_status_defaults(cdt, cdn);
+	},
+	stock_affecting(frm, cdt, cdn) {
+		set_activity_row_status_defaults(cdt, cdn);
+	},
+});
+
+function set_activity_row_status_defaults(cdt, cdn) {
+	const row = locals[cdt][cdn];
+	frappe.model.set_value(cdt, cdn, "billing_status", row.billable ? "Pending Charge" : "Not Billable");
+	frappe.model.set_value(cdt, cdn, "stock_status", row.stock_affecting ? "Pending" : "Not Applicable");
 }
 
 function add_hospitalisation_action_buttons(frm) {

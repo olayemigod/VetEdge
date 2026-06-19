@@ -8,6 +8,7 @@ from unittest import TestCase
 APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
 SETTINGS_JSON = APP_ROOT / "veterinary/doctype/veterinary_settings/veterinary_settings.json"
 HOSPITALISATION_JSON = APP_ROOT / "veterinary/doctype/veterinary_hospitalisation/veterinary_hospitalisation.json"
+ACTIVITY_JSON = APP_ROOT / "veterinary/doctype/veterinary_hospitalisation_activity/veterinary_hospitalisation_activity.json"
 
 
 def load_json(path: Path) -> dict:
@@ -35,6 +36,23 @@ class TestVeterinaryHospitalisationStructure(TestCase):
 			fields["hospitalisation_payment_gate"]["options"],
 			"Full Payment Required\nPartial Payment Gate\nNo Payment Gate",
 		)
+
+	def test_veterinary_hospitalisation_activity_doctype_exists(self):
+		activity = load_json(ACTIVITY_JSON)
+
+		self.assertEqual(activity["name"], "Veterinary Hospitalisation Activity")
+		self.assertEqual(activity["istable"], 1)
+		fields = fields_by_name(activity)
+		self.assertIn("Vaccination", fields["activity_type"]["options"].splitlines())
+		self.assertFalse(fields["item"].get("reqd"))
+
+	def test_hospitalisation_has_optional_activities_table(self):
+		fields = fields_by_name(load_json(HOSPITALISATION_JSON))
+
+		self.assertIn("activities", fields)
+		self.assertEqual(fields["activities"]["fieldtype"], "Table")
+		self.assertEqual(fields["activities"]["options"], "Veterinary Hospitalisation Activity")
+		self.assertFalse(fields["activities"].get("reqd"))
 
 	def test_hospitalisation_can_be_created_without_care_location(self):
 		fields = fields_by_name(load_json(HOSPITALISATION_JSON))
