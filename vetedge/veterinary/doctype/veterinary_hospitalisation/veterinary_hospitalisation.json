@@ -1,0 +1,324 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-06-18 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "hospitalisation_title",
+  "admission_section",
+  "patient",
+  "customer",
+  "status",
+  "admission_datetime",
+  "service_branch",
+  "company",
+  "column_break_admission",
+  "linked_consultation",
+  "attending_veterinarian",
+  "admitted_by",
+  "admission_reason",
+  "care_location_section",
+  "care_location_type",
+  "care_location",
+  "isolation_required",
+  "billing_section",
+  "sales_invoice",
+  "invoice_status",
+  "payment_gate_status",
+  "payment_gate_message",
+  "discharge_section",
+  "discharged_by",
+  "discharge_datetime",
+  "discharge_summary"
+ ],
+ "fields": [
+  {
+   "default": "VHOS-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "VHOS-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hospitalisation_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Hospitalisation Title",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "admission_section",
+   "fieldtype": "Section Break",
+   "label": "Admission"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Veterinary Patient",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Draft\nAdmitted\nUnder Care\nReady for Discharge\nDischarged\nCancelled",
+   "reqd": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "admission_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Admission Date/Time",
+   "no_copy": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Branch",
+   "options": "Branch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_admission",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "linked_consultation",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Linked Consultation",
+   "no_copy": 1,
+   "options": "Veterinary Consultation"
+  },
+  {
+   "fieldname": "attending_veterinarian",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Attending Veterinarian",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "admitted_by",
+   "fieldtype": "Link",
+   "label": "Admitted By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "admission_reason",
+   "fieldtype": "Small Text",
+   "label": "Admission Reason",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "care_location_section",
+   "fieldtype": "Section Break",
+   "label": "Care Location"
+  },
+  {
+   "default": "Not Assigned",
+   "description": "Optional. Use Not Assigned when the patient is admitted for care without a kennel, cage, ward, or other location assignment.",
+   "fieldname": "care_location_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Care Location Type",
+   "options": "Not Assigned\nKennel\nCage\nWard\nICU\nIsolation\nRecovery Area\nTreatment Room\nHolding Area"
+  },
+  {
+   "description": "Optional. Link a Kennel only when hospital care is tied to an existing kennel record.",
+   "fieldname": "care_location",
+   "fieldtype": "Link",
+   "label": "Care Location",
+   "options": "Kennel"
+  },
+  {
+   "default": "0",
+   "fieldname": "isolation_required",
+   "fieldtype": "Check",
+   "label": "Isolation Required"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "billing_section",
+   "fieldtype": "Section Break",
+   "label": "Invoice and Payment Gate"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sales Invoice",
+   "no_copy": 1,
+   "options": "Sales Invoice"
+  },
+  {
+   "default": "Not Invoiced",
+   "fieldname": "invoice_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Invoice Status",
+   "no_copy": 1,
+   "options": "Not Invoiced\nDraft\nUnpaid\nPartly Paid\nPaid\nOverdue\nCancelled"
+  },
+  {
+   "default": "Not Checked",
+   "fieldname": "payment_gate_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Payment Gate Status",
+   "no_copy": 1,
+   "options": "Not Checked\nAllowed\nBlocked\nOverride",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_gate_message",
+   "fieldtype": "Small Text",
+   "label": "Payment Gate Message",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "discharge_section",
+   "fieldtype": "Section Break",
+   "label": "Discharge"
+  },
+  {
+   "fieldname": "discharged_by",
+   "fieldtype": "Link",
+   "label": "Discharged By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discharge_datetime",
+   "fieldtype": "Datetime",
+   "label": "Discharge Date/Time",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "discharge_summary",
+   "fieldtype": "Text Editor",
+   "label": "Discharge Summary"
+  }
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Hospitalisation",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Doctor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Veterinary Nurse",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Front Desk",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Branch Manager",
+   "share": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "patient,customer,service_branch,linked_consultation,attending_veterinarian,status,sales_invoice",
+ "show_title_field_in_link": 1,
+ "sort_field": "admission_datetime",
+ "sort_order": "DESC",
+ "title_field": "hospitalisation_title",
+ "track_changes": 1
+}

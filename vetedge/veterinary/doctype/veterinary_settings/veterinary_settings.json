@@ -28,6 +28,9 @@
   "allow_doctor_collect_payment",
   "consultation_requires_payment_before_treatment",
   "consultation_payment_gate",
+  "hospitalisation_section",
+  "enable_veterinary_hospitalisation",
+  "hospitalisation_payment_gate",
   "vitals_section",
   "enable_vitals",
   "require_vitals_before_completion",
@@ -263,6 +266,28 @@
    "fieldname": "consultation_payment_gate",
    "fieldtype": "Select",
    "label": "Consultation Payment Gate",
+   "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
+  },
+  {
+   "fieldname": "hospitalisation_section",
+   "fieldtype": "Section Break",
+   "label": "Hospitalisation Feature Control"
+  },
+  {
+   "default": "1",
+   "description": "Enables the Veterinary Hospitalisation workflow in VetEdge. This setting can later be controlled by CoreEdge entitlement/subscription rules.",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_veterinary_hospitalisation",
+   "fieldtype": "Check",
+   "label": "Enable Veterinary Hospitalisation"
+  },
+  {
+   "default": "Partial Payment Gate",
+   "description": "Controls whether hospitalisation care requires full payment, partial payment, or only invoice generation before proceeding.",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_payment_gate",
+   "fieldtype": "Select",
+   "label": "Hospitalisation Payment Gate",
    "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
   },
   {
