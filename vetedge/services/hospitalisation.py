@@ -501,7 +501,7 @@ def evaluate_hospitalisation_payment_gate(doc) -> dict:
 			if session:
 				return get_payment_gate_status(session)
 	except Exception:
-		raise
+		pass
 
 	invoice_name = doc.get("sales_invoice")
 	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):

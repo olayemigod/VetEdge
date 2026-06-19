@@ -562,6 +562,15 @@ def create_lab_order_invoice(lab_order: str) -> dict:
 	can_access_lab_order(get_current_user(), lab_order, raise_exception=True)
 
 	order = frappe.get_doc(LAB_ORDER_DOCTYPE, lab_order)
+	if is_persisted_lab_order_for_billing_core(order) and use_billing_core_for_lab_order():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session(LAB_ORDER_DOCTYPE, order.name)
+		invoice_name = result.get("invoice")
+		if invoice_name:
+			frappe.db.set_value(LAB_ORDER_DOCTYPE, order.name, "linked_invoice", invoice_name, update_modified=False)
+		return {"lab_order": order.name, "invoice": invoice_name, "created": bool(result.get("created")), "billing_session": result.get("session")}
+
 	if order.consultation:
 		frappe.throw(
 			"Consultation-linked lab orders are billed through the consultation invoice flow.",
@@ -611,6 +620,22 @@ def build_lab_order_invoice_items(order, cost_center: str) -> list[dict]:
 		default_rate = frappe.db.get_value(LAB_TEST_DOCTYPE, row.lab_test_template, "default_rate")
 		items.append(build_invoice_item(row.billing_item, 1, None, default_rate, cost_center))
 	return items
+
+
+def is_persisted_lab_order_for_billing_core(order) -> bool:
+	db = getattr(frappe, "db", None)
+	if not db or not hasattr(db, "exists"):
+		return False
+	return bool(order.get("name") and db.exists(LAB_ORDER_DOCTYPE, order.name))
+
+
+def use_billing_core_for_lab_order() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
 
 
 def create_lab_order_sales_invoice(order, items: list[dict], cost_center: str):

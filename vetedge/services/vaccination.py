@@ -372,6 +372,16 @@ def enforce_vaccination_payment_before_administration(doc, user: str | None = No
 	user = user or get_current_user()
 	if user_has_any_role(user, PAYMENT_OVERRIDE_ROLES):
 		return
+	if use_billing_core_for_vaccination():
+		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
+
+		if not resolve_billing_session(VACCINATION_RECORD_DOCTYPE, doc.name):
+			sync_source_to_billing_session(VACCINATION_RECORD_DOCTYPE, doc.name)
+		session = resolve_billing_session(VACCINATION_RECORD_DOCTYPE, doc.name)
+		status = get_payment_gate_status(session) if session else {"can_proceed": False, "message": "Create and pay the vaccination invoice before administering this vaccine."}
+		if not status.get("can_proceed"):
+			frappe.throw(status.get("message") or "Pay the vaccination invoice before administering this vaccine.", frappe.ValidationError)
+		return
 	if not doc.linked_invoice:
 		frappe.throw(
 			"Create and pay the vaccination invoice before administering this vaccine.",
@@ -535,6 +545,24 @@ def create_or_update_vaccination_invoice(record: str) -> dict:
 	doc = frappe.get_doc(VACCINATION_RECORD_DOCTYPE, record)
 	if doc.status == "Cancelled":
 		frappe.throw("Cancelled vaccination records cannot be billed.", frappe.ValidationError)
+	if use_billing_core_for_vaccination():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session(VACCINATION_RECORD_DOCTYPE, doc.name)
+		invoice_name = result.get("invoice")
+		if invoice_name:
+			doc.linked_invoice = invoice_name
+		if doc.status != "Administered":
+			doc.status = get_vaccination_workflow_status(doc)
+		doc.save()
+		return {
+			"name": doc.name,
+			"vaccination_record": doc.name,
+			"invoice": doc.linked_invoice,
+			"status": doc.status,
+			"billing_session": result.get("session"),
+		}
+
 	invoice_name = create_vaccination_invoice(doc)
 	if invoice_name:
 		doc.linked_invoice = invoice_name
@@ -550,6 +578,12 @@ def create_or_update_vaccination_invoice(record: str) -> dict:
 
 
 def create_vaccination_invoice(doc) -> str | None:
+	if use_billing_core_for_vaccination():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session(VACCINATION_RECORD_DOCTYPE, doc.name)
+		return result.get("invoice")
+
 	vaccine = get_vaccine_defaults(doc.vaccine)
 	if not vaccine.default_item:
 		return None
@@ -586,6 +620,14 @@ def create_vaccination_invoice(doc) -> str | None:
 		invoice_name = invoice.name
 	return invoice_name
 
+
+def use_billing_core_for_vaccination() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
 
 
 def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str) -> str:

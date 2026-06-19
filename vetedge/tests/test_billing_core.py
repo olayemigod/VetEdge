@@ -105,7 +105,8 @@ class TestBillingCore(TestCase):
 		self.assertEqual(len(invoice.get("items")), 1)
 
 	def test_submitted_current_invoice_creates_new_draft_for_new_charge(self):
-		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB")
+		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[])
+		billing_core.add_or_update_session_charge(session, charge_payload("new-consultation-fee"))
 		submitted = make_invoice("SINV-SUB", docstatus=1)
 		new_invoice = make_invoice("SINV-NEW", docstatus=0)
 
@@ -117,7 +118,8 @@ class TestBillingCore(TestCase):
 		self.assertEqual(session.current_draft_invoice, "SINV-NEW")
 
 	def test_cancelled_current_invoice_creates_new_draft_for_new_charge(self):
-		session = make_session(current_draft_invoice="SINV-CAN", latest_invoice="SINV-CAN")
+		session = make_session(current_draft_invoice="SINV-CAN", latest_invoice="SINV-CAN", charges=[])
+		billing_core.add_or_update_session_charge(session, charge_payload("new-consultation-fee"))
 		cancelled = make_invoice("SINV-CAN", docstatus=2)
 		new_invoice = make_invoice("SINV-NEW", docstatus=0)
 
@@ -298,11 +300,248 @@ class TestBillingCore(TestCase):
 			self.assertEqual(billing_core.get_source_context("Veterinary Lab Order", "VLAB-001"), ("Veterinary Consultation", "VCON-001"))
 			self.assertEqual(billing_core.get_source_context("Veterinary Vaccination Record", "VVAC-001"), ("Veterinary Consultation", "VCON-001"))
 
+	def test_consultation_modal_income_account_resolution_is_schema_safe(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			company="Company A",
+			service_branch="Main",
+			linked_invoice=None,
+		)
+
+		def get_field(fieldname):
+			return frappe._dict(fieldname=fieldname) if fieldname == "income_account" else None
+
+		def get_meta(doctype):
+			if doctype == "Item Default":
+				return frappe._dict(get_field=get_field)
+			return frappe._dict(get_field=lambda fieldname: None)
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Item" and isinstance(fieldname, (list, tuple)):
+				self.assertNotIn("income_account", fieldname)
+				return frappe._dict(item_name="Consultation", stock_uom="Nos", standard_rate=150)
+			if doctype == "Item Default":
+				self.assertEqual(fieldname, "income_account")
+				return None
+			if doctype == "Item" and fieldname == "item_group":
+				return "Services"
+			if doctype == "Item Group" and fieldname in {"income_account", "default_income_account"}:
+				raise AssertionError(f"Item Group.{fieldname} must not be queried when the field is absent")
+			if doctype == "Company" and fieldname == "default_income_account":
+				raise AssertionError("Company.default_income_account must not be queried when the field is absent")
+			return None
+
+		def sync_source(source_doctype, source_name):
+			charge = billing_core.build_source_charge(
+				consultation,
+				"Consultation Fee",
+				consultation.name,
+				"CONS-ITEM",
+				1,
+				None,
+				None,
+				"CC-Main",
+			)
+			self.assertIsNone(charge["income_account"])
+			return {"invoice": "SINV-001", "session": "VBS-001", "created": True}
+
+		with (
+			patch.object(billing_modal, "require_internal_user"),
+			patch.object(billing_modal, "get_billing_source_config", return_value=billing_modal.BILLING_SOURCE_CONFIGS["Veterinary Consultation"]),
+			patch.object(billing_modal.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_modal, "assert_can_act_on_source"),
+			patch.object(billing_modal, "get_invoice_summary", return_value=None),
+			patch.object(billing_modal, "get_billing_modal_state", return_value={"billing_session": {"name": "VBS-001"}}),
+			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+			patch.object(billing_core.frappe, "get_meta", side_effect=get_meta),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=get_value),
+			patch.object(billing_core, "get_default_company", return_value="Company A"),
+			patch.object(billing_core, "sync_source_to_billing_session", side_effect=sync_source) as sync,
+		):
+			result = billing_modal.create_or_update_modal_invoice("Veterinary Consultation", "VCON-001")
+
+		sync.assert_called_once_with("Veterinary Consultation", "VCON-001")
+		self.assertTrue(result["created"])
+
+	def test_build_source_charge_defaults_missing_standard_rate_to_zero(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with (
+			patch.object(billing_core.frappe.db, "get_value", return_value=frappe._dict(item_name="Consultation", stock_uom="Nos")),
+			patch.object(billing_core, "_get_item_income_account", return_value=None),
+		):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", None, None, None, "CC-Main")
+
+		self.assertEqual(charge["qty"], 1)
+		self.assertEqual(charge["rate"], 0)
+		self.assertEqual(charge["amount"], 0)
+		self.assertIsNone(charge["income_account"])
+
+	def test_new_sales_invoice_totals_are_prepared_before_insert(self):
+		session = make_session(charges=[])
+		billing_core.add_or_update_session_charge(session, charge_payload(amount=0))
+		created_invoice = make_invoice("SINV-NEW", docstatus=0, outstanding_amount=None)
+		for fieldname in (
+			"total",
+			"net_total",
+			"base_total",
+			"base_net_total",
+			"grand_total",
+			"base_grand_total",
+			"rounded_total",
+			"base_rounded_total",
+			"outstanding_amount",
+		):
+			created_invoice[fieldname] = None
+		created_invoice.set_missing_values = Mock()
+		created_invoice.calculate_taxes_and_totals = Mock()
+
+		def assert_totals_prepared():
+			self.assertIsNotNone(created_invoice.base_grand_total)
+			self.assertIsNotNone(created_invoice.grand_total)
+			self.assertEqual(len(created_invoice.get("items") or []), 1)
+
+		created_invoice.insert.side_effect = assert_totals_prepared
+		with billing_core_context(session, make_invoice("SINV-OLD"), created_invoice=created_invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertEqual(result["added_count"], 1)
+		created_invoice.set_missing_values.assert_called()
+		created_invoice.calculate_taxes_and_totals.assert_called()
+		created_invoice.insert.assert_called_once()
+
+	def test_empty_session_does_not_create_empty_invoice(self):
+		session = make_session(charges=[], current_draft_invoice=None, latest_invoice=None)
+		created_invoice = make_invoice("SINV-EMPTY")
+
+		with billing_core_context(session, make_invoice("SINV-OLD"), created_invoice=created_invoice):
+			invoice, created = billing_core.create_or_update_draft_invoice_for_session(session)
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertIsNone(invoice)
+		self.assertFalse(created)
+		self.assertIsNone(result["invoice"])
+		created_invoice.insert.assert_not_called()
+
+	def test_first_consultation_registration_required_adds_registration_charge(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		patient = frappe._dict(doctype="Veterinary Patient", name="PAT-001", primary_owner="CUST-001", default_branch="Main")
+		rule = frappe._dict(enabled=True, require_payment_before_first_consultation=True, registration_item="REG-ITEM", registration_fee=75, enforce_cost_center=False)
+		with registration_consultation_context(consultation, patient, rule, first=True, paid=False):
+			payload = billing_core.get_registration_charge_payload_for_consultation(consultation, make_session(charges=[]))
+
+		self.assertIsNotNone(payload)
+		self.assertEqual(payload["charge_key"], "Veterinary Patient:PAT-001:Registration Fee")
+		self.assertEqual(payload["source_doctype"], "Veterinary Patient")
+		self.assertEqual(payload["amount"], 75)
+
+	def test_first_consultation_registration_and_consultation_create_one_draft_invoice(self):
+		session = make_session(charges=[])
+		billing_core.add_or_update_session_charge(session, charge_payload("consultation-fee", "CONS-ITEM", 100))
+		billing_core.add_or_update_session_charge(session, {**charge_payload("Veterinary Patient:PAT-001:Registration Fee", "REG-ITEM", 75), "source_doctype": "Veterinary Patient", "source_name": "PAT-001"})
+		created_invoice = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with billing_core_context(session, make_invoice("SINV-OLD"), created_invoice=created_invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertEqual(result["added_count"], 2)
+		self.assertEqual(len(created_invoice.get("items") or []), 2)
+
+	def test_rerun_consultation_registration_sync_does_not_duplicate_registration_charge(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		patient = frappe._dict(doctype="Veterinary Patient", name="PAT-001", primary_owner="CUST-001", default_branch="Main")
+		rule = frappe._dict(enabled=True, require_payment_before_first_consultation=True, registration_item="REG-ITEM", registration_fee=75, enforce_cost_center=False)
+		session = make_session(charges=[])
+		billing_core.add_or_update_session_charge(session, {**charge_payload("Veterinary Patient:PAT-001:Registration Fee", "REG-ITEM", 75), "source_doctype": "Veterinary Patient", "source_name": "PAT-001"})
+
+		with registration_consultation_context(consultation, patient, rule, first=True, paid=False):
+			payload = billing_core.get_registration_charge_payload_for_consultation(consultation, session)
+
+		self.assertIsNone(payload)
+		self.assertEqual(len(session.charges), 1)
+
+	def test_paid_registration_is_not_added_to_consultation_session(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		patient = frappe._dict(doctype="Veterinary Patient", name="PAT-001", primary_owner="CUST-001", default_branch="Main")
+		rule = frappe._dict(enabled=True, require_payment_before_first_consultation=True, registration_item="REG-ITEM", registration_fee=75, enforce_cost_center=False)
+		with registration_consultation_context(consultation, patient, rule, first=True, paid=True):
+			self.assertIsNone(billing_core.get_registration_charge_payload_for_consultation(consultation, make_session(charges=[])))
+
+	def test_registration_not_required_before_first_consultation_is_not_added(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		patient = frappe._dict(doctype="Veterinary Patient", name="PAT-001", primary_owner="CUST-001", default_branch="Main")
+		rule = frappe._dict(enabled=True, require_payment_before_first_consultation=False, registration_item="REG-ITEM", registration_fee=75, enforce_cost_center=False)
+		with registration_consultation_context(consultation, patient, rule, first=True, paid=False):
+			self.assertIsNone(billing_core.get_registration_charge_payload_for_consultation(consultation, make_session(charges=[])))
+
+	def test_registration_is_not_added_when_consultation_is_not_first(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-002", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		patient = frappe._dict(doctype="Veterinary Patient", name="PAT-001", primary_owner="CUST-001", default_branch="Main")
+		rule = frappe._dict(enabled=True, require_payment_before_first_consultation=True, registration_item="REG-ITEM", registration_fee=75, enforce_cost_center=False)
+		with registration_consultation_context(consultation, patient, rule, first=False, paid=False):
+			self.assertIsNone(billing_core.get_registration_charge_payload_for_consultation(consultation, make_session(charges=[])))
+
+	def test_invoice_hook_skips_refresh_during_billing_core_sync(self):
+		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+		frappe.flags.vetedge_billing_core_syncing = True
+		try:
+			with (
+				patch.object(billing_core, "is_billing_sessions_enabled", return_value=True),
+				patch.object(billing_core, "get_sessions_for_invoice") as get_sessions,
+			):
+				billing_core.update_billing_sessions_from_invoice(frappe._dict(name="SINV-001"))
+			get_sessions.assert_not_called()
+		finally:
+			frappe.flags.vetedge_billing_core_syncing = previous
+
 	def test_billing_core_does_not_introduce_ignore_permissions(self):
 		from pathlib import Path
 
 		source = Path(billing_core.__file__).read_text()
 		self.assertNotIn("ignore_permissions=True", source)
+
+
+class registration_consultation_context:
+	def __init__(self, consultation, patient, rule, first=True, paid=False):
+		self.consultation = consultation
+		self.patient = patient
+		self.rule = rule
+		self.first = first
+		self.paid = paid
+		self.patches = []
+
+	def __enter__(self):
+		def get_doc(doctype, name=None):
+			if doctype == "Veterinary Patient":
+				return self.patient
+			if doctype == "Veterinary Consultation":
+				return self.consultation
+			return frappe._dict(doctype=doctype, name=name)
+
+		self.patches = [
+			patch.object(billing_core.frappe, "get_doc", side_effect=get_doc),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "_get_item_income_account", return_value=None),
+			patch.object(billing_core, "is_patient_registration_fee_paid", return_value=self.paid),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=self.rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=self.first),
+			patch.object(
+				billing_core.frappe.db,
+				"get_value",
+				return_value=frappe._dict(item_name="Registration", stock_uom="Nos", standard_rate=0),
+			),
+		]
+		for patcher in self.patches:
+			patcher.start()
+		return self
+
+	def __exit__(self, exc_type, exc, tb):
+		for patcher in reversed(self.patches):
+			patcher.stop()
+		return False
 
 
 class billing_core_context:

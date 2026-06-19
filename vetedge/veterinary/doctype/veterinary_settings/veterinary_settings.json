@@ -236,6 +236,12 @@
    "label": "Require Invoice Before Service"
   },
   {
+   "default": "1",
+   "fieldname": "sync_related_billable_sources_to_session",
+   "fieldtype": "Check",
+   "label": "Sync Related Billable Sources to Session"
+  },
+  {
    "collapsible": 1,
    "depends_on": "eval:doc.enable_registration_billing",
    "fieldname": "branch_registration_rules_section",

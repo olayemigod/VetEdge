@@ -27,6 +27,16 @@ PAYMENT_GATE_ALIASES = {
 }
 PENDING_STATUSES = {"Pending", "Draft Invoiced"}
 FINAL_INVOICE_STATUSES = {"Submitted Invoiced", "Paid", "Cancelled", "Skipped"}
+ACTIVE_SESSION_STATUSES = {"Draft", "Active", "Partially Paid"}
+SUPPORTED_BILLING_SOURCE_DOCTYPES = {
+	"Veterinary Consultation",
+	"Veterinary Lab Order",
+	"Veterinary Hospitalisation",
+	"Veterinary Vaccination Record",
+	"Veterinary Patient",
+	"Pet Grooming Session",
+	"Pet Boarding Booking",
+}
 
 
 def is_billing_sessions_enabled() -> bool:
@@ -38,6 +48,20 @@ def is_billing_sessions_enabled() -> bool:
 	if not meta.has_field("enable_billing_sessions"):
 		return True
 	return bool(cint(frappe.get_single("Veterinary Settings").get("enable_billing_sessions")))
+
+
+
+def should_sync_related_billable_sources_to_session() -> bool:
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return True
+	meta = frappe.get_meta("Veterinary Settings")
+	if not meta.has_field("sync_related_billable_sources_to_session"):
+		return True
+	return bool(cint(frappe.get_single("Veterinary Settings").get("sync_related_billable_sources_to_session")))
+
+
+def get_active_session_status_filter():
+	return ["in", sorted(ACTIVE_SESSION_STATUSES)]
 
 
 def normalize_payment_gate_mode(mode: str | None = None) -> str:
@@ -72,7 +96,29 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 	if context != (source_doctype, source_name):
 		rows = frappe.get_all(
 			BILLING_SESSION_DOCTYPE,
-			filters={"source_context_doctype": context[0], "source_context_name": context[1], "status": ["!=", "Cancelled"]},
+			filters={"source_context_doctype": context[0], "source_context_name": context[1], "status": get_active_session_status_filter()},
+			fields=["name"],
+			order_by="modified desc",
+			limit=1,
+		)
+		if rows:
+			return frappe.get_doc(BILLING_SESSION_DOCTYPE, rows[0].name)
+
+	identity = get_source_billing_identity(source_doctype, source_name)
+	consultation = identity.get("consultation") or find_active_consultation_for_identity(identity)
+	if consultation and source_doctype != "Veterinary Consultation":
+		consultation_session = resolve_billing_session("Veterinary Consultation", consultation)
+		if consultation_session and consultation_session.get("status") in ACTIVE_SESSION_STATUSES:
+			return consultation_session
+
+	if identity.get("patient") and identity.get("customer"):
+		rows = frappe.get_all(
+			BILLING_SESSION_DOCTYPE,
+			filters={
+				"animal": identity.get("patient"),
+				"customer": identity.get("customer"),
+				"status": get_active_session_status_filter(),
+			},
 			fields=["name"],
 			order_by="modified desc",
 			limit=1,
@@ -99,10 +145,11 @@ def get_or_create_billing_session(
 		return update_session_context(existing, customer, animal, company, branch, payment_gate_mode)
 
 	source_doc = frappe.get_doc(source_doctype, source_name)
-	customer = customer or source_doc.get("primary_owner") or source_doc.get("customer")
-	animal = animal or source_doc.get("patient") or source_doc.get("animal")
-	branch = branch or source_doc.get("service_branch") or source_doc.get("branch")
-	company = company or source_doc.get("company") or get_default_company()
+	identity = get_source_billing_identity(source_doctype, source_name, source_doc)
+	customer = customer or identity.get("customer") or source_doc.get("primary_owner") or source_doc.get("customer")
+	animal = animal or identity.get("patient") or source_doc.get("patient") or source_doc.get("animal")
+	branch = branch or identity.get("branch") or source_doc.get("service_branch") or source_doc.get("branch")
+	company = company or identity.get("company") or source_doc.get("company") or get_default_company()
 	if not customer:
 		frappe.throw("Customer is required before creating a Billing Session.", frappe.ValidationError)
 
@@ -173,14 +220,21 @@ def sync_session_charges_to_invoice(session):
 		session.save()
 		return {"session": session.name, "invoice": session.get("current_draft_invoice"), "added_count": 0, "updated_count": 0}
 
-	invoice, created = create_or_update_draft_invoice_for_session(session)
+	invoice, created = create_or_update_draft_invoice_for_session(session, pending)
+	if not invoice:
+		refresh_billing_session_totals(session)
+		session.save()
+		return {"session": session.name, "invoice": None, "created": False, "added_count": 0, "updated_count": 0}
 	item_index = get_invoice_item_charge_index(invoice)
 	added = updated = 0
 	for charge in pending:
 		key = charge.get("charge_key")
 		if key in item_index:
 			update_invoice_item_from_charge(item_index[key], charge)
-			updated += 1
+			if created:
+				added += 1
+			else:
+				updated += 1
 		else:
 			item_index[key] = append_invoice_item_from_charge(invoice, charge)
 			added += 1
@@ -188,16 +242,17 @@ def sync_session_charges_to_invoice(session):
 		charge.invoice_item_name = item_index[key].get("name")
 		charge.billing_status = "Draft Invoiced"
 
-	invoice.save()
-	session.current_draft_invoice = invoice.name
-	session.latest_invoice = invoice.name
-	refresh_billing_session_totals(session)
-	session.save()
+	_prepare_sales_invoice_totals(invoice)
+	run_with_billing_core_sync_flag(invoice.save)
+	session = update_session_after_invoice_sync(session.name, invoice.name, [row.get("charge_key") for row in pending])
 	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated}
 
 
-def create_or_update_draft_invoice_for_session(session):
+def create_or_update_draft_invoice_for_session(session, pending_charges=None):
 	session = ensure_session_doc(session)
+	pending_charges = list(pending_charges) if pending_charges is not None else [
+		row for row in session.get("charges") or [] if row.get("billing_status") in PENDING_STATUSES
+	]
 	invoice_name = session.get("current_draft_invoice")
 	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
 		invoice = frappe.get_doc("Sales Invoice", invoice_name)
@@ -206,6 +261,9 @@ def create_or_update_draft_invoice_for_session(session):
 			return invoice, False
 		session.current_draft_invoice = None
 
+	if not pending_charges:
+		return None, False
+
 	invoice = frappe.get_doc(
 		{
 			"doctype": "Sales Invoice",
@@ -213,12 +271,16 @@ def create_or_update_draft_invoice_for_session(session):
 			"company": session.company or get_default_company(),
 			"posting_date": nowdate(),
 			"due_date": nowdate(),
+			"update_stock": 0,
 			"items": [],
 			"remarks": f"VetEdge billing session {session.name}",
 		}
 	)
 	apply_invoice_session_defaults(invoice, session)
-	invoice.insert()
+	for charge in pending_charges:
+		append_invoice_item_from_charge(invoice, charge)
+	_prepare_sales_invoice_totals(invoice)
+	run_with_billing_core_sync_flag(invoice.insert)
 	session.current_draft_invoice = invoice.name
 	session.latest_invoice = invoice.name
 	return invoice, True
@@ -302,13 +364,154 @@ def cancel_billing_session(session):
 
 def sync_source_to_billing_session(source_doctype: str, source_name: str):
 	session = get_or_create_billing_session(source_doctype, source_name, payment_gate_mode=get_source_payment_gate_mode(source_doctype))
+	if should_sync_related_billable_sources_to_session():
+		sync_all_related_sources_to_billing_session(session, source_doctype, source_name)
+	else:
+		sync_single_source_to_billing_session(session, source_doctype, source_name)
+	result = sync_session_charges_to_invoice(session.name)
+	summary = get_billing_session_summary(result.get("session") or session.name)
+	update_all_session_source_compatibility_fields(summary)
+	result["session"] = summary.get("name")
+	return result
+
+
+def sync_single_source_to_billing_session(session, source_doctype: str, source_name: str):
+	session = ensure_session_doc(session)
 	for payload in get_source_charge_payloads(source_doctype, source_name, session):
 		add_or_update_session_charge(session, payload)
 	session.save()
-	result = sync_session_charges_to_invoice(session)
-	summary = get_billing_session_summary(session)
-	update_all_session_source_compatibility_fields(summary)
-	return result
+	return session
+
+
+def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=None, trigger_source_name=None):
+	session = ensure_session_doc(session)
+	for source_doctype, source_name in find_related_billable_sources_for_session(session, trigger_source_doctype, trigger_source_name):
+		if source_doctype and source_name:
+			for payload in get_source_charge_payloads(source_doctype, source_name, session):
+				add_or_update_session_charge(session, payload)
+	session.save()
+	return session
+
+
+
+def run_with_billing_core_sync_flag(fn):
+	flags = getattr(frappe, "flags", None)
+	if flags is None:
+		return fn()
+	previous = getattr(flags, "vetedge_billing_core_syncing", False)
+	flags.vetedge_billing_core_syncing = True
+	try:
+		return fn()
+	finally:
+		flags.vetedge_billing_core_syncing = previous
+
+
+def safe_refresh_billing_session(session_name: str, reconcile: bool = False):
+	if not session_name or not frappe.db.exists(BILLING_SESSION_DOCTYPE, session_name):
+		return None
+	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+	if reconcile:
+		reconcile_session_charge_statuses(session)
+	refresh_billing_session_totals(session)
+	session.save()
+	return session
+
+
+def update_session_after_invoice_sync(session_name: str, invoice_name: str, charge_keys: list[str]):
+	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+	for row in session.get("charges") or []:
+		if row.get("charge_key") in charge_keys:
+			row.invoice = invoice_name
+			row.billing_status = "Draft Invoiced"
+	session.current_draft_invoice = invoice_name
+	session.latest_invoice = invoice_name
+	refresh_billing_session_totals(session)
+	session.save()
+	return session
+
+
+def find_related_billable_sources_for_session(session, trigger_source_doctype=None, trigger_source_name=None) -> list[tuple[str, str]]:
+	session = ensure_session_doc(session)
+	sources = OrderedDict()
+
+	def add(doctype, name):
+		if doctype in SUPPORTED_BILLING_SOURCE_DOCTYPES and name:
+			sources[(doctype, name)] = None
+
+	add(trigger_source_doctype, trigger_source_name)
+	add(session.get("created_from_doctype"), session.get("created_from_name"))
+	if session.get("source_context_doctype") in SUPPORTED_BILLING_SOURCE_DOCTYPES:
+		add(session.get("source_context_doctype"), session.get("source_context_name"))
+
+	identity = get_session_billing_identity(session, trigger_source_doctype, trigger_source_name)
+	consultation = identity.get("consultation") or find_active_consultation_for_identity(identity)
+	patient = identity.get("patient") or session.get("animal")
+	customer = identity.get("customer") or session.get("customer")
+
+	if trigger_source_doctype == "Veterinary Patient" and trigger_source_name:
+		add("Veterinary Patient", trigger_source_name)
+	if consultation:
+		add("Veterinary Consultation", consultation)
+		add_linked_sources("Veterinary Lab Order", "consultation", consultation, add)
+		add_linked_sources("Veterinary Vaccination Record", "linked_consultation", consultation, add)
+		add_linked_sources("Veterinary Hospitalisation", "linked_consultation", consultation, add)
+
+	# Grooming and boarding are not visit-scoped in current metadata; only include them when directly triggered/created.
+	return list(sources.keys())
+
+
+def add_linked_sources(doctype: str, fieldname: str, value: str, add):
+	if not value or not frappe.db.exists("DocType", doctype) or not doctype_has_field(doctype, fieldname):
+		return
+	filters = {fieldname: value}
+	if doctype_has_field(doctype, "status"):
+		filters["status"] = ["!=", "Cancelled"]
+	for row in frappe.get_all(doctype, filters=filters, fields=["name"]):
+		add(doctype, row.name)
+
+
+def get_session_billing_identity(session, trigger_source_doctype=None, trigger_source_name=None) -> dict:
+	identity = frappe._dict(patient=session.get("animal"), customer=session.get("customer"), branch=session.get("branch"), company=session.get("company"))
+	if trigger_source_doctype and trigger_source_name:
+		identity.update(get_source_billing_identity(trigger_source_doctype, trigger_source_name))
+	return identity
+
+
+def get_source_billing_identity(source_doctype: str, source_name: str, doc=None) -> dict:
+	if not source_doctype or not source_name:
+		return frappe._dict()
+	doc = doc or frappe.get_doc(source_doctype, source_name)
+	patient = doc.get("patient") or doc.get("animal") or (doc.name if source_doctype == "Veterinary Patient" else None)
+	customer = doc.get("primary_owner") or doc.get("customer")
+	return frappe._dict(
+		patient=patient,
+		customer=customer,
+		branch=doc.get("service_branch") or doc.get("branch") or doc.get("default_branch"),
+		company=doc.get("company"),
+		consultation=doc.get("consultation") or doc.get("linked_consultation") or (doc.name if source_doctype == "Veterinary Consultation" else None),
+	)
+
+
+def find_active_consultation_for_identity(identity: dict | None) -> str | None:
+	identity = identity or {}
+	patient = identity.get("patient")
+	customer = identity.get("customer")
+	if not patient or not frappe.db.exists("DocType", "Veterinary Consultation"):
+		return None
+	filters = {"patient": patient}
+	if customer and doctype_has_field("Veterinary Consultation", "primary_owner"):
+		filters["primary_owner"] = customer
+	if doctype_has_field("Veterinary Consultation", "status"):
+		filters["status"] = ["not in", ["Cancelled", "Completed"]]
+	rows = frappe.get_all("Veterinary Consultation", filters=filters, fields=["name"], order_by="creation asc", limit=1)
+	return rows[0].name if rows else None
+
+
+def doctype_has_field(doctype: str, fieldname: str) -> bool:
+	try:
+		return bool(frappe.get_meta(doctype).has_field(fieldname))
+	except Exception:
+		return False
 
 
 def get_source_charge_payloads(source_doctype: str, source_name: str, session=None) -> list[dict]:
@@ -403,17 +606,14 @@ def refresh_billing_session_totals(session):
 
 
 def update_billing_sessions_from_invoice(doc, method: str | None = None) -> None:
-	if not is_billing_sessions_enabled():
+	if not is_billing_sessions_enabled() or getattr(frappe.flags, "vetedge_billing_core_syncing", False):
 		return
 	for session_name in get_sessions_for_invoice(doc.name):
-		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
-		reconcile_session_charge_statuses(session)
-		refresh_billing_session_totals(session)
-		session.save()
+		safe_refresh_billing_session(session_name, reconcile=True)
 
 
 def update_billing_sessions_from_payment_entry(doc, method: str | None = None) -> None:
-	if not is_billing_sessions_enabled():
+	if not is_billing_sessions_enabled() or getattr(frappe.flags, "vetedge_billing_core_syncing", False):
 		return
 	invoice_names = [
 		row.reference_name
@@ -422,9 +622,7 @@ def update_billing_sessions_from_payment_entry(doc, method: str | None = None) -
 	]
 	for invoice_name in invoice_names:
 		for session_name in get_sessions_for_invoice(invoice_name):
-			session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
-			refresh_billing_session_totals(session)
-			session.save()
+			safe_refresh_billing_session(session_name)
 
 
 def get_sessions_for_invoice(invoice_name: str) -> list[str]:
@@ -498,6 +696,9 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 	payloads = []
 	if settings.consultation_item:
 		payloads.append(build_source_charge(doc, "Consultation Fee", doc.name, settings.consultation_item, 1, None, None, cost_center))
+	registration_payload = get_registration_charge_payload_for_consultation(doc, session)
+	if registration_payload:
+		payloads.append(registration_payload)
 	if settings.enable_treatment_billing:
 		for row in doc.get("planned_treatments") or []:
 			if row.get("item"):
@@ -505,6 +706,84 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 	payloads.extend(get_lab_order_charge_payloads_for_consultation(doc.name, cost_center))
 	payloads.extend(get_vaccination_charge_payloads_for_consultation(doc.name, cost_center))
 	return payloads
+
+
+
+def should_include_registration_charge_for_consultation(consultation_doc, session) -> bool:
+	patient = consultation_doc.get("patient")
+	if not patient:
+		return False
+	try:
+		from vetedge.services.registration_billing import get_registration_rule, is_first_consultation_for_patient
+	except Exception:
+		return False
+
+	branch = consultation_doc.get("service_branch") or frappe.db.get_value("Veterinary Patient", patient, "default_branch")
+	rule = get_registration_rule(branch)
+	if not rule.enabled or not rule.require_payment_before_first_consultation:
+		return False
+	if not is_first_consultation_for_patient(patient, current_consultation=consultation_doc.name):
+		return False
+	if is_patient_registration_fee_paid(patient, consultation_doc.get("primary_owner")):
+		return False
+	charge_key = get_registration_charge_key(patient)
+	if session and get_session_charge(ensure_session_doc(session), charge_key):
+		return False
+	return True
+
+
+def get_registration_charge_payload_for_consultation(consultation_doc, session):
+	if not should_include_registration_charge_for_consultation(consultation_doc, session):
+		return None
+	from vetedge.services.registration_billing import get_registration_rule
+
+	patient = frappe.get_doc("Veterinary Patient", consultation_doc.patient)
+	branch = consultation_doc.get("service_branch") or patient.get("default_branch")
+	rule = get_registration_rule(branch)
+	if not rule.registration_item:
+		return None
+	cost_center = get_billing_cost_center(branch, required=rule.enforce_cost_center)
+	payload = build_source_charge(
+		patient,
+		"Registration Fee",
+		patient.name,
+		rule.registration_item,
+		1,
+		None,
+		rule.registration_fee,
+		cost_center,
+		description="Registration Fee",
+	)
+	payload["charge_key"] = get_registration_charge_key(patient.name)
+	payload["source_detail_name"] = "Registration Fee"
+	payload["branch"] = branch
+	return payload
+
+
+def get_registration_charge_key(patient: str) -> str:
+	return f"Veterinary Patient:{patient}:Registration Fee"
+
+
+def is_patient_registration_fee_paid(patient, customer=None) -> bool:
+	if not patient or not frappe.db.exists("Veterinary Patient", patient):
+		return False
+	patient_doc = frappe.db.get_value(
+		"Veterinary Patient",
+		patient,
+		["primary_owner", "registration_status", "registration_invoice"],
+		as_dict=True,
+	)
+	if not patient_doc:
+		return False
+	if customer and patient_doc.get("primary_owner") and patient_doc.get("primary_owner") != customer:
+		return False
+	if patient_doc.get("registration_status") == "Registration Paid":
+		return True
+	invoice_name = patient_doc.get("registration_invoice")
+	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+		return False
+	invoice = frappe.db.get_value("Sales Invoice", invoice_name, ["docstatus", "status", "outstanding_amount"], as_dict=True)
+	return bool(invoice and cint(invoice.get("docstatus")) == 1 and (invoice.get("status") == "Paid" or flt(invoice.get("outstanding_amount")) <= 0))
 
 
 def get_lab_order_charge_payloads(lab_order_name: str, session=None) -> list[dict]:
@@ -576,7 +855,10 @@ def get_patient_registration_charge_payloads(patient_name: str, session=None) ->
 		return []
 	patient = frappe.get_doc("Veterinary Patient", patient_name)
 	cost_center = get_billing_cost_center(patient.get("default_branch"), required=True)
-	return [build_source_charge(patient, "Registration", patient.name, settings.default_registration_item, 1, None, settings.get("default_registration_fee"), cost_center)]
+	payload = build_source_charge(patient, "Registration Fee", patient.name, settings.default_registration_item, 1, None, settings.get("default_registration_fee"), cost_center, description="Registration Fee")
+	payload["charge_key"] = get_registration_charge_key(patient.name)
+	payload["source_detail_name"] = "Registration Fee"
+	return [payload]
 
 
 def get_grooming_charge_payloads(session_name: str, session=None) -> list[dict]:
@@ -668,7 +950,8 @@ def get_boarding_charge_detail_key(doc) -> str:
 def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, source_detail_name=None, notes=None):
 	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom", "standard_rate"], as_dict=True) or {}
 	qty = flt(qty) or 1
-	rate = flt(rate) if rate not in (None, "") else flt(item.get("standard_rate"))
+	rate = flt(rate if rate is not None else item.get("standard_rate"))
+	amount = flt(qty * rate)
 	company = get_source_charge_company(doc)
 	return {
 		"source_doctype": doc.doctype,
@@ -681,7 +964,7 @@ def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, ra
 		"qty": qty,
 		"uom": uom or item.get("stock_uom"),
 		"rate": rate,
-		"amount": qty * rate,
+		"amount": amount,
 		"income_account": _get_item_income_account(item_code, company),
 		"cost_center": cost_center,
 		"branch": doc.get("service_branch") or doc.get("branch") or doc.get("default_branch"),
@@ -690,29 +973,58 @@ def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, ra
 
 
 def get_source_charge_company(doc) -> str | None:
-	return doc.get("company") or get_default_company()
+	if doc.get("company"):
+		return doc.get("company")
+	try:
+		return get_default_company()
+	except Exception:
+		return None
+
+
+def _doctype_has_field(doctype, fieldname):
+	try:
+		meta = frappe.get_meta(doctype)
+		return bool(meta.get_field(fieldname))
+	except Exception:
+		return False
 
 
 def _get_item_income_account(item_code, company=None):
 	if not item_code:
 		return None
 
-	filters = {"parent": item_code}
-	if company:
-		filters["company"] = company
+	if _doctype_has_field("Item Default", "income_account"):
+		if company:
+			income_account = frappe.db.get_value(
+				"Item Default",
+				{"parent": item_code, "company": company},
+				"income_account",
+			)
+			if income_account:
+				return income_account
 
-	income_account = frappe.db.get_value("Item Default", filters, "income_account")
-	if income_account:
-		return income_account
-
-	item_group = frappe.db.get_value("Item", item_code, "item_group")
-	if item_group:
-		income_account = frappe.db.get_value("Item Group", item_group, "income_account")
+		income_account = frappe.db.get_value(
+			"Item Default",
+			{"parent": item_code},
+			"income_account",
+		)
 		if income_account:
 			return income_account
 
-	if company:
-		income_account = frappe.db.get_value("Company", company, "default_income_account")
+	item_group = frappe.db.get_value("Item", item_code, "item_group")
+	if item_group:
+		for fieldname in ("income_account", "default_income_account"):
+			if _doctype_has_field("Item Group", fieldname):
+				income_account = frappe.db.get_value("Item Group", item_group, fieldname)
+				if income_account:
+					return income_account
+
+	if company and _doctype_has_field("Company", "default_income_account"):
+		income_account = frappe.db.get_value(
+			"Company",
+			company,
+			"default_income_account",
+		)
 		if income_account:
 			return income_account
 
@@ -722,7 +1034,11 @@ def _get_item_income_account(item_code, company=None):
 def normalize_charge_payload(charge, charge_key, session):
 	qty = flt(charge.get("qty")) or 1
 	rate = flt(charge.get("rate"))
-	amount = flt(charge.get("amount")) or qty * rate
+	amount = flt(charge.get("amount") if charge.get("amount") is not None else qty * rate)
+	if not rate and amount and qty:
+		rate = flt(amount / qty)
+	if not amount and rate:
+		amount = flt(qty * rate)
 	return {
 		"source_doctype": charge.get("source_doctype"),
 		"source_name": charge.get("source_name"),
@@ -779,17 +1095,53 @@ def update_invoice_item_from_charge(row, charge) -> None:
 
 def build_invoice_item_from_charge(charge) -> dict:
 	description = charge.get("description") or charge.get("item_name") or charge.get("item_code")
+	qty, rate, amount = get_charge_invoice_values(charge)
 	return {
 		"item_code": charge.item_code,
 		"item_name": charge.get("item_name"),
 		"description": f"{description}\nVetEdge billing charge: {charge.charge_key}",
-		"qty": flt(charge.qty) or 1,
+		"qty": qty,
 		"uom": charge.get("uom"),
-		"rate": flt(charge.rate),
-		"amount": flt(charge.amount),
+		"rate": rate,
+		"amount": amount,
 		"income_account": charge.get("income_account"),
 		"cost_center": charge.get("cost_center"),
 	}
+
+
+def get_charge_invoice_values(charge) -> tuple[float, float, float]:
+	qty = flt(charge.get("qty")) or 1
+	rate = flt(charge.get("rate"))
+	amount = flt(charge.get("amount") if charge.get("amount") is not None else qty * rate)
+	if not rate and amount and qty:
+		rate = flt(amount / qty)
+	if not amount and rate:
+		amount = flt(qty * rate)
+	return qty, rate, amount
+
+
+def _prepare_sales_invoice_totals(invoice):
+	set_missing_values = getattr(invoice, "set_missing_values", None)
+	if callable(set_missing_values):
+		set_missing_values()
+	calculate_taxes_and_totals = getattr(invoice, "calculate_taxes_and_totals", None)
+	if callable(calculate_taxes_and_totals):
+		calculate_taxes_and_totals()
+	numeric_fields = (
+		"total",
+		"net_total",
+		"base_total",
+		"base_net_total",
+		"grand_total",
+		"base_grand_total",
+		"rounded_total",
+		"base_rounded_total",
+		"outstanding_amount",
+	)
+	for fieldname in numeric_fields:
+		if getattr(invoice, fieldname, None) is None:
+			setattr(invoice, fieldname, 0)
+	return invoice
 
 
 def get_invoice_item_charge_index(invoice) -> dict[str, object]:

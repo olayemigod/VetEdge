@@ -188,6 +188,13 @@ def get_rule_value(rule, fieldname: str, fallback):
 
 
 def create_registration_invoice(doc, rule: RegistrationBillingRule):
+
+	if doc.get("name") and use_billing_core_for_registration():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session("Veterinary Patient", doc.name)
+		invoice_name = result.get("invoice")
+		return frappe.get_doc("Sales Invoice", invoice_name) if invoice_name else frappe._dict(name=None)
 	cost_center = get_billing_cost_center(doc.default_branch, required=rule.enforce_cost_center)
 	invoice = frappe.get_doc(
 		{
@@ -217,6 +224,15 @@ def create_registration_invoice(doc, rule: RegistrationBillingRule):
 	return invoice
 
 
+def use_billing_core_for_registration() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
+
+
 def validate_registration_payment_before_first_consultation(
 	patient: str,
 	current_consultation: str | None = None,
@@ -240,9 +256,31 @@ def validate_registration_payment_before_first_consultation(
 	if not is_first_consultation_for_patient(patient, current_consultation=current_consultation):
 		return
 
+	if use_billing_core_for_registration():
+		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
+
+		if not resolve_billing_session("Veterinary Patient", patient_doc.name):
+			sync_source_to_billing_session("Veterinary Patient", patient_doc.name)
+		session = resolve_billing_session("Veterinary Patient", patient_doc.name)
+		status = get_payment_gate_status(session) if session else {"can_proceed": False}
+		if status.get("can_proceed"):
+			return
+		frappe.throw(
+			_(status.get("message") or "A registration invoice must be created and paid before the first consultation can proceed."),
+			frappe.ValidationError,
+		)
+
 	active_invoice_name = get_active_registration_invoice_name(patient_doc.name)
 	if active_invoice_name:
-		invoice = frappe.get_doc("Sales Invoice", active_invoice_name)
+		try:
+			invoice = frappe.get_doc("Sales Invoice", active_invoice_name)
+		except Exception:
+			frappe.throw(
+				_("Registration invoice {0} must be paid before the first consultation can proceed.").format(
+					active_invoice_name
+				),
+				frappe.ValidationError,
+			)
 		update_patient_registration_payment_status(patient_doc.name, invoice)
 		if is_invoice_paid(invoice):
 			return

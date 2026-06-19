@@ -92,6 +92,21 @@ def create_consultation_invoice(consultation: str, update_status: int = 1) -> di
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
 	settings = get_consultation_billing_settings()
 	validate_consultation_invoice_request(consultation_doc, settings)
+	if use_billing_core_for_source("Veterinary Consultation"):
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session("Veterinary Consultation", consultation_doc.name)
+		invoice_name = result.get("invoice")
+		if invoice_name:
+			update_consultation_after_billing_core_sync(consultation_doc, invoice_name, settings, update_status=update_status)
+		return {
+			"consultation": consultation_doc.name,
+			"invoice": invoice_name,
+			"is_draft_update": not bool(result.get("created")),
+			"status": frappe.db.get_value("Veterinary Consultation", consultation_doc.name, "status") or consultation_doc.status,
+			"billing_session": result.get("session"),
+		}
+
 
 	cost_center = get_billing_cost_center(consultation_doc.service_branch, required=True)
 	draft_invoice_name = get_active_consultation_invoice_name(consultation_doc)
@@ -154,6 +169,33 @@ def get_invoice_access_summary(invoice: str) -> dict:
 		**invoice_row,
 		"can_open_full_form": bool(diagnostic.get("can_open_full_form")),
 	}
+
+
+def use_billing_core_for_source(source_doctype: str) -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
+
+
+def update_consultation_after_billing_core_sync(doc, invoice_name: str, settings: ConsultationBillingSettings, update_status: int = 1) -> None:
+	invoice = frappe.get_doc("Sales Invoice", invoice_name)
+	doc = get_latest_consultation_doc(doc)
+	values = {
+		"linked_invoice": invoice.name,
+		"payment_status": get_invoice_payment_status(invoice),
+	}
+	status = get_consultation_status_after_invoice_created(doc, settings) if cint(update_status) else None
+	if status and doc.status not in {"Completed", "Cancelled"}:
+		values["status"] = status
+	for fieldname, value in values.items():
+		setattr(doc, fieldname, value)
+	if getattr(doc, "save", None):
+		doc.save()
+	else:
+		frappe.db.set_value("Veterinary Consultation", doc.name, values, update_modified=False)
 
 
 @frappe.whitelist()

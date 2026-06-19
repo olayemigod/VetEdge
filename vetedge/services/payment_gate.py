@@ -137,6 +137,21 @@ def assert_consultation_can_proceed(doc, target_status: str | None = None) -> No
 	if target_status not in CONSULTATION_PROCEED_STATUSES:
 		return
 
+	if use_billing_core_for_payment_gate():
+		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
+
+		if is_billable_consultation(doc) and not resolve_billing_session("Veterinary Consultation", doc.name):
+			sync_source_to_billing_session("Veterinary Consultation", doc.name)
+		session = resolve_billing_session("Veterinary Consultation", doc.name)
+		if not session:
+			return
+		status = get_payment_gate_status(session)
+		if status.get("can_proceed"):
+			if status.get("gate") == NO_PAYMENT_GATE:
+				notify_no_payment_gate_warning([invoice.get("name") for invoice in status.get("invoices", []) if invoice.get("name")])
+			return
+		frappe.throw(status.get("message") or FULL_PAYMENT_REQUIRED_MESSAGE, frappe.ValidationError)
+
 	invoice_names = ensure_billable_invoice_exists(doc)
 	if not invoice_names:
 		return
@@ -155,6 +170,17 @@ def assert_consultation_can_proceed(doc, target_status: str | None = None) -> No
 
 		if not state["is_fully_paid"]:
 			frappe.throw(FULL_PAYMENT_REQUIRED_MESSAGE, frappe.ValidationError)
+
+
+
+
+def use_billing_core_for_payment_gate() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
 
 
 def is_billable_consultation(doc) -> bool:

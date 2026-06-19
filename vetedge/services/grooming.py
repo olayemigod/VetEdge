@@ -411,6 +411,11 @@ def set_grooming_invoice_links(session_doc, invoice_name: str | None) -> None:
 def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 	if not is_grooming_billing_enabled():
 		return None, False
+	if use_billing_core_for_grooming():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		result = sync_source_to_billing_session(GROOMING_SESSION_DOCTYPE, session_doc.name)
+		return result.get("invoice"), bool(result.get("created"))
 	item_code, default_rate = get_grooming_service_billing_defaults(session_doc.grooming_service)
 	if not item_code:
 		frappe.throw("Grooming Service must have a Default Item before billing can be created.", frappe.ValidationError)
@@ -483,6 +488,14 @@ def emit_grooming_appointment_event(doc, event: str, previous_status: str | None
 		},
 	)
 
+
+def use_billing_core_for_grooming() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled
+
+		return is_billing_sessions_enabled()
+	except Exception:
+		return False
 
 
 def emit_grooming_session_event(doc, event: str, previous_status: str | None = None) -> dict:

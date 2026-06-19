@@ -523,6 +523,16 @@ def ensure_booking_transition_allowed(current_status: str, target_status: str) -
 def validate_boarding_payment_before_check_in(doc) -> None:
     if not boarding_requires_payment_before_check_in():
         return
+    if use_billing_core_for_boarding():
+        from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
+
+        if not resolve_billing_session(PET_BOARDING_BOOKING_DOCTYPE, doc.name):
+            sync_source_to_billing_session(PET_BOARDING_BOOKING_DOCTYPE, doc.name)
+        session = resolve_billing_session(PET_BOARDING_BOOKING_DOCTYPE, doc.name)
+        status = get_payment_gate_status(session) if session else {"can_proceed": False, "message": "Create and pay the boarding invoice before this booking can be checked in."}
+        if not status.get("can_proceed"):
+            frappe.throw(status.get("message") or "The boarding invoice must be fully paid before this booking can be checked in.", frappe.ValidationError)
+        return
     if not doc.linked_invoice or not is_active_sales_invoice(doc.linked_invoice):
         frappe.throw(
             "Create and pay the boarding invoice before this booking can be checked in.",
@@ -818,6 +828,16 @@ def build_boarding_adjustment_invoice_item(booking_doc, cost_center: str, delta_
 def create_boarding_invoice_doc(booking_doc) -> dict:
     if booking_doc.status == "Cancelled":
         frappe.throw("Cancelled boarding bookings cannot be billed.", frappe.ValidationError)
+    if use_billing_core_for_boarding():
+        from vetedge.services.billing_core import sync_source_to_billing_session
+
+        sync_boarding_charge_fields(booking_doc)
+        result = sync_source_to_billing_session(PET_BOARDING_BOOKING_DOCTYPE, booking_doc.name)
+        invoice_name = result.get("invoice")
+        if invoice_name:
+            booking_doc.linked_invoice = invoice_name
+            booking_doc.save()
+        return {"name": booking_doc.name, "invoice": invoice_name, "created": bool(result.get("created")), "adjustment": False, "billing_session": result.get("session")}
     charges = calculate_boarding_charges(booking_doc)
     booking_doc.daily_rate = charges["daily_rate"]
     booking_doc.billable_days = charges["billable_days"]
@@ -867,6 +887,14 @@ def reserve_boarding_booking(booking: str) -> dict:
     doc = frappe.get_doc(PET_BOARDING_BOOKING_DOCTYPE, booking)
     return reserve_boarding_booking_doc(doc)
 
+
+def use_billing_core_for_boarding() -> bool:
+    try:
+        from vetedge.services.billing_core import is_billing_sessions_enabled
+
+        return is_billing_sessions_enabled()
+    except Exception:
+        return False
 
 
 @frappe.whitelist()
