@@ -212,12 +212,13 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["billing_session"], "VBS-001")
 
 	def test_lab_order_invoice_api_uses_billing_core(self):
-		order = frappe._dict(doctype="Veterinary Lab Order", name="VLAB-001", linked_invoice=None)
+		order = frappe._dict(doctype="Veterinary Lab Order", name="VLAB-001", linked_invoice=None, primary_owner="CUST-001", service_branch="Main")
 		with (
 			patch.object(lab, "require_internal_user"),
 			patch.object(lab, "can_access_lab_order"),
 			patch.object(lab, "get_current_user", return_value="vet@example.com"),
 			patch.object(lab, "use_billing_core_for_lab_order", return_value=True),
+			patch.object(lab, "is_persisted_lab_order_for_billing_core", return_value=True),
 			patch.object(lab.frappe, "get_doc", return_value=order),
 			patch.object(lab.frappe.db, "set_value") as set_value,
 			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "session": "VBS-001", "created": True}) as sync,
@@ -369,6 +370,7 @@ class TestBillingCore(TestCase):
 
 		with (
 			patch.object(billing_core.frappe.db, "get_value", return_value=frappe._dict(item_name="Consultation", stock_uom="Nos")),
+			patch.object(billing_core, "_get_item_selling_rate", return_value=0),
 			patch.object(billing_core, "_get_item_income_account", return_value=None),
 		):
 			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", None, None, None, "CC-Main")
@@ -484,6 +486,70 @@ class TestBillingCore(TestCase):
 		with registration_consultation_context(consultation, patient, rule, first=False, paid=False):
 			self.assertIsNone(billing_core.get_registration_charge_payload_for_consultation(consultation, make_session(charges=[])))
 
+	def test_branch_price_list_item_price_is_used_for_source_charge(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", primary_owner="CUST-001", service_branch="Main")
+
+		with price_list_context(branch_price_list="Main Branch Services", item_prices={"Main Branch Services": 450}):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "Vet Treatment", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 450)
+		self.assertEqual(charge["amount"], 450)
+		self.assertEqual(charge["branch"], "Main")
+
+	def test_default_vetedge_price_list_is_used_when_branch_blank(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(vetedge_price_list="VetEdge Default", item_prices={"VetEdge Default": 225}):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 225)
+
+	def test_selling_settings_price_list_is_used_when_vetedge_default_blank(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(selling_settings_price_list="ERP Selling", item_prices={"ERP Selling": 180}):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 180)
+
+	def test_standard_rate_is_used_when_no_item_price_exists(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(item_standard_rate=95, item_prices={}):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 95)
+
+	def test_zero_rate_returned_when_no_item_price_or_standard_rate_exists(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(item_standard_rate=0, item_prices={}):
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 0)
+		self.assertEqual(charge["amount"], 0)
+
+	def test_explicit_source_rate_wins_over_price_list(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(branch_price_list="Main Branch Services", item_prices={"Main Branch Services": 450}):
+			charge = billing_core.build_source_charge(doc, "Treatment", "ROW-1", "CONS-ITEM", 2, "Nos", 125, "CC-Main")
+
+		self.assertEqual(charge["rate"], 125)
+		self.assertEqual(charge["amount"], 250)
+
+	def test_item_price_optional_fields_are_schema_safe(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", company="Company A", service_branch="Main")
+
+		with price_list_context(branch_price_list="Main Branch Services", item_prices={"Main Branch Services": 320}, optional_item_price_fields=False) as ctx:
+			charge = billing_core.build_source_charge(doc, "Consultation Fee", doc.name, "CONS-ITEM", 1, "Nos", None, "CC-Main")
+
+		self.assertEqual(charge["rate"], 320)
+		self.assertNotIn("selling", ctx.item_price_filters)
+		self.assertNotIn("uom", ctx.item_price_fields)
+		self.assertNotIn("valid_from", ctx.item_price_fields)
+		self.assertNotIn("valid_upto", ctx.item_price_fields)
+
 	def test_invoice_hook_skips_refresh_during_billing_core_sync(self):
 		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
 		frappe.flags.vetedge_billing_core_syncing = True
@@ -502,6 +568,103 @@ class TestBillingCore(TestCase):
 
 		source = Path(billing_core.__file__).read_text()
 		self.assertNotIn("ignore_permissions=True", source)
+
+
+class price_list_context:
+	def __init__(
+		self,
+		branch_price_list=None,
+		vetedge_price_list=None,
+		selling_settings_price_list=None,
+		item_prices=None,
+		item_standard_rate=0,
+		optional_item_price_fields=True,
+	):
+		self.branch_price_list = branch_price_list
+		self.vetedge_price_list = vetedge_price_list
+		self.selling_settings_price_list = selling_settings_price_list
+		self.item_prices = item_prices or {}
+		self.item_standard_rate = item_standard_rate
+		self.optional_item_price_fields = optional_item_price_fields
+		self.patches = []
+		self.item_price_filters = {}
+		self.item_price_fields = []
+
+	def __enter__(self):
+		def exists(doctype, name=None):
+			if doctype == "DocType":
+				return name in {"Branch", "Veterinary Settings", "Selling Settings", "Item Price", "Item Default", "Item Group", "Company"}
+			if doctype == "Price List":
+				return name == "Standard Selling"
+			return True
+
+		def get_field(fieldname):
+			base_fields = {"vetedge_price_list", "default_selling_price_list", "selling_price_list", "income_account"}
+			item_price_fields = {"selling", "uom", "valid_from", "valid_upto"} if self.optional_item_price_fields else set()
+			return frappe._dict(fieldname=fieldname) if fieldname in base_fields or fieldname in item_price_fields else None
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Item" and isinstance(fieldname, (list, tuple)):
+				self_fieldnames = set(fieldname)
+				if "income_account" in self_fieldnames:
+					raise AssertionError("Item.income_account must not be queried")
+				return frappe._dict(item_name=name, stock_uom="Nos", standard_rate=self.item_standard_rate)
+			if doctype == "Item" and fieldname == "standard_rate":
+				return self.item_standard_rate
+			if doctype == "Item" and fieldname == "item_group":
+				return "Services"
+			if doctype == "Branch":
+				self.assert_branch_field_safe(fieldname)
+				return self.branch_price_list
+			if doctype == "Item Default":
+				return None
+			return None
+
+		def get_single_value(doctype, fieldname):
+			if doctype == "Veterinary Settings" and fieldname == "default_selling_price_list":
+				return self.vetedge_price_list
+			if doctype == "Selling Settings" and fieldname == "selling_price_list":
+				return self.selling_settings_price_list
+			return None
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype != "Item Price":
+				return []
+			self.item_price_filters = dict(filters or {})
+			self.item_price_fields = list(fields or [])
+			price_list = self.item_price_filters.get("price_list")
+			rate = self.item_prices.get(price_list)
+			if rate is None:
+				return []
+			row = frappe._dict(name="IP-001", price_list_rate=rate)
+			if "uom" in self.item_price_fields:
+				row.uom = "Nos"
+			if "valid_from" in self.item_price_fields:
+				row.valid_from = "2026-01-01"
+			if "valid_upto" in self.item_price_fields:
+				row.valid_upto = None
+			return [row]
+
+		self.patches = [
+			patch.object(billing_core.frappe.db, "exists", side_effect=exists),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=get_value),
+			patch.object(billing_core.frappe.db, "get_single_value", side_effect=get_single_value),
+			patch.object(billing_core.frappe, "get_meta", return_value=frappe._dict(get_field=get_field)),
+			patch.object(billing_core.frappe, "get_all", side_effect=get_all),
+			patch.object(billing_core, "_get_item_income_account", return_value=None),
+		]
+		for patcher in self.patches:
+			patcher.start()
+		return self
+
+	def assert_branch_field_safe(self, fieldname):
+		if fieldname not in {"vetedge_price_list", "selling_price_list"}:
+			raise AssertionError(f"Unexpected Branch price list field query: {fieldname}")
+
+	def __exit__(self, exc_type, exc, tb):
+		for patcher in reversed(self.patches):
+			patcher.stop()
+		return False
 
 
 class registration_consultation_context:

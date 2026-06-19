@@ -22,6 +22,8 @@
   "column_break_billing_core",
   "allow_partial_payment_to_proceed",
   "require_invoice_before_service",
+  "default_selling_price_list",
+  "sync_related_billable_sources_to_session",
   "branch_registration_rules_section",
   "branch_registration_rules",
   "clinical_tab",
@@ -234,6 +236,14 @@
    "fieldname": "require_invoice_before_service",
    "fieldtype": "Check",
    "label": "Require Invoice Before Service"
+  },
+  {
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "description": "Fallback selling price list used by VetEdge Billing Core when the branch has no VetEdge Price List.",
+   "fieldname": "default_selling_price_list",
+   "fieldtype": "Link",
+   "label": "Default Selling Price List",
+   "options": "Price List"
   },
   {
    "default": "1",

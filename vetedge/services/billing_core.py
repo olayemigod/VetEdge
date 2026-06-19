@@ -950,9 +950,26 @@ def get_boarding_charge_detail_key(doc) -> str:
 def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, source_detail_name=None, notes=None):
 	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom", "standard_rate"], as_dict=True) or {}
 	qty = flt(qty) or 1
-	rate = flt(rate if rate is not None else item.get("standard_rate"))
-	amount = flt(qty * rate)
 	company = get_source_charge_company(doc)
+	customer = doc.get("primary_owner") or doc.get("customer")
+	branch = doc.get("service_branch") or doc.get("branch") or doc.get("default_branch")
+	resolved_uom = uom or item.get("stock_uom")
+	posting_date = doc.get("posting_date") or doc.get("transaction_date") or doc.get("consultation_date") or _safe_nowdate()
+	rate = flt(rate)
+	if rate <= 0:
+		rate = flt(
+			_get_item_selling_rate(
+				item_code,
+				company=company,
+				customer=customer,
+				branch=branch,
+				posting_date=posting_date,
+				uom=resolved_uom,
+			)
+		)
+	if rate <= 0:
+		rate = flt(item.get("standard_rate"))
+	amount = flt(qty * rate)
 	return {
 		"source_doctype": doc.doctype,
 		"source_name": doc.name,
@@ -962,12 +979,12 @@ def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, ra
 		"item_name": item.get("item_name") or item_code,
 		"description": description or source_type,
 		"qty": qty,
-		"uom": uom or item.get("stock_uom"),
+		"uom": resolved_uom,
 		"rate": rate,
 		"amount": amount,
 		"income_account": _get_item_income_account(item_code, company),
 		"cost_center": cost_center,
-		"branch": doc.get("service_branch") or doc.get("branch") or doc.get("default_branch"),
+		"branch": branch,
 		"notes": notes,
 	}
 
@@ -979,6 +996,82 @@ def get_source_charge_company(doc) -> str | None:
 		return get_default_company()
 	except Exception:
 		return None
+
+
+def _safe_nowdate():
+	try:
+		return nowdate()
+	except Exception:
+		return None
+
+
+def _get_branch_price_list(branch):
+	if not branch or not frappe.db.exists("DocType", "Branch"):
+		return None
+	for fieldname in ("vetedge_price_list", "selling_price_list"):
+		if _doctype_has_field("Branch", fieldname):
+			price_list = frappe.db.get_value("Branch", branch, fieldname)
+			if price_list:
+				return price_list
+	return None
+
+
+def _get_default_selling_price_list(company=None):
+	if frappe.db.exists("DocType", "Veterinary Settings") and _doctype_has_field("Veterinary Settings", "default_selling_price_list"):
+		price_list = frappe.db.get_single_value("Veterinary Settings", "default_selling_price_list")
+		if price_list:
+			return price_list
+	if frappe.db.exists("DocType", "Selling Settings") and _doctype_has_field("Selling Settings", "selling_price_list"):
+		price_list = frappe.db.get_single_value("Selling Settings", "selling_price_list")
+		if price_list:
+			return price_list
+	if frappe.db.exists("Price List", "Standard Selling"):
+		return "Standard Selling"
+	return None
+
+
+def _resolve_selling_price_list(company=None, customer=None, branch=None, source_doc=None, explicit_price_list=None):
+	if explicit_price_list:
+		return explicit_price_list
+	branch = branch or (source_doc.get("service_branch") or source_doc.get("branch") or source_doc.get("default_branch") if source_doc else None)
+	price_list = _get_branch_price_list(branch)
+	if price_list:
+		return price_list
+	return _get_default_selling_price_list(company=company)
+
+
+def _get_item_selling_rate(item_code, company=None, customer=None, branch=None, price_list=None, posting_date=None, uom=None):
+	if not item_code:
+		return 0
+	posting_date = posting_date or _safe_nowdate()
+	price_list = _resolve_selling_price_list(company=company, customer=customer, branch=branch, explicit_price_list=price_list)
+	if price_list and frappe.db.exists("DocType", "Item Price"):
+		filters = {"item_code": item_code, "price_list": price_list}
+		if _doctype_has_field("Item Price", "selling"):
+			filters["selling"] = 1
+		fields = ["name", "price_list_rate"]
+		for fieldname in ("uom", "valid_from", "valid_upto"):
+			if _doctype_has_field("Item Price", fieldname):
+				fields.append(fieldname)
+		order_by = "valid_from desc" if _doctype_has_field("Item Price", "valid_from") else "modified desc"
+		rows = frappe.get_all("Item Price", filters=filters, fields=fields, order_by=order_by)
+		valid_rows = []
+		for row in rows:
+			valid_from = row.get("valid_from")
+			valid_upto = row.get("valid_upto")
+			if valid_from and str(valid_from) > str(posting_date):
+				continue
+			if valid_upto and str(valid_upto) < str(posting_date):
+				continue
+			valid_rows.append(row)
+		if uom and _doctype_has_field("Item Price", "uom"):
+			exact = [row for row in valid_rows if row.get("uom") == uom]
+			if exact:
+				valid_rows = exact
+		if valid_rows:
+			return flt(valid_rows[0].get("price_list_rate"))
+	item = frappe.db.get_value("Item", item_code, "standard_rate")
+	return flt(item)
 
 
 def _doctype_has_field(doctype, fieldname):
