@@ -43,6 +43,20 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertIn("VetEdge Front Desk", link.get("display_depends_on", ""))
 		self.assertIn("Branch Manager", link.get("display_depends_on", ""))
 
+	def test_veterinary_hospitalisation_is_in_veterinary_records(self):
+		items = _load_sidebar()["items"]
+		labels = [item.get("label") for item in items]
+		hospitalisation_index = labels.index("Veterinary Hospitalisation")
+
+		self.assertGreater(hospitalisation_index, labels.index("Veterinary Consultation"))
+		self.assertLess(hospitalisation_index, labels.index("Veterinary Appointment"))
+
+		link = _links_by_label(items)["Veterinary Hospitalisation"]
+		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
+		self.assertEqual(link["link_type"], "DocType")
+		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
+		self.assertIn("Veterinary Nurse", link.get("display_depends_on", ""))
+
 	def test_veterinary_notification_item_is_admin_monitoring_link(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
@@ -65,6 +79,7 @@ class TestWorkspaceSidebar(TestCase):
 		]
 		counts = Counter(links)
 		for key in (
+			("Veterinary Hospitalisation", "Veterinary Hospitalisation", "DocType"),
 			("Veterinary Missed Appointment", "Veterinary Missed Appointment", "DocType"),
 			("Veterinary Notification Item", "Veterinary Notification Item", "DocType"),
 		):
