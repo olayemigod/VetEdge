@@ -4,6 +4,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 		set_location_help(frm);
 		set_activity_help(frm);
 		add_hospitalisation_action_buttons(frm);
+		add_activity_dialog_button(frm);
 		add_charge_sheet_action_buttons(frm);
 	},
 	status(frm) {
@@ -50,6 +51,169 @@ function set_activity_row_status_defaults(cdt, cdn) {
 	const row = locals[cdt][cdn];
 	frappe.model.set_value(cdt, cdn, "billing_status", row.billable ? "Pending Charge" : "Not Billable");
 	frappe.model.set_value(cdt, cdn, "stock_status", row.stock_affecting ? "Pending" : "Not Applicable");
+}
+
+
+function add_activity_dialog_button(frm) {
+	if (frm.is_new() || ["Cancelled", "Discharged"].includes(frm.doc.status)) {
+		return;
+	}
+
+	frm.add_custom_button(__("Add Activity"), () => {
+		open_activity_dialog(frm);
+	}, __("Clinical"));
+}
+
+function open_activity_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Add Hospitalisation Activity"),
+		fields: [
+			{
+				fieldname: "activity_intro",
+				fieldtype: "HTML",
+				options: `<p class="text-muted">${__(
+					"Record clinical activity first. Billing and stock posting are handled separately."
+				)}</p>`,
+			},
+			{
+				fieldname: "activity_type",
+				fieldtype: "Select",
+				label: __("Activity Type"),
+				reqd: 1,
+				options: [
+					"Vitals",
+					"Medication",
+					"Vaccination",
+					"Fluid Therapy",
+					"Feeding",
+					"Nursing Note",
+					"Wound Care",
+					"Lab",
+					"Imaging",
+					"Procedure",
+					"Oxygen / Nebulisation",
+					"Owner Communication",
+					"Other",
+				].join("\n"),
+			},
+			{
+				fieldname: "activity_datetime",
+				fieldtype: "Datetime",
+				label: __("Activity Datetime"),
+				default: frappe.datetime.now_datetime(),
+			},
+			{
+				fieldname: "performed_by",
+				fieldtype: "Link",
+				label: __("Performed By"),
+				options: "User",
+				default: frappe.session.user,
+			},
+			{
+				fieldname: "clinical_notes",
+				fieldtype: "Text Editor",
+				label: __("Clinical Notes"),
+			},
+			{
+				fieldname: "flags_section",
+				fieldtype: "Section Break",
+			},
+			{
+				fieldname: "billable",
+				fieldtype: "Check",
+				label: __("Billable"),
+				onchange: () => update_activity_dialog_item_visibility(dialog),
+			},
+			{
+				fieldname: "stock_affecting",
+				fieldtype: "Check",
+				label: __("Stock Affecting"),
+				onchange: () => update_activity_dialog_item_visibility(dialog),
+			},
+			{
+				fieldname: "item_section",
+				fieldtype: "Section Break",
+				depends_on: "eval:doc.billable || doc.stock_affecting",
+			},
+			{
+				fieldname: "item",
+				fieldtype: "Link",
+				label: __("Item"),
+				options: "Item",
+				onchange: () => set_default_activity_qty(dialog),
+				depends_on: "eval:doc.billable || doc.stock_affecting",
+			},
+			{
+				fieldname: "qty",
+				fieldtype: "Float",
+				label: __("Qty"),
+				default: 1,
+				depends_on: "eval:doc.billable || doc.stock_affecting",
+			},
+			{
+				fieldname: "uom",
+				fieldtype: "Link",
+				label: __("UOM"),
+				options: "UOM",
+				depends_on: "eval:doc.billable || doc.stock_affecting",
+			},
+		],
+		primary_action_label: __("Add"),
+		primary_action(values) {
+			add_activity_row_from_dialog(frm, dialog, values);
+		},
+	});
+
+	update_activity_dialog_item_visibility(dialog);
+	dialog.show();
+}
+
+function update_activity_dialog_item_visibility(dialog) {
+	const values = dialog.get_values(true) || {};
+	const show_item_fields = Boolean(values.billable || values.stock_affecting);
+	["item_section", "item", "qty", "uom"].forEach((fieldname) => {
+		dialog.set_df_property(fieldname, "hidden", !show_item_fields);
+	});
+	dialog.refresh();
+}
+
+function set_default_activity_qty(dialog) {
+	const values = dialog.get_values(true) || {};
+	if (values.item && !values.qty) {
+		dialog.set_value("qty", 1);
+	}
+}
+
+function add_activity_row_from_dialog(frm, dialog, values) {
+	if (!values.item && values.billable) {
+		frappe.show_alert({
+			message: __("Charge sheet sync requires an Item for billable activities."),
+			indicator: "orange",
+		});
+	}
+	if (!values.item && values.stock_affecting) {
+		frappe.show_alert({
+			message: __("Stock posting will require an Item when it is enabled."),
+			indicator: "orange",
+		});
+	}
+
+	const row = frm.add_child("activities");
+	row.activity_type = values.activity_type;
+	row.activity_datetime = values.activity_datetime;
+	row.performed_by = values.performed_by;
+	row.clinical_notes = values.clinical_notes;
+	row.billable = values.billable ? 1 : 0;
+	row.stock_affecting = values.stock_affecting ? 1 : 0;
+	row.item = values.item;
+	row.qty = values.item && !values.qty ? 1 : values.qty;
+	row.uom = values.uom;
+	row.billing_status = values.billable ? "Pending Charge" : "Not Billable";
+	row.stock_status = values.stock_affecting ? "Pending" : "Not Applicable";
+
+	frm.refresh_field("activities");
+	frm.dirty();
+	dialog.hide();
 }
 
 function add_charge_sheet_action_buttons(frm) {
@@ -118,17 +282,12 @@ function add_hospitalisation_action_buttons(frm) {
 		return;
 	}
 
-	frm.add_custom_button(__("Create / Link Invoice"), () => {
-		frappe.call({
-			method: "vetedge.services.hospitalisation.create_or_link_hospitalisation_invoice",
-			args: { hospitalisation_name: frm.doc.name },
-			freeze: true,
-			callback(result) {
-				if (result.message) {
-					frappe.set_route("Form", "Sales Invoice", result.message);
-				}
-			},
-		});
+	frm.add_custom_button(__("Billing / Payment"), () => {
+		if (window.vetedgeBillingModal?.open) {
+			window.vetedgeBillingModal.open(frm);
+			return;
+		}
+		frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
 	}, __("Billing"));
 
 	frm.add_custom_button(__("Check Payment Gate"), () => {

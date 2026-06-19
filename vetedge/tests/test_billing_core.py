@@ -129,6 +129,126 @@ class TestBillingCore(TestCase):
 		self.assertTrue(created)
 		self.assertEqual(invoice.name, "SINV-NEW")
 
+	def test_consultation_treatment_rows_use_child_row_charge_keys(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(name="ROW-1", item="TREAT-ITEM", qty=1, uom="Nos", rate=100, description="Treatment A"),
+				frappe._dict(name="ROW-2", item="TREAT-ITEM", qty=1, uom="Nos", rate=100, description="Treatment B"),
+			],
+		)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=True)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		charge_keys = [row["charge_key"] for row in payloads]
+		self.assertEqual(len(charge_keys), 2)
+		self.assertIn("Veterinary Consultation:VCON-001:Treatment:ROW-1", charge_keys)
+		self.assertIn("Veterinary Consultation:VCON-001:Treatment:ROW-2", charge_keys)
+
+	def test_consultation_parent_submitted_then_new_treatment_row_creates_pending_charge(self):
+		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"
+		new_treatment_key = "Veterinary Consultation:VCON-001:Treatment:ROW-NEW"
+		submitted_charge = frappe._dict({**charge_payload(submitted_key, "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[submitted_charge])
+		payloads = [
+			charge_payload(submitted_key, "CONS-ITEM", 125),
+			charge_payload(new_treatment_key, "TREAT-ITEM", 75),
+		]
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=payloads),
+			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name == "SINV-SUB"),
+			patch.object(billing_core.frappe.db, "get_value", return_value=1),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(len(session.charges), 2)
+		self.assertEqual(submitted_charge.amount, 100)
+		new_charge = billing_core.get_existing_charge_by_key(session, new_treatment_key)
+		self.assertIsNotNone(new_charge)
+		self.assertEqual(new_charge.billing_status, "Pending")
+		self.assertIsNone(new_charge.get("invoice"))
+
+	def test_new_treatment_row_after_submitted_invoice_makes_modal_show_create_next_invoice(self):
+		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"
+		new_treatment_key = "Veterinary Consultation:VCON-001:Treatment:ROW-NEW"
+		session = make_session(
+			current_draft_invoice=None,
+			latest_invoice="SINV-SUB",
+			charges=[
+				frappe._dict({**charge_payload(submitted_key, "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+				frappe._dict(charge_payload(new_treatment_key, "TREAT-ITEM", 75)),
+			],
+		)
+		submitted = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=0)
+
+		with billing_core_context(session, submitted, paid_amount=100):
+			summary = billing_core.get_billing_session_summary(session)
+		actions = billing_modal.get_available_actions(
+			billing_modal.BILLING_SOURCE_CONFIGS["Veterinary Consultation"],
+			{"name": "SINV-SUB", "docstatus": 1, "is_submitted": True},
+			summary,
+		)
+
+		self.assertTrue(actions["has_pending_charges"])
+		self.assertTrue(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "Create Next Invoice")
+		self.assertEqual(actions["pending_charge_count"], 1)
+
+	def test_create_next_invoice_after_submitted_consultation_contains_only_new_treatment_row(self):
+		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"
+		new_treatment_key = "Veterinary Consultation:VCON-001:Treatment:ROW-NEW"
+		old_charge = frappe._dict({**charge_payload(submitted_key, "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		new_charge = frappe._dict(charge_payload(new_treatment_key, "TREAT-ITEM", 75))
+		session = make_session(current_draft_invoice=None, latest_invoice="SINV-SUB", charges=[old_charge, new_charge])
+		submitted = make_invoice("SINV-SUB", docstatus=1, items=[frappe._dict({"description": f"Consultation\nVetEdge billing charge: {submitted_key}"})], outstanding_amount=0)
+		second = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with billing_core_context(session, submitted, created_invoice=second, paid_amount=100):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertEqual(len(submitted.get("items")), 1)
+		submitted.save.assert_not_called()
+		self.assertEqual(len(second.get("items")), 1)
+		self.assertIn(new_treatment_key, second.get("items")[0].description)
+		self.assertNotIn(submitted_key, second.get("items")[0].description)
+
+	def test_diagnose_unbilled_items_reports_submitted_draft_and_pending_keys(self):
+		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"
+		pending_key = "Veterinary Consultation:VCON-001:Treatment:ROW-NEW"
+		session = make_session(
+			charges=[
+				frappe._dict({**charge_payload(submitted_key), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+				frappe._dict(charge_payload(pending_key, "TREAT-ITEM", 75)),
+			],
+		)
+
+		with (
+			patch.object(billing_core, "sync_source_charge_payloads_to_billing_session", return_value=session),
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[charge_payload(submitted_key), charge_payload(pending_key, "TREAT-ITEM", 75)]),
+			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name == "SINV-SUB"),
+			patch.object(billing_core.frappe.db, "get_value", return_value=1),
+		):
+			diagnostics = billing_core.diagnose_billing_session_unbilled_items("Veterinary Consultation", "VCON-001")
+
+		self.assertIn(submitted_key, diagnostics["submitted_charge_keys"])
+		self.assertIn(pending_key, diagnostics["pending_unbilled_charge_keys"])
+
 	def test_new_charge_after_submitted_invoice_creates_second_draft_invoice(self):
 		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Draft Invoiced"})
 		new_charge = frappe._dict(charge_payload("treatment-row-1", "TREAT-ITEM", 50))

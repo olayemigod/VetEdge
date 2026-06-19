@@ -9,3 +9,4 @@ vetedge.patches.move_follow_up_appointment_links
 vetedge.patches.sync_vetedge_email_templates
 vetedge.patches.remove_clinic_visit_consultation_type
 vetedge.patches.add_branch_vetedge_price_list
+vetedge.patches.repair_literal_billing_session_name

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import TestCase
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -102,6 +103,134 @@ class TestBillingModal(TestCase):
 		self.assertTrue(actions["can_create_invoice"])
 		self.assertTrue(actions["can_submit_invoice"])
 		self.assertFalse(actions["can_record_payment"])
+
+	def test_modal_session_actions_create_invoice_for_pending_charges_without_invoice(self):
+		config = billing_modal.get_billing_source_config("Veterinary Consultation")
+		session = {"invoices": [], "charges": [{"billing_status": "Pending", "invoice": None}]}
+
+		actions = billing_modal.get_available_actions(config, None, session)
+
+		self.assertTrue(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "Create Invoice")
+		self.assertEqual(actions["pending_charge_count"], 1)
+		self.assertFalse(actions["can_open_full_invoice"])
+
+	def test_modal_session_actions_update_and_open_draft_invoice(self):
+		config = billing_modal.get_billing_source_config("Veterinary Consultation")
+		session = {
+			"current_draft_invoice": "SINV-DRAFT",
+			"latest_invoice": "SINV-DRAFT",
+			"invoices": [{"name": "SINV-DRAFT", "docstatus": 0}],
+			"charges": [{"billing_status": "Draft Invoiced", "invoice": "SINV-DRAFT"}],
+		}
+
+		actions = billing_modal.get_available_actions(config, {"name": "SINV-DRAFT", "docstatus": 0, "is_draft": True}, session)
+
+		self.assertTrue(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "Update Draft Invoice")
+		self.assertEqual(actions["open_invoice_label"], "Open Draft Invoice")
+		self.assertEqual(actions["open_invoice_name"], "SINV-DRAFT")
+		self.assertEqual(actions["pending_charge_count"], 0)
+
+	def test_modal_session_actions_create_next_invoice_after_submitted_invoice_with_pending_charge(self):
+		config = billing_modal.get_billing_source_config("Veterinary Consultation")
+		session = {
+			"latest_invoice": "SINV-SUBMITTED",
+			"invoices": [{"name": "SINV-SUBMITTED", "docstatus": 1}],
+			"charges": [
+				{"billing_status": "Submitted Invoiced", "invoice": "SINV-SUBMITTED"},
+				{"billing_status": "Pending", "invoice": None},
+			],
+		}
+
+		actions = billing_modal.get_available_actions(config, {"name": "SINV-SUBMITTED", "docstatus": 1, "is_submitted": True}, session)
+
+		self.assertTrue(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "Create Next Invoice")
+		self.assertEqual(actions["open_invoice_label"], "Open Submitted Invoice")
+		self.assertEqual(actions["latest_invoice_docstatus"], 1)
+		self.assertEqual(actions["pending_charge_count"], 1)
+
+	def test_modal_session_actions_create_new_invoice_after_cancelled_invoice_with_pending_charge(self):
+		config = billing_modal.get_billing_source_config("Veterinary Consultation")
+		session = {
+			"latest_invoice": "SINV-CANCELLED",
+			"invoices": [{"name": "SINV-CANCELLED", "docstatus": 2}],
+			"charges": [{"billing_status": "Pending", "invoice": None}],
+		}
+
+		actions = billing_modal.get_available_actions(config, {"name": "SINV-CANCELLED", "docstatus": 2}, session)
+
+		self.assertTrue(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "Create New Invoice")
+		self.assertEqual(actions["open_invoice_label"], "Open Latest Invoice")
+		self.assertEqual(actions["latest_invoice_docstatus"], 2)
+
+	def test_modal_session_actions_do_not_offer_invoice_creation_without_pending_charges(self):
+		config = billing_modal.get_billing_source_config("Veterinary Consultation")
+		session = {
+			"latest_invoice": "SINV-SUBMITTED",
+			"invoices": [{"name": "SINV-SUBMITTED", "docstatus": 1}],
+			"charges": [{"billing_status": "Submitted Invoiced", "invoice": "SINV-SUBMITTED"}],
+		}
+
+		actions = billing_modal.get_available_actions(config, {"name": "SINV-SUBMITTED", "docstatus": 1, "is_submitted": True}, session)
+
+		self.assertFalse(actions["can_create_or_update_invoice"])
+		self.assertEqual(actions["invoice_action_label"], "No pending uninvoiced charges.")
+		self.assertEqual(actions["pending_charge_count"], 0)
+		self.assertTrue(actions["can_open_full_invoice"])
+
+	def test_all_shared_modal_sources_use_billing_core_action_state(self):
+		session = {
+			"latest_invoice": "SINV-SUBMITTED",
+			"invoices": [{"name": "SINV-SUBMITTED", "docstatus": 1}],
+			"charges": [{"billing_status": "Pending", "invoice": None}],
+		}
+
+		for source_doctype in (
+			"Veterinary Consultation",
+			"Veterinary Lab Order",
+			"Veterinary Vaccination Record",
+			"Veterinary Hospitalisation",
+			"Pet Grooming Session",
+			"Pet Boarding Booking",
+			"Veterinary Patient",
+		):
+			with self.subTest(source_doctype=source_doctype):
+				config = billing_modal.get_billing_source_config(source_doctype)
+				actions = billing_modal.get_available_actions(
+					config,
+					{"name": "SINV-SUBMITTED", "docstatus": 1, "is_submitted": True},
+					session,
+				)
+				self.assertTrue(actions["can_create_or_update_invoice"])
+				self.assertEqual(actions["invoice_action_label"], "Create Next Invoice")
+				self.assertEqual(actions["open_invoice_name"], "SINV-SUBMITTED")
+
+	def test_billing_modal_js_consumes_billing_core_invoice_action_fields(self):
+		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+
+		self.assertIn("actions.invoice_action_label", js)
+		self.assertIn("actions.can_create_or_update_invoice", js)
+		self.assertIn("vetedge.services.billing_modal.create_or_update_modal_invoice", js)
+		self.assertIn("state?.actions?.open_invoice_name", js)
+		self.assertNotIn("Open Full Invoice", js)
+
+	def test_billable_source_forms_open_shared_billing_modal(self):
+		for relative_path in (
+			"vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js",
+			"vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.js",
+			"vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.js",
+			"vetedge/veterinary/doctype/veterinary_hospitalisation/veterinary_hospitalisation.js",
+			"vetedge/veterinary/doctype/pet_grooming_session/pet_grooming_session.js",
+			"vetedge/veterinary/doctype/pet_boarding_booking/pet_boarding_booking.js",
+			"vetedge/veterinary/doctype/veterinary_patient/veterinary_patient.js",
+		):
+			with self.subTest(relative_path=relative_path):
+				js = get_app_file(relative_path).read_text()
+				self.assertIn("vetedgeBillingModal", js)
+				self.assertIn("window.vetedgeBillingModal.open(frm)", js)
 
 	def test_submit_modal_invoice_submits_draft_invoice(self):
 		source = frappe._dict(
@@ -412,3 +541,7 @@ class modal_action_context:
 		for patcher in reversed(self.patches):
 			patcher.stop()
 		return False
+
+
+def get_app_file(relative_path: str) -> Path:
+	return Path(__file__).resolve().parents[2] / relative_path

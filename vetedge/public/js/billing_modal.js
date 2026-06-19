@@ -129,11 +129,16 @@
 			`
 			: "";
 
+		const invoiceActionLabel = actions.invoice_action_label || (invoice ? __("Update Draft Invoice") : __("Create Invoice"));
+		const openInvoiceLabel = actions.open_invoice_label || __("Open Latest Invoice");
+		const invoiceActionMessage = !actions.can_create_or_update_invoice && actions.invoice_action_label
+			? `<div class="text-muted small ve-billing-action-message">${escapeHtml(__(actions.invoice_action_label))}</div>`
+			: "";
 		const buttons = [
-			actions.can_create_invoice ? actionButton("create-invoice", invoice ? __("Update Invoice") : __("Create Invoice"), true, busy) : "",
+			actions.can_create_or_update_invoice ? actionButton("create-invoice", __(invoiceActionLabel), true, busy) : "",
 			actions.can_submit_invoice ? actionButton("submit-invoice", __("Submit Invoice"), true, busy) : "",
 			actions.can_record_payment ? actionButton("record-payment", __("Record Payment"), true, busy) : "",
-			actions.can_open_full_invoice ? actionButton("open-invoice", __("Open Full Invoice"), false, busy) : "",
+			actions.can_open_full_invoice ? actionButton("open-invoice", __(openInvoiceLabel), false, busy) : "",
 			actionButton("refresh", __("Refresh Status"), false, busy),
 		].filter(Boolean).join(" ");
 
@@ -160,6 +165,7 @@
 					gap: 8px;
 					margin-top: 12px;
 				}
+				.ve-billing-action-message { margin-top: 8px; }
 				.ve-billing-table { margin-bottom: 8px; }
 				@media (max-width: 767px) {
 					.ve-billing-grid { grid-template-columns: 1fr; }
@@ -195,6 +201,7 @@
 				<h4>${__("Payment Gate / Proceed Status")}</h4>
 				${gateBlock || `<div class="text-muted">${__("No consultation payment gate applies to this document.")}</div>`}
 			</div>
+			${invoiceActionMessage}
 			<div class="ve-billing-actions">${buttons}</div>
 		`;
 	}
@@ -387,7 +394,9 @@
 					paint();
 				});
 			});
-			wrapper.find("[data-action='open-invoice']").on("click", () => openFullInvoice(state?.invoice?.name));
+			wrapper.find("[data-action='open-invoice']").on("click", () => {
+				openFullInvoice(state?.actions?.open_invoice_name || state?.open_invoice_name || state?.invoice?.name);
+			});
 		}
 
 		dialog.show();

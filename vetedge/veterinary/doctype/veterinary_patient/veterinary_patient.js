@@ -59,35 +59,19 @@ function add_registration_invoice_actions(frm) {
 				return;
 			}
 
+			frm.add_custom_button(__("Billing / Payment"), () => {
+				if (window.vetedgeBillingModal?.open) {
+					window.vetedgeBillingModal.open(frm);
+					return;
+				}
+				frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
+			}, __("Registration Billing"));
+
 			if (frm.doc.registration_invoice) {
 				frm.add_custom_button(__("View Registration Invoice"), () => {
 					window.vetedgeInvoiceSummary.open(frm.doc.registration_invoice);
 				}, __("Registration Billing"));
-				return;
 			}
-
-			frm.add_custom_button(__("Create Registration Invoice"), () => {
-				frappe.call({
-					method: "vetedge.services.registration_billing.create_manual_registration_invoice",
-					args: { patient: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Creating registration invoice..."),
-					callback(response) {
-						const result = response.message || {};
-						if (!result.invoice) {
-							return;
-						}
-
-						const message = result.created
-							? __("Registration invoice {0} created.", [result.invoice])
-							: __("Registration invoice {0} is already available.", [result.invoice]);
-						frappe.show_alert({ message, indicator: result.created ? "green" : "blue" });
-						frm.reload_doc().then(() => {
-							window.vetedgeInvoiceSummary.open(result.invoice);
-						});
-					},
-				});
-			}, __("Registration Billing"));
 		},
 		error() {
 			return;

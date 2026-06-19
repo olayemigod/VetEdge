@@ -64,6 +64,64 @@ def get_active_session_status_filter():
 	return ["in", sorted(ACTIVE_SESSION_STATUSES)]
 
 
+def get_open_session_status_filter():
+	return ["not in", ["Closed", "Cancelled"]]
+
+
+def is_billing_session_open_for_continuity(session) -> bool:
+	return bool(session and session.get("status") not in {"Closed", "Cancelled"})
+
+
+def find_registration_billing_session_for_consultation(identity: dict | None):
+	identity = identity or {}
+	patient = identity.get("patient")
+	customer = identity.get("customer")
+	if not patient or not customer:
+		return None
+	filters = {
+		"animal": patient,
+		"customer": customer,
+		"status": get_open_session_status_filter(),
+	}
+	rows = frappe.get_all(
+		BILLING_SESSION_DOCTYPE,
+		filters=filters,
+		fields=["name", "created_from_doctype", "source_context_doctype", "current_draft_invoice", "latest_invoice", "status"],
+		order_by="modified desc",
+	)
+	fallback = None
+	for row in rows:
+		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, row.name)
+		if not is_billing_session_open_for_continuity(session):
+			continue
+		if session_is_registration_origin(session):
+			return session
+		if fallback is None and session_has_active_draft_or_pending_charges(session):
+			fallback = session
+	return fallback
+
+
+def session_is_registration_origin(session) -> bool:
+	if session.get("created_from_doctype") == "Veterinary Patient" or session.get("source_context_doctype") == "Veterinary Patient":
+		return True
+	return bool(
+		frappe.get_all(
+			BILLING_SESSION_CHARGE_DOCTYPE,
+			filters={"parent": session.name, "source_doctype": "Veterinary Patient"},
+			fields=["name"],
+			limit=1,
+		)
+	)
+
+
+def session_has_active_draft_or_pending_charges(session) -> bool:
+	invoice_name = session.get("current_draft_invoice") or session.get("latest_invoice")
+	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
+		if cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) == 0:
+			return True
+	return any(row.get("billing_status") in PENDING_STATUSES for row in session.get("charges") or [])
+
+
 def normalize_payment_gate_mode(mode: str | None = None) -> str:
 	if mode in PAYMENT_GATE_ALIASES:
 		return PAYMENT_GATE_ALIASES[mode]
@@ -81,7 +139,9 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 	if source_uses_explicit_billing_session(source_doctype):
 		session_name = frappe.db.get_value(source_doctype, source_name, "billing_session")
 		if session_name and frappe.db.exists(BILLING_SESSION_DOCTYPE, session_name):
-			return frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+			session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+			if is_billing_session_open_for_continuity(session):
+				return session
 	rows = frappe.get_all(
 		BILLING_SESSION_CHARGE_DOCTYPE,
 		filters={"source_doctype": source_doctype, "source_name": source_name},
@@ -91,6 +151,12 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 	)
 	if rows:
 		return frappe.get_doc(BILLING_SESSION_DOCTYPE, rows[0].parent)
+
+	identity = get_source_billing_identity(source_doctype, source_name)
+	if source_doctype == "Veterinary Consultation":
+		registration_session = find_registration_billing_session_for_consultation(identity)
+		if registration_session:
+			return registration_session
 
 	context = get_source_context(source_doctype, source_name)
 	if context != (source_doctype, source_name):
@@ -104,7 +170,6 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 		if rows:
 			return frappe.get_doc(BILLING_SESSION_DOCTYPE, rows[0].name)
 
-	identity = get_source_billing_identity(source_doctype, source_name)
 	consultation = identity.get("consultation") or find_active_consultation_for_identity(identity)
 	if consultation and source_doctype != "Veterinary Consultation":
 		consultation_session = resolve_billing_session("Veterinary Consultation", consultation)
@@ -157,6 +222,7 @@ def get_or_create_billing_session(
 	session = frappe.get_doc(
 		{
 			"doctype": BILLING_SESSION_DOCTYPE,
+			"naming_series": "VBS-.YYYY.-.#####",
 			"customer": customer,
 			"animal": animal,
 			"company": company,
@@ -191,15 +257,19 @@ def update_session_context(session, customer=None, animal=None, company=None, br
 
 
 def add_or_update_session_charge(session, charge_payload: dict):
-	charge = frappe._dict(charge_payload or {})
+	return upsert_source_charge_payload(session, charge_payload)
+
+
+def upsert_source_charge_payload(session, payload: dict):
+	charge = frappe._dict(payload or {})
 	charge_key = charge.get("charge_key") or build_charge_key(charge)
 	if not charge_key:
 		frappe.throw("Billing Session charge_key is required.", frappe.ValidationError)
 
-	existing = get_session_charge(session, charge_key)
+	existing = get_existing_charge_by_key(session, charge_key)
 	values = normalize_charge_payload(charge, charge_key, session)
 	if existing:
-		if existing.get("billing_status") in FINAL_INVOICE_STATUSES:
+		if is_charge_already_submitted(existing) or existing.get("billing_status") in {"Cancelled", "Skipped"}:
 			return existing
 		for fieldname, value in values.items():
 			setattr(existing, fieldname, value)
@@ -214,11 +284,12 @@ def add_or_update_session_charge(session, charge_payload: dict):
 def sync_session_charges_to_invoice(session):
 	session = ensure_session_doc(session)
 	reconcile_session_charge_statuses(session)
-	pending = [row for row in session.get("charges") or [] if row.get("billing_status") in PENDING_STATUSES]
+	active_draft = _get_active_draft_invoice(session)
+	pending = _get_pending_charges_for_invoice(session, active_draft)
 	if not pending:
 		refresh_billing_session_totals(session)
 		session.save()
-		return {"session": session.name, "invoice": session.get("current_draft_invoice"), "added_count": 0, "updated_count": 0}
+		return {"session": session.name, "invoice": active_draft.name if active_draft else None, "created": False, "added_count": 0, "updated_count": 0}
 
 	invoice, created = create_or_update_draft_invoice_for_session(session, pending)
 	if not invoice:
@@ -250,16 +321,12 @@ def sync_session_charges_to_invoice(session):
 
 def create_or_update_draft_invoice_for_session(session, pending_charges=None):
 	session = ensure_session_doc(session)
-	pending_charges = list(pending_charges) if pending_charges is not None else [
-		row for row in session.get("charges") or [] if row.get("billing_status") in PENDING_STATUSES
-	]
-	invoice_name = session.get("current_draft_invoice")
-	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
-		invoice = frappe.get_doc("Sales Invoice", invoice_name)
-		if cint(invoice.docstatus) == 0:
-			apply_invoice_session_defaults(invoice, session)
-			return invoice, False
-		session.current_draft_invoice = None
+	reconcile_session_charge_statuses(session)
+	invoice = _get_active_draft_invoice(session)
+	pending_charges = list(pending_charges) if pending_charges is not None else _get_pending_charges_for_invoice(session, invoice)
+	if invoice:
+		apply_invoice_session_defaults(invoice, session)
+		return invoice, False
 
 	if not pending_charges:
 		return None, False
@@ -284,6 +351,112 @@ def create_or_update_draft_invoice_for_session(session, pending_charges=None):
 	session.current_draft_invoice = invoice.name
 	session.latest_invoice = invoice.name
 	return invoice, True
+
+
+def _get_active_draft_invoice(session):
+	session = ensure_session_doc(session)
+	invoice_name = session.get("current_draft_invoice")
+	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
+		invoice = frappe.get_doc("Sales Invoice", invoice_name)
+		if cint(invoice.docstatus) == 0:
+			return invoice
+		session.current_draft_invoice = None
+	elif invoice_name:
+		session.current_draft_invoice = None
+
+	latest_invoice = session.get("latest_invoice")
+	if latest_invoice and latest_invoice != invoice_name and frappe.db.exists("Sales Invoice", latest_invoice):
+		invoice = frappe.get_doc("Sales Invoice", latest_invoice)
+		if cint(invoice.docstatus) == 0:
+			session.current_draft_invoice = invoice.name
+			return invoice
+	return None
+
+
+def _get_pending_charges_for_invoice(session, draft_invoice=None):
+	session = ensure_session_doc(session)
+	draft_invoice_name = draft_invoice.name if draft_invoice else None
+	pending = []
+	for row in session.get("charges") or []:
+		invoice_name = row.get("invoice")
+		if not invoice_name:
+			if row.get("billing_status") not in FINAL_INVOICE_STATUSES:
+				pending.append(row)
+			continue
+		if not frappe.db.exists("Sales Invoice", invoice_name):
+			row.invoice = None
+			row.invoice_item_name = None
+			if row.get("billing_status") != "Skipped":
+				row.billing_status = "Pending"
+				pending.append(row)
+			continue
+		docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
+		if docstatus == 0 and invoice_name == draft_invoice_name:
+			pending.append(row)
+		elif docstatus == 0 and not draft_invoice_name:
+			pending.append(row)
+		elif docstatus == 2:
+			row.billing_status = "Cancelled"
+	return pending
+
+
+@frappe.whitelist()
+def diagnose_billing_session_unbilled_items(source_doctype: str, source_name: str) -> dict:
+	session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
+	source_payloads = get_source_charge_payloads(source_doctype, source_name, session)
+	existing = {row.get("charge_key"): row for row in session.get("charges") or []}
+	submitted = []
+	draft = []
+	pending = []
+	rows = []
+	for payload in source_payloads:
+		charge_key = payload.get("charge_key") or build_charge_key(payload)
+		charge = existing.get(charge_key)
+		invoice_name = charge.get("invoice") if charge else None
+		docstatus = None
+		if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
+			docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
+		if docstatus == 1:
+			submitted.append(charge_key)
+		elif docstatus == 0:
+			draft.append(charge_key)
+		elif not charge or not invoice_name or charge.get("billing_status") == "Pending":
+			pending.append(charge_key)
+		rows.append(
+			{
+				"charge_key": charge_key,
+				"source_detail_name": payload.get("source_detail_name"),
+				"item_code": payload.get("item_code"),
+				"existing": bool(charge),
+				"invoice": invoice_name,
+				"invoice_docstatus": docstatus,
+				"billing_status": charge.get("billing_status") if charge else "Unbilled",
+				"reason": get_unbilled_diagnostic_reason(charge, docstatus),
+			}
+		)
+	return {
+		"session": session.name,
+		"source_payload_charge_keys": [payload.get("charge_key") or build_charge_key(payload) for payload in source_payloads],
+		"existing_session_charge_keys": list(existing.keys()),
+		"submitted_charge_keys": submitted,
+		"draft_charge_keys": draft,
+		"pending_unbilled_charge_keys": pending,
+		"rows": rows,
+	}
+
+
+def get_unbilled_diagnostic_reason(charge, invoice_docstatus) -> str:
+	if not charge:
+		return "No Billing Session Charge exists for this source detail."
+	if invoice_docstatus == 1:
+		return "Charge is linked to a submitted Sales Invoice."
+	if invoice_docstatus == 0:
+		return "Charge is linked to an active draft Sales Invoice."
+	if invoice_docstatus == 2:
+		return "Charge is linked to a cancelled Sales Invoice and is not draftable unless reset."
+	if not charge.get("invoice"):
+		return "Charge has no linked invoice and is pending."
+	return "Charge invoice state could not be resolved."
 
 
 def get_billing_session_summary(session) -> dict:
@@ -335,12 +508,55 @@ def get_payment_gate_status(session) -> dict:
 	if mode == PARTIAL_PAYMENT_GATE:
 		allowed = flt(session.total_paid) > 0
 		return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": "Payment gate passed." if allowed else "A partial payment is required before service can proceed."}
-	allowed = flt(session.outstanding_amount) <= 0
+	unsubmitted = [row for row in invoices if cint(row.get("docstatus")) == 0]
+	if unsubmitted:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "All linked Sales Invoices must be submitted before full payment can be confirmed."}
+	allowed = flt(session.outstanding_amount) <= 0 and flt(session.total_invoiced) > 0
 	return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": "Payment gate passed." if allowed else "Full payment is required before service can proceed."}
 
 
 def can_proceed_with_payment_gate(session) -> bool:
 	return bool(get_payment_gate_status(session).get("can_proceed"))
+
+
+@frappe.whitelist()
+def create_or_update_invoice_for_billing_session(session_name: str):
+	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+	session.check_permission("write")
+	result = sync_session_charges_to_invoice(session.name)
+	summary = get_billing_session_summary(result.get("session") or session.name)
+	result["billing_session"] = summary
+	return result
+
+
+@frappe.whitelist()
+def refresh_billing_session_summary(session_name: str):
+	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+	session.check_permission("write")
+	refresh_billing_session_totals(session)
+	session.save()
+	return get_billing_session_summary(session.name)
+
+
+@frappe.whitelist()
+def get_billing_session_invoice_state(session_name: str):
+	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+	session.check_permission("read")
+	current = get_invoice_docstate(session.get("current_draft_invoice"))
+	latest = get_invoice_docstate(session.get("latest_invoice"))
+	return {
+		"session": session.name,
+		"current_draft_invoice": current,
+		"latest_invoice": latest,
+		"has_pending_charges": bool(_get_pending_charges_for_invoice(session, _get_active_draft_invoice(session))),
+	}
+
+
+def get_invoice_docstate(invoice_name: str | None):
+	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+		return None
+	invoice = frappe.get_doc("Sales Invoice", invoice_name)
+	return {"name": invoice.name, "docstatus": cint(invoice.docstatus), "status": invoice.get("status")}
 
 
 def close_billing_session(session):
@@ -363,16 +579,22 @@ def cancel_billing_session(session):
 
 
 def sync_source_to_billing_session(source_doctype: str, source_name: str):
-	session = get_or_create_billing_session(source_doctype, source_name, payment_gate_mode=get_source_payment_gate_mode(source_doctype))
-	if should_sync_related_billable_sources_to_session():
-		sync_all_related_sources_to_billing_session(session, source_doctype, source_name)
-	else:
-		sync_single_source_to_billing_session(session, source_doctype, source_name)
+	session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
 	result = sync_session_charges_to_invoice(session.name)
 	summary = get_billing_session_summary(result.get("session") or session.name)
 	update_all_session_source_compatibility_fields(summary)
 	result["session"] = summary.get("name")
 	return result
+
+
+def sync_source_charge_payloads_to_billing_session(source_doctype: str, source_name: str):
+	"""Persist current source charge payloads without creating or updating an invoice."""
+	session = get_or_create_billing_session(source_doctype, source_name, payment_gate_mode=get_source_payment_gate_mode(source_doctype))
+	if should_sync_related_billable_sources_to_session():
+		sync_all_related_sources_to_billing_session(session, source_doctype, source_name)
+	else:
+		sync_single_source_to_billing_session(session, source_doctype, source_name)
+	return ensure_session_doc(session.name)
 
 
 def sync_single_source_to_billing_session(session, source_doctype: str, source_name: str):
@@ -1159,10 +1381,32 @@ def build_charge_key(charge) -> str:
 
 
 def get_session_charge(session, charge_key: str):
+	return get_existing_charge_by_key(session, charge_key)
+
+
+def get_existing_charge_by_key(session, charge_key: str):
 	for row in session.get("charges") or []:
 		if row.get("charge_key") == charge_key:
 			return row
 	return None
+
+
+def is_charge_already_submitted(charge) -> bool:
+	invoice_name = charge.get("invoice")
+	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
+		return cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) == 1
+	return charge.get("billing_status") in {"Submitted Invoiced", "Paid"}
+
+
+def is_source_detail_already_billed(session, charge_key: str) -> bool:
+	charge = get_existing_charge_by_key(session, charge_key)
+	return bool(charge and is_charge_already_submitted(charge))
+
+
+def get_unbilled_source_payloads(session, source_doctype: str, source_name: str) -> list[dict]:
+	session = ensure_session_doc(session)
+	payloads = get_source_charge_payloads(source_doctype, source_name, session)
+	return [payload for payload in payloads if not is_source_detail_already_billed(session, payload.get("charge_key") or build_charge_key(payload))]
 
 
 def apply_invoice_session_defaults(invoice, session) -> None:

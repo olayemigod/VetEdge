@@ -9,6 +9,7 @@ APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
 SETTINGS_JSON = APP_ROOT / "veterinary/doctype/veterinary_settings/veterinary_settings.json"
 HOSPITALISATION_JSON = APP_ROOT / "veterinary/doctype/veterinary_hospitalisation/veterinary_hospitalisation.json"
 ACTIVITY_JSON = APP_ROOT / "veterinary/doctype/veterinary_hospitalisation_activity/veterinary_hospitalisation_activity.json"
+CHARGE_ITEM_JSON = APP_ROOT / "veterinary/doctype/veterinary_hospitalisation_charge_item/veterinary_hospitalisation_charge_item.json"
 
 
 def load_json(path: Path) -> dict:
@@ -45,6 +46,23 @@ class TestVeterinaryHospitalisationStructure(TestCase):
 		fields = fields_by_name(activity)
 		self.assertIn("Vaccination", fields["activity_type"]["options"].splitlines())
 		self.assertFalse(fields["item"].get("reqd"))
+
+	def test_veterinary_hospitalisation_charge_item_doctype_exists(self):
+		charge_item = load_json(CHARGE_ITEM_JSON)
+
+		self.assertEqual(charge_item["name"], "Veterinary Hospitalisation Charge Item")
+		self.assertEqual(charge_item["istable"], 1)
+		fields = fields_by_name(charge_item)
+		self.assertTrue(fields["item"].get("reqd"))
+		self.assertEqual(fields["billing_status"]["options"], "Pending Invoice\nInvoiced\nCancelled")
+
+	def test_hospitalisation_has_optional_charge_items_table(self):
+		fields = fields_by_name(load_json(HOSPITALISATION_JSON))
+
+		self.assertIn("charge_items", fields)
+		self.assertEqual(fields["charge_items"]["fieldtype"], "Table")
+		self.assertEqual(fields["charge_items"]["options"], "Veterinary Hospitalisation Charge Item")
+		self.assertFalse(fields["charge_items"].get("reqd"))
 
 	def test_hospitalisation_has_optional_activities_table(self):
 		fields = fields_by_name(load_json(HOSPITALISATION_JSON))

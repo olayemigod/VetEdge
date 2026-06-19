@@ -36,7 +36,7 @@ frappe.ui.form.on("Veterinary Lab Order", {
 			}, __("Clinical"));
 		}
 
-		if (!frm.is_new() && (frm.doc.linked_invoice || !frm.doc.consultation)) {
+		if (!frm.is_new() && frm.doc.status !== "Cancelled") {
 			frm.add_custom_button(__("Billing / Payment"), () => {
 				if (window.vetedgeBillingModal?.open) {
 					window.vetedgeBillingModal.open(frm);

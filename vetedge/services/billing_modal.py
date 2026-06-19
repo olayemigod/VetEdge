@@ -259,12 +259,16 @@ def get_consultation_payment_gate_state(doc, invoice_summary: dict | None) -> di
 	}
 
 
-def get_available_actions(config: BillingSourceConfig, invoice_summary: dict | None) -> dict:
+def get_available_actions(
+	config: BillingSourceConfig,
+	invoice_summary: dict | None,
+	session_summary: dict | None = None,
+) -> dict:
 	can_create_invoice = bool(config.create_invoice_method)
 	if invoice_summary and cint(invoice_summary.get("docstatus")) == 1:
 		can_create_invoice = False
 
-	return {
+	actions = {
 		"can_create_invoice": can_create_invoice,
 		"can_submit_invoice": bool(invoice_summary and invoice_summary.get("is_draft")),
 		"can_record_payment": bool(
@@ -275,7 +279,121 @@ def get_available_actions(config: BillingSourceConfig, invoice_summary: dict | N
 		"can_open_full_invoice": bool(invoice_summary),
 		"is_paid": bool(invoice_summary and invoice_summary.get("is_submitted") and flt(invoice_summary.get("outstanding_amount")) <= 0),
 	}
+	actions.update(get_modal_invoice_action_state(session_summary, invoice_summary, can_create_invoice))
+	if session_summary:
+		actions["can_create_invoice"] = actions["can_create_or_update_invoice"]
+		actions["can_open_full_invoice"] = bool(actions.get("open_invoice_name"))
+	return actions
 
+
+def get_modal_invoice_action_state(
+	session_summary: dict | None,
+	invoice_summary: dict | None = None,
+	legacy_can_create_invoice: bool = False,
+) -> dict:
+	state = {
+		"current_draft_invoice": None,
+		"latest_invoice": None,
+		"latest_invoice_docstatus": None,
+		"has_pending_charges": False,
+		"pending_charge_count": 0,
+		"can_create_or_update_invoice": False,
+		"invoice_action_label": "No pending uninvoiced charges.",
+		"open_invoice_label": None,
+		"open_invoice_name": None,
+	}
+
+	if not session_summary:
+		return get_legacy_modal_invoice_action_state(state, invoice_summary, legacy_can_create_invoice)
+
+	invoices = session_summary.get("invoices") or []
+	current_draft_invoice = session_summary.get("current_draft_invoice")
+	latest_invoice = session_summary.get("latest_invoice")
+	current_invoice_summary = find_session_invoice_summary(invoices, current_draft_invoice)
+	latest_invoice_summary = find_session_invoice_summary(invoices, latest_invoice) or (invoices[-1] if invoices else None)
+	current_docstatus = cint(current_invoice_summary.get("docstatus")) if current_invoice_summary else None
+	latest_docstatus = cint(latest_invoice_summary.get("docstatus")) if latest_invoice_summary else None
+	pending_charge_count = get_pending_session_charge_count(session_summary)
+
+	state.update(
+		{
+			"current_draft_invoice": current_draft_invoice if current_docstatus == 0 else None,
+			"latest_invoice": latest_invoice_summary.get("name") if latest_invoice_summary else latest_invoice,
+			"latest_invoice_docstatus": latest_docstatus,
+			"has_pending_charges": pending_charge_count > 0,
+			"pending_charge_count": pending_charge_count,
+		}
+	)
+
+	if current_invoice_summary and current_docstatus == 0:
+		state["can_create_or_update_invoice"] = True
+		state["invoice_action_label"] = "Update Draft Invoice"
+	elif pending_charge_count > 0:
+		state["can_create_or_update_invoice"] = True
+		if not latest_invoice_summary:
+			state["invoice_action_label"] = "Create Invoice"
+		elif latest_docstatus == 1:
+			state["invoice_action_label"] = "Create Next Invoice"
+		elif latest_docstatus == 2:
+			state["invoice_action_label"] = "Create New Invoice"
+		else:
+			state["invoice_action_label"] = "Create Invoice"
+
+	open_invoice = current_invoice_summary if current_docstatus == 0 else latest_invoice_summary
+	if open_invoice:
+		docstatus = cint(open_invoice.get("docstatus"))
+		state["open_invoice_name"] = open_invoice.get("name")
+		if docstatus == 0:
+			state["open_invoice_label"] = "Open Draft Invoice"
+		elif docstatus == 1:
+			state["open_invoice_label"] = "Open Submitted Invoice"
+		else:
+			state["open_invoice_label"] = "Open Latest Invoice"
+
+	return state
+
+
+def get_legacy_modal_invoice_action_state(state: dict, invoice_summary: dict | None, can_create_invoice: bool) -> dict:
+	if invoice_summary:
+		docstatus = cint(invoice_summary.get("docstatus"))
+		state.update(
+			{
+				"latest_invoice": invoice_summary.get("name"),
+				"latest_invoice_docstatus": docstatus,
+				"open_invoice_name": invoice_summary.get("name"),
+			}
+		)
+		if docstatus == 0:
+			state["current_draft_invoice"] = invoice_summary.get("name")
+			state["invoice_action_label"] = "Update Draft Invoice" if can_create_invoice else state["invoice_action_label"]
+			state["open_invoice_label"] = "Open Draft Invoice"
+		elif docstatus == 1:
+			state["open_invoice_label"] = "Open Submitted Invoice"
+		else:
+			state["open_invoice_label"] = "Open Latest Invoice"
+	else:
+		state["invoice_action_label"] = "Create Invoice" if can_create_invoice else state["invoice_action_label"]
+	state["can_create_or_update_invoice"] = bool(can_create_invoice)
+	return state
+
+
+def find_session_invoice_summary(invoices: list[dict], invoice_name: str | None) -> dict | None:
+	if not invoice_name:
+		return None
+	for invoice in invoices:
+		if invoice.get("name") == invoice_name:
+			return invoice
+	return None
+
+
+def get_pending_session_charge_count(session_summary: dict | None) -> int:
+	if not session_summary:
+		return 0
+	count = 0
+	for charge in session_summary.get("charges") or []:
+		if not charge.get("invoice") or charge.get("billing_status") == "Pending":
+			count += 1
+	return count
 
 
 def is_billing_sessions_enabled() -> bool:
@@ -289,12 +407,15 @@ def is_billing_sessions_enabled() -> bool:
 
 def get_billing_session_summary_for_source(source_doctype: str, source_name: str) -> dict | None:
 	try:
-		from vetedge.services.billing_core import get_billing_session_summary, resolve_billing_session
+		from vetedge.services.billing_core import get_billing_session_summary, resolve_billing_session, sync_source_charge_payloads_to_billing_session
 	except Exception:
 		return None
 	if not is_billing_sessions_enabled():
 		return None
-	session = resolve_billing_session(source_doctype, source_name)
+	if source_supports_billing_session(source_doctype):
+		session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
+	else:
+		session = resolve_billing_session(source_doctype, source_name)
 	if not session:
 		return None
 	return get_billing_session_summary(session)
@@ -344,7 +465,8 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	invoice_summary = get_invoice_summary(invoice_name)
 	session_summary = get_billing_session_summary_for_source(source_doctype, source_name)
 	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
-	return {
+	actions = get_available_actions(config, invoice_summary, session_summary)
+	state = {
 		"config": {
 			"source_doctype": config.source_doctype,
 			"invoice_link_field": config.invoice_link_field,
@@ -355,9 +477,22 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		"invoice": invoice_summary,
 		"billing_session": session_summary,
 		"payment_gate": (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
-		"actions": get_available_actions(config, invoice_summary),
+		"actions": actions,
 		"payment_modes": get_payment_modes(),
 	}
+	for fieldname in (
+		"current_draft_invoice",
+		"latest_invoice",
+		"latest_invoice_docstatus",
+		"has_pending_charges",
+		"pending_charge_count",
+		"can_create_or_update_invoice",
+		"invoice_action_label",
+		"open_invoice_label",
+		"open_invoice_name",
+	):
+		state[fieldname] = actions.get(fieldname)
+	return state
 
 
 @frappe.whitelist()
