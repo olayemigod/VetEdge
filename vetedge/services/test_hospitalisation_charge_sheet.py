@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
@@ -188,6 +189,59 @@ class TestHospitalisationChargeSheet(TestCase):
 		self.assertEqual(hosp.payment_gate_status, "Blocked")
 		self.assertEqual(hosp.payment_gate_message, "Blocked before sync")
 
+	def test_sync_uses_billing_core_active_draft_invoice(self):
+		charge = make_charge("VHOS-001:ACT-1")
+		hosp = hospitalisation_doc(
+			status="Under Care",
+			sales_invoice=None,
+			payment_gate_status="Blocked",
+			payment_gate_message="Still blocked",
+			charge_items=[charge],
+			activities=[activity(name="ACT-1")],
+		)
+		invoice = invoice_doc(name="SINV-REG", docstatus=0, items=[])
+		session = frappe._dict(
+			name="VBS-REG",
+			charges=[
+				frappe._dict(
+					source_doctype="Veterinary Hospitalisation",
+					source_name="VHOS-001",
+					charge_key="Veterinary Hospitalisation:VHOS-001:Hospitalisation:VHOS-001:ACT-1",
+					invoice="SINV-REG",
+					invoice_item_name="SII-001",
+					billing_status="Draft Invoiced",
+				)
+			],
+		)
+
+		with billing_core_charge_context(hosp, invoice, session):
+			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
+
+		self.assertEqual(result["invoice"], "SINV-REG")
+		self.assertEqual(result["billing_session"], "VBS-REG")
+		self.assertEqual(hosp.sales_invoice, "SINV-REG")
+		self.assertEqual(charge.billing_status, "Invoiced")
+		self.assertEqual(charge.sales_invoice, "SINV-REG")
+		self.assertEqual(hosp.activities[0].billing_status, "Charged")
+		self.assertEqual(hosp.status, "Under Care")
+		self.assertEqual(hosp.payment_gate_status, "Blocked")
+		self.assertEqual(hosp.payment_gate_message, "Still blocked")
+
+	def test_billing_core_sync_does_not_duplicate_local_invoiced_charge(self):
+		charge = make_charge("VHOS-001:ACT-1")
+		charge.billing_status = "Invoiced"
+		charge.sales_invoice = "SINV-REG"
+		hosp = hospitalisation_doc(sales_invoice="SINV-REG", charge_items=[charge], activities=[activity(name="ACT-1", billing_status="Charged")])
+		invoice = invoice_doc(name="SINV-REG", docstatus=0, items=[frappe._dict(description="Medication\nVetEdge billing charge: Veterinary Hospitalisation:VHOS-001:Hospitalisation:VHOS-001:ACT-1")])
+		session = frappe._dict(name="VBS-REG", charges=[])
+
+		with billing_core_charge_context(hosp, invoice, session, added_count=0):
+			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
+
+		self.assertEqual(result["added_count"], 0)
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertEqual(charge.billing_status, "Invoiced")
+
 
 def make_charge(source_hash):
 	return frappe._dict(
@@ -204,50 +258,131 @@ def make_charge(source_hash):
 	)
 
 
-def charge_context(hosp, linked_invoice=None, created_invoice=None):
-	linked_invoice = linked_invoice or invoice_doc(name=hosp.get("sales_invoice") or "SINV-001", docstatus=0)
-	created_invoice = created_invoice or invoice_doc(name="SINV-NEW", docstatus=0)
+class charge_context:
+	def __init__(self, hosp, linked_invoice=None, created_invoice=None):
+		self.hosp = hosp
+		self.linked_invoice = linked_invoice or invoice_doc(name=hosp.get("sales_invoice") or "SINV-001", docstatus=0)
+		self.created_invoice = created_invoice or invoice_doc(name="SINV-NEW", docstatus=0)
+		self.stack = ExitStack()
 
-	def exists(doctype, name=None):
-		if doctype in {"DocType", "Item"}:
+	def __enter__(self):
+		linked_invoice = self.linked_invoice
+		created_invoice = self.created_invoice
+		hosp = self.hosp
+
+		def exists(doctype, name=None):
+			if doctype in {"DocType", "Item"}:
+				return True
+			if doctype == "Sales Invoice":
+				return bool(name)
 			return True
-		if doctype == "Sales Invoice":
-			return bool(name)
-		return True
 
-	def get_value(doctype, name, fieldname=None, **kwargs):
-		if doctype == "Item" and fieldname == "item_name":
-			return "Test Item"
-		if doctype == "Item" and fieldname == "stock_uom":
-			return "Nos"
-		if doctype == "Item" and fieldname == "standard_rate":
-			return 10
-		return None
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Item" and fieldname == "item_name":
+				return "Test Item"
+			if doctype == "Item" and fieldname == "stock_uom":
+				return "Nos"
+			if doctype == "Item" and fieldname == "standard_rate":
+				return 10
+			return None
 
-	def get_doc(doctype, name=None):
-		if isinstance(doctype, dict):
-			created_invoice.update(doctype)
-			created_invoice.name = created_invoice.name or "SINV-NEW"
-			return created_invoice
-		if doctype == "Veterinary Hospitalisation":
-			return hosp
-		if doctype == "Sales Invoice":
-			return linked_invoice if name == linked_invoice.name else created_invoice
-		return frappe._dict(name=name)
+		def get_doc(doctype, name=None):
+			if isinstance(doctype, dict):
+				created_invoice.update(doctype)
+				created_invoice.name = created_invoice.name or "SINV-NEW"
+				return created_invoice
+			if doctype == "Veterinary Hospitalisation":
+				return hosp
+			if doctype == "Sales Invoice":
+				return linked_invoice if name == linked_invoice.name else created_invoice
+			return frappe._dict(name=name)
 
-	frappe_stub = SimpleNamespace(
-		db=SimpleNamespace(exists=exists, get_value=get_value),
-		get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname in {"enable_veterinary_hospitalisation"}),
-		get_single=lambda doctype: frappe._dict(enable_veterinary_hospitalisation=1),
-		get_doc=get_doc,
-		_dict=frappe._dict,
-		session=SimpleNamespace(user="vet@example.com"),
-		ValidationError=frappe.ValidationError,
-		throw=Mock(side_effect=frappe.ValidationError),
-	)
-	return patch.multiple(
-		hospitalisation,
-		frappe=frappe_stub,
-		require_internal_user=Mock(),
-		nowdate=Mock(return_value="2026-06-19"),
-	)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=get_value),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname in {"enable_veterinary_hospitalisation"}),
+			get_single=lambda doctype: frappe._dict(enable_veterinary_hospitalisation=1),
+			get_doc=get_doc,
+			_dict=frappe._dict,
+			session=SimpleNamespace(user="vet@example.com"),
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		self.stack.enter_context(
+			patch.multiple(
+				hospitalisation,
+				frappe=frappe_stub,
+				require_internal_user=Mock(),
+				nowdate=Mock(return_value="2026-06-19"),
+			)
+		)
+		self.stack.enter_context(patch("vetedge.services.billing_core.is_billing_sessions_enabled", return_value=False))
+		return self
+
+	def __exit__(self, exc_type, exc, tb):
+		return self.stack.__exit__(exc_type, exc, tb)
+
+
+class billing_core_charge_context:
+	def __init__(self, hosp, invoice, session, added_count=1, created=False):
+		self.hosp = hosp
+		self.invoice = invoice
+		self.session = session
+		self.added_count = added_count
+		self.created = created
+		self.stack = ExitStack()
+
+	def __enter__(self):
+		hosp = self.hosp
+		invoice = self.invoice
+		session = self.session
+
+		def exists(doctype, name=None):
+			if doctype in {"DocType", "Item", "Veterinary Billing Session"}:
+				return True
+			if doctype == "Sales Invoice":
+				return bool(name)
+			return True
+
+		def get_doc(doctype, name=None):
+			if doctype == "Veterinary Hospitalisation":
+				return hosp
+			if doctype == "Sales Invoice":
+				return invoice
+			if doctype == "Veterinary Billing Session":
+				return session
+			return frappe._dict(name=name)
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=Mock(return_value=None)),
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname in {"enable_veterinary_hospitalisation"}),
+			get_single=lambda doctype: frappe._dict(enable_veterinary_hospitalisation=1),
+			get_doc=get_doc,
+			_dict=frappe._dict,
+			session=SimpleNamespace(user="vet@example.com"),
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		self.stack.enter_context(
+			patch.multiple(
+				hospitalisation,
+				frappe=frappe_stub,
+				require_internal_user=Mock(),
+				get_invoice_payment_status=Mock(return_value="Draft"),
+			)
+		)
+		self.stack.enter_context(patch("vetedge.services.billing_core.is_billing_sessions_enabled", return_value=True))
+		self.stack.enter_context(
+			patch(
+				"vetedge.services.billing_core.sync_source_to_billing_session",
+				return_value={
+					"invoice": invoice.name,
+					"session": session.name,
+					"created": self.created,
+					"added_count": self.added_count,
+				},
+			)
+		)
+		return self
+
+	def __exit__(self, exc_type, exc, tb):
+		return self.stack.__exit__(exc_type, exc, tb)

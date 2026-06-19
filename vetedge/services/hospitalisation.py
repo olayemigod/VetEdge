@@ -332,27 +332,10 @@ def get_charge_description(activity) -> str:
 def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
-	try:
-		from vetedge.services.billing_core import is_billing_sessions_enabled, sync_source_to_billing_session
+	from vetedge.services.billing_core import is_billing_sessions_enabled
 
-		if is_billing_sessions_enabled():
-			result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-			doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-			invoice = result.get("invoice")
-			if invoice:
-				doc.sales_invoice = invoice
-				doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
-				doc.save()
-			return {
-				"hospitalisation": hospitalisation_name,
-				"invoice": invoice,
-				"added_count": result.get("added_count", 0),
-				"skipped_count": 0,
-				"created_new_invoice": bool(result.get("created")),
-				"billing_session": result.get("session"),
-			}
-	except Exception:
-		raise
+	if is_billing_sessions_enabled():
+		return sync_hospitalisation_charges_with_billing_core(hospitalisation_name)
 
 	build_hospitalisation_charge_items(hospitalisation_name)
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
@@ -393,6 +376,67 @@ def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str) -> dict:
 		"skipped_count": skipped_count,
 		"created_new_invoice": created_new_invoice,
 	}
+
+
+def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) -> dict:
+	from vetedge.services.billing_core import BILLING_SESSION_DOCTYPE, sync_source_to_billing_session
+
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	previous_status = doc.get("status")
+	previous_gate_status = doc.get("payment_gate_status")
+	previous_gate_message = doc.get("payment_gate_message")
+
+	result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	invoice = result.get("invoice")
+	if invoice:
+		doc.sales_invoice = invoice
+		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
+
+	session_name = result.get("session")
+	if session_name and frappe.db.exists(BILLING_SESSION_DOCTYPE, session_name):
+		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
+		apply_billing_session_charge_statuses_to_hospitalisation(doc, session)
+
+	doc.status = previous_status
+	doc.payment_gate_status = previous_gate_status
+	doc.payment_gate_message = previous_gate_message
+	doc.save(ignore_permissions=True)
+	return {
+		"hospitalisation": hospitalisation_name,
+		"invoice": invoice,
+		"added_count": result.get("added_count", 0),
+		"skipped_count": 0,
+		"created_new_invoice": bool(result.get("created")),
+		"billing_session": session_name,
+	}
+
+
+def apply_billing_session_charge_statuses_to_hospitalisation(doc, session) -> None:
+	session_charge_index = {
+		get_hospitalisation_charge_source_hash(row): row
+		for row in session.get("charges") or []
+		if row.get("source_doctype") == HOSPITALISATION_DOCTYPE and row.get("source_name") == doc.name
+	}
+	for charge in doc.get("charge_items") or []:
+		session_charge = session_charge_index.get(charge.get("source_hash"))
+		if not session_charge:
+			continue
+		if session_charge.get("billing_status") in {"Draft Invoiced", "Submitted Invoiced", "Paid"}:
+			charge.billing_status = "Invoiced"
+			charge.sales_invoice = session_charge.get("invoice")
+			charge.sales_invoice_item = session_charge.get("invoice_item_name")
+			mark_activity_charged(doc, charge)
+		elif session_charge.get("billing_status") == "Cancelled":
+			charge.billing_status = "Cancelled"
+
+
+def get_hospitalisation_charge_source_hash(session_charge) -> str | None:
+	charge_key = session_charge.get("charge_key") or ""
+	prefix = f"{HOSPITALISATION_DOCTYPE}:{session_charge.get('source_name')}:Hospitalisation:"
+	if charge_key.startswith(prefix):
+		return charge_key[len(prefix) :]
+	return None
 
 
 def get_or_create_charge_invoice(doc):

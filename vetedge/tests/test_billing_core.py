@@ -129,6 +129,233 @@ class TestBillingCore(TestCase):
 		self.assertTrue(created)
 		self.assertEqual(invoice.name, "SINV-NEW")
 
+	def test_new_charge_after_submitted_invoice_creates_second_draft_invoice(self):
+		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Draft Invoiced"})
+		new_charge = frappe._dict(charge_payload("treatment-row-1", "TREAT-ITEM", 50))
+		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[old_charge, new_charge])
+		submitted = make_invoice("SINV-SUB", docstatus=1, items=[frappe._dict({"description": "Consultation\nVetEdge billing charge: consultation-fee"})], outstanding_amount=0)
+		second = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with billing_core_context(session, submitted, created_invoice=second, paid_amount=100):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertTrue(result["created"])
+		self.assertEqual(len(submitted.get("items") or []), 1)
+		submitted.save.assert_not_called()
+		self.assertEqual(len(second.get("items") or []), 1)
+		self.assertIn("treatment-row-1", second.get("items")[0].description)
+		self.assertNotIn("consultation-fee", second.get("items")[0].description)
+		self.assertEqual(session.current_draft_invoice, "SINV-NEW")
+		self.assertEqual(session.latest_invoice, "SINV-NEW")
+		self.assertEqual(old_charge.invoice, "SINV-SUB")
+		self.assertIn(old_charge.billing_status, {"Submitted Invoiced", "Paid"})
+		self.assertEqual(new_charge.invoice, "SINV-NEW")
+		self.assertEqual(new_charge.billing_status, "Draft Invoiced")
+
+	def test_rerun_second_draft_sync_does_not_duplicate_new_charge(self):
+		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		new_charge = frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Draft Invoiced"})
+		session = make_session(current_draft_invoice="SINV-NEW", latest_invoice="SINV-NEW", charges=[old_charge, new_charge])
+		submitted = make_invoice("SINV-SUB", docstatus=1, items=[frappe._dict({"description": "Consultation\nVetEdge billing charge: consultation-fee"})], outstanding_amount=0)
+		draft = make_invoice("SINV-NEW", docstatus=0, items=[frappe._dict({"description": "Treatment\nVetEdge billing charge: treatment-row-1"})])
+
+		with billing_core_context(session, submitted, created_invoice=draft, paid_amount=100):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertFalse(result["created"])
+		self.assertEqual(result["updated_count"], 1)
+		self.assertEqual(len(draft.get("items") or []), 1)
+
+	def test_session_summary_aggregates_multiple_linked_invoices(self):
+		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		new_charge = frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Draft Invoiced"})
+		session = make_session(current_draft_invoice="SINV-NEW", latest_invoice="SINV-NEW", charges=[old_charge, new_charge])
+		submitted = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=25)
+		draft = make_invoice("SINV-NEW", docstatus=0, outstanding_amount=50)
+
+		with billing_core_context(session, submitted, created_invoice=draft, paid_amount=75):
+			summary = billing_core.get_billing_session_summary(session)
+
+		self.assertEqual(summary["total_charges"], 150)
+		self.assertEqual(summary["total_invoiced"], 200)
+		self.assertEqual(summary["total_paid"], 75)
+		self.assertEqual(summary["outstanding_amount"], 25)
+		self.assertEqual({row["name"] for row in summary["invoices"]}, {"SINV-SUB", "SINV-NEW"})
+
+	def test_cancelled_current_draft_is_not_reused_for_new_charge(self):
+		session = make_session(current_draft_invoice="SINV-CAN", latest_invoice="SINV-CAN", charges=[frappe._dict(charge_payload("new-treatment", "TREAT-ITEM", 60))])
+		cancelled = make_invoice("SINV-CAN", docstatus=2, items=[])
+		new_invoice = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with billing_core_context(session, cancelled, created_invoice=new_invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertTrue(result["created"])
+		cancelled.save.assert_not_called()
+		self.assertEqual(session.current_draft_invoice, "SINV-NEW")
+		self.assertEqual(len(new_invoice.get("items") or []), 1)
+
+	def test_full_payment_gate_blocks_when_session_has_draft_followup_invoice(self):
+		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		new_charge = frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Draft Invoiced"})
+		session = make_session(payment_gate_mode="Full Payment Gate", current_draft_invoice="SINV-NEW", latest_invoice="SINV-NEW", charges=[old_charge, new_charge])
+		submitted = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=0)
+		draft = make_invoice("SINV-NEW", docstatus=0, outstanding_amount=50)
+
+		with billing_core_context(session, submitted, created_invoice=draft, paid_amount=100):
+			status = billing_core.get_payment_gate_status(session)
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("must be submitted", status["message"])
+
+	def test_consultation_resolves_existing_registration_billing_session(self):
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		session = make_session(name="VBS-REG", animal="PAT-001", customer="CUST-001", created_from_doctype="Veterinary Patient", created_from_name="PAT-001", current_draft_invoice="SINV-REG")
+
+		def get_doc(doctype, name=None):
+			if doctype == "Veterinary Consultation":
+				return consultation
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return session
+			return frappe._dict(doctype=doctype, name=name)
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE and filters == {"source_doctype": "Veterinary Consultation", "source_name": "VCON-001"}:
+				return []
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return [frappe._dict(name="VBS-REG", created_from_doctype="Veterinary Patient", source_context_doctype="Veterinary Patient", current_draft_invoice="SINV-REG", latest_invoice="SINV-REG", status="Active")]
+			if doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE and filters and filters.get("parent") == "VBS-REG":
+				return [frappe._dict(name="CHG-REG")]
+			return []
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True), get_value=Mock(return_value=None)),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=Mock(return_value=frappe._dict(enable_billing_sessions=1)),
+			get_all=get_all,
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		with patch.object(billing_core, "frappe", frappe_stub):
+			resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(resolved.name, "VBS-REG")
+
+	def test_hospitalisation_resolves_existing_registration_billing_session(self):
+		hospitalisation_doc = frappe._dict(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			patient="PAT-001",
+			customer="CUST-001",
+			service_branch="Main",
+			linked_consultation="VCON-001",
+		)
+		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		session = make_session(name="VBS-REG", animal="PAT-001", customer="CUST-001", created_from_doctype="Veterinary Patient", created_from_name="PAT-001", current_draft_invoice="SINV-REG")
+
+		def get_doc(doctype, name=None):
+			if doctype == "Veterinary Hospitalisation":
+				return hospitalisation_doc
+			if doctype == "Veterinary Consultation":
+				return consultation
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return session
+			return frappe._dict(doctype=doctype, name=name)
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Veterinary Hospitalisation" and fieldname == "linked_consultation":
+				return "VCON-001"
+			return None
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE:
+				return []
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE and isinstance(filters, dict):
+				if filters.get("source_context_doctype") == "Veterinary Consultation":
+					return []
+				if filters.get("animal") == "PAT-001" and filters.get("customer") == "CUST-001":
+					return [frappe._dict(name="VBS-REG", created_from_doctype="Veterinary Patient", source_context_doctype="Veterinary Patient", current_draft_invoice="SINV-REG", latest_invoice="SINV-REG", status="Active")]
+			return []
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True), get_value=get_value),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=Mock(return_value=frappe._dict(enable_billing_sessions=1)),
+			get_all=get_all,
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		with patch.object(billing_core, "frappe", frappe_stub):
+			resolved = billing_core.resolve_billing_session("Veterinary Hospitalisation", "VHOS-001")
+
+		self.assertEqual(resolved.name, "VBS-REG")
+
+	def test_consultation_charge_joins_existing_registration_draft_invoice(self):
+		registration_charge = frappe._dict({**charge_payload("Veterinary Patient:PAT-001:Registration Fee", "REG-ITEM", 75), "source_doctype": "Veterinary Patient", "source_name": "PAT-001", "invoice": "SINV-REG", "billing_status": "Draft Invoiced"})
+		consultation_charge = frappe._dict(charge_payload("consultation-fee", "CONS-ITEM", 100))
+		session = make_session(name="VBS-REG", current_draft_invoice="SINV-REG", latest_invoice="SINV-REG", charges=[registration_charge, consultation_charge])
+		draft = make_invoice("SINV-REG", docstatus=0, items=[frappe._dict({"description": "Registration Fee\nVetEdge billing charge: Veterinary Patient:PAT-001:Registration Fee"})])
+
+		with billing_core_context(session, draft):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-REG")
+		self.assertFalse(result["created"])
+		self.assertEqual(len(draft.get("items") or []), 2)
+		self.assertIn("consultation-fee", draft.get("items")[1].description)
+		self.assertEqual(session.current_draft_invoice, "SINV-REG")
+
+	def test_submitted_registration_invoice_stays_linked_and_consultation_gets_followup_draft(self):
+		registration_charge = frappe._dict({**charge_payload("Veterinary Patient:PAT-001:Registration Fee", "REG-ITEM", 75), "source_doctype": "Veterinary Patient", "source_name": "PAT-001", "invoice": "SINV-REG", "billing_status": "Submitted Invoiced"})
+		consultation_charge = frappe._dict(charge_payload("consultation-fee", "CONS-ITEM", 100))
+		session = make_session(name="VBS-REG", current_draft_invoice="SINV-REG", latest_invoice="SINV-REG", charges=[registration_charge, consultation_charge])
+		submitted = make_invoice("SINV-REG", docstatus=1, items=[frappe._dict({"description": "Registration Fee\nVetEdge billing charge: Veterinary Patient:PAT-001:Registration Fee"})], outstanding_amount=75)
+		followup = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with billing_core_context(session, submitted, created_invoice=followup):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertTrue(result["created"])
+		self.assertEqual(len(submitted.get("items") or []), 1)
+		submitted.save.assert_not_called()
+		self.assertEqual(len(followup.get("items") or []), 1)
+		self.assertIn("consultation-fee", followup.get("items")[0].description)
+		self.assertEqual(registration_charge.invoice, "SINV-REG")
+		self.assertEqual(consultation_charge.invoice, "SINV-NEW")
+
+	def test_billing_session_action_reuses_active_draft_invoice(self):
+		session = make_session(current_draft_invoice="SINV-REG", latest_invoice="SINV-REG", charges=[frappe._dict(charge_payload("consultation-fee", "CONS-ITEM", 100))])
+		session.check_permission = Mock()
+		draft = make_invoice("SINV-REG", docstatus=0, items=[])
+
+		with billing_core_context(session, draft):
+			result = billing_core.create_or_update_invoice_for_billing_session(session.name)
+
+		self.assertEqual(result["invoice"], "SINV-REG")
+		self.assertFalse(result["created"])
+		self.assertEqual(len(draft.get("items") or []), 1)
+		session.check_permission.assert_called_with("write")
+
+	def test_billing_session_action_does_not_create_empty_invoice(self):
+		session = make_session(charges=[], current_draft_invoice=None, latest_invoice=None)
+		session.check_permission = Mock()
+		created = make_invoice("SINV-EMPTY", docstatus=0, items=[])
+
+		with billing_core_context(session, make_invoice("SINV-OLD"), created_invoice=created):
+			result = billing_core.create_or_update_invoice_for_billing_session(session.name)
+
+		self.assertIsNone(result["invoice"])
+		created.insert.assert_not_called()
+		session.check_permission.assert_called_with("write")
+
 	def test_no_payment_gate_allows_after_invoice_generation(self):
 		session = make_session(payment_gate_mode="No Payment Gate", current_draft_invoice="SINV-001", latest_invoice="SINV-001")
 		invoice = make_invoice(docstatus=0)
@@ -562,6 +789,78 @@ class TestBillingCore(TestCase):
 			get_sessions.assert_not_called()
 		finally:
 			frappe.flags.vetedge_billing_core_syncing = previous
+
+	def test_billing_session_creation_uses_expanded_naming_series(self):
+		created_payloads = []
+		inserted_names = []
+
+		def exists(doctype, name=None):
+			if doctype == "DocType":
+				return name == billing_core.BILLING_SESSION_DOCTYPE
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return False
+			return False
+
+		def get_doc(doctype, name=None):
+			if isinstance(doctype, dict):
+				created_payloads.append(dict(doctype))
+				idx = len(created_payloads)
+				doc = frappe._dict(doctype)
+				doc.name = f"VBS-2026-{idx:05d}"
+				doc.insert = Mock(side_effect=lambda: inserted_names.append(doc.name))
+				return doc
+			return frappe._dict(doctype=doctype, name=name, primary_owner="CUST-001", patient=f"PAT-{name}", service_branch="Main", company="Company A")
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=Mock(return_value=None)),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=Mock(return_value=frappe._dict()),
+			get_all=Mock(return_value=[]),
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		with (
+			patch.object(billing_core, "frappe", frappe_stub),
+			patch.object(billing_core, "get_default_company", return_value="Company A"),
+		):
+			first = billing_core.get_or_create_billing_session("Veterinary Patient", "PAT-001")
+			second = billing_core.get_or_create_billing_session("Veterinary Patient", "PAT-002")
+
+		self.assertEqual(first.name, "VBS-2026-00001")
+		self.assertEqual(second.name, "VBS-2026-00002")
+		self.assertNotEqual(first.name, second.name)
+		self.assertEqual(inserted_names, ["VBS-2026-00001", "VBS-2026-00002"])
+		for payload in created_payloads:
+			self.assertNotIn("name", payload)
+			self.assertEqual(payload.get("naming_series"), "VBS-.YYYY.-.#####")
+			self.assertNotEqual(payload.get("naming_series"), payload.get("name"))
+
+	def test_repair_literal_billing_session_patch_renames_bad_record(self):
+		from vetedge.patches import repair_literal_billing_session_name as patch_module
+
+		renames = []
+
+		def exists(doctype, name=None):
+			if doctype == "DocType":
+				return name == "Veterinary Billing Session"
+			if doctype == "Veterinary Billing Session":
+				return name == patch_module.BAD_BILLING_SESSION_NAME
+			return False
+
+		with (
+			patch.object(patch_module.frappe.db, "exists", side_effect=exists),
+			patch.object(patch_module, "make_autoname", return_value="VBS-2026-00001"),
+			patch.object(patch_module.frappe, "rename_doc", side_effect=lambda *args, **kwargs: renames.append((args, kwargs))),
+		):
+			patch_module.execute()
+
+		self.assertEqual(len(renames), 1)
+		args, kwargs = renames[0]
+		self.assertEqual(args[:3], ("Veterinary Billing Session", "VBS-.YYYY.-.#####", "VBS-2026-00001"))
+		self.assertTrue(kwargs.get("force"))
+		self.assertFalse(kwargs.get("merge"))
 
 	def test_billing_core_does_not_introduce_ignore_permissions(self):
 		from pathlib import Path
