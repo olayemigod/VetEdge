@@ -56,6 +56,69 @@
 		`;
 	}
 
+	function renderSessionSummary(state) {
+		const session = state.billing_session || null;
+		if (!session) {
+			return "";
+		}
+		const ledger = session.invoice_ledger || {};
+		const currency = ledger.currency || session.currency || state.invoice?.currency;
+		const gate = state.payment_gate || session.payment_gate || {};
+		const warning = session.session_warning || (ledger.outstanding_amount > 0 ? __("This billing session still has unpaid balance from earlier invoice(s).") : "");
+		return `
+			<div class="ve-billing-section">
+				<h4>${__("Billing Session")}</h4>
+				<div class="ve-billing-grid">
+					${labelValue(__("Billing Session"), session.name)}
+					${labelValue(__("Session Total"), money(session.total_invoiced || ledger.total_invoiced || session.total_charges, currency))}
+					${labelValue(__("Total Paid"), money(session.total_paid || ledger.total_paid, currency))}
+					${labelValue(__("Total Outstanding"), money(session.outstanding_amount || ledger.outstanding_amount, currency))}
+					${labelValue(__("Payment Status"), session.payment_status || ledger.payment_status)}
+					${labelValue(__("Gate Mode"), session.payment_gate_mode || gate.gate)}
+					${labelValue(__("Gate Result"), gate.can_proceed ? __("Allowed") : __("Blocked"))}
+				</div>
+				${warning ? `<div class="alert alert-warning ve-billing-session-warning">${escapeHtml(warning)}</div>` : ""}
+			</div>
+		`;
+	}
+
+	function renderLinkedInvoices(state) {
+		const session = state.billing_session || null;
+		const invoices = session?.invoices || session?.invoice_ledger?.invoices || [];
+		if (!invoices.length) {
+			return "";
+		}
+		return `
+			<div class="ve-billing-section">
+				<h4>${__("Linked Invoices")}</h4>
+				<table class="table table-bordered table-condensed ve-billing-table">
+					<thead>
+						<tr>
+							<th>${__("Invoice")}</th>
+							<th>${__("Status")}</th>
+							<th class="text-right">${__("Grand Total")}</th>
+							<th class="text-right">${__("Paid")}</th>
+							<th class="text-right">${__("Outstanding")}</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						${invoices.map((row) => `
+							<tr>
+								<td>${escapeHtml(row.name || row.invoice)}</td>
+								<td>${escapeHtml(row.status || (row.docstatus === 0 ? __("Draft") : row.docstatus === 1 ? __("Submitted") : __("Cancelled")))}</td>
+								<td class="text-right">${money(row.grand_total || row.rounded_total, row.currency)}</td>
+								<td class="text-right">${money(row.paid_amount, row.currency)}</td>
+								<td class="text-right">${money(row.outstanding_amount, row.currency)}</td>
+								<td class="text-right"><button class="btn btn-default btn-xs" data-action="open-ledger-invoice" data-invoice="${escapeHtml(row.name || row.invoice)}">${__("Open")}</button></td>
+							</tr>
+						`).join("")}
+					</tbody>
+				</table>
+			</div>
+		`;
+	}
+
 	function renderTaxes(invoice) {
 		const taxes = invoice?.taxes || [];
 		if (!taxes.length && !invoice?.discount_amount) {
@@ -166,6 +229,7 @@
 					margin-top: 12px;
 				}
 				.ve-billing-action-message { margin-top: 8px; }
+				.ve-billing-session-warning { margin-top: 10px; margin-bottom: 0; }
 				.ve-billing-table { margin-bottom: 8px; }
 				@media (max-width: 767px) {
 					.ve-billing-grid { grid-template-columns: 1fr; }
@@ -181,6 +245,8 @@
 					${labelValue(__("Service Branch"), source.service_branch)}
 				</div>
 			</div>
+			${renderSessionSummary(state)}
+			${renderLinkedInvoices(state)}
 			<div class="ve-billing-section">
 				<h4>${__("Invoice")}</h4>
 				${invoiceBlock}
@@ -396,6 +462,9 @@
 			});
 			wrapper.find("[data-action='open-invoice']").on("click", () => {
 				openFullInvoice(state?.actions?.open_invoice_name || state?.open_invoice_name || state?.invoice?.name);
+			});
+			wrapper.find("[data-action='open-ledger-invoice']").on("click", (event) => {
+				openFullInvoice(event.currentTarget.dataset.invoice);
 			});
 		}
 

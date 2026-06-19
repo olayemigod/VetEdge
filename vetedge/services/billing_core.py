@@ -434,6 +434,8 @@ def diagnose_billing_session_unbilled_items(source_doctype: str, source_name: st
 				"reason": get_unbilled_diagnostic_reason(charge, docstatus),
 			}
 		)
+	ledger = get_billing_session_invoice_ledger(session)
+	gate = get_payment_gate_status(session)
 	return {
 		"session": session.name,
 		"source_payload_charge_keys": [payload.get("charge_key") or build_charge_key(payload) for payload in source_payloads],
@@ -442,6 +444,12 @@ def diagnose_billing_session_unbilled_items(source_doctype: str, source_name: st
 		"draft_charge_keys": draft,
 		"pending_unbilled_charge_keys": pending,
 		"rows": rows,
+		"payment_ledger": ledger,
+		"linked_invoices": ledger.get("invoices"),
+		"aggregate_outstanding": ledger.get("outstanding_amount"),
+		"gate_mode": gate.get("gate"),
+		"gate_allowed": gate.get("can_proceed"),
+		"gate_blocked_reason": None if gate.get("can_proceed") else gate.get("message"),
 	}
 
 
@@ -462,7 +470,8 @@ def get_unbilled_diagnostic_reason(charge, invoice_docstatus) -> str:
 def get_billing_session_summary(session) -> dict:
 	session = ensure_session_doc(session)
 	refresh_billing_session_totals(session)
-	invoices = get_session_invoice_summaries(session)
+	ledger = get_billing_session_invoice_ledger(session)
+	invoices = ledger["invoices"]
 	gate = get_payment_gate_status(session)
 	source_documents = list(
 		OrderedDict.fromkeys(
@@ -485,6 +494,8 @@ def get_billing_session_summary(session) -> dict:
 		"outstanding_amount": flt(session.get("outstanding_amount")),
 		"payment_status": session.get("payment_status"),
 		"invoices": invoices,
+		"invoice_ledger": ledger,
+		"session_warning": get_session_payment_warning(ledger),
 		"payment_gate": gate,
 		"source_documents": [{"doctype": item.split(":", 1)[0], "name": item.split(":", 1)[1]} for item in source_documents],
 		"charges": [serialize_charge(row) for row in session.get("charges") or []],
@@ -495,24 +506,52 @@ def get_payment_gate_status(session) -> dict:
 	session = ensure_session_doc(session)
 	refresh_billing_session_totals(session)
 	mode = normalize_payment_gate_mode(session.get("payment_gate_mode"))
-	invoices = get_session_invoice_summaries(session)
-	has_invoice = bool(invoices)
-	has_submitted_invoice = any(cint(row.get("docstatus")) == 1 for row in invoices)
-
-	if not has_invoice:
+	ledger = get_billing_session_invoice_ledger(session)
+	if ledger["has_pending_uninvoiced_charges"] and not ledger["invoices"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
+	if not ledger["invoices"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
 	if mode == NO_PAYMENT_GATE:
-		return {"gate": mode, "can_proceed": True, "status": "Allowed", "message": "Invoice has been generated. Payment is not required before proceeding."}
-	if not has_submitted_invoice:
+		return {
+			"gate": mode,
+			"can_proceed": True,
+			"status": "Allowed",
+			"message": get_session_payment_warning(ledger) or "Invoice has been generated. Payment is not required before proceeding.",
+		}
+	if not ledger["submitted_invoice_count"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "At least one linked Sales Invoice must be submitted before service can proceed."}
 	if mode == PARTIAL_PAYMENT_GATE:
-		allowed = flt(session.total_paid) > 0
-		return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": "Payment gate passed." if allowed else "A partial payment is required before service can proceed."}
-	unsubmitted = [row for row in invoices if cint(row.get("docstatus")) == 0]
-	if unsubmitted:
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "All linked Sales Invoices must be submitted before full payment can be confirmed."}
-	allowed = flt(session.outstanding_amount) <= 0 and flt(session.total_invoiced) > 0
+		allowed = flt(ledger["total_paid"]) > 0
+		message = "Payment gate passed."
+		if allowed and ledger["outstanding_amount"] > 0:
+			message = get_session_payment_warning(ledger) or message
+		return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": message if allowed else "A partial payment is required before service can proceed."}
+	if ledger["has_pending_uninvoiced_charges"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Full payment required. There are pending uninvoiced charges."}
+	if ledger["has_active_draft_invoice"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Full payment required. There is still an active draft invoice."}
+	if ledger["has_unpaid_submitted_invoice"] or flt(ledger["outstanding_amount"]) > 0:
+		return {
+			"gate": mode,
+			"can_proceed": False,
+			"status": "Blocked",
+			"message": f"Full payment required. {format_money_for_message(ledger['outstanding_amount'], ledger.get('currency'))} is still outstanding across this billing session.",
+		}
+	allowed = ledger["submitted_invoice_count"] > 0 and flt(ledger["outstanding_amount"]) <= 0
 	return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": "Payment gate passed." if allowed else "Full payment is required before service can proceed."}
+
+
+def get_session_payment_warning(ledger: dict) -> str | None:
+	if flt(ledger.get("outstanding_amount")) > 0:
+		return "This billing session still has unpaid balance from earlier invoice(s)."
+	return None
+
+
+def format_money_for_message(amount, currency=None) -> str:
+	value = flt(amount)
+	if currency == "NGN" or not currency:
+		return f"?{value:,.2f}"
+	return f"{currency} {value:,.2f}"
 
 
 def can_proceed_with_payment_gate(session) -> bool:
@@ -788,43 +827,161 @@ def boarding_to_billing_charges(doc) -> list[dict]:
 
 def refresh_billing_session_totals(session):
 	session = ensure_session_doc(session)
-	invoices = get_session_invoice_names(session)
-	total_charges = sum(flt(row.amount) for row in session.get("charges") or [] if row.get("billing_status") != "Cancelled")
-	total_invoiced = total_paid = outstanding = 0
-	for invoice_name in invoices:
-		if not frappe.db.exists("Sales Invoice", invoice_name):
-			continue
-		invoice = frappe.get_doc("Sales Invoice", invoice_name)
-		if cint(invoice.docstatus) == 2:
-			continue
-		total_invoiced += flt(invoice.get("grand_total"))
-		if cint(invoice.docstatus) == 1:
-			state = get_invoice_payment_state(invoice.name)
-			total_paid += flt(state.get("paid_amount"))
-			outstanding += flt(state.get("outstanding_amount"))
-	session.total_charges = total_charges
-	session.total_invoiced = total_invoiced
-	session.total_paid = total_paid
-	session.outstanding_amount = outstanding
-	session.payment_status = get_session_payment_status(session, invoices)
+	ledger = get_billing_session_invoice_ledger(session)
+	session.total_charges = ledger["total_charges"]
+	session.total_invoiced = ledger["total_invoiced"]
+	session.total_paid = ledger["total_paid"]
+	session.outstanding_amount = ledger["outstanding_amount"]
+	session.payment_status = ledger["payment_status"]
 	session.billing_summary_json = json.dumps(
 		{
-			"invoice_count": len(invoices),
-			"total_charges": total_charges,
-			"total_invoiced": total_invoiced,
-			"total_paid": total_paid,
-			"outstanding_amount": outstanding,
+			"invoice_count": len(ledger["invoices"]),
+			"submitted_invoice_count": ledger["submitted_invoice_count"],
+			"draft_invoice_count": ledger["draft_invoice_count"],
+			"cancelled_invoice_count": ledger["cancelled_invoice_count"],
+			"total_charges": ledger["total_charges"],
+			"total_invoiced": ledger["total_invoiced"],
+			"total_submitted": ledger["total_submitted"],
+			"total_draft": ledger["total_draft"],
+			"total_paid": ledger["total_paid"],
+			"outstanding_amount": ledger["outstanding_amount"],
+			"has_pending_uninvoiced_charges": ledger["has_pending_uninvoiced_charges"],
 		},
 		default=str,
 	)
 	if session.status not in {"Closed", "Cancelled"}:
-		if total_invoiced and outstanding <= 0:
+		if ledger["payment_status"] == "Paid":
 			session.status = "Paid"
-		elif total_paid > 0:
+		elif ledger["total_paid"] > 0:
 			session.status = "Partially Paid"
 		else:
 			session.status = "Active"
 	return session
+
+
+def get_billing_session_invoice_ledger(session) -> dict:
+	session = ensure_session_doc(session)
+	invoice_rows = []
+	invoice_names = get_session_invoice_names(session)
+	total_charges = sum(flt(row.amount) for row in session.get("charges") or [] if row.get("billing_status") not in {"Cancelled", "Skipped"})
+	has_pending_uninvoiced_charges = any(
+		(not row.get("invoice") and row.get("billing_status") not in {"Cancelled", "Skipped"})
+		or row.get("billing_status") == "Pending"
+		for row in session.get("charges") or []
+	)
+	total_invoiced = total_submitted = total_draft = total_paid = outstanding_amount = 0
+	draft_invoice_count = submitted_invoice_count = unpaid_invoice_count = cancelled_invoice_count = 0
+	has_unpaid_submitted_invoice = has_active_draft_invoice = False
+	currency = None
+
+	for invoice_name in invoice_names:
+		if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+			continue
+		invoice = frappe.get_doc("Sales Invoice", invoice_name)
+		docstatus = cint(invoice.docstatus)
+		grand_total = flt(invoice.get("grand_total"))
+		rounded_total = flt(invoice.get("rounded_total"))
+		invoice_total = rounded_total or grand_total
+		paid_amount = flt(invoice.get("paid_amount"))
+		invoice_outstanding = flt(invoice.get("outstanding_amount"))
+		if docstatus == 1:
+			state = get_invoice_payment_state(invoice.name)
+			paid_amount = flt(state.get("paid_amount"))
+			invoice_outstanding = flt(state.get("outstanding_amount"))
+		if not currency:
+			currency = invoice.get("currency")
+		is_cancelled = docstatus == 2
+		is_draft = docstatus == 0
+		is_submitted = docstatus == 1
+		contributes = not is_cancelled
+		blocks_full_payment_gate = False
+		if is_draft:
+			draft_invoice_count += 1
+			has_active_draft_invoice = True
+			blocks_full_payment_gate = True
+		elif is_submitted:
+			submitted_invoice_count += 1
+			if invoice_outstanding > 0:
+				unpaid_invoice_count += 1
+				has_unpaid_submitted_invoice = True
+				blocks_full_payment_gate = True
+		elif is_cancelled:
+			cancelled_invoice_count += 1
+		if contributes:
+			total_invoiced += invoice_total
+			if is_draft:
+				total_draft += invoice_total
+			elif is_submitted:
+				total_submitted += invoice_total
+				total_paid += paid_amount
+				outstanding_amount += invoice_outstanding
+		invoice_rows.append(
+			{
+				"invoice": invoice.name,
+				"name": invoice.name,
+				"docstatus": docstatus,
+				"status": invoice.get("status"),
+				"grand_total": grand_total,
+				"rounded_total": rounded_total,
+				"paid_amount": paid_amount,
+				"outstanding_amount": invoice_outstanding,
+				"currency": invoice.get("currency"),
+				"is_draft": is_draft,
+				"is_submitted": is_submitted,
+				"is_cancelled": is_cancelled,
+				"blocks_full_payment_gate": blocks_full_payment_gate,
+				"contributes_to_total": contributes,
+			}
+		)
+
+	payment_status = get_session_payment_status_from_ledger(
+		submitted_invoice_count=submitted_invoice_count,
+		draft_invoice_count=draft_invoice_count,
+		has_pending_uninvoiced_charges=has_pending_uninvoiced_charges,
+		outstanding_amount=outstanding_amount,
+		total_paid=total_paid,
+	)
+	return {
+		"invoices": invoice_rows,
+		"total_charges": flt(total_charges),
+		"total_invoiced": flt(total_invoiced),
+		"total_submitted": flt(total_submitted),
+		"total_draft": flt(total_draft),
+		"total_paid": flt(total_paid),
+		"outstanding_amount": flt(outstanding_amount),
+		"draft_invoice_count": draft_invoice_count,
+		"submitted_invoice_count": submitted_invoice_count,
+		"unpaid_invoice_count": unpaid_invoice_count,
+		"cancelled_invoice_count": cancelled_invoice_count,
+		"has_unpaid_submitted_invoice": has_unpaid_submitted_invoice,
+		"has_active_draft_invoice": has_active_draft_invoice,
+		"has_pending_uninvoiced_charges": has_pending_uninvoiced_charges,
+		"payment_status": payment_status,
+		"currency": currency,
+	}
+
+
+def get_session_payment_status_from_ledger(
+	*,
+	submitted_invoice_count: int,
+	draft_invoice_count: int,
+	has_pending_uninvoiced_charges: bool,
+	outstanding_amount: float,
+	total_paid: float,
+) -> str:
+	if not submitted_invoice_count and not draft_invoice_count:
+		return "Pending Invoice" if has_pending_uninvoiced_charges else "Not Invoiced"
+	if draft_invoice_count:
+		return "Draft Invoice Pending"
+	if has_pending_uninvoiced_charges:
+		return "Pending Invoice"
+	if submitted_invoice_count and flt(outstanding_amount) > 0 and flt(total_paid) > 0:
+		return "Partially Paid"
+	if submitted_invoice_count and flt(outstanding_amount) > 0:
+		return "Unpaid"
+	if submitted_invoice_count and flt(outstanding_amount) <= 0:
+		return "Paid"
+	return "Not Invoiced"
 
 
 def update_billing_sessions_from_invoice(doc, method: str | None = None) -> None:
@@ -1526,43 +1683,11 @@ def get_session_invoice_names(session) -> list[str]:
 
 
 def get_session_invoice_summaries(session) -> list[dict]:
-	summaries = []
-	for invoice_name in get_session_invoice_names(session):
-		if not frappe.db.exists("Sales Invoice", invoice_name):
-			continue
-		invoice = frappe.get_doc("Sales Invoice", invoice_name)
-		summaries.append(
-			{
-				"name": invoice.name,
-				"docstatus": cint(invoice.docstatus),
-				"status": invoice.get("status"),
-				"grand_total": flt(invoice.get("grand_total")),
-				"paid_amount": flt(invoice.get("paid_amount")),
-				"outstanding_amount": flt(invoice.get("outstanding_amount")),
-				"currency": invoice.get("currency"),
-			}
-		)
-	return summaries
+	return get_billing_session_invoice_ledger(session)["invoices"]
 
 
 def get_session_payment_status(session, invoice_names: Iterable[str]) -> str:
-	submitted = []
-	draft_exists = False
-	for invoice_name in invoice_names:
-		if not frappe.db.exists("Sales Invoice", invoice_name):
-			continue
-		docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
-		if docstatus == 0:
-			draft_exists = True
-		elif docstatus == 1:
-			submitted.append(invoice_name)
-	if submitted and flt(session.outstanding_amount) <= 0:
-		return "Paid"
-	if flt(session.total_paid) > 0:
-		return "Partly Paid"
-	if draft_exists or submitted:
-		return "Unpaid"
-	return "Not Invoiced"
+	return get_billing_session_invoice_ledger(session)["payment_status"]
 
 
 def serialize_charge(row) -> dict:

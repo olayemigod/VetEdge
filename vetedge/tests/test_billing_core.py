@@ -238,11 +238,11 @@ class TestBillingCore(TestCase):
 			],
 		)
 
+		invoice = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=0)
 		with (
+			multi_invoice_billing_context(session, {"SINV-SUB": invoice}, {"SINV-SUB": 100}),
 			patch.object(billing_core, "sync_source_charge_payloads_to_billing_session", return_value=session),
 			patch.object(billing_core, "get_source_charge_payloads", return_value=[charge_payload(submitted_key), charge_payload(pending_key, "TREAT-ITEM", 75)]),
-			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name == "SINV-SUB"),
-			patch.object(billing_core.frappe.db, "get_value", return_value=1),
 		):
 			diagnostics = billing_core.diagnose_billing_session_unbilled_items("Veterinary Consultation", "VCON-001")
 
@@ -288,6 +288,102 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["updated_count"], 1)
 		self.assertEqual(len(draft.get("items") or []), 1)
 
+	def test_multiple_invoice_ledger_keeps_earlier_outstanding_when_latest_is_paid(self):
+		old_charge = frappe._dict({**charge_payload("old-consult", "CONS-ITEM", 100), "invoice": "SINV-OLD", "billing_status": "Submitted Invoiced"})
+		new_charge = frappe._dict({**charge_payload("new-treatment", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Paid"})
+		session = make_session(latest_invoice="SINV-NEW", charges=[old_charge, new_charge])
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=40)
+		new_invoice = make_invoice("SINV-NEW", docstatus=1, outstanding_amount=0)
+
+		with multi_invoice_billing_context(session, {"SINV-OLD": old_invoice, "SINV-NEW": new_invoice}, {"SINV-OLD": 60, "SINV-NEW": 50}):
+			ledger = billing_core.get_billing_session_invoice_ledger(session)
+			billing_core.refresh_billing_session_totals(session)
+
+		self.assertEqual(ledger["total_paid"], 110)
+		self.assertEqual(ledger["outstanding_amount"], 40)
+		self.assertTrue(ledger["has_unpaid_submitted_invoice"])
+		self.assertEqual(session.payment_status, "Partially Paid")
+		self.assertNotEqual(session.payment_status, "Paid")
+
+	def test_full_payment_gate_blocks_when_earlier_invoice_is_partly_paid_but_latest_is_paid(self):
+		session = make_session(
+			payment_gate_mode="Full Payment Gate",
+			latest_invoice="SINV-NEW",
+			charges=[
+				frappe._dict({**charge_payload("old-consult"), "invoice": "SINV-OLD", "billing_status": "Submitted Invoiced"}),
+				frappe._dict({**charge_payload("new-treatment"), "invoice": "SINV-NEW", "billing_status": "Paid"}),
+			],
+		)
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=40)
+		new_invoice = make_invoice("SINV-NEW", docstatus=1, outstanding_amount=0)
+
+		with multi_invoice_billing_context(session, {"SINV-OLD": old_invoice, "SINV-NEW": new_invoice}, {"SINV-OLD": 60, "SINV-NEW": 50}):
+			gate = billing_core.get_payment_gate_status(session)
+
+		self.assertFalse(gate["can_proceed"])
+		self.assertEqual(gate["status"], "Blocked")
+		self.assertIn("still outstanding across this billing session", gate["message"])
+
+	def test_partial_payment_gate_uses_aggregate_paid_but_keeps_outstanding_warning(self):
+		session = make_session(
+			payment_gate_mode="Partial Payment Gate",
+			charges=[frappe._dict({**charge_payload("old-consult"), "invoice": "SINV-OLD", "billing_status": "Submitted Invoiced"})],
+		)
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=40)
+
+		with multi_invoice_billing_context(session, {"SINV-OLD": old_invoice}, {"SINV-OLD": 60}):
+			gate = billing_core.get_payment_gate_status(session)
+
+		self.assertTrue(gate["can_proceed"])
+		self.assertIn("unpaid balance", gate["message"])
+
+	def test_no_payment_gate_allows_but_keeps_outstanding_warning(self):
+		session = make_session(
+			payment_gate_mode="No Payment Gate",
+			charges=[frappe._dict({**charge_payload("old-consult"), "invoice": "SINV-OLD", "billing_status": "Submitted Invoiced"})],
+		)
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=40)
+
+		with multi_invoice_billing_context(session, {"SINV-OLD": old_invoice}, {"SINV-OLD": 60}):
+			gate = billing_core.get_payment_gate_status(session)
+
+		self.assertTrue(gate["can_proceed"])
+		self.assertIn("unpaid balance", gate["message"])
+
+	def test_full_payment_gate_allows_when_all_session_invoices_are_paid(self):
+		session = make_session(
+			payment_gate_mode="Full Payment Gate",
+			charges=[
+				frappe._dict({**charge_payload("old-consult"), "invoice": "SINV-OLD", "billing_status": "Paid"}),
+				frappe._dict({**charge_payload("new-treatment"), "invoice": "SINV-NEW", "billing_status": "Paid"}),
+			],
+		)
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=0)
+		new_invoice = make_invoice("SINV-NEW", docstatus=1, outstanding_amount=0)
+
+		with multi_invoice_billing_context(session, {"SINV-OLD": old_invoice, "SINV-NEW": new_invoice}, {"SINV-OLD": 100, "SINV-NEW": 50}):
+			gate = billing_core.get_payment_gate_status(session)
+
+		self.assertTrue(gate["can_proceed"])
+		self.assertEqual(gate["status"], "Allowed")
+
+	def test_cancelled_invoices_are_excluded_from_session_payment_totals(self):
+		session = make_session(
+			charges=[
+				frappe._dict({**charge_payload("cancelled"), "invoice": "SINV-CAN", "billing_status": "Cancelled"}),
+				frappe._dict({**charge_payload("paid"), "invoice": "SINV-PAID", "billing_status": "Paid"}),
+			],
+		)
+		cancelled = make_invoice("SINV-CAN", docstatus=2, outstanding_amount=100)
+		paid = make_invoice("SINV-PAID", docstatus=1, outstanding_amount=0)
+
+		with multi_invoice_billing_context(session, {"SINV-CAN": cancelled, "SINV-PAID": paid}, {"SINV-PAID": 100}):
+			ledger = billing_core.get_billing_session_invoice_ledger(session)
+
+		self.assertEqual(ledger["cancelled_invoice_count"], 1)
+		self.assertEqual(ledger["outstanding_amount"], 0)
+		self.assertEqual(ledger["total_paid"], 100)
+
 	def test_session_summary_aggregates_multiple_linked_invoices(self):
 		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
 		new_charge = frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Draft Invoiced"})
@@ -329,7 +425,7 @@ class TestBillingCore(TestCase):
 			status = billing_core.get_payment_gate_status(session)
 
 		self.assertFalse(status["can_proceed"])
-		self.assertIn("must be submitted", status["message"])
+		self.assertIn("active draft invoice", status["message"])
 
 	def test_consultation_resolves_existing_registration_billing_session(self):
 		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
@@ -1124,6 +1220,69 @@ class registration_consultation_context:
 		for patcher in reversed(self.patches):
 			patcher.stop()
 		return False
+
+
+
+class multi_invoice_billing_context:
+	def __init__(self, session, invoices, paid_amounts=None):
+		self.session = session
+		self.invoices = invoices
+		self.paid_amounts = paid_amounts or {}
+		self.patches = []
+
+	def __enter__(self):
+		def exists(doctype, name=None):
+			if doctype in {"DocType", "Veterinary Settings"}:
+				return True
+			if doctype == "Sales Invoice":
+				return name in self.invoices
+			return True
+
+		def get_doc(doctype, name=None):
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return self.session
+			if doctype == "Sales Invoice":
+				return self.invoices[name]
+			return frappe._dict(name=name)
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Sales Invoice" and fieldname == "docstatus":
+				return self.invoices[name].docstatus
+			return None
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists, get_value=get_value),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=lambda doctype: frappe._dict(enable_billing_sessions=1),
+			get_all=Mock(return_value=[]),
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		self.patches = [
+			patch.object(billing_core, "frappe", frappe_stub),
+			patch.object(billing_core, "get_invoice_payment_state", side_effect=self.get_invoice_payment_state),
+		]
+		for patcher in self.patches:
+			patcher.start()
+		return self
+
+	def get_invoice_payment_state(self, invoice_name):
+		invoice = self.invoices[invoice_name]
+		paid = billing_core.flt(self.paid_amounts.get(invoice_name, invoice.get("paid_amount")))
+		outstanding = billing_core.flt(invoice.get("outstanding_amount"))
+		return {
+			"invoice": invoice_name,
+			"paid_amount": paid,
+			"outstanding_amount": outstanding,
+			"has_payment": paid > 0,
+			"is_fully_paid": outstanding <= 0,
+		}
+
+	def __exit__(self, exc_type, exc, tb):
+		for patcher in reversed(self.patches):
+			patcher.stop()
 
 
 class billing_core_context:
