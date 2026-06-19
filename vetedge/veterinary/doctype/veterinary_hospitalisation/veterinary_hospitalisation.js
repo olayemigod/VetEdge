@@ -4,6 +4,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 		set_location_help(frm);
 		set_activity_help(frm);
 		add_hospitalisation_action_buttons(frm);
+		add_charge_sheet_action_buttons(frm);
 	},
 	status(frm) {
 		set_discharge_fields_visibility(frm);
@@ -49,6 +50,67 @@ function set_activity_row_status_defaults(cdt, cdn) {
 	const row = locals[cdt][cdn];
 	frappe.model.set_value(cdt, cdn, "billing_status", row.billable ? "Pending Charge" : "Not Billable");
 	frappe.model.set_value(cdt, cdn, "stock_status", row.stock_affecting ? "Pending" : "Not Applicable");
+}
+
+function add_charge_sheet_action_buttons(frm) {
+	if (frm.is_new()) {
+		return;
+	}
+
+	frm.add_custom_button(__("View Charge Summary"), () => {
+		frappe.call({
+			method: "vetedge.services.hospitalisation.get_hospitalisation_charge_summary",
+			args: { hospitalisation_name: frm.doc.name },
+			callback(result) {
+				const summary = result.message || {};
+				frappe.msgprint({
+					title: __("Charge Summary"),
+					message: [
+						`${__("Pending")}: ${format_currency(summary.total_pending || 0)}`,
+						`${__("Invoiced")}: ${format_currency(summary.total_invoiced || 0)}`,
+						`${__("Cancelled")}: ${format_currency(summary.total_cancelled || 0)}`,
+						`${__("Linked Invoice")}: ${summary.linked_invoice || "-"}`,
+					].join("<br>"),
+				});
+			},
+		});
+	}, __("Billing"));
+
+	if (["Cancelled", "Discharged"].includes(frm.doc.status)) {
+		return;
+	}
+
+	frm.add_custom_button(__("Build Charge Sheet"), () => {
+		frappe.call({
+			method: "vetedge.services.hospitalisation.build_hospitalisation_charge_items",
+			args: { hospitalisation_name: frm.doc.name },
+			freeze: true,
+			callback(result) {
+				const summary = result.message || {};
+				frappe.show_alert({
+					message: __(`Created ${summary.created || 0} charge item(s).`),
+					indicator: "green",
+				});
+				frm.reload_doc();
+			},
+		});
+	}, __("Billing"));
+
+	frm.add_custom_button(__("Sync Charges to Invoice"), () => {
+		frappe.call({
+			method: "vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice",
+			args: { hospitalisation_name: frm.doc.name },
+			freeze: true,
+			callback(result) {
+				const summary = result.message || {};
+				frappe.show_alert({
+					message: __(`Synced ${summary.added_count || 0} charge item(s) to invoice.`),
+					indicator: "green",
+				});
+				frm.reload_doc();
+			},
+		});
+	}, __("Billing"));
 }
 
 function add_hospitalisation_action_buttons(frm) {

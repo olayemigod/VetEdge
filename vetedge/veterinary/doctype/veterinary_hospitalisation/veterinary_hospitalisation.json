@@ -27,6 +27,9 @@
   "activities_tab",
   "activities_section",
   "activities",
+  "charge_sheet_tab",
+  "charge_sheet_section",
+  "charge_items",
   "billing_section",
   "sales_invoice",
   "invoice_status",
@@ -193,6 +196,23 @@
    "fieldtype": "Table",
    "label": "Activities",
    "options": "Veterinary Hospitalisation Activity"
+  },
+  {
+   "fieldname": "charge_sheet_tab",
+   "fieldtype": "Tab Break",
+   "label": "Charge Sheet"
+  },
+  {
+   "fieldname": "charge_sheet_section",
+   "fieldtype": "Section Break",
+   "label": "Hospitalisation Charges"
+  },
+  {
+   "description": "Billing bridge from hospitalisation activities to Sales Invoice. Sync only adds pending charges to draft invoices.",
+   "fieldname": "charge_items",
+   "fieldtype": "Table",
+   "label": "Charge Items",
+   "options": "Veterinary Hospitalisation Charge Item"
   },
   {
    "collapsible": 1,

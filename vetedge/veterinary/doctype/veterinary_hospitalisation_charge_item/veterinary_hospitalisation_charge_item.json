@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "creation": "2026-06-19 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "source_activity",
+  "activity_type",
+  "item",
+  "item_name",
+  "description",
+  "qty",
+  "uom",
+  "rate",
+  "amount",
+  "billing_status",
+  "sales_invoice",
+  "sales_invoice_item",
+  "source_hash",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_activity",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Activity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "activity_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Activity Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "default": "0",
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate"
+  },
+  {
+   "default": "0",
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "read_only": 1
+  },
+  {
+   "default": "Pending Invoice",
+   "fieldname": "billing_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Billing Status",
+   "options": "Pending Invoice\nInvoiced\nCancelled"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_invoice_item",
+   "fieldtype": "Data",
+   "label": "Sales Invoice Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_hash",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Hospitalisation Charge Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
