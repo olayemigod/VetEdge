@@ -37,6 +37,7 @@ class TestBillingModal(TestCase):
 			patch.object(billing_modal, "assert_can_read_source"),
 			patch.object(billing_modal, "get_invoice_summary", return_value={"name": "SINV-001", "docstatus": 1}),
 			patch.object(billing_modal, "get_billing_modal_state", return_value={"invoice": {"name": "SINV-001"}}),
+			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=False),
 			patch.object(billing_modal.frappe, "get_attr") as get_attr,
 		):
 			result = billing_modal.create_invoice_from_modal("Veterinary Consultation", "VCON-001")
@@ -62,6 +63,7 @@ class TestBillingModal(TestCase):
 			patch.object(billing_modal, "assert_can_read_source"),
 			patch.object(billing_modal, "get_invoice_summary", return_value={"name": "SINV-001", "docstatus": 0}),
 			patch.object(billing_modal, "get_billing_modal_state", return_value={"invoice": {"name": "SINV-001"}}),
+			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=False),
 			patch.object(billing_modal.frappe, "get_attr", return_value=create_invoice),
 		):
 			result = billing_modal.create_invoice_from_modal("Veterinary Consultation", "VCON-001")

@@ -80,6 +80,15 @@ BILLING_SOURCE_CONFIGS: dict[str, BillingSourceConfig] = {
 		create_invoice_method="vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice",
 		create_invoice_arg="hospitalisation_name",
 	),
+	"Veterinary Patient": BillingSourceConfig(
+		source_doctype="Veterinary Patient",
+		invoice_link_field="registration_invoice",
+		patient_field="name",
+		owner_field="primary_owner",
+		branch_field="default_branch",
+		create_invoice_method="vetedge.services.registration_billing.create_manual_registration_invoice",
+		create_invoice_arg="patient",
+	),
 }
 
 
@@ -269,13 +278,18 @@ def get_available_actions(config: BillingSourceConfig, invoice_summary: dict | N
 
 
 
+def is_billing_sessions_enabled() -> bool:
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled as core_is_billing_sessions_enabled
+
+		return core_is_billing_sessions_enabled()
+	except Exception:
+		return False
+
+
 def get_billing_session_summary_for_source(source_doctype: str, source_name: str) -> dict | None:
 	try:
-		from vetedge.services.billing_core import (
-			get_billing_session_summary,
-			is_billing_sessions_enabled,
-			resolve_billing_session,
-		)
+		from vetedge.services.billing_core import get_billing_session_summary, resolve_billing_session
 	except Exception:
 		return None
 	if not is_billing_sessions_enabled():
@@ -293,6 +307,8 @@ def source_supports_billing_session(source_doctype: str) -> bool:
 		"Veterinary Hospitalisation",
 		"Veterinary Vaccination Record",
 		"Veterinary Patient",
+		"Pet Grooming Session",
+		"Pet Boarding Booking",
 	}
 
 
@@ -362,7 +378,7 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 	invoice_summary = get_invoice_summary(invoice_name)
 	if source_supports_billing_session(source_doctype):
 		try:
-			from vetedge.services.billing_core import is_billing_sessions_enabled, sync_source_to_billing_session
+			from vetedge.services.billing_core import sync_source_to_billing_session
 
 			if is_billing_sessions_enabled():
 				result = sync_source_to_billing_session(source_doctype, source_name)

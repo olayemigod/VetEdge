@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 
-from vetedge.services import billing_core, billing_modal
+from vetedge.services import billing, billing_core, billing_modal, boarding, grooming, lab, registration_billing, vaccination
 
 
 def make_session(**values):
@@ -175,6 +175,128 @@ class TestBillingCore(TestCase):
 
 		self.assertEqual(state["billing_session"], summary)
 		self.assertTrue(state["payment_gate"]["can_proceed"])
+
+
+
+	def test_global_billing_sources_are_modal_session_supported(self):
+		for doctype in [
+			"Veterinary Consultation",
+			"Veterinary Lab Order",
+			"Veterinary Vaccination Record",
+			"Veterinary Hospitalisation",
+			"Veterinary Patient",
+			"Pet Grooming Session",
+			"Pet Boarding Booking",
+		]:
+			self.assertTrue(billing_modal.source_supports_billing_session(doctype), doctype)
+
+	def test_consultation_invoice_api_uses_billing_core(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", service_branch="Main", status="Draft")
+		doc.save = Mock()
+		settings = billing.ConsultationBillingSettings(True, "CONS-ITEM", False, False, False, True)
+		with (
+			patch.object(billing, "require_internal_user"),
+			patch.object(billing, "can_access_consultation"),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing, "validate_consultation_invoice_request"),
+			patch.object(billing, "use_billing_core_for_source", return_value=True),
+			patch.object(billing.frappe, "get_doc", side_effect=lambda doctype, name=None: doc if doctype == "Veterinary Consultation" else make_invoice(name or "SINV-001")),
+			patch.object(billing.frappe.db, "get_value", return_value="Draft"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "session": "VBS-001", "created": True}) as sync,
+		):
+			result = billing.create_consultation_invoice("VCON-001")
+
+		sync.assert_called_once_with("Veterinary Consultation", "VCON-001")
+		self.assertEqual(result["billing_session"], "VBS-001")
+
+	def test_lab_order_invoice_api_uses_billing_core(self):
+		order = frappe._dict(doctype="Veterinary Lab Order", name="VLAB-001", linked_invoice=None)
+		with (
+			patch.object(lab, "require_internal_user"),
+			patch.object(lab, "can_access_lab_order"),
+			patch.object(lab, "get_current_user", return_value="vet@example.com"),
+			patch.object(lab, "use_billing_core_for_lab_order", return_value=True),
+			patch.object(lab.frappe, "get_doc", return_value=order),
+			patch.object(lab.frappe.db, "set_value") as set_value,
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "session": "VBS-001", "created": True}) as sync,
+		):
+			result = lab.create_lab_order_invoice("VLAB-001")
+
+		sync.assert_called_once_with(lab.LAB_ORDER_DOCTYPE, "VLAB-001")
+		set_value.assert_called_once()
+		self.assertEqual(result["billing_session"], "VBS-001")
+
+	def test_vaccination_invoice_api_uses_billing_core(self):
+		doc = frappe._dict(doctype="Veterinary Vaccination Record", name="VVAC-001", status="Draft", linked_invoice=None)
+		doc.save = Mock()
+		with (
+			patch.object(vaccination, "require_internal_user"),
+			patch.object(vaccination.frappe, "get_doc", return_value=doc),
+			patch.object(vaccination, "use_billing_core_for_vaccination", return_value=True),
+			patch.object(vaccination, "get_vaccination_workflow_status", return_value="Awaiting Payment"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "session": "VBS-001"}) as sync,
+		):
+			result = vaccination.create_or_update_vaccination_invoice("VVAC-001")
+
+		sync.assert_called_once_with(vaccination.VACCINATION_RECORD_DOCTYPE, "VVAC-001")
+		self.assertEqual(result["billing_session"], "VBS-001")
+		self.assertEqual(doc.linked_invoice, "SINV-001")
+
+	def test_registration_invoice_uses_billing_core(self):
+		doc = frappe._dict(doctype="Veterinary Patient", name="PAT-001")
+		rule = registration_billing.RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+		with (
+			patch.object(registration_billing, "use_billing_core_for_registration", return_value=True),
+			patch.object(registration_billing.frappe, "get_doc", return_value=make_invoice("SINV-001")),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "session": "VBS-001"}) as sync,
+		):
+			invoice = registration_billing.create_registration_invoice(doc, rule)
+
+		sync.assert_called_once_with("Veterinary Patient", "PAT-001")
+		self.assertEqual(invoice.name, "SINV-001")
+
+	def test_grooming_invoice_uses_billing_core(self):
+		doc = frappe._dict(doctype="Pet Grooming Session", name="PGS-001", status="Draft", grooming_service="Bath")
+		with (
+			patch.object(grooming, "is_grooming_billing_enabled", return_value=True),
+			patch.object(grooming, "use_billing_core_for_grooming", return_value=True),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "created": True, "session": "VBS-001"}) as sync,
+		):
+			invoice, created = grooming.create_grooming_invoice(doc)
+
+		sync.assert_called_once_with(grooming.GROOMING_SESSION_DOCTYPE, "PGS-001")
+		self.assertEqual(invoice, "SINV-001")
+		self.assertTrue(created)
+
+	def test_boarding_invoice_uses_billing_core(self):
+		doc = frappe._dict(doctype="Pet Boarding Booking", name="PBB-001", status="Reserved")
+		doc.save = Mock()
+		with (
+			patch.object(boarding, "use_billing_core_for_boarding", return_value=True),
+			patch.object(boarding, "sync_boarding_charge_fields"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value={"invoice": "SINV-001", "created": True, "session": "VBS-001"}) as sync,
+		):
+			result = boarding.create_boarding_invoice_doc(doc)
+
+		sync.assert_called_once_with(boarding.PET_BOARDING_BOOKING_DOCTYPE, "PBB-001")
+		self.assertEqual(result["billing_session"], "VBS-001")
+		self.assertEqual(doc.linked_invoice, "SINV-001")
+
+	def test_adapter_dispatch_includes_grooming_and_boarding(self):
+		with (
+			patch.object(billing_core, "get_grooming_charge_payloads", return_value=[{"charge_key": "groom"}]) as grooming_payloads,
+			patch.object(billing_core, "get_boarding_charge_payloads", return_value=[{"charge_key": "board"}]) as boarding_payloads,
+		):
+			self.assertEqual(billing_core.get_source_charge_payloads("Pet Grooming Session", "PGS-001")[0]["charge_key"], "groom")
+			self.assertEqual(billing_core.get_source_charge_payloads("Pet Boarding Booking", "PBB-001")[0]["charge_key"], "board")
+
+		grooming_payloads.assert_called_once_with("PGS-001", None)
+		boarding_payloads.assert_called_once_with("PBB-001", None)
+
+	def test_related_sources_join_consultation_session_context(self):
+		with patch.object(billing_core.frappe.db, "get_value", side_effect=lambda doctype, name, fieldname=None, **kwargs: "VCON-001" if fieldname in {"consultation", "linked_consultation"} else None):
+			self.assertEqual(billing_core.get_source_context("Veterinary Lab Order", "VLAB-001"), ("Veterinary Consultation", "VCON-001"))
+			self.assertEqual(billing_core.get_source_context("Veterinary Vaccination Record", "VVAC-001"), ("Veterinary Consultation", "VCON-001"))
 
 	def test_billing_core_does_not_introduce_ignore_permissions(self):
 		from pathlib import Path
