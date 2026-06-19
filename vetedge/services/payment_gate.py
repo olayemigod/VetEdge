@@ -84,6 +84,54 @@ def has_valid_payment(invoice_name: str) -> bool:
 	return bool(get_invoice_payment_state(invoice_name).get("has_payment"))
 
 
+def evaluate_invoice_payment_gate(invoice, gate_setting_value: str, context_label: str) -> dict:
+	invoice_name = invoice if isinstance(invoice, str) else invoice.name
+	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name) if isinstance(invoice, str) else invoice
+	context = context_label or "document"
+	gate = gate_setting_value if gate_setting_value in CONSULTATION_PAYMENT_GATE_OPTIONS else FULL_PAYMENT_REQUIRED
+
+	if cint(invoice_doc.docstatus) != 1:
+		return {
+			"gate": gate,
+			"invoice": invoice_doc.name,
+			"can_proceed": False,
+			"status": "Blocked",
+			"message": f"The linked Sales Invoice must be submitted before {context} care can proceed.",
+		}
+
+	state = get_invoice_payment_state(invoice_doc.name)
+	if gate == NO_PAYMENT_GATE:
+		return {
+			"gate": gate,
+			"invoice": invoice_doc.name,
+			"can_proceed": True,
+			"status": "Allowed",
+			"message": f"{context.title()} is allowed because No Payment Gate is enabled. The invoice remains outstanding.",
+			"payment_state": state,
+		}
+
+	if gate == PARTIAL_PAYMENT_GATE:
+		allowed = bool(state.get("has_payment") or state.get("is_fully_paid"))
+		return {
+			"gate": gate,
+			"invoice": invoice_doc.name,
+			"can_proceed": allowed,
+			"status": "Allowed" if allowed else "Blocked",
+			"message": "Payment gate passed." if allowed else f"A partial payment is required before {context} care can proceed.",
+			"payment_state": state,
+		}
+
+	allowed = bool(state.get("is_fully_paid"))
+	return {
+		"gate": gate,
+		"invoice": invoice_doc.name,
+		"can_proceed": allowed,
+		"status": "Allowed" if allowed else "Blocked",
+		"message": "Payment gate passed." if allowed else f"Full payment is required before {context} care can proceed.",
+		"payment_state": state,
+	}
+
+
 def assert_consultation_can_proceed(doc, target_status: str | None = None) -> None:
 	target_status = target_status or doc.get("status")
 	if target_status not in CONSULTATION_PROCEED_STATUSES:

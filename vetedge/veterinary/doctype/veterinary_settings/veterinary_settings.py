@@ -48,6 +48,7 @@ class VeterinarySettings(Document):
 					"enforce_strict_expiry_control",
 					"block_manual_expired_batch_override",
 					"enable_vaccination",
+					"enable_veterinary_hospitalisation",
 					"enable_grooming",
 					"enable_grooming_billing",
 					"require_grooming_appointment",

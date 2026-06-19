@@ -50,6 +50,7 @@ frappe.ui.form.on("Veterinary Consultation", {
 			add_status_actions(frm);
 			add_dispensary_actions(frm);
 			add_lab_actions(frm);
+			add_hospitalisation_actions(frm);
 			try {
 				add_vaccination_actions(frm);
 			} catch (error) {
@@ -671,6 +672,33 @@ function sync_dispensary_preview(frm, force = false) {
 			configure_dispensary_grid(frm);
 		},
 	});
+}
+
+function add_hospitalisation_actions(frm) {
+	if (["Completed", "Cancelled"].includes(frm.doc.status)) {
+		return;
+	}
+
+	frappe.db
+		.get_single_value("Veterinary Settings", "enable_veterinary_hospitalisation")
+		.then((enabled) => {
+			if (!enabled) {
+				return;
+			}
+			frm.add_custom_button(__("Admit for Hospitalisation"), () => {
+				frappe.call({
+					method: "vetedge.services.hospitalisation.create_hospitalisation_from_consultation",
+					args: { consultation_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Creating hospitalisation..."),
+					callback(result) {
+						if (result.message) {
+							frappe.set_route("Form", "Veterinary Hospitalisation", result.message);
+						}
+					},
+				});
+			}, __("Clinical"));
+		});
 }
 
 function add_billing_actions(frm) {
