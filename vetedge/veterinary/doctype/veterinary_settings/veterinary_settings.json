@@ -16,6 +16,12 @@
   "auto_create_invoice_on_registration",
   "require_payment_before_first_consultation",
   "enforce_cost_center_on_billing",
+  "billing_core_section",
+  "enable_billing_sessions",
+  "default_payment_gate_mode",
+  "column_break_billing_core",
+  "allow_partial_payment_to_proceed",
+  "require_invoice_before_service",
   "branch_registration_rules_section",
   "branch_registration_rules",
   "clinical_tab",
@@ -190,6 +196,44 @@
    "fieldname": "enforce_cost_center_on_billing",
    "fieldtype": "Check",
    "label": "Enforce Cost Center on Billing"
+  },
+  {
+   "fieldname": "billing_core_section",
+   "fieldtype": "Section Break",
+   "label": "Billing Core"
+  },
+  {
+   "default": "1",
+   "description": "Use shared Billing Sessions to group charges from consultations, labs, hospitalisation, vaccination, and other VetEdge services.",
+   "fieldname": "enable_billing_sessions",
+   "fieldtype": "Check",
+   "label": "Enable Billing Sessions"
+  },
+  {
+   "default": "Full Payment Gate",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "default_payment_gate_mode",
+   "fieldtype": "Select",
+   "label": "Default Payment Gate Mode",
+   "options": "No Payment Gate\nPartial Payment Gate\nFull Payment Gate"
+  },
+  {
+   "fieldname": "column_break_billing_core",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "allow_partial_payment_to_proceed",
+   "fieldtype": "Check",
+   "label": "Allow Partial Payment to Proceed"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "require_invoice_before_service",
+   "fieldtype": "Check",
+   "label": "Require Invoice Before Service"
   },
   {
    "collapsible": 1,

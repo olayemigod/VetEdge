@@ -178,24 +178,28 @@ doc_events = {
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
 		],
 		"on_update_after_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
 		],
 		"on_submit": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
 		],
 		"on_cancel": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",
 			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
 		],
 	},
 	"Payment Entry": {
@@ -204,12 +208,14 @@ doc_events = {
 			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
 			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
 			"vetedge.services.grooming.update_grooming_status_from_payment_entry",
+			"vetedge.services.billing_core.update_billing_sessions_from_payment_entry",
 		],
 		"on_cancel": [
 			"vetedge.services.registration_billing.update_registration_status_from_payment_entry",
 			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
 			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
 			"vetedge.services.grooming.update_grooming_status_from_payment_entry",
+			"vetedge.services.billing_core.update_billing_sessions_from_payment_entry",
 		],
 	},
 	"Stock Entry": {

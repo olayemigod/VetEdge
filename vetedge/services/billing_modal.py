@@ -71,6 +71,15 @@ BILLING_SOURCE_CONFIGS: dict[str, BillingSourceConfig] = {
 		create_invoice_method="vetedge.services.lab.create_lab_order_invoice",
 		create_invoice_arg="lab_order",
 	),
+	"Veterinary Hospitalisation": BillingSourceConfig(
+		source_doctype="Veterinary Hospitalisation",
+		invoice_link_field="sales_invoice",
+		patient_field="patient",
+		owner_field="customer",
+		branch_field="service_branch",
+		create_invoice_method="vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice",
+		create_invoice_arg="hospitalisation_name",
+	),
 }
 
 
@@ -259,6 +268,45 @@ def get_available_actions(config: BillingSourceConfig, invoice_summary: dict | N
 	}
 
 
+
+def get_billing_session_summary_for_source(source_doctype: str, source_name: str) -> dict | None:
+	try:
+		from vetedge.services.billing_core import (
+			get_billing_session_summary,
+			is_billing_sessions_enabled,
+			resolve_billing_session,
+		)
+	except Exception:
+		return None
+	if not is_billing_sessions_enabled():
+		return None
+	session = resolve_billing_session(source_doctype, source_name)
+	if not session:
+		return None
+	return get_billing_session_summary(session)
+
+
+def source_supports_billing_session(source_doctype: str) -> bool:
+	return source_doctype in {
+		"Veterinary Consultation",
+		"Veterinary Lab Order",
+		"Veterinary Hospitalisation",
+		"Veterinary Vaccination Record",
+		"Veterinary Patient",
+	}
+
+
+def get_primary_session_invoice_summary(session_summary: dict | None, fallback: dict | None = None) -> dict | None:
+	if not session_summary:
+		return fallback
+	for invoice in session_summary.get("invoices") or []:
+		if invoice.get("name") == session_summary.get("current_draft_invoice"):
+			return get_invoice_summary(invoice.get("name")) or invoice
+	for invoice in reversed(session_summary.get("invoices") or []):
+		return get_invoice_summary(invoice.get("name")) or invoice
+	return fallback
+
+
 def get_payment_modes() -> list[str]:
 	if not frappe.db.exists("DocType", "Mode of Payment"):
 		return []
@@ -278,6 +326,8 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	assert_can_read_source(doc)
 	invoice_name = get_linked_invoice_name(doc, config)
 	invoice_summary = get_invoice_summary(invoice_name)
+	session_summary = get_billing_session_summary_for_source(source_doctype, source_name)
+	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
 	return {
 		"config": {
 			"source_doctype": config.source_doctype,
@@ -287,7 +337,8 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		},
 		"source": build_source_summary(doc, config),
 		"invoice": invoice_summary,
-		"payment_gate": get_consultation_payment_gate_state(doc, invoice_summary),
+		"billing_session": session_summary,
+		"payment_gate": (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
 		"actions": get_available_actions(config, invoice_summary),
 		"payment_modes": get_payment_modes(),
 	}
@@ -309,6 +360,16 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 	assert_can_act_on_source(doc, config)
 	invoice_name = get_linked_invoice_name(doc, config)
 	invoice_summary = get_invoice_summary(invoice_name)
+	if source_supports_billing_session(source_doctype):
+		try:
+			from vetedge.services.billing_core import is_billing_sessions_enabled, sync_source_to_billing_session
+
+			if is_billing_sessions_enabled():
+				result = sync_source_to_billing_session(source_doctype, source_name)
+				return {"created": True, "result": result, "state": get_billing_modal_state(source_doctype, source_name)}
+		except Exception:
+			raise
+
 	if invoice_summary and cint(invoice_summary.get("docstatus")) == 1:
 		return {
 			"created": False,
@@ -338,7 +399,7 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 	assert_can_act_on_source(doc, config)
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
-	assert_invoice_is_linked_to_source(invoice_doc.name, doc, config)
+	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)
 	can_access_branch_data(frappe.session.user, invoice_doc.get("branch") or doc.get(config.branch_field), raise_exception=True)
 	if cint(invoice_doc.docstatus) == 1:
 		frappe.throw("The linked Sales Invoice is already submitted.", frappe.ValidationError)
@@ -371,7 +432,7 @@ def record_modal_invoice_payment(
 	assert_can_act_on_source(doc, config)
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
-	assert_invoice_is_linked_to_source(invoice_doc.name, doc, config)
+	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)
 	can_access_branch_data(frappe.session.user, invoice_doc.get("branch") or doc.get(config.branch_field), raise_exception=True)
 	if cint(invoice_doc.docstatus) != 1:
 		frappe.throw("Submit the Sales Invoice before recording payment.", frappe.ValidationError)
@@ -425,6 +486,10 @@ def record_modal_invoice_payment(
 def resolve_modal_invoice_name(doc, config: BillingSourceConfig, invoice: str | None = None) -> str:
 	invoice_name = invoice or get_linked_invoice_name(doc, config)
 	if not invoice_name:
+		session_summary = get_billing_session_summary_for_source(doc.doctype, doc.name)
+		if session_summary:
+			invoice_name = session_summary.get("current_draft_invoice") or session_summary.get("latest_invoice")
+	if not invoice_name:
 		frappe.throw("A Sales Invoice must be generated before this action can continue.", frappe.ValidationError)
 	if not frappe.db.exists("Sales Invoice", invoice_name):
 		frappe.throw("The linked Sales Invoice could not be found.", frappe.ValidationError)
@@ -448,6 +513,16 @@ def get_effective_invoice_submit_posting_date(invoice):
 def assert_invoice_is_linked_to_source(invoice_name: str, doc, config: BillingSourceConfig) -> None:
 	linked_invoice = get_linked_invoice_name(doc, config)
 	if linked_invoice == invoice_name:
+		return
+	frappe.throw("The selected Sales Invoice is not linked to this billing source.", frappe.PermissionError)
+
+
+def assert_invoice_is_linked_to_source_or_session(invoice_name: str, doc, config: BillingSourceConfig) -> None:
+	linked_invoice = get_linked_invoice_name(doc, config)
+	if linked_invoice == invoice_name:
+		return
+	session_summary = get_billing_session_summary_for_source(doc.doctype, doc.name)
+	if session_summary and any(row.get("name") == invoice_name for row in session_summary.get("invoices") or []):
 		return
 	frappe.throw("The selected Sales Invoice is not linked to this billing source.", frappe.PermissionError)
 

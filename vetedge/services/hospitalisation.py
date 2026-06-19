@@ -332,6 +332,28 @@ def get_charge_description(activity) -> str:
 def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
+	try:
+		from vetedge.services.billing_core import is_billing_sessions_enabled, sync_source_to_billing_session
+
+		if is_billing_sessions_enabled():
+			result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+			doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+			invoice = result.get("invoice")
+			if invoice:
+				doc.sales_invoice = invoice
+				doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
+				doc.save()
+			return {
+				"hospitalisation": hospitalisation_name,
+				"invoice": invoice,
+				"added_count": result.get("added_count", 0),
+				"skipped_count": 0,
+				"created_new_invoice": bool(result.get("created")),
+				"billing_session": result.get("session"),
+			}
+	except Exception:
+		raise
+
 	build_hospitalisation_charge_items(hospitalisation_name)
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
 	pending = [row for row in doc.get("charge_items") or [] if row.get("billing_status") == "Pending Invoice"]
@@ -471,6 +493,16 @@ def check_hospitalisation_payment_gate(hospitalisation_name: str) -> dict:
 
 def evaluate_hospitalisation_payment_gate(doc) -> dict:
 	gate = get_hospitalisation_payment_gate()
+	try:
+		from vetedge.services.billing_core import get_payment_gate_status, is_billing_sessions_enabled, resolve_billing_session
+
+		if is_billing_sessions_enabled():
+			session = resolve_billing_session(HOSPITALISATION_DOCTYPE, doc.name)
+			if session:
+				return get_payment_gate_status(session)
+	except Exception:
+		raise
+
 	invoice_name = doc.get("sales_invoice")
 	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
 		return {
