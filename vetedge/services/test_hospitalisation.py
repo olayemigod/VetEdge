@@ -59,6 +59,48 @@ class TestHospitalisationActions(TestCase):
 
 		self.assertEqual(frappe_stub.throw.call_args.args[0], hospitalisation.DISABLED_MESSAGE)
 
+	def test_hospitalisation_patient_context_returns_owner_and_details(self):
+		patient = doc(
+			doctype="Veterinary Patient",
+			name="VP-001",
+			patient_name="Max",
+			primary_owner="CUST-001",
+			default_branch="Main",
+			species="Canine",
+			breed="Labrador",
+			sex="Male",
+			approximate_age="3 years",
+			date_of_birth="2023-01-01",
+		)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: patient)
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+		):
+			context = hospitalisation.get_hospitalisation_patient_context("VP-001")
+
+		self.assertEqual(context["customer"], "CUST-001")
+		self.assertEqual(context["patient_name"], "Max")
+		self.assertEqual(context["service_branch"], "Main")
+		self.assertEqual(context["species"], "Canine")
+		self.assertEqual(context["age"], "3 years")
+
+	def test_hospitalisation_patient_context_missing_optional_fields_does_not_crash(self):
+		patient = doc(doctype="Veterinary Patient", name="VP-002", patient_name="Tiny", primary_owner="CUST-002")
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: patient)
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+		):
+			context = hospitalisation.get_hospitalisation_patient_context("VP-002")
+
+		self.assertEqual(context["customer"], "CUST-002")
+		self.assertEqual(context["patient_name"], "Tiny")
+		self.assertIsNone(context["species"])
+		self.assertIsNone(context["date_of_birth"])
+
 	def test_create_hospitalisation_from_consultation_creates_linked_record(self):
 		created = []
 		consultation = doc(

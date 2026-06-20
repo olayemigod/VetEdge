@@ -136,6 +136,29 @@ def get_hospitalisation_veterinarian_title(doc) -> str | None:
 
 
 @frappe.whitelist()
+def get_hospitalisation_patient_context(patient: str) -> dict:
+	require_internal_user()
+	if not patient:
+		return {}
+	patient_doc = frappe.get_doc("Veterinary Patient", patient)
+	return {
+		"patient": patient_doc.name,
+		"patient_name": patient_doc.get("patient_name") or patient_doc.name,
+		"customer": patient_doc.get("primary_owner"),
+		"primary_owner": patient_doc.get("primary_owner"),
+		"service_branch": patient_doc.get("default_branch"),
+		"default_branch": patient_doc.get("default_branch"),
+		"species": patient_doc.get("species"),
+		"breed": patient_doc.get("breed"),
+		"sex": patient_doc.get("sex"),
+		"age": patient_doc.get("approximate_age") or patient_doc.get("age"),
+		"approximate_age": patient_doc.get("approximate_age"),
+		"date_of_birth": patient_doc.get("date_of_birth"),
+		"owner_contact": patient_doc.get("owner_contact") or patient_doc.get("primary_contact"),
+	}
+
+
+@frappe.whitelist()
 def create_hospitalisation_from_consultation(consultation_name: str) -> str:
 	require_internal_user()
 	assert_hospitalisation_enabled()

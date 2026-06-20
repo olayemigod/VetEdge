@@ -1,11 +1,14 @@
 frappe.ui.form.on("Veterinary Hospitalisation", {
 	setup(frm) {
-		frm.set_query("attending_veterinarian", () => ({
-			query: "vetedge.services.permissions.get_veterinary_doctor_users",
-		}));
+		set_attending_veterinarian_query(frm);
+	},
+
+	onload(frm) {
+		set_attending_veterinarian_query(frm);
 	},
 
 	refresh(frm) {
+		set_attending_veterinarian_query(frm);
 		set_hospitalisation_labels(frm);
 		set_discharge_fields_visibility(frm);
 		set_location_help(frm);
@@ -54,32 +57,29 @@ function autofill_hospitalisation_patient_details(frm) {
 	if (!frm.doc.patient) {
 		return;
 	}
-	frappe.db
-		.get_value("Veterinary Patient", frm.doc.patient, [
-			"patient_name",
-			"primary_owner",
-			"default_branch",
-			"species",
-			"breed",
-			"sex",
-			"approximate_age",
-		])
-		.then((result) => {
-			const patient = result?.message || {};
+	frappe.call({
+		method: "vetedge.services.hospitalisation.get_hospitalisation_patient_context",
+		args: { patient: frm.doc.patient },
+		callback(result) {
+			const patient = result.message || {};
 			frm._hospitalisation_patient_title = patient.patient_name || frm.doc.patient;
-			set_form_value_if_field_exists(frm, "customer", patient.primary_owner);
-			set_form_value_if_field_exists(frm, "pet_owner", patient.primary_owner);
+			set_form_value_if_field_exists(frm, "customer", patient.customer || patient.primary_owner);
+			set_form_value_if_field_exists(frm, "pet_owner", patient.customer || patient.primary_owner);
 			set_form_value_if_field_exists(frm, "patient_name", patient.patient_name);
 			set_form_value_if_field_exists(frm, "species", patient.species);
 			set_form_value_if_field_exists(frm, "breed", patient.breed);
 			set_form_value_if_field_exists(frm, "sex", patient.sex);
-			set_form_value_if_field_exists(frm, "age", patient.approximate_age);
-			set_form_value_if_field_exists(frm, "approximate_age", patient.approximate_age);
+			set_form_value_if_field_exists(frm, "age", patient.age || patient.approximate_age);
+			set_form_value_if_field_exists(frm, "approximate_age", patient.approximate_age || patient.age);
+			set_form_value_if_field_exists(frm, "date_of_birth", patient.date_of_birth);
+			set_form_value_if_field_exists(frm, "owner_contact", patient.owner_contact);
 			if (!frm.doc.service_branch) {
-				set_form_value_if_field_exists(frm, "service_branch", patient.default_branch);
+				set_form_value_if_field_exists(frm, "service_branch", patient.service_branch || patient.default_branch);
 			}
+			refresh_hospitalisation_context_fields(frm);
 			update_hospitalisation_title_preview(frm);
-		});
+		},
+	});
 }
 
 function autofill_hospitalisation_context_from_consultation(frm) {
@@ -109,10 +109,32 @@ function autofill_hospitalisation_context_from_consultation(frm) {
 		});
 }
 
+function set_attending_veterinarian_query(frm) {
+	const field = frappe.meta.get_docfield(frm.doctype, "attending_veterinarian", frm.doc.name);
+	if (!field || field.options !== "User") {
+		return;
+	}
+	frm.set_query("attending_veterinarian", () => ({
+		query: "vetedge.services.permissions.get_veterinary_doctor_users",
+	}));
+}
+
+function has_form_field(frm, fieldname) {
+	return Boolean(frm.fields_dict[fieldname] || frappe.meta.has_field(frm.doctype, fieldname));
+}
+
 function set_form_value_if_field_exists(frm, fieldname, value) {
-	if (value && frm.fields_dict[fieldname] && frm.doc[fieldname] !== value) {
+	if (value !== undefined && value !== null && value !== "" && has_form_field(frm, fieldname) && frm.doc[fieldname] !== value) {
 		frm.set_value(fieldname, value);
 	}
+}
+
+function refresh_hospitalisation_context_fields(frm) {
+	["customer", "pet_owner", "patient_name", "species", "breed", "sex", "age", "approximate_age", "date_of_birth", "owner_contact", "service_branch"].forEach((fieldname) => {
+		if (has_form_field(frm, fieldname)) {
+			frm.refresh_field(fieldname);
+		}
+	});
 }
 
 function fetch_hospitalisation_veterinarian_title(frm) {
