@@ -1727,7 +1727,7 @@ def update_source_billing_compatibility_fields(source_doctype: str, source_name:
 	if source_doctype == "Veterinary Patient":
 		values.update({"registration_billed": 1, "registration_status": get_registration_compatibility_status(summary)})
 	elif source_doctype == "Veterinary Hospitalisation":
-		values["invoice_status"] = summary.get("payment_status")
+		values["invoice_status"] = get_select_safe_invoice_status(source_doctype, "invoice_status", summary.get("payment_status"))
 	elif source_doctype in {"Veterinary Consultation"}:
 		values["payment_status"] = summary.get("payment_status")
 	frappe.db.set_value(source_doctype, source_name, values, update_modified=False)
@@ -1743,6 +1743,24 @@ def update_all_session_source_compatibility_fields(summary: dict | None = None) 
 		return
 	for source in summary.get("source_documents") or []:
 		update_source_billing_compatibility_fields(source.get("doctype"), source.get("name"), summary)
+
+
+def get_select_safe_invoice_status(doctype: str, fieldname: str, status: str | None) -> str:
+	status_map = {
+		"Draft Invoice Pending": "Draft",
+		"Pending Invoice": "Not Invoiced",
+		"Partially Paid": "Partly Paid",
+	}
+	status = status_map.get(status or "Not Invoiced", status or "Not Invoiced")
+	try:
+		field = frappe.get_meta(doctype).get_field(fieldname)
+		if field and field.fieldtype == "Select":
+			options = {option.strip() for option in (field.options or "").split("\n") if option.strip()}
+			if options and status not in options:
+				return "Not Invoiced" if "Not Invoiced" in options else next(iter(options))
+	except Exception:
+		pass
+	return status
 
 
 def get_registration_compatibility_status(summary: dict) -> str:

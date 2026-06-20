@@ -425,7 +425,7 @@ def get_active_lab_tests_for_picker() -> list[dict]:
 	return frappe.get_all(
 		LAB_TEST_DOCTYPE,
 		filters={"is_active": 1},
-		fields=["name", "test_name", "sample_type"],
+		fields=["name", "test_name", "sample_type", "linked_item", "default_rate"],
 		order_by="test_name asc",
 	)
 

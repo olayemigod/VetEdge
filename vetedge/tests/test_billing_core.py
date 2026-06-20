@@ -74,6 +74,11 @@ def charge_payload(key="consultation-fee", item="ITEM-001", amount=100):
 
 
 class TestBillingCore(TestCase):
+	def test_hospitalisation_billing_core_status_is_select_safe(self):
+		with patch.object(billing_core.frappe, "get_meta", return_value=SimpleNamespace(get_field=lambda fieldname: SimpleNamespace(fieldtype="Select", options="Not Invoiced\nDraft\nUnpaid\nPartly Paid\nPaid\nOverdue\nCancelled"))):
+			status = billing_core.get_select_safe_invoice_status("Veterinary Hospitalisation", "invoice_status", "Draft Invoice Pending")
+		self.assertEqual(status, "Draft")
+
 	def test_add_or_update_session_charge_is_idempotent(self):
 		session = make_session()
 

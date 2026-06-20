@@ -116,6 +116,29 @@ class TestHospitalisationStockPosting(TestCase):
 		self.assertEqual(result["stock_entries"], ["STE-001"])
 		self.assertEqual(len(ctx.created_entries), 1)
 
+	def test_stock_preview_does_not_create_stock_entry_or_save_hospitalisation(self):
+		row = activity(activity_type="Medication")
+		hosp = hospitalisation_doc(activities=[row])
+		with stock_context(hosp) as ctx:
+			preview = hospitalisation.get_hospitalisation_stock_posting_preview("VHOS-001")
+
+		self.assertEqual(preview["to_post_count"], 1)
+		self.assertEqual(preview["items"][0]["warehouse"], "Stores - A")
+		self.assertEqual(ctx.created_entries, [])
+		hosp.save.assert_not_called()
+		self.assertEqual(row.stock_status, "Pending")
+
+	def test_stock_preview_reports_blocked_rows_without_mutation(self):
+		row = activity(item=None)
+		hosp = hospitalisation_doc(activities=[row])
+		with stock_context(hosp) as ctx:
+			preview = hospitalisation.get_hospitalisation_stock_posting_preview("VHOS-001")
+
+		self.assertEqual(preview["blocked_count"], 1)
+		self.assertEqual(ctx.created_entries, [])
+		hosp.save.assert_not_called()
+		self.assertFalse(row.get("stock_posting_message"))
+
 	def test_running_stock_posting_twice_does_not_create_duplicate_entries(self):
 		hosp = hospitalisation_doc(activities=[activity()])
 		with stock_context(hosp) as ctx:

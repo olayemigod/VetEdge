@@ -227,12 +227,12 @@ function add_clinical_activity_action_buttons(frm) {
 		["Add Vitals", () => open_hospitalisation_vitals_dialog(frm)],
 		["Add Vaccination", () => open_hospitalisation_vaccination_dialog(frm)],
 		["Add Lab Order", () => open_hospitalisation_lab_order_dialog(frm)],
-		["Add Medication", () => open_activity_dialog(frm, { activity_type: "Medication", title: "Add Medication" })],
+		["Add Medication", () => open_medication_multi_row_dialog(frm)],
 		["Add Fluid Therapy", () => open_activity_dialog(frm, { activity_type: "Fluid Therapy", title: "Add Fluid Therapy" })],
 		["Add Feeding", () => open_activity_dialog(frm, { activity_type: "Feeding", title: "Add Feeding" })],
 		["Add Nursing Note", () => open_activity_dialog(frm, { activity_type: "Nursing Note", title: "Add Nursing Note" })],
 		["Add Wound Care", () => open_activity_dialog(frm, { activity_type: "Wound Care", title: "Add Wound Care" })],
-		["Add Procedure", () => open_activity_dialog(frm, { activity_type: "Procedure", title: "Add Procedure" })],
+		["Add Procedure", () => open_billable_activity_dialog(frm, { activity_type: "Procedure", title: "Add Procedure" })],
 		["Add Oxygen / Nebulisation", () => open_activity_dialog(frm, { activity_type: "Oxygen / Nebulisation", title: "Add Oxygen / Nebulisation" })],
 		["Add Owner Update", () => open_activity_dialog(frm, { activity_type: "Owner Communication", title: "Add Owner Update" })],
 		["Add Other Activity", () => open_activity_dialog(frm, { activity_type: "Other", title: "Add Other Activity" })],
@@ -412,17 +412,15 @@ function open_hospitalisation_vaccination_dialog(frm) {
 			{ fieldtype: "Select", fieldname: "route", label: __("Route"), options: "\nOral\nSubcutaneous\nIntramuscular\nIntranasal\nTopical\nOther" },
 			{ fieldtype: "Datetime", fieldname: "administered_on", label: __("Administered On"), default: frappe.datetime.now_datetime(), reqd: 1 },
 			{ fieldtype: "Date", fieldname: "next_due_date", label: __("Next Due Date") },
+			{ fieldtype: "Check", fieldname: "billable", label: __("Billable"), default: 1 },
+			{ fieldtype: "Check", fieldname: "stock_affecting", label: __("Stock Affecting") },
+			{ fieldtype: "Currency", fieldname: "rate", label: __("Rate if no item price exists") },
 			{ fieldtype: "Small Text", fieldname: "notes", label: __("Notes") },
 		],
 		primary_action_label: __("Add"),
 		primary_action(values) {
 			if (!frm.doc.linked_consultation) {
-				append_activity_row(frm, {
-					activity_type: "Vaccination",
-					activity_datetime: values.administered_on,
-					clinical_notes: format_vaccination_activity_notes(values),
-				});
-				dialog.hide();
+				add_vaccination_activity_with_billing(frm, dialog, values);
 				return;
 			}
 			frappe.call({
@@ -435,14 +433,7 @@ function open_hospitalisation_vaccination_dialog(frm) {
 					if (!record?.name) {
 						return;
 					}
-					append_activity_row(frm, {
-						activity_type: "Vaccination",
-						activity_datetime: values.administered_on,
-						clinical_notes: format_vaccination_activity_notes(values),
-						linked_doctype: "Veterinary Vaccination Record",
-						linked_document: record.name,
-					});
-					dialog.hide();
+					add_vaccination_activity_with_billing(frm, dialog, values, record.name);
 					frappe.show_alert({ message: __("Vaccination added"), indicator: "green" });
 				},
 			});
@@ -476,6 +467,12 @@ function open_hospitalisation_lab_order_dialog(frm) {
 						frappe.msgprint(__("Please select at least one lab test."));
 						return;
 					}
+					const selectedTests = state.selected.map((name) => tests.find((test) => test.name === name)).filter(Boolean);
+					const missingRates = selectedTests.filter((test) => test.linked_item && !flt(test.default_rate));
+					if (missingRates.length) {
+						frappe.msgprint(__("Selected billable lab tests need a Default Rate before they can be added to hospitalisation charges."));
+						return;
+					}
 					frappe.call({
 						method: "vetedge.services.lab.create_lab_order_from_consultation",
 						args: {
@@ -490,12 +487,7 @@ function open_hospitalisation_lab_order_dialog(frm) {
 							if (!order?.name) {
 								return;
 							}
-							append_activity_row(frm, {
-								activity_type: "Lab",
-								clinical_notes: values.sample_notes,
-								linked_doctype: "Veterinary Lab Order",
-								linked_document: order.name,
-							});
+							add_lab_activities_with_billing(frm, values, selectedTests, order.name);
 							dialog.hide();
 							frappe.show_alert({ message: __("Lab order added"), indicator: "green" });
 						},
@@ -597,6 +589,7 @@ function append_activity_row(frm, values) {
 
 	frm.refresh_field("activities");
 	frm.dirty();
+	return row;
 }
 
 function format_vitals_activity_notes(values) {
@@ -628,19 +621,304 @@ function format_vaccination_activity_notes(values) {
 	].filter(Boolean).join("\n");
 }
 
-function add_stock_action_buttons(frm) {
-	if (frm.is_new() || ["Cancelled", "Discharged"].includes(frm.doc.status)) {
+
+
+function add_vaccination_activity_with_billing(frm, dialog, values, linkedDocument = null) {
+	frappe.db.get_value("Veterinary Vaccine", values.vaccine, ["default_item"]).then((result) => {
+		const item = result?.message?.default_item;
+		const activityValues = {
+			activity_type: "Vaccination",
+			activity_datetime: values.administered_on,
+			clinical_notes: format_vaccination_activity_notes(values),
+			linked_doctype: linkedDocument ? "Veterinary Vaccination Record" : null,
+			linked_document: linkedDocument,
+			billable: values.billable && item,
+			stock_affecting: values.stock_affecting,
+			item,
+			qty: 1,
+		};
+		if (!values.billable || !item) {
+			append_activity_row(frm, activityValues);
+			dialog.hide();
+			return;
+		}
+		resolve_billing_rate(item, values.rate).then((billing) => {
+			if (!billing.rate) {
+				frappe.msgprint(__("Enter a rate before adding this billable vaccination."));
+				return;
+			}
+			const activity = append_activity_row(frm, { ...activityValues, uom: billing.uom });
+			append_charge_item_for_activity(frm, activity, {
+				item,
+				description: format_vaccination_activity_notes(values) || "Vaccination",
+				qty: 1,
+				uom: billing.uom,
+				rate: billing.rate,
+			});
+			dialog.hide();
+		});
+	});
+}
+
+function add_lab_activities_with_billing(frm, values, tests, linkedDocument) {
+	(tests || []).forEach((test) => {
+		const item = test.linked_item;
+		const activity = append_activity_row(frm, {
+			activity_type: "Lab",
+			clinical_notes: [test.test_name || test.name, values.sample_notes].filter(Boolean).join("\n"),
+			linked_doctype: "Veterinary Lab Order",
+			linked_document: linkedDocument,
+			billable: Boolean(item),
+			item,
+			qty: 1,
+		});
+		if (item) {
+			const rate = flt(test.default_rate);
+			if (!rate) {
+				frappe.show_alert({ message: __("Lab test has a billing item but no rate. Add a rate on the charge row before syncing."), indicator: "orange" });
+			}
+			append_charge_item_for_activity(frm, activity, {
+				item,
+				description: test.test_name || test.name,
+				qty: 1,
+				rate,
+			});
+		}
+	});
+}
+
+function resolve_billing_rate(item, explicitRate) {
+	if (flt(explicitRate)) {
+		return Promise.resolve({ rate: flt(explicitRate) });
+	}
+	return frappe.db.get_value("Item", item, ["stock_uom", "standard_rate"]).then((result) => {
+		const itemDoc = result?.message || {};
+		return { rate: flt(itemDoc.standard_rate), uom: itemDoc.stock_uom };
+	});
+}
+
+function open_billable_activity_dialog(frm, options = {}) {
+	const activityType = options.activity_type || "Procedure";
+	const dialog = new frappe.ui.Dialog({
+		title: __(options.title || `Add ${activityType}`),
+		fields: [
+			{ fieldname: "clinical_notes", fieldtype: "Text Editor", label: __("Clinical Notes") },
+			{ fieldname: "item", fieldtype: "Link", label: __("Billing Item"), options: "Item", reqd: 1 },
+			{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), default: 1 },
+			{ fieldname: "uom", fieldtype: "Link", label: __("UOM"), options: "UOM" },
+			{ fieldname: "rate", fieldtype: "Currency", label: __("Rate") },
+			{ fieldname: "stock_affecting", fieldtype: "Check", label: __("Stock Affecting") },
+		],
+		primary_action_label: __("Add"),
+		primary_action(values) {
+			add_billable_activity_with_rate(frm, dialog, {
+				...values,
+				activity_type: activityType,
+				billable: 1,
+			});
+		},
+	});
+	dialog.show();
+}
+
+function open_medication_multi_row_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Add Medication"),
+		size: "large",
+		fields: [
+			{ fieldname: "medications_html", fieldtype: "HTML" },
+		],
+		primary_action_label: __("Add Medications"),
+		primary_action() {
+			const rows = collect_medication_dialog_rows(dialog);
+			if (!rows.length) {
+				frappe.msgprint(__("Add at least one medication row."));
+				return;
+			}
+			add_medication_rows(frm, dialog, rows);
+		},
+	});
+	dialog.show();
+	render_medication_rows(dialog, [{}]);
+}
+
+function render_medication_rows(dialog, rows) {
+	const wrapper = dialog.fields_dict.medications_html.$wrapper;
+	wrapper.html(`
+		<div class="hospitalisation-medication-rows">
+			<table class="table table-bordered">
+				<thead><tr>
+					<th>${__("Item")}</th><th>${__("Qty")}</th><th>${__("UOM")}</th><th>${__("Dose")}</th><th>${__("Route")}</th><th>${__("Frequency")}</th><th>${__("Billable")}</th><th>${__("Stock")}</th><th>${__("Rate")}</th><th>${__("Notes")}</th><th></th>
+				</tr></thead>
+				<tbody>${rows.map((row, index) => medication_row_html(row, index)).join("")}</tbody>
+			</table>
+			<button class="btn btn-default btn-sm" data-add-row="1">${__("Add Row")}</button>
+		</div>
+	`);
+	wrapper.find("[data-add-row]").on("click", () => {
+		render_medication_rows(dialog, [...collect_medication_dialog_rows(dialog, true), {}]);
+	});
+	wrapper.find("[data-remove-row]").on("click", function () {
+		const index = Number($(this).attr("data-remove-row"));
+		const nextRows = collect_medication_dialog_rows(dialog, true).filter((_, rowIndex) => rowIndex !== index);
+		render_medication_rows(dialog, nextRows.length ? nextRows : [{}]);
+	});
+}
+
+function medication_row_html(row, index) {
+	const checked = (value) => value ? "checked" : "";
+	const value = (fieldname) => frappe.utils.escape_html(row[fieldname] || "");
+	return `<tr data-medication-row="${index}">
+		<td><input class="form-control" data-field="item" value="${value("item")}" placeholder="${__("Item code")}"></td>
+		<td><input class="form-control" data-field="qty" type="number" step="0.01" value="${frappe.utils.escape_html(row.qty || 1)}"></td>
+		<td><input class="form-control" data-field="uom" value="${value("uom")}"></td>
+		<td><input class="form-control" data-field="dose" value="${value("dose")}"></td>
+		<td><input class="form-control" data-field="route" value="${value("route")}"></td>
+		<td><input class="form-control" data-field="frequency" value="${value("frequency")}"></td>
+		<td class="text-center"><input type="checkbox" data-field="billable" ${checked(row.billable)}></td>
+		<td class="text-center"><input type="checkbox" data-field="stock_affecting" ${checked(row.stock_affecting)}></td>
+		<td><input class="form-control" data-field="rate" type="number" step="0.01" value="${frappe.utils.escape_html(row.rate || "")}"></td>
+		<td><input class="form-control" data-field="notes" value="${value("notes")}"></td>
+		<td><button class="btn btn-xs btn-default" data-remove-row="${index}">${__("Remove")}</button></td>
+	</tr>`;
+}
+
+function collect_medication_dialog_rows(dialog, includeBlank = false) {
+	const rows = [];
+	dialog.fields_dict.medications_html.$wrapper.find("[data-medication-row]").each(function () {
+		const row = {};
+		$(this).find("[data-field]").each(function () {
+			const fieldname = $(this).attr("data-field");
+			row[fieldname] = $(this).attr("type") === "checkbox" ? $(this).is(":checked") : $(this).val();
+		});
+		if (includeBlank || row.item || row.dose || row.notes) {
+			rows.push(row);
+		}
+	});
+	return rows;
+}
+
+function add_medication_rows(frm, dialog, rows) {
+	let blocked = false;
+	rows.forEach((row) => {
+		if (row.billable && row.item && !flt(row.rate)) {
+			blocked = true;
+		}
+	});
+	if (blocked) {
+		frappe.msgprint(__("Enter a rate for each billable medication item before adding."));
 		return;
 	}
+	rows.forEach((row) => {
+		const notes = [row.dose && `${__("Dose")}: ${row.dose}`, row.route && `${__("Route")}: ${row.route}`, row.frequency && `${__("Frequency")}: ${row.frequency}`, row.notes].filter(Boolean).join("\n");
+		const activity = append_activity_row(frm, {
+			activity_type: "Medication",
+			clinical_notes: notes,
+			billable: row.billable,
+			stock_affecting: row.stock_affecting,
+			item: row.item,
+			qty: flt(row.qty) || 1,
+			uom: row.uom,
+		});
+		if (row.billable && row.item) {
+			append_charge_item_for_activity(frm, activity, {
+				item: row.item,
+				description: notes || "Medication",
+				qty: flt(row.qty) || 1,
+				uom: row.uom,
+				rate: flt(row.rate),
+			});
+		}
+	});
+	dialog.hide();
+}
 
-	frm.add_custom_button(__("Post Stock Usage"), () => {
-		frappe.call({
-			method: "vetedge.services.hospitalisation.post_hospitalisation_activity_stock",
-			args: { hospitalisation_name: frm.doc.name },
-			freeze: true,
-			freeze_message: __("Posting stock usage..."),
-			callback(result) {
-				const summary = result.message || {};
+function add_billable_activity_with_rate(frm, dialog, values) {
+	if (!values.item) {
+		frappe.msgprint(__("Select a billing item."));
+		return;
+	}
+	if (!flt(values.rate)) {
+		frappe.msgprint(__("Enter a rate before adding this billable activity."));
+		return;
+	}
+	const activity = append_activity_row(frm, values);
+	append_charge_item_for_activity(frm, activity, values);
+	dialog.hide();
+}
+
+function append_charge_item_for_activity(frm, activity, values) {
+	const row = frm.add_child("charge_items");
+	const qty = flt(values.qty) || 1;
+	const rate = flt(values.rate);
+	row.source_activity = activity.name;
+	row.activity_type = activity.activity_type;
+	row.item = values.item;
+	row.description = values.description || values.clinical_notes || activity.clinical_notes || activity.activity_type;
+	row.qty = qty;
+	row.uom = values.uom;
+	row.rate = rate;
+	row.amount = qty * rate;
+	row.billing_status = "Pending Invoice";
+	row.source_hash = `${frm.doc.name}:${activity.name}`;
+	row.notes = values.notes || values.clinical_notes;
+	frm.refresh_field("charge_items");
+	frm.dirty();
+}
+
+function preview_stock_usage(frm) {
+	frappe.call({
+		method: "vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview",
+		args: { hospitalisation_name: frm.doc.name },
+		freeze: true,
+		freeze_message: __("Checking stock usage..."),
+		callback(result) {
+			show_stock_usage_preview(frm, result.message || {});
+		},
+	});
+}
+
+function show_stock_usage_preview(frm, summary) {
+	const readyRows = summary.items || [];
+	const blockedRows = summary.blocked || [];
+	const skippedRows = summary.skipped || [];
+	const message = [
+		`${__("Ready to Post")}: ${summary.to_post_count || 0}`,
+		`${__("Skipped")}: ${summary.skipped_count || 0}`,
+		`${__("Blocked")}: ${summary.blocked_count || 0}`,
+		readyRows.length ? `<br><b>${__("Items")}</b><br>${readyRows.map(format_stock_preview_row).join("<br>")}` : null,
+		blockedRows.length ? `<br><b>${__("Blocked")}</b><br>${blockedRows.map(format_stock_preview_row).join("<br>")}` : null,
+		skippedRows.length ? `<br><b>${__("Skipped")}</b><br>${skippedRows.map(format_stock_preview_row).join("<br>")}` : null,
+	].filter(Boolean).join("<br>");
+	const dialog = new frappe.ui.Dialog({
+		title: __("Post Stock Usage"),
+		fields: [{ fieldname: "preview", fieldtype: "HTML", options: message }],
+		primary_action_label: __("Confirm Post"),
+		primary_action() {
+			if (!readyRows.length) {
+				frappe.msgprint(__("There are no stock rows ready to post."));
+				return;
+			}
+			dialog.hide();
+			post_stock_usage(frm);
+		},
+	});
+	dialog.show();
+}
+
+function format_stock_preview_row(row) {
+	return frappe.utils.escape_html([row.activity_type, row.item, row.qty, row.uom, row.warehouse, row.message].filter(Boolean).join(" | "));
+}
+
+function post_stock_usage(frm) {
+	frappe.call({
+		method: "vetedge.services.hospitalisation.post_hospitalisation_activity_stock",
+		args: { hospitalisation_name: frm.doc.name },
+		freeze: true,
+		freeze_message: __("Posting stock usage..."),
+		callback(result) {
+			const summary = result.message || {};
+			frm.reload_doc().then(() => {
 				frappe.msgprint({
 					title: __("Stock Usage"),
 					message: [
@@ -650,9 +928,18 @@ function add_stock_action_buttons(frm) {
 					].join("<br>"),
 					indicator: summary.blocked_count ? "orange" : "green",
 				});
-				frm.reload_doc();
-			},
-		});
+			});
+		},
+	});
+}
+
+function add_stock_action_buttons(frm) {
+	if (frm.is_new() || ["Cancelled", "Discharged"].includes(frm.doc.status)) {
+		return;
+	}
+
+	frm.add_custom_button(__("Post Stock Usage"), () => {
+		preview_stock_usage(frm);
 	}, __("Stock"));
 }
 
@@ -756,16 +1043,21 @@ function add_hospitalisation_action_buttons(frm) {
 				freeze: true,
 				callback(result) {
 					const gate = result.message || {};
-					if (gate.message) {
-						frappe.msgprint({
-							message: gate.message,
-							indicator: gate.can_proceed ? "green" : "red",
-						});
-					}
-					if (!gate.can_proceed && window.vetedgeBillingModal?.open) {
-						window.vetedgeBillingModal.open(frm);
-					}
-					frm.reload_doc();
+					frm.reload_doc().then(() => {
+						if (gate.message) {
+							frappe.msgprint({
+								message: gate.message,
+								indicator: gate.can_proceed ? "green" : "red",
+							});
+						}
+						if (!gate.can_proceed && window.vetedgeBillingModal?.open) {
+							window.vetedgeBillingModal.open(frm);
+						}
+					});
+				},
+				error(result) {
+					const message = result.message || result.exc || __("Hospitalisation admission could not be completed.");
+					frm.reload_doc().then(() => frappe.msgprint({ message, indicator: "red" }));
 				},
 			});
 		}, __("Clinical"));

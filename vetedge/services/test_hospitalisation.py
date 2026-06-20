@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
@@ -126,6 +127,25 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(summary["total_invoiced"], 50)
 		self.assertEqual(summary["total_cancelled"], 25)
 		hospital_doc.save.assert_not_called()
+
+	def test_hospitalisation_invoice_status_normalizes_billing_core_session_text(self):
+		self.assertEqual(hospitalisation.get_hospitalisation_invoice_status(status="Draft Invoice Pending"), "Draft")
+		self.assertEqual(hospitalisation.get_hospitalisation_invoice_status(status="Pending Invoice"), "Not Invoiced")
+		self.assertEqual(hospitalisation.get_hospitalisation_invoice_status(status="Partially Paid"), "Partly Paid")
+
+	def test_hospitalisation_draft_invoice_status_is_draft(self):
+		invoice = doc(doctype="Sales Invoice", name="SINV-DRAFT", docstatus=0, outstanding_amount=100, grand_total=100)
+		self.assertEqual(hospitalisation.get_hospitalisation_invoice_status(invoice), "Draft")
+
+	def test_hospitalisation_js_contains_stabilised_action_flows(self):
+		js_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "veterinary_hospitalisation" / "veterinary_hospitalisation.js"
+		script = js_path.read_text()
+		self.assertIn("get_hospitalisation_stock_posting_preview", script)
+		self.assertIn("Confirm Post", script)
+		self.assertIn("open_medication_multi_row_dialog", script)
+		self.assertIn("add_vaccination_activity_with_billing", script)
+		self.assertIn("add_lab_activities_with_billing", script)
+		self.assertIn("frm.reload_doc().then", script)
 
 	def test_create_hospitalisation_from_consultation_creates_linked_record(self):
 		created = []

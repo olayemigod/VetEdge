@@ -16,6 +16,7 @@ from vetedge.services.permissions import (
 	can_progress_grooming_session,
 	can_review_lab_results,
 	get_invoice_access_diagnostic,
+	get_veterinary_doctor_users,
 	get_pet_grooming_appointment_query,
 	has_pet_grooming_appointment_permission,
 	has_pet_grooming_session_permission,
@@ -37,6 +38,20 @@ from vetedge.services.permissions import (
 
 
 class TestPermissions(TestCase):
+	def test_veterinary_doctor_user_query_returns_only_doctor_users(self):
+		def fake_sql(query, values=None, *args, **kwargs):
+			if "`tabDocType`" in query:
+				return [["User"]]
+			self.assertIn("has_role.role = 'VetEdge Doctor'", query)
+			self.assertEqual(values["search"], "%doc%")
+			return [["doctor@example.com", "Dr Example"]]
+
+		with patch("vetedge.services.permissions.frappe.db.sql", side_effect=fake_sql):
+			results = get_veterinary_doctor_users("User", "doc", "name", 0, 20, {})
+
+		self.assertEqual(results, [["doctor@example.com", "Dr Example"]])
+		self.assertNotIn(["frontdesk@example.com", "Front Desk"], results)
+
 	def test_branch_access_is_blocked_for_unassigned_internal_user(self):
 		with (
 			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),

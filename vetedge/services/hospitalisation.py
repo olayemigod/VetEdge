@@ -19,6 +19,7 @@ CHARGE_ITEM_DOCTYPE = "Veterinary Hospitalisation Charge Item"
 DISABLED_MESSAGE = "Veterinary Hospitalisation is not enabled for this clinic."
 ACTIVE_HOSPITALISATION_STATUSES = {"Draft", "Admitted", "Under Care", "Ready for Discharge"}
 DISCHARGE_ALLOWED_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
+VALID_HOSPITALISATION_INVOICE_STATUSES = {"Not Invoiced", "Draft", "Unpaid", "Partly Paid", "Paid", "Overdue", "Cancelled"}
 
 
 def is_hospitalisation_enabled() -> bool:
@@ -245,13 +246,30 @@ def apply_hospitalisation_invoice_defaults(doc, invoice) -> None:
 			break
 
 
+def get_hospitalisation_invoice_status(invoice=None, status: str | None = None) -> str:
+	if invoice is not None:
+		if cint(invoice.get("docstatus")) == 0:
+			return "Draft"
+		if cint(invoice.get("docstatus")) == 2:
+			return "Cancelled"
+		status = get_invoice_payment_status(invoice)
+	status = status or "Not Invoiced"
+	status_map = {
+		"Draft Invoice Pending": "Draft",
+		"Pending Invoice": "Not Invoiced",
+		"Partially Paid": "Partly Paid",
+	}
+	status = status_map.get(status, status)
+	return status if status in VALID_HOSPITALISATION_INVOICE_STATUSES else "Not Invoiced"
+
+
 def sync_invoice_status(doc) -> None:
 	if not doc.get("sales_invoice") or not frappe.db.exists("Sales Invoice", doc.sales_invoice):
 		doc.invoice_status = "Not Invoiced"
 		doc.save()
 		return
 	invoice = frappe.get_doc("Sales Invoice", doc.sales_invoice)
-	doc.invoice_status = get_invoice_payment_status(invoice)
+	doc.invoice_status = get_hospitalisation_invoice_status(invoice)
 	doc.save()
 
 
@@ -390,7 +408,7 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	invoice = result.get("invoice")
 	if invoice:
 		doc.sales_invoice = invoice
-		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
+		doc.invoice_status = get_hospitalisation_invoice_status(frappe.get_doc("Sales Invoice", invoice))
 
 	session_name = result.get("session")
 	if session_name and frappe.db.exists(BILLING_SESSION_DOCTYPE, session_name):
@@ -493,6 +511,69 @@ def mark_activity_charged(doc, charge) -> None:
 		if get_activity_source_hash(doc.name, activity) == charge.get("source_hash"):
 			activity.billing_status = "Charged"
 			return
+
+
+@frappe.whitelist()
+def get_hospitalisation_stock_posting_preview(hospitalisation_name: str, activity_row_name: str | None = None) -> dict:
+	require_internal_user()
+	assert_hospitalisation_enabled()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	if doc.get("status") == "Cancelled":
+		frappe.throw("Cancelled hospitalisations cannot post stock usage.", frappe.ValidationError)
+
+	activities = get_stock_posting_activities(doc, activity_row_name)
+	summary = {
+		"hospitalisation": doc.name,
+		"to_post_count": 0,
+		"skipped_count": 0,
+		"blocked_count": 0,
+		"items": [],
+		"skipped": [],
+		"blocked": [],
+		"warnings": [],
+	}
+	for activity in activities:
+		result = preview_single_hospitalisation_activity_stock(doc, activity)
+		if result.get("status") == "ready":
+			summary["to_post_count"] += 1
+			summary["items"].append(result)
+		elif result.get("status") == "blocked":
+			summary["blocked_count"] += 1
+			summary["blocked"].append(result)
+		else:
+			summary["skipped_count"] += 1
+			summary["skipped"].append(result)
+	return summary
+
+
+def preview_single_hospitalisation_activity_stock(doc, activity) -> dict:
+	activity_name = get_activity_source_name(activity)
+	base = {
+		"activity": activity_name,
+		"activity_type": activity.get("activity_type"),
+		"item": activity.get("item"),
+		"qty": flt(activity.get("qty")),
+		"uom": activity.get("uom"),
+	}
+	if not cint(activity.get("stock_affecting")):
+		return {**base, "status": "skipped", "message": "Activity is not marked stock affecting."}
+	if activity.get("stock_status") == "Posted" or activity.get("stock_entry"):
+		return {**base, "status": "skipped", "message": "Stock has already been posted for this activity.", "stock_entry": activity.get("stock_entry")}
+	if not activity.get("item"):
+		return {**base, "status": "blocked", "message": "A stock Item is required before stock usage can be posted."}
+	qty = flt(activity.get("qty"))
+	if qty <= 0:
+		return {**base, "status": "blocked", "message": "Stock quantity must be greater than zero."}
+	try:
+		profile = get_hospitalisation_activity_item_stock_profile(activity.get("item"))
+		if not profile.is_stock_item:
+			return {**base, "status": "blocked", "message": f"Item {activity.get('item')} is not a stock item."}
+		warehouse = resolve_hospitalisation_activity_source_warehouse(doc, activity)
+	except Exception as exc:
+		return {**base, "status": "blocked", "message": str(exc)}
+	if not warehouse:
+		return {**base, "status": "blocked", "message": "A source warehouse is required before stock usage can be posted."}
+	return {**base, "status": "ready", "message": "Ready to post stock usage.", "warehouse": warehouse, "uom": activity.get("uom") or profile.stock_uom}
 
 
 @frappe.whitelist()
@@ -761,7 +842,7 @@ def update_payment_gate_fields(doc, result: dict, save: bool = True) -> None:
 	doc.payment_gate_status = result.get("status") or ("Allowed" if result.get("can_proceed") else "Blocked")
 	doc.payment_gate_message = result.get("message")
 	if doc.get("sales_invoice") and frappe.db.exists("Sales Invoice", doc.sales_invoice):
-		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", doc.sales_invoice))
+		doc.invoice_status = get_hospitalisation_invoice_status(frappe.get_doc("Sales Invoice", doc.sales_invoice))
 	if save:
 		doc.save()
 
@@ -917,11 +998,15 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	invoice = billing_result.get("invoice")
 	if invoice:
 		doc.sales_invoice = invoice
-		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
+		doc.invoice_status = get_hospitalisation_invoice_status(frappe.get_doc("Sales Invoice", invoice))
 	doc.save()
 
 	response = {
 		**gate,
+		"allowed": bool(gate.get("can_proceed")),
+		"blocked": not bool(gate.get("can_proceed")),
+		"open_billing_modal": not bool(gate.get("can_proceed")),
+		"hospitalisation_mutated": True,
 		"hospitalisation": doc.name,
 		"invoice": invoice,
 		"billing_session": session_name,
