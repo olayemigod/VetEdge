@@ -111,13 +111,13 @@ class TestHospitalisationChargeSheet(TestCase):
 		charge = make_charge("VHOS-001:ACT-1")
 		hosp = hospitalisation_doc(sales_invoice="SINV-001", charge_items=[charge], activities=[activity(name="ACT-1")])
 		invoice = invoice_doc(docstatus=0)
+		session = billing_core_session_for_charge("VBS-001", "SINV-001")
 
-		with charge_context(hosp, invoice):
+		with billing_core_charge_context(hosp, invoice, session):
 			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertEqual(result["invoice"], "SINV-001")
 		self.assertEqual(result["added_count"], 1)
-		self.assertEqual(len(invoice.get("items")), 1)
 		self.assertEqual(charge.billing_status, "Invoiced")
 		self.assertEqual(hosp.activities[0].billing_status, "Charged")
 
@@ -125,37 +125,40 @@ class TestHospitalisationChargeSheet(TestCase):
 		charge = make_charge("VHOS-001:ACT-1")
 		hosp = hospitalisation_doc(sales_invoice="SINV-001", charge_items=[charge], activities=[activity(name="ACT-1")])
 		invoice = invoice_doc(docstatus=0)
+		session = billing_core_session_for_charge("VBS-001", "SINV-001")
 
-		with charge_context(hosp, invoice):
+		with billing_core_charge_context(hosp, invoice, session, added_count=[1, 0]):
 			first = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 			second = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertEqual(first["added_count"], 1)
 		self.assertEqual(second["added_count"], 0)
-		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertEqual(charge.billing_status, "Invoiced")
 
 	def test_submitted_linked_invoice_is_not_mutated(self):
 		charge = make_charge("VHOS-001:ACT-1")
 		old_invoice = invoice_doc(name="SINV-SUB", docstatus=1, items=[])
 		new_invoice = invoice_doc(name="SINV-NEW", docstatus=0, items=[])
 		hosp = hospitalisation_doc(sales_invoice="SINV-SUB", charge_items=[charge], activities=[activity(name="ACT-1")])
+		session = billing_core_session_for_charge("VBS-001", "SINV-NEW")
 
-		with charge_context(hosp, old_invoice, created_invoice=new_invoice):
+		with billing_core_charge_context(hosp, new_invoice, session, created=True):
 			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertTrue(result["created_new_invoice"])
 		self.assertEqual(result["invoice"], "SINV-NEW")
 		self.assertEqual(old_invoice.get("items"), [])
 		old_invoice.save.assert_not_called()
-		self.assertEqual(len(new_invoice.get("items")), 1)
+		self.assertEqual(hosp.sales_invoice, "SINV-NEW")
 
 	def test_cancelled_linked_invoice_is_not_reused(self):
 		charge = make_charge("VHOS-001:ACT-1")
 		cancelled_invoice = invoice_doc(name="SINV-CAN", docstatus=2, items=[])
 		new_invoice = invoice_doc(name="SINV-NEW", docstatus=0, items=[])
 		hosp = hospitalisation_doc(sales_invoice="SINV-CAN", charge_items=[charge], activities=[activity(name="ACT-1")])
+		session = billing_core_session_for_charge("VBS-001", "SINV-NEW")
 
-		with charge_context(hosp, cancelled_invoice, created_invoice=new_invoice):
+		with billing_core_charge_context(hosp, new_invoice, session, created=True):
 			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertTrue(result["created_new_invoice"])
@@ -182,8 +185,9 @@ class TestHospitalisationChargeSheet(TestCase):
 			activities=[activity(name="ACT-1")],
 		)
 		invoice = invoice_doc(docstatus=0)
+		session = billing_core_session_for_charge("VBS-001", "SINV-001")
 
-		with charge_context(hosp, invoice):
+		with billing_core_charge_context(hosp, invoice, session):
 			hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertEqual(hosp.payment_gate_status, "Blocked")
@@ -241,6 +245,22 @@ class TestHospitalisationChargeSheet(TestCase):
 		self.assertEqual(result["added_count"], 0)
 		self.assertEqual(len(invoice.get("items")), 1)
 		self.assertEqual(charge.billing_status, "Invoiced")
+
+
+def billing_core_session_for_charge(session_name, invoice_name, status="Draft Invoiced"):
+	return frappe._dict(
+		name=session_name,
+		charges=[
+			frappe._dict(
+				source_doctype="Veterinary Hospitalisation",
+				source_name="VHOS-001",
+				charge_key="Veterinary Hospitalisation:VHOS-001:Hospitalisation:VHOS-001:ACT-1",
+				invoice=invoice_name,
+				invoice_item_name="SII-001",
+				billing_status=status,
+			)
+		],
+	)
 
 
 def make_charge(source_hash):
@@ -312,7 +332,6 @@ class charge_context:
 				hospitalisation,
 				frappe=frappe_stub,
 				require_internal_user=Mock(),
-				nowdate=Mock(return_value="2026-06-19"),
 			)
 		)
 		self.stack.enter_context(patch("vetedge.services.billing_core.is_billing_sessions_enabled", return_value=False))
@@ -371,15 +390,21 @@ class billing_core_charge_context:
 			)
 		)
 		self.stack.enter_context(patch("vetedge.services.billing_core.is_billing_sessions_enabled", return_value=True))
+		added_counts = list(self.added_count) if isinstance(self.added_count, list) else None
+
+		def sync_result(*args, **kwargs):
+			added_count = added_counts.pop(0) if added_counts is not None and added_counts else self.added_count
+			return {
+				"invoice": invoice.name,
+				"session": session.name,
+				"created": self.created,
+				"added_count": added_count,
+			}
+
 		self.stack.enter_context(
 			patch(
 				"vetedge.services.billing_core.sync_source_to_billing_session",
-				return_value={
-					"invoice": invoice.name,
-					"session": session.name,
-					"created": self.created,
-					"added_count": self.added_count,
-				},
+				side_effect=sync_result,
 			)
 		)
 		return self

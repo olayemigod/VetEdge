@@ -18,6 +18,12 @@
   "stock_section",
   "stock_affecting",
   "stock_status",
+  "source_warehouse",
+  "stock_entry",
+  "posted_stock_qty",
+  "stock_posting_message",
+  "stock_posted_on",
+  "stock_posted_by",
   "linkage_section",
   "linked_doctype",
   "linked_document"
@@ -127,6 +133,45 @@
    "fieldtype": "Dynamic Link",
    "label": "Linked Document",
    "options": "linked_doctype"
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "description": "Optional. Used when posting stock usage for this hospitalisation activity."
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "posted_stock_qty",
+   "fieldtype": "Float",
+   "label": "Posted Stock Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_posting_message",
+   "fieldtype": "Small Text",
+   "label": "Stock Posting Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_posted_on",
+   "fieldtype": "Datetime",
+   "label": "Stock Posted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_posted_by",
+   "fieldtype": "Link",
+   "label": "Stock Posted By",
+   "options": "User",
+   "read_only": 1
   }
  ],
  "istable": 1,
