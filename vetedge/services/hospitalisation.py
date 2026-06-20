@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint, flt, now, nowdate
+from frappe.utils import cint, flt, formatdate, getdate, now
 
 from vetedge.services.billing import get_invoice_payment_status
 from vetedge.services.payment_gate import (
@@ -11,7 +11,6 @@ from vetedge.services.payment_gate import (
 	evaluate_invoice_payment_gate,
 )
 from vetedge.services.portal_access import require_internal_user
-from vetedge.services.registration_billing import get_default_company
 
 
 SETTINGS_DOCTYPE = "Veterinary Settings"
@@ -93,8 +92,47 @@ def normalize_hospitalisation_charge_items(doc) -> None:
 
 
 def sync_hospitalisation_title(doc) -> None:
-	parts = [doc.get("patient"), doc.get("status"), doc.get("admission_datetime")]
-	doc.hospitalisation_title = " - ".join(str(part) for part in parts if part)
+	patient_title = get_hospitalisation_patient_title(doc)
+	parts = [patient_title or "Hospitalisation"]
+	admission_date = get_hospitalisation_admission_date_title(doc)
+	veterinarian_title = get_hospitalisation_veterinarian_title(doc)
+	if admission_date:
+		parts.append(admission_date)
+	if veterinarian_title:
+		parts.append(veterinarian_title)
+	if patient_title:
+		parts.append("Hospitalisation")
+	doc.hospitalisation_title = " - ".join(parts)
+
+
+def get_hospitalisation_patient_title(doc) -> str | None:
+	patient = doc.get("patient")
+	if not patient:
+		return None
+	try:
+		return frappe.db.get_value("Veterinary Patient", patient, "patient_name") or patient
+	except Exception:
+		return patient
+
+
+def get_hospitalisation_admission_date_title(doc) -> str | None:
+	admission_datetime = doc.get("admission_datetime")
+	if not admission_datetime:
+		return None
+	try:
+		return formatdate(getdate(admission_datetime))
+	except Exception:
+		return str(admission_datetime)
+
+
+def get_hospitalisation_veterinarian_title(doc) -> str | None:
+	veterinarian = doc.get("attending_veterinarian") or doc.get("admitted_by")
+	if not veterinarian:
+		return None
+	try:
+		return frappe.db.get_value("User", veterinarian, "full_name") or veterinarian
+	except Exception:
+		return veterinarian
 
 
 @frappe.whitelist()
@@ -119,7 +157,7 @@ def create_hospitalisation_from_consultation(consultation_name: str) -> str:
 			"admission_reason": consultation.get("presenting_complaint") or "Admitted from consultation",
 		}
 	)
-	doc.insert(ignore_permissions=True)
+	doc.insert()
 	return doc.name
 
 
@@ -144,34 +182,15 @@ def get_active_hospitalisation_for_consultation(consultation_name: str) -> str |
 def create_or_link_hospitalisation_invoice(hospitalisation_name: str) -> str:
 	require_internal_user()
 	assert_hospitalisation_enabled()
-	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-
-	if doc.get("sales_invoice") and frappe.db.exists("Sales Invoice", doc.sales_invoice):
-		sync_invoice_status(doc)
-		return doc.sales_invoice
-
-	invoice = create_hospitalisation_invoice_doc(doc)
-	doc.sales_invoice = invoice.name
-	doc.invoice_status = get_invoice_payment_status(invoice)
-	doc.save(ignore_permissions=True)
-	return invoice.name
+	result = sync_hospitalisation_charges_with_billing_core(hospitalisation_name)
+	return result.get("invoice")
 
 
 def create_hospitalisation_invoice_doc(doc, include_default_item: bool = True):
-	invoice = frappe.get_doc(
-		{
-			"doctype": "Sales Invoice",
-			"customer": doc.customer,
-			"company": doc.company or get_default_company(),
-			"posting_date": nowdate(),
-			"due_date": nowdate(),
-			"items": build_hospitalisation_invoice_items() if include_default_item else [],
-			"remarks": f"VetEdge hospitalisation invoice for {doc.name}",
-		}
+	frappe.throw(
+		"Hospitalisation invoices are managed by VetEdge Billing Core. Use create_or_link_hospitalisation_invoice instead.",
+		frappe.ValidationError,
 	)
-	apply_hospitalisation_invoice_defaults(doc, invoice)
-	invoice.insert(ignore_permissions=True, ignore_mandatory=True)
-	return invoice
 
 
 def build_hospitalisation_invoice_items() -> list[dict]:
@@ -206,11 +225,11 @@ def apply_hospitalisation_invoice_defaults(doc, invoice) -> None:
 def sync_invoice_status(doc) -> None:
 	if not doc.get("sales_invoice") or not frappe.db.exists("Sales Invoice", doc.sales_invoice):
 		doc.invoice_status = "Not Invoiced"
-		doc.save(ignore_permissions=True)
+		doc.save()
 		return
 	invoice = frappe.get_doc("Sales Invoice", doc.sales_invoice)
 	doc.invoice_status = get_invoice_payment_status(invoice)
-	doc.save(ignore_permissions=True)
+	doc.save()
 
 
 @frappe.whitelist()
@@ -245,7 +264,7 @@ def build_hospitalisation_charge_items(hospitalisation_name: str) -> dict:
 		created += 1
 
 	normalize_hospitalisation_charge_items(doc)
-	doc.save(ignore_permissions=True)
+	doc.save()
 	return {"hospitalisation": doc.name, "created": created, "existing": existing, "skipped": skipped}
 
 
@@ -332,50 +351,7 @@ def get_charge_description(activity) -> str:
 def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
-	from vetedge.services.billing_core import is_billing_sessions_enabled
-
-	if is_billing_sessions_enabled():
-		return sync_hospitalisation_charges_with_billing_core(hospitalisation_name)
-
-	build_hospitalisation_charge_items(hospitalisation_name)
-	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-	pending = [row for row in doc.get("charge_items") or [] if row.get("billing_status") == "Pending Invoice"]
-	if not pending:
-		return {
-			"hospitalisation": doc.name,
-			"invoice": doc.get("sales_invoice"),
-			"added_count": 0,
-			"skipped_count": 0,
-			"created_new_invoice": False,
-		}
-
-	invoice, created_new_invoice = get_or_create_charge_invoice(doc)
-	added_count = 0
-	skipped_count = 0
-	existing_sources = get_invoice_charge_sources(invoice)
-
-	for charge in pending:
-		if charge.get("source_hash") in existing_sources:
-			skipped_count += 1
-			mark_charge_invoiced(charge, invoice, None)
-			mark_activity_charged(doc, charge)
-			continue
-		item_row = append_invoice_item_from_charge(invoice, charge)
-		mark_charge_invoiced(charge, invoice, item_row)
-		mark_activity_charged(doc, charge)
-		added_count += 1
-
-	invoice.save(ignore_permissions=True)
-	doc.sales_invoice = invoice.name
-	doc.invoice_status = get_invoice_payment_status(invoice)
-	doc.save(ignore_permissions=True)
-	return {
-		"hospitalisation": doc.name,
-		"invoice": invoice.name,
-		"added_count": added_count,
-		"skipped_count": skipped_count,
-		"created_new_invoice": created_new_invoice,
-	}
+	return sync_hospitalisation_charges_with_billing_core(hospitalisation_name)
 
 
 def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) -> dict:
@@ -401,7 +377,7 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	doc.status = previous_status
 	doc.payment_gate_status = previous_gate_status
 	doc.payment_gate_message = previous_gate_message
-	doc.save(ignore_permissions=True)
+	doc.save()
 	return {
 		"hospitalisation": hospitalisation_name,
 		"invoice": invoice,
@@ -440,17 +416,10 @@ def get_hospitalisation_charge_source_hash(session_charge) -> str | None:
 
 
 def get_or_create_charge_invoice(doc):
-	invoice_name = doc.get("sales_invoice")
-	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
-		invoice = frappe.get_doc("Sales Invoice", invoice_name)
-		if cint(invoice.docstatus) == 0:
-			return invoice, False
-
-	invoice = create_hospitalisation_invoice_doc(doc, include_default_item=False)
-	doc.sales_invoice = invoice.name
-	doc.invoice_status = get_invoice_payment_status(invoice)
-	doc.save(ignore_permissions=True)
-	return invoice, True
+	frappe.throw(
+		"Hospitalisation charge invoices must be synced through VetEdge Billing Core.",
+		frappe.ValidationError,
+	)
 
 
 def get_invoice_charge_sources(invoice) -> set[str]:
@@ -560,34 +529,49 @@ def evaluate_hospitalisation_payment_gate(doc) -> dict:
 	return evaluate_invoice_payment_gate(invoice, gate, "hospitalisation")
 
 
-def update_payment_gate_fields(doc, result: dict) -> None:
+def update_payment_gate_fields(doc, result: dict, save: bool = True) -> None:
 	doc.payment_gate_status = result.get("status") or ("Allowed" if result.get("can_proceed") else "Blocked")
 	doc.payment_gate_message = result.get("message")
 	if doc.get("sales_invoice") and frappe.db.exists("Sales Invoice", doc.sales_invoice):
 		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", doc.sales_invoice))
-	doc.save(ignore_permissions=True)
+	if save:
+		doc.save()
 
 
 @frappe.whitelist()
 def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
-	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-	create_or_link_hospitalisation_invoice(doc.name)
-	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-	result = evaluate_hospitalisation_payment_gate(doc)
-	update_payment_gate_fields(doc, result)
-
-	if not result.get("can_proceed"):
-		return result
+	from vetedge.services.billing_core import get_billing_session_summary, get_payment_gate_status, sync_source_to_billing_session
 
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	billing_result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, doc.name)
+	session_name = billing_result.get("session")
+	session = frappe.get_doc("Veterinary Billing Session", session_name) if session_name else None
+	gate = get_payment_gate_status(session) if session else evaluate_hospitalisation_payment_gate(doc)
+	update_payment_gate_fields(doc, gate, save=False)
+	invoice = billing_result.get("invoice")
+	if invoice:
+		doc.sales_invoice = invoice
+		doc.invoice_status = get_invoice_payment_status(frappe.get_doc("Sales Invoice", invoice))
+	doc.save()
+
+	response = {
+		**gate,
+		"hospitalisation": doc.name,
+		"invoice": invoice,
+		"billing_session": session_name,
+		"billing_session_summary": get_billing_session_summary(session) if session else None,
+	}
+	if not gate.get("can_proceed"):
+		return response
+
 	doc.status = "Admitted" if doc.status == "Draft" else "Under Care"
 	doc.admitted_by = frappe.session.user
-	doc.save(ignore_permissions=True)
-	result["hospitalisation"] = doc.name
-	result["status"] = doc.payment_gate_status
-	return result
+	doc.save()
+	response["status"] = doc.payment_gate_status
+	response["hospitalisation_status"] = doc.status
+	return response
 
 
 @frappe.whitelist()
@@ -602,5 +586,5 @@ def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str 
 	doc.discharge_datetime = now()
 	if discharge_summary is not None:
 		doc.discharge_summary = discharge_summary
-	doc.save(ignore_permissions=True)
+	doc.save()
 	return doc.name

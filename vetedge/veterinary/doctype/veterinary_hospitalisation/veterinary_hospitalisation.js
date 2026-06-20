@@ -1,5 +1,12 @@
 frappe.ui.form.on("Veterinary Hospitalisation", {
+	setup(frm) {
+		frm.set_query("attending_veterinarian", () => ({
+			query: "vetedge.services.permissions.get_veterinary_doctor_users",
+		}));
+	},
+
 	refresh(frm) {
+		set_hospitalisation_labels(frm);
 		set_discharge_fields_visibility(frm);
 		set_location_help(frm);
 		set_activity_help(frm);
@@ -10,11 +17,142 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 	status(frm) {
 		set_discharge_fields_visibility(frm);
 	},
+
+	patient(frm) {
+		autofill_hospitalisation_patient_details(frm);
+	},
+
+	admission_datetime(frm) {
+		update_hospitalisation_title_preview(frm);
+	},
+
+	attending_veterinarian(frm) {
+		fetch_hospitalisation_veterinarian_title(frm);
+	},
+
+	admitted_by(frm) {
+		fetch_hospitalisation_veterinarian_title(frm);
+	},
+
+	linked_consultation(frm) {
+		autofill_hospitalisation_context_from_consultation(frm);
+	},
 });
 
 function set_discharge_fields_visibility(frm) {
 	const show_discharge_fields = ["Ready for Discharge", "Discharged"].includes(frm.doc.status);
 	frm.toggle_display(["discharged_by", "discharge_datetime", "discharge_summary"], show_discharge_fields);
+}
+
+
+function set_hospitalisation_labels(frm) {
+	frm.set_df_property("customer", "label", __("Pet Owner"));
+}
+
+function autofill_hospitalisation_patient_details(frm) {
+	if (!frm.doc.patient) {
+		return;
+	}
+	frappe.db
+		.get_value("Veterinary Patient", frm.doc.patient, [
+			"patient_name",
+			"primary_owner",
+			"default_branch",
+			"species",
+			"breed",
+			"sex",
+			"approximate_age",
+		])
+		.then((result) => {
+			const patient = result?.message || {};
+			frm._hospitalisation_patient_title = patient.patient_name || frm.doc.patient;
+			set_form_value_if_field_exists(frm, "customer", patient.primary_owner);
+			set_form_value_if_field_exists(frm, "pet_owner", patient.primary_owner);
+			set_form_value_if_field_exists(frm, "patient_name", patient.patient_name);
+			set_form_value_if_field_exists(frm, "species", patient.species);
+			set_form_value_if_field_exists(frm, "breed", patient.breed);
+			set_form_value_if_field_exists(frm, "sex", patient.sex);
+			set_form_value_if_field_exists(frm, "age", patient.approximate_age);
+			set_form_value_if_field_exists(frm, "approximate_age", patient.approximate_age);
+			if (!frm.doc.service_branch) {
+				set_form_value_if_field_exists(frm, "service_branch", patient.default_branch);
+			}
+			update_hospitalisation_title_preview(frm);
+		});
+}
+
+function autofill_hospitalisation_context_from_consultation(frm) {
+	if (!frm.doc.linked_consultation) {
+		return;
+	}
+	frappe.db
+		.get_value("Veterinary Consultation", frm.doc.linked_consultation, [
+			"patient",
+			"primary_owner",
+			"service_branch",
+			"company",
+			"consulting_practitioner",
+		])
+		.then((result) => {
+			const consultation = result?.message || {};
+			set_form_value_if_field_exists(frm, "patient", consultation.patient);
+			set_form_value_if_field_exists(frm, "customer", consultation.primary_owner);
+			set_form_value_if_field_exists(frm, "pet_owner", consultation.primary_owner);
+			set_form_value_if_field_exists(frm, "service_branch", consultation.service_branch);
+			set_form_value_if_field_exists(frm, "company", consultation.company);
+			set_form_value_if_field_exists(frm, "attending_veterinarian", consultation.consulting_practitioner);
+			if (consultation.patient) {
+				autofill_hospitalisation_patient_details(frm);
+			}
+			fetch_hospitalisation_veterinarian_title(frm);
+		});
+}
+
+function set_form_value_if_field_exists(frm, fieldname, value) {
+	if (value && frm.fields_dict[fieldname] && frm.doc[fieldname] !== value) {
+		frm.set_value(fieldname, value);
+	}
+}
+
+function fetch_hospitalisation_veterinarian_title(frm) {
+	const user = frm.doc.attending_veterinarian || frm.doc.admitted_by;
+	if (!user) {
+		frm._hospitalisation_veterinarian_title = null;
+		update_hospitalisation_title_preview(frm);
+		return;
+	}
+	frappe.db.get_value("User", user, "full_name").then((result) => {
+		frm._hospitalisation_veterinarian_title = result?.message?.full_name || user;
+		update_hospitalisation_title_preview(frm);
+	});
+}
+
+function update_hospitalisation_title_preview(frm) {
+	if (!frm.fields_dict.hospitalisation_title) {
+		return;
+	}
+	const patientTitle = frm._hospitalisation_patient_title || frm.doc.patient_name || frm.doc.patient;
+	const parts = [patientTitle || __("Hospitalisation")];
+	const admissionDate = get_hospitalisation_date_title(frm.doc.admission_datetime);
+	const veterinarianTitle = frm._hospitalisation_veterinarian_title || frm.doc.attending_veterinarian || frm.doc.admitted_by;
+	if (admissionDate) {
+		parts.push(admissionDate);
+	}
+	if (veterinarianTitle) {
+		parts.push(veterinarianTitle);
+	}
+	if (patientTitle) {
+		parts.push(__("Hospitalisation"));
+	}
+	set_form_value_if_field_exists(frm, "hospitalisation_title", parts.join(" - "));
+}
+
+function get_hospitalisation_date_title(value) {
+	if (!value) {
+		return null;
+	}
+	const dateValue = String(value).split(/[ T]/)[0];
+	return frappe.datetime.str_to_user(dateValue);
 }
 
 function set_location_help(frm) {
@@ -570,6 +708,9 @@ function add_hospitalisation_action_buttons(frm) {
 							message: gate.message,
 							indicator: gate.can_proceed ? "green" : "red",
 						});
+					}
+					if (!gate.can_proceed && window.vetedgeBillingModal?.open) {
+						window.vetedgeBillingModal.open(frm);
 					}
 					frm.reload_doc();
 				},

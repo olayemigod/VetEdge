@@ -103,37 +103,24 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(name, "VHOS-EXISTING")
 
 	def test_hospitalisation_invoice_can_be_created_and_linked(self):
-		hosp = doc(
-			doctype="Veterinary Hospitalisation",
-			name="VHOS-001",
-			customer="CUST-001",
-			company="Company A",
-			service_branch="Main",
-			sales_invoice=None,
-		)
-		created_invoice = invoice(docstatus=0, outstanding_amount=0)
-		created_invoice.insert = Mock()
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", sales_invoice=None)
+		linked_invoice = invoice(docstatus=0, outstanding_amount=1000)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: linked_invoice if doctype == "Sales Invoice" else hosp)
 
-		def get_doc(doctype, name=None):
-			if isinstance(doctype, dict):
-				created_invoice.update(doctype)
-				created_invoice.name = "SINV-001"
-				return created_invoice
-			return hosp
-
-		frappe_stub = make_frappe_stub(get_doc=get_doc, item_exists=False)
 		with (
 			patch.object(hospitalisation, "frappe", frappe_stub),
 			patch.object(hospitalisation, "require_internal_user"),
-			patch.object(hospitalisation, "get_default_company", return_value="Company A"),
-			patch.object(hospitalisation, "nowdate", return_value="2026-06-19"),
+			patch.object(hospitalisation, "sync_hospitalisation_charges_with_billing_core", return_value={"invoice": "SINV-001"}) as sync,
 		):
 			name = hospitalisation.create_or_link_hospitalisation_invoice("VHOS-001")
 
 		self.assertEqual(name, "SINV-001")
-		self.assertEqual(hosp.sales_invoice, "SINV-001")
-		self.assertEqual(hosp.invoice_status, "Unpaid")
-		created_invoice.insert.assert_called_once_with(ignore_permissions=True, ignore_mandatory=True)
+		sync.assert_called_once_with("VHOS-001")
+
+	def test_create_hospitalisation_invoice_doc_is_deprecated(self):
+		frappe_stub = make_frappe_stub()
+		with patch.object(hospitalisation, "frappe", frappe_stub):
+			self.assertRaises(frappe.ValidationError, hospitalisation.create_hospitalisation_invoice_doc, doc(name="VHOS-001"))
 
 	def test_admission_blocks_without_submitted_invoice(self):
 		hosp = doc(
@@ -145,27 +132,84 @@ class TestHospitalisationActions(TestCase):
 			sales_invoice=None,
 		)
 		draft_invoice = invoice(docstatus=0, outstanding_amount=1000)
-		draft_invoice.insert = Mock()
+		session = billing_session()
 
 		def get_doc(doctype, name=None):
-			if isinstance(doctype, dict):
-				draft_invoice.update(doctype)
-				draft_invoice.name = "SINV-001"
-				return draft_invoice
 			if doctype == "Sales Invoice":
 				return draft_invoice
+			if doctype == "Veterinary Billing Session":
+				return session
 			return hosp
 
-		frappe_stub = make_frappe_stub(get_doc=get_doc, item_exists=False)
-		with (
-			hospitalisation_gate_context(frappe_stub, draft_invoice, gate="Partial Payment Gate"),
-			patch.object(hospitalisation, "nowdate", return_value="2026-06-19"),
+		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		with billing_core_admit_context(
+			frappe_stub,
+			session,
+			sync_result={"session": "VBS-001", "invoice": "SINV-001", "created": True},
+			gate={"can_proceed": False, "status": "Blocked", "message": "At least one linked Sales Invoice must be submitted before service can proceed."},
+		):
+			with patch.object(hospitalisation, "create_hospitalisation_invoice_doc", side_effect=AssertionError("legacy invoice path called")):
+				result = hospitalisation.admit_hospitalisation("VHOS-001")
+
+		self.assertFalse(result["can_proceed"])
+		self.assertEqual(result["billing_session"], "VBS-001")
+		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertEqual(hosp.status, "Draft")
+		self.assertEqual(hosp.payment_gate_status, "Blocked")
+		self.assertEqual(hosp.sales_invoice, "SINV-001")
+
+	def test_admit_uses_billing_core_and_allows_when_gate_passes(self):
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		paid_invoice = invoice(docstatus=1, outstanding_amount=0)
+		session = billing_session(status="Paid")
+
+		def get_doc(doctype, name=None):
+			if doctype == "Sales Invoice":
+				return paid_invoice
+			if doctype == "Veterinary Billing Session":
+				return session
+			return hosp
+
+		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		with billing_core_admit_context(
+			frappe_stub,
+			session,
+			sync_result={"session": "VBS-001", "invoice": "SINV-PAID", "created": False},
+			gate={"can_proceed": True, "status": "Allowed", "message": "Payment gate passed."},
+		) as ctx:
+			with patch.object(hospitalisation, "create_hospitalisation_invoice_doc", side_effect=AssertionError("legacy invoice path called")):
+				result = hospitalisation.admit_hospitalisation("VHOS-001")
+
+		ctx["sync"].assert_called_once_with("Veterinary Hospitalisation", "VHOS-001")
+		self.assertTrue(result["can_proceed"])
+		self.assertEqual(hosp.status, "Admitted")
+		self.assertEqual(hosp.admitted_by, "vet@example.com")
+		self.assertEqual(hosp.payment_gate_status, "Allowed")
+
+	def test_admit_no_payment_gate_allows_after_billing_core_invoice_generation(self):
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		draft_invoice = invoice(docstatus=0, outstanding_amount=1000)
+		session = billing_session(payment_gate_mode="No Payment Gate")
+
+		def get_doc(doctype, name=None):
+			if doctype == "Sales Invoice":
+				return draft_invoice
+			if doctype == "Veterinary Billing Session":
+				return session
+			return hosp
+
+		frappe_stub = make_frappe_stub(get_doc=get_doc, settings_doc=settings(gate="No Payment Gate"))
+		with billing_core_admit_context(
+			frappe_stub,
+			session,
+			sync_result={"session": "VBS-001", "invoice": "SINV-DRAFT", "created": True},
+			gate={"can_proceed": True, "status": "Allowed", "message": "Invoice has been generated. Payment is not required before proceeding."},
 		):
 			result = hospitalisation.admit_hospitalisation("VHOS-001")
 
-		self.assertFalse(result["can_proceed"])
-		self.assertEqual(hosp.status, "Draft")
-		self.assertEqual(hosp.payment_gate_status, "Blocked")
+		self.assertTrue(result["can_proceed"])
+		self.assertEqual(hosp.status, "Admitted")
+		self.assertEqual(hosp.sales_invoice, "SINV-DRAFT")
 
 	def test_draft_invoice_does_not_satisfy_any_gate(self):
 		for gate in ("Full Payment Required", "Partial Payment Gate", "No Payment Gate"):
@@ -200,6 +244,28 @@ class TestHospitalisationActions(TestCase):
 
 		self.assertTrue(result["can_proceed"])
 		self.assertEqual(hosp.payment_gate_status, "Allowed")
+
+	def test_hospitalisation_title_includes_patient_date_and_admitting_vet(self):
+		hosp = doc(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			patient="VP-001",
+			admission_datetime="2026-06-20 09:30:00",
+			attending_veterinarian="vet@example.com",
+		)
+		frappe_stub = make_frappe_stub()
+		frappe_stub.db.get_value.side_effect = lambda doctype, name, fieldname=None, **kwargs: {
+			("Veterinary Patient", "VP-001", "patient_name"): "Max",
+			("User", "vet@example.com", "full_name"): "Dr Ada Bello",
+		}.get((doctype, name, fieldname))
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "formatdate", return_value="20 Jun 2026"),
+		):
+			hospitalisation.sync_hospitalisation_title(hosp)
+
+		self.assertEqual(hosp.hospitalisation_title, "Max - 20 Jun 2026 - Dr Ada Bello - Hospitalisation")
 
 	def test_discharge_sets_discharge_fields(self):
 		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Under Care")
@@ -251,6 +317,41 @@ def hospitalisation_gate_context(frappe_stub, invoice_doc, gate="Partial Payment
 		):
 			yield
 
+	return manager()
+
+
+def billing_session(**values):
+	defaults = {
+		"doctype": "Veterinary Billing Session",
+		"name": "VBS-001",
+		"status": "Active",
+		"payment_gate_mode": "Partial Payment Gate",
+		"charges": [],
+	}
+	defaults.update(values)
+	session = frappe._dict(defaults)
+	session.save = Mock()
+	return session
+
+
+def billing_core_admit_context(frappe_stub, session, sync_result=None, gate=None):
+	from contextlib import contextmanager
+
+	@contextmanager
+	def manager():
+		sync_result = manager.sync_result or {"session": session.name, "invoice": "SINV-001", "created": True}
+		gate_result = manager.gate or {"can_proceed": False, "status": "Blocked", "message": "Blocked"}
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", return_value=sync_result) as sync,
+			patch("vetedge.services.billing_core.get_payment_gate_status", return_value=gate_result),
+			patch("vetedge.services.billing_core.get_billing_session_summary", return_value={"name": session.name, "payment_gate": gate_result}),
+		):
+			yield {"sync": sync}
+
+	manager.sync_result = sync_result
+	manager.gate = gate
 	return manager()
 
 
