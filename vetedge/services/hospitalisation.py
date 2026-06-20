@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint, flt, formatdate, getdate, now
+from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now
 
 from vetedge.services.billing import get_invoice_payment_status
 from vetedge.services.payment_gate import (
@@ -470,6 +470,211 @@ def mark_activity_charged(doc, charge) -> None:
 		if get_activity_source_hash(doc.name, activity) == charge.get("source_hash"):
 			activity.billing_status = "Charged"
 			return
+
+
+@frappe.whitelist()
+def post_hospitalisation_activity_stock(hospitalisation_name: str, activity_row_name: str | None = None) -> dict:
+	require_internal_user()
+	assert_hospitalisation_enabled()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	if doc.get("status") == "Cancelled":
+		frappe.throw("Cancelled hospitalisations cannot post stock usage.", frappe.ValidationError)
+
+	activities = get_stock_posting_activities(doc, activity_row_name)
+	summary = {
+		"hospitalisation": doc.name,
+		"posted_count": 0,
+		"skipped_count": 0,
+		"blocked_count": 0,
+		"stock_entries": [],
+		"messages": [],
+	}
+	for activity in activities:
+		result = post_single_hospitalisation_activity_stock(doc, activity)
+		summary["messages"].append(result)
+		if result.get("status") == "posted":
+			summary["posted_count"] += 1
+			if result.get("stock_entry"):
+				summary["stock_entries"].append(result.get("stock_entry"))
+		elif result.get("status") == "blocked":
+			summary["blocked_count"] += 1
+		else:
+			summary["skipped_count"] += 1
+
+	doc.save()
+	return summary
+
+
+def get_stock_posting_activities(doc, activity_row_name: str | None = None) -> list:
+	activities = list(doc.get("activities") or [])
+	if not activity_row_name:
+		return activities
+	for activity in activities:
+		if get_activity_source_name(activity) == activity_row_name or activity.get("name") == activity_row_name:
+			return [activity]
+	frappe.throw(f"Hospitalisation activity row {activity_row_name} was not found.", frappe.ValidationError)
+
+
+def post_single_hospitalisation_activity_stock(doc, activity) -> dict:
+	activity_name = get_activity_source_name(activity)
+	if not cint(activity.get("stock_affecting")):
+		return update_activity_stock_message(activity, activity_name, "skipped", "Activity is not marked stock affecting.")
+	if activity.get("stock_status") == "Posted" or activity.get("stock_entry"):
+		return update_activity_stock_message(activity, activity_name, "skipped", "Stock has already been posted for this activity.", activity.get("stock_entry"))
+	if not activity.get("item"):
+		activity.stock_status = "Pending"
+		return update_activity_stock_message(activity, activity_name, "blocked", "A stock Item is required before stock usage can be posted.")
+	qty = flt(activity.get("qty"))
+	if qty <= 0:
+		activity.stock_status = "Pending"
+		return update_activity_stock_message(activity, activity_name, "blocked", "Stock quantity must be greater than zero.")
+
+	try:
+		profile = get_hospitalisation_activity_item_stock_profile(activity.get("item"))
+		if not profile.is_stock_item:
+			activity.stock_status = "Pending"
+			return update_activity_stock_message(activity, activity_name, "blocked", f"Item {activity.get('item')} is not a stock item.")
+		warehouse = resolve_hospitalisation_activity_source_warehouse(doc, activity)
+		if not warehouse:
+			activity.stock_status = "Pending"
+			return update_activity_stock_message(activity, activity_name, "blocked", "A source warehouse is required before stock usage can be posted.")
+		entry_name = create_hospitalisation_activity_stock_entry(doc, activity, profile, warehouse, qty)
+	except Exception as exc:
+		activity.stock_status = "Pending"
+		return update_activity_stock_message(activity, activity_name, "blocked", str(exc))
+
+	activity.stock_status = "Posted"
+	activity.stock_entry = entry_name
+	activity.source_warehouse = warehouse
+	activity.posted_stock_qty = qty
+	activity.stock_posted_on = now()
+	activity.stock_posted_by = frappe.session.user
+	return update_activity_stock_message(activity, activity_name, "posted", f"Posted stock usage via Stock Entry {entry_name}.", entry_name)
+
+
+def get_hospitalisation_activity_item_stock_profile(item_code: str):
+	from vetedge.services.stock import get_item_stock_profile
+
+	return get_item_stock_profile(item_code)
+
+
+def resolve_hospitalisation_activity_source_warehouse(doc, activity) -> str | None:
+	warehouse = activity.get("source_warehouse")
+	if warehouse:
+		from vetedge.services.stock import validate_warehouse_company
+
+		validate_warehouse_company(warehouse, doc.get("company"))
+		return warehouse
+
+	from vetedge.services.stock import get_branch_dispensary_warehouse
+
+	warehouse = get_branch_dispensary_warehouse(doc.get("service_branch"), company=doc.get("company"), required=False)
+	if warehouse:
+		return warehouse
+
+	warehouse = get_hospitalisation_settings_default_warehouse()
+	if warehouse:
+		from vetedge.services.stock import validate_warehouse_company
+
+		validate_warehouse_company(warehouse, doc.get("company"))
+		return warehouse
+
+	return get_company_default_warehouse(doc.get("company"))
+
+
+def get_hospitalisation_settings_default_warehouse() -> str | None:
+	if not frappe.db.exists("DocType", SETTINGS_DOCTYPE):
+		return None
+	meta = frappe.get_meta(SETTINGS_DOCTYPE)
+	for fieldname in (
+		"hospitalisation_stock_warehouse",
+		"default_hospitalisation_stock_warehouse",
+		"default_stock_warehouse",
+		"default_warehouse",
+		"dispensary_warehouse",
+	):
+		if meta.has_field(fieldname):
+			warehouse = frappe.get_single(SETTINGS_DOCTYPE).get(fieldname)
+			if warehouse:
+				return warehouse
+	return None
+
+
+def get_company_default_warehouse(company: str | None) -> str | None:
+	if not company or not frappe.db.exists("DocType", "Company"):
+		return None
+	meta = frappe.get_meta("Company")
+	if not meta.has_field("default_warehouse"):
+		return None
+	warehouse = frappe.db.get_value("Company", company, "default_warehouse")
+	if warehouse:
+		from vetedge.services.stock import validate_warehouse_company
+
+		validate_warehouse_company(warehouse, company)
+	return warehouse
+
+
+def create_hospitalisation_activity_stock_entry(doc, activity, profile, warehouse: str, qty: float) -> str:
+	from vetedge.services.expiry_control import allocate_item_batches
+	from vetedge.services.stock import build_stock_entry_rows, validate_stock_availability
+
+	if not doc.get("company"):
+		frappe.throw("Company is required before hospitalisation stock usage can be posted.", frappe.ValidationError)
+
+	allocations = []
+	posting_datetime = get_datetime(activity.get("activity_datetime")) if activity.get("activity_datetime") else None
+	if profile.has_batch_no:
+		allocations = allocate_item_batches(
+			item_code=activity.get("item"),
+			warehouse=warehouse,
+			qty=qty,
+			posting_datetime=posting_datetime,
+		)
+	stock_rows = [
+		{
+			"item_code": activity.get("item"),
+			"qty": qty,
+			"uom": activity.get("uom") or profile.stock_uom,
+			"batch_allocations": allocations,
+		}
+	]
+	validate_stock_availability(stock_rows, warehouse, posting_datetime=posting_datetime)
+	entry = frappe.get_doc(
+		{
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Issue",
+			"purpose": "Material Issue",
+			"company": doc.get("company"),
+			"from_warehouse": warehouse,
+			"remarks": f"VetEdge hospitalisation stock usage for {doc.name} activity {get_activity_source_name(activity)}",
+			"items": build_stock_entry_rows(
+				items=stock_rows,
+				warehouse=warehouse,
+				company=doc.get("company"),
+				use_serial_batch_fields=cint(frappe.get_single_value("Stock Settings", "use_serial_batch_fields")),
+			),
+		}
+	)
+	meta = frappe.get_meta("Stock Entry")
+	if doc.get("service_branch") and meta.has_field("branch"):
+		entry.branch = doc.get("service_branch")
+	for fieldname in ("veterinary_hospitalisation", "hospitalisation", "vetedge_hospitalisation"):
+		if meta.has_field(fieldname):
+			entry.set(fieldname, doc.name)
+			break
+	entry.insert()
+	entry.submit()
+	return entry.name
+
+
+def update_activity_stock_message(activity, activity_name: str, status: str, message: str, stock_entry: str | None = None) -> dict:
+	activity.stock_posting_message = message
+	return {
+		"activity": activity_name,
+		"status": status,
+		"message": message,
+		"stock_entry": stock_entry,
+	}
 
 
 @frappe.whitelist()

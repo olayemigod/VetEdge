@@ -12,6 +12,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 		set_activity_help(frm);
 		add_hospitalisation_action_buttons(frm);
 		add_clinical_activity_action_buttons(frm);
+		add_stock_action_buttons(frm);
 		add_charge_sheet_action_buttons(frm);
 	},
 	status(frm) {
@@ -601,6 +602,34 @@ function format_vaccination_activity_notes(values) {
 		values.next_due_date ? `${__("Next Due")}: ${values.next_due_date}` : null,
 		values.notes,
 	].filter(Boolean).join("\n");
+}
+
+function add_stock_action_buttons(frm) {
+	if (frm.is_new() || ["Cancelled", "Discharged"].includes(frm.doc.status)) {
+		return;
+	}
+
+	frm.add_custom_button(__("Post Stock Usage"), () => {
+		frappe.call({
+			method: "vetedge.services.hospitalisation.post_hospitalisation_activity_stock",
+			args: { hospitalisation_name: frm.doc.name },
+			freeze: true,
+			freeze_message: __("Posting stock usage..."),
+			callback(result) {
+				const summary = result.message || {};
+				frappe.msgprint({
+					title: __("Stock Usage"),
+					message: [
+						`${__("Posted")}: ${summary.posted_count || 0}`,
+						`${__("Skipped")}: ${summary.skipped_count || 0}`,
+						`${__("Blocked")}: ${summary.blocked_count || 0}`,
+					].join("<br>"),
+					indicator: summary.blocked_count ? "orange" : "green",
+				});
+				frm.reload_doc();
+			},
+		});
+	}, __("Stock"));
 }
 
 function add_charge_sheet_action_buttons(frm) {
