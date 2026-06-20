@@ -767,6 +767,142 @@ def update_payment_gate_fields(doc, result: dict, save: bool = True) -> None:
 
 
 @frappe.whitelist()
+def get_hospitalisation_discharge_readiness(hospitalisation_name: str) -> dict:
+	require_internal_user()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	return build_hospitalisation_discharge_readiness(doc)
+
+
+def build_hospitalisation_discharge_readiness(doc, discharge_summary: str | None = None) -> dict:
+	pending_billable = get_pending_billable_activities_without_charges(doc)
+	pending_charges = get_pending_hospitalisation_charge_items(doc)
+	pending_stock = get_pending_stock_activities(doc)
+	billing_session_summary, gate = get_hospitalisation_discharge_billing_state(doc)
+	messages = []
+	recommended_actions = []
+
+	if not (discharge_summary or doc.get("discharge_summary")):
+		messages.append("Discharge summary is required before discharge.")
+		recommended_actions.append("Complete Discharge Summary")
+	if pending_billable:
+		messages.append("There are billable activities that have not been added to the charge sheet.")
+		recommended_actions.append("Build Charge Sheet")
+	if pending_charges:
+		messages.append("There are charge items pending invoice sync.")
+		recommended_actions.append("Sync Charges to Invoice")
+	if pending_stock:
+		messages.append("There are stock-affecting activities that have not been posted.")
+		recommended_actions.append("Post Stock Usage")
+	if not gate.get("can_proceed"):
+		messages.append(gate.get("message") or "Billing/payment gate blocks discharge.")
+		recommended_actions.append("Open Billing & Payment")
+	elif gate.get("message"):
+		messages.append(gate.get("message"))
+		if flt((billing_session_summary or {}).get("outstanding_amount")) > 0:
+			recommended_actions.append("Open Billing & Payment")
+
+	recommended_actions = list(dict.fromkeys(recommended_actions))
+	can_discharge = bool(discharge_summary or doc.get("discharge_summary")) and not pending_billable and not pending_charges and bool(gate.get("can_proceed"))
+	return {
+		"hospitalisation": doc.name,
+		"status": doc.get("status"),
+		"pending_billable_activities": pending_billable,
+		"pending_charge_items": pending_charges,
+		"pending_stock_activities": pending_stock,
+		"billing_session": billing_session_summary,
+		"invoice_summary": get_hospitalisation_invoice_summary(doc, billing_session_summary),
+		"payment_gate": gate,
+		"can_discharge": can_discharge,
+		"warnings": messages,
+		"messages": messages,
+		"recommended_actions": recommended_actions,
+		"discharge_billing_status": get_discharge_billing_status(pending_billable, pending_charges, billing_session_summary, gate),
+	}
+
+
+def get_pending_billable_activities_without_charges(doc) -> list[dict]:
+	charge_sources = {row.get("source_activity") for row in doc.get("charge_items") or [] if row.get("billing_status") != "Cancelled"}
+	charge_hashes = {row.get("source_hash") for row in doc.get("charge_items") or [] if row.get("billing_status") != "Cancelled"}
+	pending = []
+	for activity in doc.get("activities") or []:
+		if not cint(activity.get("billable")) or activity.get("billing_status") in {"Charged", "Cancelled"}:
+			continue
+		source = get_activity_source_name(activity)
+		if source not in charge_sources and get_activity_source_hash(doc.name, activity) not in charge_hashes:
+			pending.append({"activity": source, "activity_type": activity.get("activity_type"), "item": activity.get("item")})
+	return pending
+
+
+def get_pending_hospitalisation_charge_items(doc) -> list[dict]:
+	pending = []
+	for row in doc.get("charge_items") or []:
+		if row.get("billing_status") in {"Invoiced", "Cancelled"}:
+			continue
+		pending.append({"charge": row.get("name") or row.get("source_activity"), "item": row.get("item"), "amount": flt(row.get("amount")), "billing_status": row.get("billing_status")})
+	return pending
+
+
+def get_pending_stock_activities(doc) -> list[dict]:
+	return [
+		{"activity": get_activity_source_name(row), "activity_type": row.get("activity_type"), "item": row.get("item"), "stock_status": row.get("stock_status")}
+		for row in doc.get("activities") or []
+		if cint(row.get("stock_affecting")) and row.get("stock_status") != "Posted" and not row.get("stock_entry")
+	]
+
+
+def get_hospitalisation_discharge_billing_state(doc) -> tuple[dict | None, dict]:
+	try:
+		from vetedge.services.billing_core import get_billing_session_summary, get_payment_gate_status, resolve_billing_session
+
+		session = resolve_billing_session(HOSPITALISATION_DOCTYPE, doc.name)
+		if session:
+			return get_billing_session_summary(session), get_payment_gate_status(session)
+	except Exception:
+		pass
+	gate = evaluate_hospitalisation_payment_gate(doc)
+	return None, gate
+
+
+def get_hospitalisation_invoice_summary(doc, billing_session_summary: dict | None = None) -> dict:
+	if billing_session_summary:
+		return {
+			"current_draft_invoice": billing_session_summary.get("current_draft_invoice"),
+			"latest_invoice": billing_session_summary.get("latest_invoice"),
+			"outstanding_amount": billing_session_summary.get("outstanding_amount"),
+			"payment_status": billing_session_summary.get("payment_status"),
+			"invoices": billing_session_summary.get("invoices") or [],
+		}
+	if doc.get("sales_invoice") and frappe.db.exists("Sales Invoice", doc.sales_invoice):
+		invoice = frappe.get_doc("Sales Invoice", doc.sales_invoice)
+		return {
+			"latest_invoice": invoice.name,
+			"docstatus": cint(invoice.docstatus),
+			"outstanding_amount": flt(invoice.get("outstanding_amount")),
+			"payment_status": get_invoice_payment_status(invoice),
+		}
+	return {}
+
+
+def get_discharge_billing_status(pending_billable, pending_charges, billing_session_summary, gate) -> str:
+	if pending_billable:
+		return "Pending Charges"
+	if pending_charges or ((billing_session_summary or {}).get("invoice_ledger") or {}).get("has_pending_uninvoiced_charges"):
+		return "Pending Invoice"
+	if not gate.get("can_proceed"):
+		return "Unpaid"
+	if flt((billing_session_summary or {}).get("outstanding_amount")) > 0:
+		return "Partially Paid"
+	return "Cleared"
+
+
+def normalize_discharge_details(discharge_summary=None, discharge_details=None) -> dict:
+	details = frappe.parse_json(discharge_details) if isinstance(discharge_details, str) and discharge_details else (discharge_details or {})
+	if discharge_summary and not details.get("discharge_summary"):
+		details["discharge_summary"] = discharge_summary
+	return details
+
+
+@frappe.whitelist()
 def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
@@ -803,16 +939,36 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 
 
 @frappe.whitelist()
-def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str | None = None) -> str:
+def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str | None = None, discharge_details=None, force: bool = False) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	if doc.get("status") == "Cancelled":
+		frappe.throw("Cancelled hospitalisations cannot be discharged.", frappe.ValidationError)
+	if doc.get("status") == "Discharged":
+		frappe.throw("Hospitalisation is already discharged.", frappe.ValidationError)
 	if doc.status not in DISCHARGE_ALLOWED_STATUSES:
 		frappe.throw("Only admitted hospitalisations can be discharged.", frappe.ValidationError)
+
+	details = normalize_discharge_details(discharge_summary, discharge_details)
+	summary = details.get("discharge_summary") or doc.get("discharge_summary")
+	if not summary:
+		frappe.throw("Discharge summary is required before discharge.", frappe.ValidationError)
+
+	readiness = build_hospitalisation_discharge_readiness(doc, discharge_summary=summary)
+	if not readiness.get("can_discharge") and not cint(force):
+		doc.discharge_billing_status = readiness.get("discharge_billing_status")
+		doc.discharge_message = " ".join(readiness.get("messages") or [])[:1000]
+		doc.save()
+		frappe.throw(doc.discharge_message or "Hospitalisation is not ready for discharge.", frappe.ValidationError)
 
 	doc.status = "Discharged"
 	doc.discharged_by = frappe.session.user
 	doc.discharge_datetime = now()
-	if discharge_summary is not None:
-		doc.discharge_summary = discharge_summary
+	doc.discharge_summary = summary
+	for fieldname in ("condition_at_discharge", "discharge_instructions", "follow_up_date", "follow_up_notes"):
+		if fieldname in details:
+			doc.set(fieldname, details.get(fieldname))
+	doc.discharge_billing_status = "Override" if cint(force) and not readiness.get("can_discharge") else readiness.get("discharge_billing_status")
+	doc.discharge_message = " ".join(readiness.get("messages") or [])[:1000]
 	doc.save()
-	return doc.name
+	return {"hospitalisation": doc.name, "status": doc.status, "discharge_billing_status": doc.get("discharge_billing_status"), "readiness": readiness}

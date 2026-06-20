@@ -316,10 +316,15 @@ class TestHospitalisationActions(TestCase):
 			patch.object(hospitalisation, "frappe", frappe_stub),
 			patch.object(hospitalisation, "require_internal_user"),
 			patch.object(hospitalisation, "now", return_value="2026-06-19 09:00:00"),
+			patch.object(
+				hospitalisation,
+				"get_hospitalisation_discharge_billing_state",
+				return_value=({"outstanding_amount": 0, "invoice_ledger": {}}, {"can_proceed": True, "status": "Allowed", "message": "Payment gate passed."}),
+			),
 		):
-			name = hospitalisation.discharge_hospitalisation("VHOS-001", "Recovered")
+			result = hospitalisation.discharge_hospitalisation("VHOS-001", "Recovered")
 
-		self.assertEqual(name, "VHOS-001")
+		self.assertEqual(result["hospitalisation"], "VHOS-001")
 		self.assertEqual(hosp.status, "Discharged")
 		self.assertEqual(hosp.discharged_by, "vet@example.com")
 		self.assertEqual(hosp.discharge_summary, "Recovered")

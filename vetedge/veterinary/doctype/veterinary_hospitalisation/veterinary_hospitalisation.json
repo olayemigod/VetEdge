@@ -38,7 +38,13 @@
   "discharge_section",
   "discharged_by",
   "discharge_datetime",
-  "discharge_summary"
+  "discharge_summary",
+  "condition_at_discharge",
+  "discharge_instructions",
+  "follow_up_date",
+  "follow_up_notes",
+  "discharge_billing_status",
+  "discharge_message"
  ],
  "fields": [
   {
@@ -280,6 +286,41 @@
    "fieldname": "discharge_summary",
    "fieldtype": "Text Editor",
    "label": "Discharge Summary"
+  },
+  {
+   "fieldname": "condition_at_discharge",
+   "fieldtype": "Select",
+   "label": "Condition at Discharge",
+   "options": "\nRecovered\nStable\nImproved\nReferred\nTransferred\nDied\nEuthanised\nDischarged Against Medical Advice"
+  },
+  {
+   "fieldname": "discharge_instructions",
+   "fieldtype": "Text Editor",
+   "label": "Discharge Instructions"
+  },
+  {
+   "fieldname": "follow_up_date",
+   "fieldtype": "Date",
+   "label": "Follow Up Date"
+  },
+  {
+   "fieldname": "follow_up_notes",
+   "fieldtype": "Text Editor",
+   "label": "Follow Up Notes"
+  },
+  {
+   "fieldname": "discharge_billing_status",
+   "fieldtype": "Select",
+   "label": "Discharge Billing Status",
+   "options": "Not Checked\nPending Charges\nPending Invoice\nUnpaid\nPartially Paid\nCleared\nOverride",
+   "default": "Not Checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discharge_message",
+   "fieldtype": "Small Text",
+   "label": "Discharge Message",
+   "read_only": 1
   }
  ],
  "module": "Veterinary",

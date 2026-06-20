@@ -23,7 +23,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 	},
 
 	patient(frm) {
-		autofill_hospitalisation_patient_details(frm);
+		void autofill_hospitalisation_patient_details(frm);
 	},
 
 	admission_datetime(frm) {
@@ -57,29 +57,35 @@ function autofill_hospitalisation_patient_details(frm) {
 	if (!frm.doc.patient) {
 		return;
 	}
-	frappe.call({
-		method: "vetedge.services.hospitalisation.get_hospitalisation_patient_context",
-		args: { patient: frm.doc.patient },
-		callback(result) {
-			const patient = result.message || {};
+	return frappe.db
+		.get_value("Veterinary Patient", frm.doc.patient, [
+			"patient_name",
+			"primary_owner",
+			"default_branch",
+			"species",
+			"breed",
+			"sex",
+			"approximate_age",
+			"date_of_birth",
+		])
+		.then((result) => {
+			const patient = result?.message || {};
 			frm._hospitalisation_patient_title = patient.patient_name || frm.doc.patient;
-			set_form_value_if_field_exists(frm, "customer", patient.customer || patient.primary_owner);
-			set_form_value_if_field_exists(frm, "pet_owner", patient.customer || patient.primary_owner);
+			set_form_value_if_field_exists(frm, "customer", patient.primary_owner);
+			set_form_value_if_field_exists(frm, "pet_owner", patient.primary_owner);
 			set_form_value_if_field_exists(frm, "patient_name", patient.patient_name);
 			set_form_value_if_field_exists(frm, "species", patient.species);
 			set_form_value_if_field_exists(frm, "breed", patient.breed);
 			set_form_value_if_field_exists(frm, "sex", patient.sex);
-			set_form_value_if_field_exists(frm, "age", patient.age || patient.approximate_age);
-			set_form_value_if_field_exists(frm, "approximate_age", patient.approximate_age || patient.age);
+			set_form_value_if_field_exists(frm, "age", patient.approximate_age);
+			set_form_value_if_field_exists(frm, "approximate_age", patient.approximate_age);
 			set_form_value_if_field_exists(frm, "date_of_birth", patient.date_of_birth);
-			set_form_value_if_field_exists(frm, "owner_contact", patient.owner_contact);
 			if (!frm.doc.service_branch) {
-				set_form_value_if_field_exists(frm, "service_branch", patient.service_branch || patient.default_branch);
+				set_form_value_if_field_exists(frm, "service_branch", patient.default_branch);
 			}
 			refresh_hospitalisation_context_fields(frm);
 			update_hospitalisation_title_preview(frm);
-		},
-	});
+		});
 }
 
 function autofill_hospitalisation_context_from_consultation(frm) {
@@ -110,10 +116,6 @@ function autofill_hospitalisation_context_from_consultation(frm) {
 }
 
 function set_attending_veterinarian_query(frm) {
-	const field = frappe.meta.get_docfield(frm.doctype, "attending_veterinarian", frm.doc.name);
-	if (!field || field.options !== "User") {
-		return;
-	}
 	frm.set_query("attending_veterinarian", () => ({
 		query: "vetedge.services.permissions.get_veterinary_doctor_users",
 	}));
@@ -770,25 +772,83 @@ function add_hospitalisation_action_buttons(frm) {
 	}
 
 	if (["Admitted", "Under Care", "Ready for Discharge"].includes(frm.doc.status)) {
+		frm.add_custom_button(__("Check Discharge Readiness"), () => {
+			check_discharge_readiness(frm);
+		}, __("Clinical"));
+
 		frm.add_custom_button(__("Discharge"), () => {
-			frappe.prompt(
-				[{ fieldname: "discharge_summary", fieldtype: "Text Editor", label: __("Discharge Summary") }],
-				(values) => {
-					frappe.call({
-						method: "vetedge.services.hospitalisation.discharge_hospitalisation",
-						args: {
-							hospitalisation_name: frm.doc.name,
-							discharge_summary: values.discharge_summary,
-						},
-						freeze: true,
-						callback() {
-							frm.reload_doc();
-						},
-					});
-				},
-				__("Discharge Hospitalisation"),
-				__("Discharge")
-			);
+			open_discharge_dialog(frm);
 		}, __("Clinical"));
 	}
+}
+
+function check_discharge_readiness(frm) {
+	frappe.call({
+		method: "vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness",
+		args: { hospitalisation_name: frm.doc.name },
+		freeze: true,
+		callback(result) {
+			show_discharge_readiness_dialog(frm, result.message || {});
+		},
+	});
+}
+
+function show_discharge_readiness_dialog(frm, readiness) {
+	const messages = readiness.messages || readiness.warnings || [];
+	const actions = readiness.recommended_actions || [];
+	frappe.msgprint({
+		title: __("Discharge Readiness"),
+		message: [
+			`${__("Can Discharge")}: ${readiness.can_discharge ? __("Yes") : __("No")}`,
+			`${__("Pending Billable Activities")}: ${(readiness.pending_billable_activities || []).length}`,
+			`${__("Pending Charge Items")}: ${(readiness.pending_charge_items || []).length}`,
+			`${__("Pending Stock Activities")}: ${(readiness.pending_stock_activities || []).length}`,
+			`${__("Billing Status")}: ${readiness.discharge_billing_status || "-"}`,
+			messages.length ? `<br><b>${__("Messages")}</b><br>${messages.map(frappe.utils.escape_html).join("<br>")}` : null,
+			actions.length ? `<br><b>${__("Recommended Actions")}</b><br>${actions.map(frappe.utils.escape_html).join("<br>")}` : null,
+		].filter(Boolean).join("<br>"),
+		indicator: readiness.can_discharge ? "green" : "orange",
+	});
+	if (!readiness.can_discharge && actions.includes("Open Billing & Payment") && window.vetedgeBillingModal?.open) {
+		window.vetedgeBillingModal.open(frm);
+	}
+}
+
+function open_discharge_dialog(frm) {
+	frappe.prompt(
+		[
+			{ fieldname: "condition_at_discharge", fieldtype: "Select", label: __("Condition at Discharge"), options: "\nRecovered\nStable\nImproved\nReferred\nTransferred\nDied\nEuthanised\nDischarged Against Medical Advice" },
+			{ fieldname: "discharge_summary", fieldtype: "Text Editor", label: __("Discharge Summary"), reqd: 1, default: frm.doc.discharge_summary },
+			{ fieldname: "discharge_instructions", fieldtype: "Text Editor", label: __("Discharge Instructions"), default: frm.doc.discharge_instructions },
+			{ fieldname: "follow_up_date", fieldtype: "Date", label: __("Follow Up Date"), default: frm.doc.follow_up_date },
+			{ fieldname: "follow_up_notes", fieldtype: "Text Editor", label: __("Follow Up Notes"), default: frm.doc.follow_up_notes },
+		],
+		(values) => {
+			frappe.call({
+				method: "vetedge.services.hospitalisation.discharge_hospitalisation",
+				args: {
+					hospitalisation_name: frm.doc.name,
+					discharge_details: values,
+				},
+				freeze: true,
+				callback(result) {
+					const response = result.message || {};
+					frappe.show_alert({ message: __("Hospitalisation discharged"), indicator: "green" });
+					if (response.readiness?.messages?.length) {
+						frappe.msgprint(response.readiness.messages.join("<br>"));
+					}
+					frm.reload_doc();
+				},
+				error(result) {
+					const message = result.message || result.exc || __("Hospitalisation is not ready for discharge.");
+					frappe.msgprint({ message, indicator: "red" });
+					if (window.vetedgeBillingModal?.open) {
+						window.vetedgeBillingModal.open(frm);
+					}
+				},
+			});
+		},
+		__("Discharge Hospitalisation"),
+		__("Discharge")
+	);
 }
