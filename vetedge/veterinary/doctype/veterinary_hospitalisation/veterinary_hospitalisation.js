@@ -841,10 +841,12 @@ function open_discharge_dialog(frm) {
 				},
 				error(result) {
 					const message = result.message || result.exc || __("Hospitalisation is not ready for discharge.");
-					frappe.msgprint({ message, indicator: "red" });
-					if (window.vetedgeBillingModal?.open) {
-						window.vetedgeBillingModal.open(frm);
-					}
+					frm.reload_doc().then(() => {
+						frappe.msgprint({ message, indicator: "red" });
+						if (window.vetedgeBillingModal?.open) {
+							window.vetedgeBillingModal.open(frm);
+						}
+					});
 				},
 			});
 		},

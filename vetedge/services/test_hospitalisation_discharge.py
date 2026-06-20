@@ -64,6 +64,13 @@ class TestHospitalisationDischarge(TestCase):
 		self.assertFalse(result["can_discharge"])
 		self.assertIn("Complete Discharge Summary", result["recommended_actions"])
 
+	def test_discharge_readiness_is_read_only_for_hospitalisation(self):
+		doc = hosp(discharge_summary="Ready")
+		with discharge_context(doc, billing_summary(), gate()):
+			result = hospitalisation.get_hospitalisation_discharge_readiness("VHOS-001")
+		self.assertTrue(result["can_discharge"])
+		doc.save.assert_not_called()
+
 	def test_readiness_detects_pending_billable_activities_without_charge_items(self):
 		doc = hosp(discharge_summary="Done", activities=[row(name="ACT-1", billable=1, billing_status="Pending Charge", activity_type="Medication")])
 		with discharge_context(doc, billing_summary(), gate()):

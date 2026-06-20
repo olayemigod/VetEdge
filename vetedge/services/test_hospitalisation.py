@@ -85,6 +85,7 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(context["service_branch"], "Main")
 		self.assertEqual(context["species"], "Canine")
 		self.assertEqual(context["age"], "3 years")
+		patient.save.assert_not_called()
 
 	def test_hospitalisation_patient_context_missing_optional_fields_does_not_crash(self):
 		patient = doc(doctype="Veterinary Patient", name="VP-002", patient_name="Tiny", primary_owner="CUST-002")
@@ -100,6 +101,31 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(context["patient_name"], "Tiny")
 		self.assertIsNone(context["species"])
 		self.assertIsNone(context["date_of_birth"])
+
+	def test_hospitalisation_charge_summary_is_read_only(self):
+		hospital_doc = doc(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			sales_invoice="SINV-001",
+			invoice_status="Draft",
+			charge_items=[
+				doc(name="CHG-1", amount=100, billing_status="Pending Invoice"),
+				doc(name="CHG-2", amount=50, billing_status="Invoiced"),
+				doc(name="CHG-3", amount=25, billing_status="Cancelled"),
+			],
+		)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: hospital_doc)
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+		):
+			summary = hospitalisation.get_hospitalisation_charge_summary("VHOS-001")
+
+		self.assertEqual(summary["total_pending"], 100)
+		self.assertEqual(summary["total_invoiced"], 50)
+		self.assertEqual(summary["total_cancelled"], 25)
+		hospital_doc.save.assert_not_called()
 
 	def test_create_hospitalisation_from_consultation_creates_linked_record(self):
 		created = []
