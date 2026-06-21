@@ -1043,17 +1043,22 @@ function add_hospitalisation_action_buttons(frm) {
 				freeze: true,
 				callback(result) {
 					const gate = result.message || {};
-					frm.reload_doc().then(() => {
+					const after_reload = () => {
 						if (gate.message) {
 							frappe.msgprint({
 								message: gate.message,
 								indicator: gate.can_proceed ? "green" : "red",
 							});
 						}
-						if (!gate.can_proceed && window.vetedgeBillingModal?.open) {
+						if (!gate.can_proceed && gate.open_billing_modal && window.vetedgeBillingModal?.open) {
 							window.vetedgeBillingModal.open(frm);
 						}
-					});
+					};
+					if (gate.reload_required || gate.hospitalisation_mutated) {
+						frm.reload_doc().then(after_reload);
+					} else {
+						after_reload();
+					}
 				},
 				error(result) {
 					const message = result.message || result.exc || __("Hospitalisation admission could not be completed.");

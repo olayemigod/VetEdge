@@ -989,17 +989,22 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	assert_hospitalisation_enabled()
 	from vetedge.services.billing_core import get_billing_session_summary, get_payment_gate_status, sync_source_to_billing_session
 
-	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
-	billing_result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, doc.name)
+	source_doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	billing_result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, source_doc.name)
 	session_name = billing_result.get("session")
 	session = frappe.get_doc("Veterinary Billing Session", session_name) if session_name else None
-	gate = get_payment_gate_status(session) if session else evaluate_hospitalisation_payment_gate(doc)
-	update_payment_gate_fields(doc, gate, save=False)
+
+	# Billing Core sync can update hospitalisation compatibility fields.
+	# Re-fetch before saving gate/admit fields so check_if_latest sees the
+	# current modified timestamp instead of the pre-sync document.
+	gate_doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	gate = get_payment_gate_status(session) if session else evaluate_hospitalisation_payment_gate(gate_doc)
+	update_payment_gate_fields(gate_doc, gate, save=False)
 	invoice = billing_result.get("invoice")
 	if invoice:
-		doc.sales_invoice = invoice
-		doc.invoice_status = get_hospitalisation_invoice_status(frappe.get_doc("Sales Invoice", invoice))
-	doc.save()
+		gate_doc.sales_invoice = invoice
+		gate_doc.invoice_status = get_hospitalisation_invoice_status(frappe.get_doc("Sales Invoice", invoice))
+	gate_doc.save()
 
 	response = {
 		**gate,
@@ -1007,7 +1012,8 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 		"blocked": not bool(gate.get("can_proceed")),
 		"open_billing_modal": not bool(gate.get("can_proceed")),
 		"hospitalisation_mutated": True,
-		"hospitalisation": doc.name,
+		"reload_required": True,
+		"hospitalisation": gate_doc.name,
 		"invoice": invoice,
 		"billing_session": session_name,
 		"billing_session_summary": get_billing_session_summary(session) if session else None,
@@ -1015,11 +1021,13 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	if not gate.get("can_proceed"):
 		return response
 
-	doc.status = "Admitted" if doc.status == "Draft" else "Under Care"
-	doc.admitted_by = frappe.session.user
-	doc.save()
-	response["status"] = doc.payment_gate_status
-	response["hospitalisation_status"] = doc.status
+	admit_doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	admit_doc.status = "Admitted" if admit_doc.status == "Draft" else "Under Care"
+	admit_doc.admitted_by = frappe.session.user
+	admit_doc.save()
+	response["status"] = admit_doc.status
+	response["payment_gate_status"] = admit_doc.payment_gate_status
+	response["hospitalisation_status"] = admit_doc.status
 	return response
 
 

@@ -274,6 +274,47 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(hosp.admitted_by, "vet@example.com")
 		self.assertEqual(hosp.payment_gate_status, "Allowed")
 
+	def test_admit_refetches_after_billing_core_updates_hospitalisation(self):
+		stale_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		stale_hosp.save = Mock(side_effect=AssertionError("stale hospitalisation document saved"))
+		gate_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		admit_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice="SINV-001")
+		paid_invoice = invoice(docstatus=1, outstanding_amount=0)
+		session = billing_session(status="Paid")
+		hospitalisation_docs = [stale_hosp, gate_hosp, admit_hosp]
+
+		def get_doc(doctype, name=None):
+			if doctype == "Sales Invoice":
+				return paid_invoice
+			if doctype == "Veterinary Billing Session":
+				return session
+			if doctype == "Veterinary Hospitalisation":
+				return hospitalisation_docs.pop(0)
+			return doc(doctype=doctype, name=name)
+
+		def sync_side_effect(source_doctype, source_name):
+			stale_hosp.invoice_status = "Draft"
+			return {"session": "VBS-001", "invoice": "SINV-PAID", "created": False}
+
+		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session", side_effect=sync_side_effect),
+			patch("vetedge.services.billing_core.get_payment_gate_status", return_value={"can_proceed": True, "status": "Allowed", "message": "Payment gate passed."}),
+			patch("vetedge.services.billing_core.get_billing_session_summary", return_value={"name": session.name}),
+			patch.object(hospitalisation, "create_hospitalisation_invoice_doc", side_effect=AssertionError("legacy invoice path called")),
+		):
+			result = hospitalisation.admit_hospitalisation("VHOS-001")
+
+		self.assertTrue(result["can_proceed"])
+		self.assertTrue(result["reload_required"])
+		self.assertEqual(result["status"], "Admitted")
+		gate_hosp.save.assert_called_once()
+		admit_hosp.save.assert_called_once()
+		self.assertEqual(admit_hosp.status, "Admitted")
+		self.assertEqual(admit_hosp.admitted_by, "vet@example.com")
+
 	def test_admit_no_payment_gate_allows_after_billing_core_invoice_generation(self):
 		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
 		draft_invoice = invoice(docstatus=0, outstanding_amount=1000)
