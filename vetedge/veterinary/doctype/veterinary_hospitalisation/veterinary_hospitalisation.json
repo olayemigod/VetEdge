@@ -24,6 +24,9 @@
   "care_location_section",
   "care_location_type",
   "care_location",
+  "care_location_assigned_on",
+  "care_location_released_on",
+  "care_location_status",
   "isolation_required",
   "activities_tab",
   "activities_section",
@@ -184,11 +187,29 @@
    "options": "Not Assigned\nKennel\nCage\nWard\nICU\nIsolation\nRecovery Area\nTreatment Room\nHolding Area"
   },
   {
-   "description": "Optional. Link a Kennel only when hospital care is tied to an existing kennel record.",
+   "description": "Optional. Assign a ward, kennel, cage, ICU, isolation, recovery, or general care location only when operational tracking is needed.",
    "fieldname": "care_location",
    "fieldtype": "Link",
    "label": "Care Location",
-   "options": "Kennel"
+   "options": "Veterinary Care Location"
+  },
+  {
+   "fieldname": "care_location_assigned_on",
+   "fieldtype": "Datetime",
+   "label": "Care Location Assigned On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "care_location_released_on",
+   "fieldtype": "Datetime",
+   "label": "Care Location Released On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "care_location_status",
+   "fieldtype": "Data",
+   "label": "Care Location Status",
+   "read_only": 1
   },
   {
    "default": "0",

@@ -1,6 +1,7 @@
 frappe.ui.form.on("Veterinary Hospitalisation", {
 	setup(frm) {
 		set_attending_veterinarian_query(frm);
+		set_care_location_query(frm);
 	},
 
 	onload(frm) {
@@ -9,6 +10,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 
 	refresh(frm) {
 		set_attending_veterinarian_query(frm);
+		set_care_location_query(frm);
 		set_hospitalisation_labels(frm);
 		set_discharge_fields_visibility(frm);
 		set_location_help(frm);
@@ -16,6 +18,7 @@ frappe.ui.form.on("Veterinary Hospitalisation", {
 		add_hospitalisation_action_buttons(frm);
 		add_clinical_activity_action_buttons(frm);
 		add_stock_action_buttons(frm);
+		add_care_location_action_buttons(frm);
 		add_charge_sheet_action_buttons(frm);
 	},
 	status(frm) {
@@ -118,6 +121,17 @@ function autofill_hospitalisation_context_from_consultation(frm) {
 function set_attending_veterinarian_query(frm) {
 	frm.set_query("attending_veterinarian", () => ({
 		query: "vetedge.services.permissions.get_veterinary_doctor_users",
+	}));
+}
+
+
+function set_care_location_query(frm) {
+	frm.set_query("care_location", () => ({
+		filters: {
+			enabled: 1,
+			branch: frm.doc.service_branch || undefined,
+			status: ["in", ["Available", "Occupied"]],
+		},
 	}));
 }
 
@@ -1036,6 +1050,99 @@ function open_generate_daily_charges_dialog(frm) {
 		},
 	});
 	dialog.show();
+}
+
+
+function add_care_location_action_buttons(frm) {
+	if (frm.is_new() || frm.doc.status === "Cancelled") {
+		return;
+	}
+
+	frm.add_custom_button(__("View Available Locations"), () => {
+		show_available_care_locations(frm);
+	}, __("Care Location"));
+
+	if (frm.doc.status !== "Discharged") {
+		frm.add_custom_button(__("Assign Care Location"), () => {
+			open_assign_care_location_dialog(frm);
+		}, __("Care Location"));
+	}
+
+	if (frm.doc.care_location) {
+		frm.add_custom_button(__("Release Care Location"), () => {
+			open_release_care_location_dialog(frm);
+		}, __("Care Location"));
+	}
+}
+
+function open_assign_care_location_dialog(frm) {
+	const locationTypeOptions = ["", "Ward", "Kennel", "Cage", "ICU", "Isolation", "Recovery", "General"].join("\n");
+	const dialog = new frappe.ui.Dialog({
+		title: __("Assign Care Location"),
+		fields: [
+			{ fieldname: "location_type", fieldtype: "Select", label: __("Location Type"), options: locationTypeOptions, default: frm.doc.care_location_type === "Not Assigned" ? "" : frm.doc.care_location_type },
+			{ fieldname: "care_location", fieldtype: "Link", label: __("Care Location"), options: "Veterinary Care Location", reqd: 1 },
+			{ fieldname: "notes", fieldtype: "Small Text", label: __("Notes") },
+		],
+		primary_action_label: __("Assign"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.hospitalisation.assign_hospitalisation_care_location",
+				args: { hospitalisation_name: frm.doc.name, care_location: values.care_location, notes: values.notes },
+				freeze: true,
+				callback(result) {
+					const response = result.message || {};
+					dialog.hide();
+					frm.reload_doc().then(() => frappe.msgprint(response.message || __("Care location assigned.")));
+				},
+			});
+		},
+	});
+	dialog.fields_dict.care_location.get_query = () => ({
+		filters: {
+			enabled: 1,
+			branch: frm.doc.service_branch || undefined,
+			location_type: dialog.get_value("location_type") || undefined,
+			status: ["in", ["Available", "Occupied"]],
+		},
+	});
+	dialog.show();
+}
+
+function open_release_care_location_dialog(frm) {
+	frappe.prompt(
+		[{ fieldname: "notes", fieldtype: "Small Text", label: __("Release Notes") }],
+		(values) => {
+			frappe.confirm(__("Release the assigned care location?"), () => {
+				frappe.call({
+					method: "vetedge.services.hospitalisation.release_hospitalisation_care_location",
+					args: { hospitalisation_name: frm.doc.name, notes: values.notes },
+					freeze: true,
+					callback(result) {
+						const response = result.message || {};
+						frm.reload_doc().then(() => frappe.msgprint(response.message || __("Care location released.")));
+					},
+				});
+			});
+		},
+		__("Release Care Location"),
+		__("Continue")
+	);
+}
+
+function show_available_care_locations(frm) {
+	frappe.call({
+		method: "vetedge.services.hospitalisation.get_available_care_locations",
+		args: { branch: frm.doc.service_branch, location_type: frm.doc.care_location_type === "Not Assigned" ? null : frm.doc.care_location_type, care_level: frm.doc.care_level },
+		freeze: true,
+		callback(result) {
+			const rows = result.message || [];
+			const message = rows.length
+				? rows.map((row) => `${frappe.utils.escape_html(row.location_name || row.name)} - ${frappe.utils.escape_html(row.location_type || "-")} - ${__("Slots")}: ${row.available_slots}`).join("<br>")
+				: __("No available care locations found for this filter.");
+			frappe.msgprint({ title: __("Available Care Locations"), message });
+		},
+	});
 }
 
 function add_charge_sheet_action_buttons(frm) {

@@ -23,6 +23,10 @@ DISABLED_MESSAGE = "Veterinary Hospitalisation is not enabled for this clinic."
 ACTIVE_HOSPITALISATION_STATUSES = {"Draft", "Admitted", "Under Care", "Ready for Discharge"}
 DISCHARGE_ALLOWED_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
 VALID_HOSPITALISATION_INVOICE_STATUSES = {"Not Invoiced", "Draft", "Unpaid", "Partly Paid", "Paid", "Overdue", "Cancelled"}
+CARE_LOCATION_DOCTYPE = "Veterinary Care Location"
+CARE_LOCATION_LOG_DOCTYPE = "Veterinary Care Location Occupancy Log"
+ACTIVE_CARE_LOCATION_STATUSES = {"Available", "Occupied"}
+
 
 
 def is_hospitalisation_enabled() -> bool:
@@ -897,6 +901,177 @@ def update_activity_stock_message(activity, activity_name: str, status: str, mes
 CARE_LEVEL_OPTIONS = {"Standard", "Observation", "Intensive Care", "ICU", "Isolation", "Recovery"}
 
 
+def get_hospitalisation_branch(doc) -> str | None:
+	return doc.get("service_branch") or doc.get("branch")
+
+
+def get_care_location_branch(location) -> str | None:
+	return location.get("branch")
+
+
+def get_active_care_location_occupancy_count(care_location: str, exclude_hospitalisation: str | None = None) -> int:
+	filters = {"care_location": care_location, "status": "Active"}
+	logs = frappe.get_all(
+		CARE_LOCATION_LOG_DOCTYPE,
+		filters=filters,
+		fields=["name", "hospitalisation"],
+	) or []
+	count = 0
+	for row in logs:
+		hospitalisation = row.get("hospitalisation")
+		if exclude_hospitalisation and hospitalisation == exclude_hospitalisation:
+			continue
+		if hospitalisation and frappe.db.exists(HOSPITALISATION_DOCTYPE, hospitalisation):
+			status = frappe.db.get_value(HOSPITALISATION_DOCTYPE, hospitalisation, "status")
+			if status in {"Cancelled", "Discharged"}:
+				continue
+		count += 1
+	return count
+
+
+def get_active_care_location_log(hospitalisation_name: str, care_location: str | None = None):
+	filters = {"hospitalisation": hospitalisation_name, "status": "Active"}
+	if care_location:
+		filters["care_location"] = care_location
+	logs = frappe.get_all(
+		CARE_LOCATION_LOG_DOCTYPE,
+		filters=filters,
+		fields=["name"],
+		order_by="assigned_on desc",
+		limit=1,
+	) or []
+	return logs[0].get("name") if logs else None
+
+
+def update_care_location_status(care_location: str) -> dict:
+	location = frappe.get_doc(CARE_LOCATION_DOCTYPE, care_location)
+	capacity = max(cint(location.get("capacity")) or 1, 1)
+	active_count = get_active_care_location_occupancy_count(care_location)
+	if not cint(location.get("enabled")) or location.get("status") in {"Inactive", "Maintenance", "Cleaning"}:
+		return {"care_location": care_location, "capacity": capacity, "active_occupancy_count": active_count, "available_slots": max(capacity - active_count, 0), "status": location.get("status")}
+	new_status = "Occupied" if active_count >= capacity else "Available"
+	if location.get("status") != new_status:
+		location.status = new_status
+		location.save()
+	return {"care_location": care_location, "capacity": capacity, "active_occupancy_count": active_count, "available_slots": max(capacity - active_count, 0), "status": new_status}
+
+
+def ensure_care_location_assignable(doc, location) -> dict:
+	if doc.get("status") == "Cancelled":
+		frappe.throw("Cancelled hospitalisations cannot be assigned a care location.", frappe.ValidationError)
+	if not cint(location.get("enabled")) or location.get("status") in {"Inactive", "Maintenance", "Cleaning"}:
+		frappe.throw("Selected care location is not available for assignment.", frappe.ValidationError)
+	doc_branch = get_hospitalisation_branch(doc)
+	location_branch = get_care_location_branch(location)
+	if doc_branch and location_branch and doc_branch != location_branch:
+		frappe.throw("Care location branch does not match the hospitalisation branch.", frappe.ValidationError)
+	capacity = max(cint(location.get("capacity")) or 1, 1)
+	active_count = get_active_care_location_occupancy_count(location.name, exclude_hospitalisation=doc.name)
+	if active_count >= capacity:
+		frappe.throw("Selected care location is already full.", frappe.ValidationError)
+	return {"capacity": capacity, "active_occupancy_count": active_count, "available_slots": capacity - active_count}
+
+
+@frappe.whitelist()
+def assign_hospitalisation_care_location(hospitalisation_name: str, care_location: str, notes: str | None = None) -> dict:
+	require_internal_user()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	location = frappe.get_doc(CARE_LOCATION_DOCTYPE, care_location)
+	availability = ensure_care_location_assignable(doc, location)
+	previous_location = doc.get("care_location")
+	if previous_location and previous_location != care_location:
+		release_hospitalisation_care_location(hospitalisation_name, notes="Released before reassignment.")
+		doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	assigned_on = now()
+	doc.care_location = care_location
+	doc.care_location_assigned_on = assigned_on
+	doc.care_location_released_on = None
+	doc.care_location_status = "Assigned"
+	doc.save()
+	log_name = get_active_care_location_log(doc.name, care_location)
+	if log_name:
+		log = frappe.get_doc(CARE_LOCATION_LOG_DOCTYPE, log_name)
+		log.notes = notes or log.get("notes")
+		log.save()
+	else:
+		log = frappe.get_doc({
+			"doctype": CARE_LOCATION_LOG_DOCTYPE,
+			"hospitalisation": doc.name,
+			"patient": doc.get("patient"),
+			"owner": doc.get("customer") or doc.get("primary_owner"),
+			"care_location": care_location,
+			"branch": get_hospitalisation_branch(doc) or location.get("branch"),
+			"assigned_on": assigned_on,
+			"status": "Active",
+			"assigned_by": frappe.session.user,
+			"notes": notes,
+		})
+		log.insert()
+	status = update_care_location_status(care_location)
+	return {"hospitalisation": doc.name, "care_location": care_location, "assigned": True, "message": "Care location assigned.", **availability, **status}
+
+
+@frappe.whitelist()
+def release_hospitalisation_care_location(hospitalisation_name: str, notes: str | None = None) -> dict:
+	require_internal_user()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	care_location = doc.get("care_location")
+	if not care_location:
+		return {"hospitalisation": doc.name, "released": False, "message": "No care location is assigned."}
+	released_on = now()
+	log_name = get_active_care_location_log(doc.name, care_location)
+	if log_name:
+		log = frappe.get_doc(CARE_LOCATION_LOG_DOCTYPE, log_name)
+		log.status = "Released"
+		log.released_on = released_on
+		log.released_by = frappe.session.user
+		log.notes = notes or log.get("notes")
+		log.save()
+	doc.care_location_released_on = released_on
+	doc.care_location_status = "Released"
+	doc.care_location = None
+	doc.save()
+	status = update_care_location_status(care_location)
+	return {"hospitalisation": doc.name, "care_location": care_location, "released": True, "message": "Care location released.", **status}
+
+
+@frappe.whitelist()
+def get_available_care_locations(branch: str | None = None, location_type: str | None = None, care_level: str | None = None) -> list[dict]:
+	require_internal_user()
+	filters = {"enabled": 1}
+	if branch:
+		filters["branch"] = branch
+	if location_type:
+		filters["location_type"] = location_type
+	locations = frappe.get_all(
+		CARE_LOCATION_DOCTYPE,
+		filters=filters,
+		fields=["name", "location_name", "branch", "location_type", "status", "capacity", "enabled"],
+		order_by="location_name asc",
+	) or []
+	available = []
+	for row in locations:
+		if row.get("status") in {"Inactive", "Maintenance", "Cleaning"}:
+			continue
+		capacity = max(cint(row.get("capacity")) or 1, 1)
+		active_count = get_active_care_location_occupancy_count(row.get("name"))
+		available_slots = max(capacity - active_count, 0)
+		if available_slots <= 0:
+			continue
+		available.append({
+			"name": row.get("name"),
+			"location_name": row.get("location_name") or row.get("name"),
+			"branch": row.get("branch"),
+			"location_type": row.get("location_type"),
+			"status": row.get("status"),
+			"capacity": capacity,
+			"active_occupancy_count": active_count,
+			"available_slots": available_slots,
+			"care_level": care_level,
+		})
+	return available
+
+
 def get_hospitalisation_charge_dates(doc, from_date=None, to_date=None) -> list:
 	start = getdate(from_date or doc.get("admission_datetime") or nowdate())
 	end_source = to_date or (doc.get("discharge_datetime") if doc.get("status") == "Discharged" else None) or nowdate()
@@ -1133,6 +1308,9 @@ def build_hospitalisation_discharge_readiness(doc, discharge_summary: str | None
 	if pending_stock:
 		messages.append("There are stock-affecting activities that have not been posted.")
 		recommended_actions.append("Post Stock Usage")
+	if doc.get("care_location"):
+		messages.append("Care location is still assigned. Release it when the patient physically leaves the location.")
+		recommended_actions.append("Release Care Location")
 	if not gate.get("can_proceed"):
 		messages.append(gate.get("message") or "Billing/payment gate blocks discharge.")
 		recommended_actions.append("Open Billing & Payment")
