@@ -20,6 +20,7 @@
   "attending_veterinarian",
   "admitted_by",
   "admission_reason",
+  "care_level",
   "care_location_section",
   "care_location_type",
   "care_location",
@@ -157,6 +158,15 @@
    "fieldtype": "Small Text",
    "label": "Admission Reason",
    "reqd": 1
+  },
+  {
+   "default": "Standard",
+   "fieldname": "care_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Care Level",
+   "options": "Standard\nObservation\nIntensive Care\nICU\nIsolation\nRecovery"
   },
   {
    "collapsible": 1,

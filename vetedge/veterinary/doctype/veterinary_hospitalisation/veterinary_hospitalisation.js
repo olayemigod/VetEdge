@@ -994,6 +994,50 @@ function add_stock_action_buttons(frm) {
 	}, __("Stock"));
 }
 
+function get_hospitalisation_date(value) {
+	return value ? String(value).slice(0, 10) : null;
+}
+
+function open_generate_daily_charges_dialog(frm) {
+	const defaultFromDate = get_hospitalisation_date(frm.doc.admission_datetime) || frappe.datetime.now_date();
+	const defaultToDate = get_hospitalisation_date(frm.doc.discharge_datetime) || frappe.datetime.now_date();
+	const careLevelOptions = ["Standard", "Observation", "Intensive Care", "ICU", "Isolation", "Recovery"].join("\n");
+	const dialog = new frappe.ui.Dialog({
+		title: __("Generate Daily Charges"),
+		fields: [
+			{ fieldname: "from_date", fieldtype: "Date", label: __("From Date"), default: defaultFromDate, reqd: 1 },
+			{ fieldname: "to_date", fieldtype: "Date", label: __("To Date"), default: defaultToDate, reqd: 1 },
+			{ fieldname: "care_level", fieldtype: "Select", label: __("Care Level"), options: careLevelOptions, default: frm.doc.care_level || "Standard", reqd: 1 },
+		],
+		primary_action_label: __("Generate"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.hospitalisation.generate_hospitalisation_daily_charges",
+				args: { hospitalisation_name: frm.doc.name, from_date: values.from_date, to_date: values.to_date, care_level: values.care_level },
+				freeze: true,
+				callback(result) {
+					const summary = result.message || {};
+					dialog.hide();
+					frm.reload_doc().then(() => {
+						frappe.msgprint({
+							title: __("Daily Charges"),
+							message: [
+								summary.message,
+								`${__("Created")}: ${summary.created || 0}`,
+								`${__("Updated")}: ${summary.updated || 0}`,
+								`${__("Existing")}: ${summary.skipped_existing || 0}`,
+								`${__("Missing Price")}: ${summary.missing_price || 0}`,
+								`${__("Total")}: ${format_currency(summary.total_amount || 0)}`,
+							].filter(Boolean).join("<br>"),
+						});
+					});
+				},
+			});
+		},
+	});
+	dialog.show();
+}
+
 function add_charge_sheet_action_buttons(frm) {
 	if (frm.is_new()) {
 		return;
@@ -1020,6 +1064,12 @@ function add_charge_sheet_action_buttons(frm) {
 			},
 		});
 	}, __("Billing"));
+
+	if (["Admitted", "Under Care", "Ready for Discharge", "Discharged"].includes(frm.doc.status)) {
+		frm.add_custom_button(__("Generate Daily Charges"), () => {
+			open_generate_daily_charges_dialog(frm);
+		}, __("Billing"));
+	}
 
 	if (["Cancelled", "Discharged"].includes(frm.doc.status)) {
 		return;

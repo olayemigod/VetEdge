@@ -18,6 +18,10 @@
   "billing_status",
   "sales_invoice",
   "sales_invoice_item",
+  "source_key",
+  "care_level",
+  "charge_category",
+  "charge_date",
   "source_hash",
   "notes"
  ],
@@ -108,6 +112,34 @@
    "fieldname": "sales_invoice_item",
    "fieldtype": "Data",
    "label": "Sales Invoice Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "charge_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Charge Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "charge_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Charge Category",
+   "options": "Daily Stay\nActivity\nManual",
+   "read_only": 1
+  },
+  {
+   "fieldname": "care_level",
+   "fieldtype": "Data",
+   "label": "Care Level",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Key",
    "read_only": 1
   },
   {

@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "creation": "2026-06-21 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "care_level",
+  "enabled",
+  "item",
+  "uom",
+  "qty_per_day",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "care_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Care Level",
+   "options": "Standard\nObservation\nIntensive Care\nICU\nIsolation\nRecovery",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty_per_day",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty Per Day"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Hospitalisation Daily Charge Setting",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

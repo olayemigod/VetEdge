@@ -39,6 +39,7 @@
   "hospitalisation_section",
   "enable_veterinary_hospitalisation",
   "hospitalisation_payment_gate",
+  "hospitalisation_daily_charge_settings",
   "vitals_section",
   "enable_vitals",
   "require_vitals_before_completion",
@@ -349,6 +350,13 @@
    "fieldtype": "Select",
    "label": "Hospitalisation Payment Gate",
    "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
+  },
+  {
+   "fieldname": "hospitalisation_daily_charge_settings",
+   "fieldtype": "Table",
+   "label": "Hospitalisation Daily Charge Settings",
+   "options": "Veterinary Hospitalisation Daily Charge Setting",
+   "depends_on": "enable_veterinary_hospitalisation"
   },
   {
    "fieldname": "vitals_section",

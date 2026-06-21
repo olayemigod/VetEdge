@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import timedelta
 import uuid
 
 import frappe
-from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now
+from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now, nowdate
 
 from vetedge.services.billing import get_invoice_payment_status
 from vetedge.services.payment_gate import (
@@ -341,6 +342,8 @@ def get_charge_item_index(doc) -> dict[str, object]:
 
 def get_charge_item_identity_keys(row) -> list[str]:
 	keys = []
+	if row.get("source_key"):
+		keys.append(row.get("source_key"))
 	if row.get("source_hash"):
 		keys.append(row.get("source_hash"))
 	if row.get("source_activity"):
@@ -888,6 +891,136 @@ def update_activity_stock_message(activity, activity_name: str, status: str, mes
 		"status": status,
 		"message": message,
 		"stock_entry": stock_entry,
+	}
+
+
+CARE_LEVEL_OPTIONS = {"Standard", "Observation", "Intensive Care", "ICU", "Isolation", "Recovery"}
+
+
+def get_hospitalisation_charge_dates(doc, from_date=None, to_date=None) -> list:
+	start = getdate(from_date or doc.get("admission_datetime") or nowdate())
+	end_source = to_date or (doc.get("discharge_datetime") if doc.get("status") == "Discharged" else None) or nowdate()
+	end = getdate(end_source)
+	if end < start:
+		end = start
+	dates = []
+	current = start
+	while current <= end:
+		dates.append(current)
+		current = current + timedelta(days=1)
+	return dates
+
+
+def get_hospitalisation_daily_charge_setting(care_level: str):
+	settings = frappe.get_single(SETTINGS_DOCTYPE)
+	for row in settings.get("hospitalisation_daily_charge_settings") or []:
+		if cint(row.get("enabled")) and row.get("care_level") == care_level:
+			return row
+	return None
+
+
+def get_daily_charge_source_key(hospitalisation_name: str, charge_date, care_level: str, item: str) -> str:
+	return f"daily-stay::{hospitalisation_name}::{getdate(charge_date)}::{care_level}::{item}"
+
+
+def get_daily_charge_index(doc) -> dict[str, object]:
+	index = {}
+	for row in doc.get("charge_items") or []:
+		if row.get("billing_status") == "Cancelled":
+			continue
+		key = row.get("source_key") or row.get("source_hash")
+		if key:
+			index[key] = row
+	return index
+
+
+def build_daily_charge_row(doc, setting, charge_date, care_level: str, source_key: str) -> dict:
+	qty = flt(setting.get("qty_per_day")) or 1
+	uom = setting.get("uom") or get_item_uom(setting.get("item"))
+	pricing = resolve_hospitalisation_charge_pricing(doc, setting.get("item"), uom)
+	rate = flt(pricing.get("rate"))
+	description = setting.get("description") or f"{care_level} Hospitalisation - {formatdate(charge_date)}"
+	return {
+		"source_activity": source_key,
+		"source_key": source_key,
+		"source_hash": source_key,
+		"activity_type": "Daily Stay",
+		"charge_category": "Daily Stay",
+		"charge_date": getdate(charge_date),
+		"care_level": care_level,
+		"item": setting.get("item"),
+		"item_name": get_item_name(setting.get("item")),
+		"description": description,
+		"qty": qty,
+		"uom": uom,
+		"rate": rate,
+		"amount": qty * rate,
+		"pricing_source": pricing.get("pricing_source"),
+		"billing_status": "Pending Invoice",
+		"notes": description,
+	}
+
+
+@frappe.whitelist()
+def generate_hospitalisation_daily_charges(hospitalisation_name: str, from_date=None, to_date=None, care_level: str | None = None) -> dict:
+	require_internal_user()
+	assert_hospitalisation_enabled()
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	if doc.is_new() if callable(getattr(doc, "is_new", None)) else not doc.get("name"):
+		frappe.throw("Save the hospitalisation before generating daily charges.", frappe.ValidationError)
+	if doc.get("status") == "Cancelled":
+		frappe.throw("Cancelled hospitalisations cannot generate daily charges.", frappe.ValidationError)
+	selected_care_level = care_level or doc.get("care_level") or "Standard"
+	if selected_care_level not in CARE_LEVEL_OPTIONS:
+		selected_care_level = "Standard"
+	setting = get_hospitalisation_daily_charge_setting(selected_care_level)
+	if not setting:
+		return {
+			"hospitalisation": doc.name,
+			"created": 0,
+			"updated": 0,
+			"skipped_existing": 0,
+			"missing_price": 0,
+			"total_amount": 0,
+			"message": f"Daily charge item is not configured for {selected_care_level} care level.",
+		}
+	charge_dates = get_hospitalisation_charge_dates(doc, from_date=from_date, to_date=to_date)
+	index = get_daily_charge_index(doc)
+	created = updated = skipped_existing = missing_price = 0
+	total_amount = 0
+	for charge_date in charge_dates:
+		source_key = get_daily_charge_source_key(doc.name, charge_date, selected_care_level, setting.get("item"))
+		row = index.get(source_key)
+		if row and row.get("billing_status") == "Invoiced":
+			skipped_existing += 1
+			total_amount += flt(row.get("amount"))
+			continue
+		new_values = build_daily_charge_row(doc, setting, charge_date, selected_care_level, source_key)
+		if row:
+			manual_rate = flt(row.get("rate"))
+			for fieldname, value in new_values.items():
+				if fieldname in {"rate", "amount"} and manual_rate > 0:
+					continue
+				setattr(row, fieldname, value)
+			if manual_rate > 0:
+				row.amount = (flt(row.get("qty")) or 1) * manual_rate
+			updated += 1
+		else:
+			append_charge_item(doc, new_values)
+			created += 1
+			row = doc.get("charge_items")[-1]
+		if flt(row.get("rate")) <= 0 or flt(row.get("amount")) <= 0:
+			missing_price += 1
+		total_amount += flt(row.get("amount"))
+	doc.save()
+	return {
+		"hospitalisation": doc.name,
+		"created": created,
+		"updated": updated,
+		"skipped_existing": skipped_existing,
+		"missing_price": missing_price,
+		"total_amount": total_amount,
+		"message": f"Generated {created} daily hospitalisation charges.",
 	}
 
 
