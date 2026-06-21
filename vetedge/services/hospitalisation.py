@@ -998,7 +998,7 @@ def assign_hospitalisation_care_location(hospitalisation_name: str, care_locatio
 			"doctype": CARE_LOCATION_LOG_DOCTYPE,
 			"hospitalisation": doc.name,
 			"patient": doc.get("patient"),
-			"owner": doc.get("customer") or doc.get("primary_owner"),
+			"pet_owner": doc.get("customer") or doc.get("primary_owner"),
 			"care_location": care_location,
 			"branch": get_hospitalisation_branch(doc) or location.get("branch"),
 			"assigned_on": assigned_on,

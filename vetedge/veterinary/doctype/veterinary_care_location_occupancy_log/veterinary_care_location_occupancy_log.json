@@ -9,7 +9,7 @@
  "field_order": [
   "hospitalisation",
   "patient",
-  "owner",
+  "pet_owner",
   "care_location",
   "branch",
   "assigned_on",
@@ -37,9 +37,9 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "owner",
+   "fieldname": "pet_owner",
    "fieldtype": "Link",
-   "label": "Owner",
+   "label": "Pet Owner",
    "options": "Customer"
   },
   {
