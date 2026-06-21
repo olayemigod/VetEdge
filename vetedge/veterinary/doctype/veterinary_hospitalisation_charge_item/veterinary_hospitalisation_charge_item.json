@@ -14,6 +14,7 @@
   "uom",
   "rate",
   "amount",
+  "pricing_source",
   "billing_status",
   "sales_invoice",
   "sales_invoice_item",
@@ -80,6 +81,12 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pricing_source",
+   "fieldtype": "Data",
+   "label": "Pricing Source",
    "read_only": 1
   },
   {

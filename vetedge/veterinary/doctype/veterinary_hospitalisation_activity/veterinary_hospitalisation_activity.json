@@ -9,6 +9,7 @@
   "activity_type",
   "performed_by",
   "clinical_notes",
+  "activity_reference",
   "billing_section",
   "billable",
   "billing_status",
@@ -57,6 +58,13 @@
    "fieldname": "clinical_notes",
    "fieldtype": "Text Editor",
    "label": "Clinical Notes"
+  },
+  {
+   "fieldname": "activity_reference",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Activity Reference",
+   "read_only": 1
   },
   {
    "fieldname": "billing_section",

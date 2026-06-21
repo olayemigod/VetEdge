@@ -107,6 +107,74 @@ class TestHospitalisationChargeSheet(TestCase):
 		self.assertEqual(second["existing"], 1)
 		self.assertEqual(len(hosp.charge_items), 1)
 
+	def test_build_after_immediate_medication_charge_does_not_duplicate(self):
+		med_activity = activity(name="ACT-1", activity_reference="MED-REF-1", item="ITEM-001", qty=2)
+		charge = make_charge("VHOS-001:MED-REF-1:ITEM-001")
+		charge.source_activity = "MED-REF-1"
+		charge.qty = 2
+		charge.rate = 25
+		charge.amount = 50
+		hosp = hospitalisation_doc(activities=[med_activity], charge_items=[charge])
+
+		with charge_context(hosp):
+			result = hospitalisation.build_hospitalisation_charge_items("VHOS-001")
+
+		self.assertEqual(result["created"], 0)
+		self.assertEqual(result["existing"], 1)
+		self.assertEqual(len(hosp.charge_items), 1)
+		self.assertEqual(hosp.charge_items[0].rate, 25)
+		self.assertEqual(hosp.charge_items[0].amount, 50)
+
+	def test_existing_manual_rate_is_preserved_when_rebuilding_charge(self):
+		med_activity = activity(name="ACT-1", activity_reference="MED-REF-1", item="ITEM-001", qty=3)
+		charge = make_charge("VHOS-001:MED-REF-1:ITEM-001")
+		charge.source_activity = "MED-REF-1"
+		charge.rate = 99
+		hosp = hospitalisation_doc(activities=[med_activity], charge_items=[charge])
+
+		with charge_context(hosp):
+			hospitalisation.build_hospitalisation_charge_items("VHOS-001")
+
+		self.assertEqual(len(hosp.charge_items), 1)
+		self.assertEqual(hosp.charge_items[0].rate, 99)
+		self.assertEqual(hosp.charge_items[0].amount, 297)
+
+	def test_missing_price_blocks_invoice_sync(self):
+		charge = make_charge("VHOS-001:ACT-1")
+		charge.rate = 0
+		charge.amount = 0
+		hosp = hospitalisation_doc(sales_invoice="SINV-001", charge_items=[charge], activities=[activity(name="ACT-1")])
+		invoice = invoice_doc(docstatus=0)
+		session = billing_core_session_for_charge("VBS-001", "SINV-001")
+
+		with billing_core_charge_context(hosp, invoice, session):
+			with self.assertRaises(frappe.ValidationError):
+				hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
+
+	def test_charge_summary_returns_totals_and_missing_price_count(self):
+		pending = make_charge("VHOS-001:ACT-1")
+		missing = make_charge("VHOS-001:ACT-2")
+		missing.source_activity = "ACT-2"
+		missing.rate = 0
+		missing.amount = 0
+		invoiced = make_charge("VHOS-001:ACT-3")
+		invoiced.source_activity = "ACT-3"
+		invoiced.amount = 30
+		invoiced.billing_status = "Invoiced"
+		hosp = hospitalisation_doc(
+			activities=[activity(name="ACT-1"), activity(name="ACT-NA", billable=0, item=None)],
+			charge_items=[pending, missing, invoiced],
+		)
+
+		with charge_context(hosp):
+			summary = hospitalisation.get_hospitalisation_charge_summary("VHOS-001")
+
+		self.assertEqual(summary["total_charge_amount"], 40)
+		self.assertEqual(summary["pending_charge_amount"], 10)
+		self.assertEqual(summary["invoiced_charge_amount"], 30)
+		self.assertEqual(summary["missing_price_count"], 1)
+		self.assertEqual(summary["not_billable_count"], 1)
+
 	def test_draft_invoice_receives_pending_charge_items(self):
 		charge = make_charge("VHOS-001:ACT-1")
 		hosp = hospitalisation_doc(sales_invoice="SINV-001", charge_items=[charge], activities=[activity(name="ACT-1")])

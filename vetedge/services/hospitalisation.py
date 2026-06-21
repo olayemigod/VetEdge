@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import frappe
 from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now
 
@@ -105,7 +107,7 @@ def generate_hospitalisation_activity_reference() -> str:
 	try:
 		return frappe.generate_hash(length=12)
 	except Exception:
-		return frappe.utils.random_string(12)
+		return uuid.uuid4().hex[:12]
 
 
 def sync_hospitalisation_title(doc) -> None:
@@ -613,8 +615,10 @@ def mark_charge_invoiced(charge, invoice, item_row) -> None:
 
 
 def mark_activity_charged(doc, charge) -> None:
+	charge_keys = set(get_charge_item_identity_keys(charge))
 	for activity in doc.get("activities") or []:
-		if get_activity_source_hash(doc.name, activity) == charge.get("source_hash"):
+		activity_keys = set(get_activity_charge_lookup_keys(doc.name, activity))
+		if activity_keys.intersection(charge_keys):
 			activity.billing_status = "Charged"
 			return
 
