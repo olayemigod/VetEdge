@@ -1,0 +1,57 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Branch",
+   "options": "Branch"
+  },
+  {
+   "fieldname": "location_type",
+   "fieldtype": "Select",
+   "label": "Location Type",
+   "options": "\nWard\nKennel\nCage\nICU\nIsolation\nRecovery\nGeneral"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nAvailable\nOccupied\nCleaning\nMaintenance\nInactive"
+  },
+  {
+   "fieldname": "include_inactive",
+   "fieldtype": "Check",
+   "label": "Include Inactive"
+  },
+  {
+   "fieldname": "occupied_only",
+   "fieldtype": "Check",
+   "label": "Occupied Only"
+  }
+ ],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Care Location Occupancy",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Veterinary Care Location",
+ "report_name": "Care Location Occupancy",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  }
+ ]
+}

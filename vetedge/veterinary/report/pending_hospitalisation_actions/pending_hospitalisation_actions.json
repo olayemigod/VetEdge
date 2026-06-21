@@ -1,0 +1,63 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Branch",
+   "options": "Branch"
+  },
+  {
+   "fieldname": "action_type",
+   "fieldtype": "Select",
+   "label": "Action Type",
+   "options": "\nMissing Price Charges\nPending Charge Sync\nPending Stock Posting\nCare Location Still Assigned\nNo Recent Activity\nPending Discharge Summary\nPending Daily Charges"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nAdmitted\nUnder Care\nReady for Discharge"
+  },
+  {
+   "fieldname": "attending_veterinarian",
+   "fieldtype": "Link",
+   "label": "Assigned To / Attending Veterinarian",
+   "options": "User"
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date"
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date"
+  }
+ ],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Pending Hospitalisation Actions",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Veterinary Hospitalisation",
+ "report_name": "Pending Hospitalisation Actions",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  }
+ ]
+}

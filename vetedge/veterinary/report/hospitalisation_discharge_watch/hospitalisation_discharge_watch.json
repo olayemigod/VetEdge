@@ -1,0 +1,69 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Branch",
+   "options": "Branch"
+  },
+  {
+   "fieldname": "care_level",
+   "fieldtype": "Select",
+   "label": "Care Level",
+   "options": "\nStandard\nObservation\nIntensive Care\nICU\nIsolation\nRecovery"
+  },
+  {
+   "fieldname": "attending_veterinarian",
+   "fieldtype": "Link",
+   "label": "Attending Veterinarian",
+   "options": "User"
+  },
+  {
+   "fieldname": "minimum_days_admitted",
+   "fieldtype": "Int",
+   "label": "Minimum Days Admitted"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nAdmitted\nUnder Care\nReady for Discharge"
+  },
+  {
+   "fieldname": "discharge_ready_only",
+   "fieldtype": "Check",
+   "label": "Discharge Ready Only"
+  },
+  {
+   "fieldname": "pending_issue_type",
+   "fieldtype": "Select",
+   "label": "Pending Issue Type",
+   "options": "\nMissing Price Charges\nPending Charge Sync\nPending Stock Posting\nCare Location Still Assigned\nPending Discharge Summary"
+  }
+ ],
+ "is_standard": "Yes",
+ "module": "Veterinary",
+ "name": "Hospitalisation Discharge Watch",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Veterinary Hospitalisation",
+ "report_name": "Hospitalisation Discharge Watch",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  }
+ ]
+}
