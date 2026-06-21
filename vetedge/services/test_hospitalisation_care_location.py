@@ -120,6 +120,13 @@ class TestHospitalisationCareLocation(TestCase):
 		self.assertEqual(data["name"], "Veterinary Care Location")
 		self.assertTrue(any(field.get("fieldname") == "enabled" for field in data["fields"]))
 
+	def test_occupancy_log_uses_format_autoname_not_literal_series(self):
+		path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "veterinary_care_location_occupancy_log" / "veterinary_care_location_occupancy_log.json"
+		data = json.loads(path.read_text())
+		self.assertEqual(data["autoname"], "format:VLOC-LOG-{YYYY}-{#####}")
+		self.assertNotEqual(data["autoname"], "VLOC-LOG-.YYYY.-.#####")
+		self.assertFalse(any(field.get("fieldname") == "naming_series" for field in data.get("fields", [])))
+
 	def test_assign_care_location_updates_hospitalisation_and_log(self):
 		stub = CareLocationFrappeStub()
 		stub.hospitalisations["VHOS-001"] = make_hospitalisation()
@@ -169,6 +176,20 @@ class TestHospitalisationCareLocation(TestCase):
 		self.assertTrue(assign["assigned"])
 		self.assertIsNone(stub.hospitalisations["VHOS-001"].care_location)
 		self.assertEqual(stub.logs[0].status, "Released")
+
+	def test_multiple_occupancy_logs_have_unique_non_literal_names(self):
+		stub = CareLocationFrappeStub()
+		stub.hospitalisations["VHOS-001"] = make_hospitalisation("VHOS-001")
+		stub.hospitalisations["VHOS-002"] = make_hospitalisation("VHOS-002")
+		stub.locations["ICU Cage 1"] = make_location(status="Available")
+		with patch.object(hospitalisation, "frappe", stub), patch.object(hospitalisation, "require_internal_user"):
+			hospitalisation.assign_hospitalisation_care_location("VHOS-001", "ICU Cage 1")
+			hospitalisation.release_hospitalisation_care_location("VHOS-001")
+			hospitalisation.assign_hospitalisation_care_location("VHOS-002", "ICU Cage 1")
+		names = [log.name for log in stub.created_logs]
+		self.assertGreaterEqual(len(names), 2)
+		self.assertEqual(len(names), len(set(names)))
+		self.assertNotIn("VLOC-LOG-.YYYY.-.#####", names)
 
 	def test_branch_mismatch_blocks_assignment(self):
 		stub = CareLocationFrappeStub()
