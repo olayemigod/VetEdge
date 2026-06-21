@@ -143,9 +143,60 @@ class TestHospitalisationActions(TestCase):
 		self.assertIn("get_hospitalisation_stock_posting_preview", script)
 		self.assertIn("Confirm Post", script)
 		self.assertIn("open_medication_multi_row_dialog", script)
+		self.assertIn("get_medication_dialog_table_fields", script)
+		self.assertIn('fieldtype: "Table"', script)
+		self.assertIn('options: "Item"', script)
+		self.assertIn('options: "UOM"', script)
+		self.assertIn("get_hospitalisation_medication_item_context", script)
+		self.assertIn("Rate is required for billable medication", script)
+		self.assertIn("append_charge_item_for_activity", script)
 		self.assertIn("add_vaccination_activity_with_billing", script)
 		self.assertIn("add_lab_activities_with_billing", script)
 		self.assertIn("frm.reload_doc().then", script)
+
+	def test_medication_item_context_uses_price_and_stock_defaults(self):
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", company="Company A", customer="CUST-001", service_branch="Main")
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Item":
+				return frappe._dict(item_name="Amoxicillin", stock_uom="Nos", is_stock_item=1, standard_rate=0)
+			return None
+
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: hosp)
+		frappe_stub.db.get_value = get_value
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch("vetedge.services.billing_core._get_item_selling_rate", return_value=250),
+		):
+			context = hospitalisation.get_hospitalisation_medication_item_context("VHOS-001", "AMOX-001")
+
+		self.assertEqual(context["item_name"], "Amoxicillin")
+		self.assertEqual(context["uom"], "Nos")
+		self.assertEqual(context["is_stock_item"], 1)
+		self.assertEqual(context["rate"], 250)
+		self.assertEqual(context["missing_price"], 0)
+
+	def test_medication_item_context_reports_missing_price_for_non_stock_item(self):
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001")
+
+		def get_value(doctype, name, fieldname=None, **kwargs):
+			if doctype == "Item":
+				return frappe._dict(item_name="Clinical Advice", stock_uom="Unit", is_stock_item=0, standard_rate=0)
+			return None
+
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: hosp)
+		frappe_stub.db.get_value = get_value
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch("vetedge.services.billing_core._get_item_selling_rate", return_value=0),
+		):
+			context = hospitalisation.get_hospitalisation_medication_item_context("VHOS-001", "ADVICE-001")
+
+		self.assertEqual(context["is_stock_item"], 0)
+		self.assertEqual(context["rate"], 0)
+		self.assertEqual(context["missing_price"], 1)
 
 	def test_create_hospitalisation_from_consultation_creates_linked_record(self):
 		created = []

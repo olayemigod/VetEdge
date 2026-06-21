@@ -573,6 +573,7 @@ function add_activity_row_from_dialog(frm, dialog, values) {
 
 function append_activity_row(frm, values) {
 	const row = frm.add_child("activities");
+	row.activity_reference = values.activity_reference || make_hospitalisation_activity_reference();
 	row.activity_type = values.activity_type || "Other";
 	row.activity_datetime = values.activity_datetime || frappe.datetime.now_datetime();
 	row.performed_by = values.performed_by || frappe.session.user;
@@ -724,13 +725,21 @@ function open_billable_activity_dialog(frm, options = {}) {
 function open_medication_multi_row_dialog(frm) {
 	const dialog = new frappe.ui.Dialog({
 		title: __("Add Medication"),
-		size: "large",
+		size: "extra-large",
 		fields: [
-			{ fieldname: "medications_html", fieldtype: "HTML" },
+			{
+				fieldname: "medications",
+				fieldtype: "Table",
+				label: __("Medications"),
+				cannot_add_rows: false,
+				in_place_edit: true,
+				data: [{}],
+				fields: get_medication_dialog_table_fields(frm, () => dialog),
+			},
 		],
 		primary_action_label: __("Add Medications"),
 		primary_action() {
-			const rows = collect_medication_dialog_rows(dialog);
+			const rows = get_medication_dialog_rows(dialog);
 			if (!rows.length) {
 				frappe.msgprint(__("Add at least one medication row."));
 				return;
@@ -739,94 +748,126 @@ function open_medication_multi_row_dialog(frm) {
 		},
 	});
 	dialog.show();
-	render_medication_rows(dialog, [{}]);
 }
 
-function render_medication_rows(dialog, rows) {
-	const wrapper = dialog.fields_dict.medications_html.$wrapper;
-	wrapper.html(`
-		<div class="hospitalisation-medication-rows">
-			<table class="table table-bordered">
-				<thead><tr>
-					<th>${__("Item")}</th><th>${__("Qty")}</th><th>${__("UOM")}</th><th>${__("Dose")}</th><th>${__("Route")}</th><th>${__("Frequency")}</th><th>${__("Billable")}</th><th>${__("Stock")}</th><th>${__("Rate")}</th><th>${__("Notes")}</th><th></th>
-				</tr></thead>
-				<tbody>${rows.map((row, index) => medication_row_html(row, index)).join("")}</tbody>
-			</table>
-			<button class="btn btn-default btn-sm" data-add-row="1">${__("Add Row")}</button>
-		</div>
-	`);
-	wrapper.find("[data-add-row]").on("click", () => {
-		render_medication_rows(dialog, [...collect_medication_dialog_rows(dialog, true), {}]);
-	});
-	wrapper.find("[data-remove-row]").on("click", function () {
-		const index = Number($(this).attr("data-remove-row"));
-		const nextRows = collect_medication_dialog_rows(dialog, true).filter((_, rowIndex) => rowIndex !== index);
-		render_medication_rows(dialog, nextRows.length ? nextRows : [{}]);
-	});
-}
-
-function medication_row_html(row, index) {
-	const checked = (value) => value ? "checked" : "";
-	const value = (fieldname) => frappe.utils.escape_html(row[fieldname] || "");
-	return `<tr data-medication-row="${index}">
-		<td><input class="form-control" data-field="item" value="${value("item")}" placeholder="${__("Item code")}"></td>
-		<td><input class="form-control" data-field="qty" type="number" step="0.01" value="${frappe.utils.escape_html(row.qty || 1)}"></td>
-		<td><input class="form-control" data-field="uom" value="${value("uom")}"></td>
-		<td><input class="form-control" data-field="dose" value="${value("dose")}"></td>
-		<td><input class="form-control" data-field="route" value="${value("route")}"></td>
-		<td><input class="form-control" data-field="frequency" value="${value("frequency")}"></td>
-		<td class="text-center"><input type="checkbox" data-field="billable" ${checked(row.billable)}></td>
-		<td class="text-center"><input type="checkbox" data-field="stock_affecting" ${checked(row.stock_affecting)}></td>
-		<td><input class="form-control" data-field="rate" type="number" step="0.01" value="${frappe.utils.escape_html(row.rate || "")}"></td>
-		<td><input class="form-control" data-field="notes" value="${value("notes")}"></td>
-		<td><button class="btn btn-xs btn-default" data-remove-row="${index}">${__("Remove")}</button></td>
-	</tr>`;
-}
-
-function collect_medication_dialog_rows(dialog, includeBlank = false) {
-	const rows = [];
-	dialog.fields_dict.medications_html.$wrapper.find("[data-medication-row]").each(function () {
-		const row = {};
-		$(this).find("[data-field]").each(function () {
-			const fieldname = $(this).attr("data-field");
-			row[fieldname] = $(this).attr("type") === "checkbox" ? $(this).is(":checked") : $(this).val();
-		});
-		if (includeBlank || row.item || row.dose || row.notes) {
-			rows.push(row);
+function get_medication_dialog_table_fields(frm, get_dialog) {
+	const refresh_grid = () => {
+		const dialog = get_dialog();
+		if (dialog?.fields_dict?.medications?.grid) {
+			dialog.fields_dict.medications.grid.refresh();
 		}
+	};
+	const update_amount = function () {
+		this.doc.amount = (flt(this.doc.qty) || 0) * (flt(this.doc.rate) || 0);
+		refresh_grid();
+	};
+	return [
+		{ fieldname: "item", fieldtype: "Link", label: __("Medication Item"), options: "Item", in_list_view: 1, reqd: 1, columns: 2, onchange: function () { hydrate_medication_item_row(frm, get_dialog(), this.doc); } },
+		{ fieldname: "item_name", fieldtype: "Data", label: __("Item Name"), read_only: 1, columns: 2 },
+		{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), default: 1, in_list_view: 1, columns: 1, onchange: update_amount },
+		{ fieldname: "uom", fieldtype: "Link", label: __("UOM"), options: "UOM", in_list_view: 1, columns: 1 },
+		{ fieldname: "dosage", fieldtype: "Data", label: __("Dosage"), columns: 1 },
+		{ fieldname: "route", fieldtype: "Data", label: __("Route"), columns: 1 },
+		{ fieldname: "frequency", fieldtype: "Data", label: __("Frequency"), columns: 1 },
+		{ fieldname: "notes", fieldtype: "Small Text", label: __("Notes"), columns: 2 },
+		{ fieldname: "billable", fieldtype: "Check", label: __("Billable"), in_list_view: 1, columns: 1 },
+		{ fieldname: "stock_affecting", fieldtype: "Check", label: __("Stock"), in_list_view: 1, columns: 1 },
+		{ fieldname: "rate", fieldtype: "Currency", label: __("Rate"), in_list_view: 1, columns: 1, onchange: update_amount },
+		{ fieldname: "amount", fieldtype: "Currency", label: __("Amount"), read_only: 1, columns: 1 },
+		{ fieldname: "pricing_source", fieldtype: "Data", label: __("Pricing Source"), read_only: 1, columns: 1 },
+		{ fieldname: "missing_price", fieldtype: "Check", label: __("Missing Price"), hidden: 1 },
+	];
+}
+
+function hydrate_medication_item_row(frm, dialog, row) {
+	if (!row?.item) {
+		return;
+	}
+	frappe.call({
+		method: "vetedge.services.hospitalisation.get_hospitalisation_medication_item_context",
+		args: { hospitalisation_name: frm.doc.name, item: row.item, uom: row.uom },
+		callback(result) {
+			const context = result.message || {};
+			row.item_name = context.item_name || row.item;
+			row.uom = row.uom || context.uom;
+			row.stock_affecting = context.is_stock_item ? 1 : 0;
+			if (flt(context.rate) > 0) {
+				row.rate = flt(context.rate);
+				row.billable = 1;
+				row.pricing_source = context.pricing_source || __("Selling Price");
+				row.missing_price = 0;
+			} else {
+				row.rate = row.rate || 0;
+				row.billable = 0;
+				row.pricing_source = "";
+				row.missing_price = 1;
+			}
+			row.qty = flt(row.qty) || 1;
+			row.amount = flt(row.qty) * flt(row.rate);
+			dialog.fields_dict.medications.grid.refresh();
+		},
 	});
-	return rows;
+}
+
+function get_medication_dialog_rows(dialog) {
+	const rows = (dialog.get_value("medications") || []).filter((row) => row.item || row.dosage || row.notes);
+	return rows.map((row) => ({
+		item: row.item,
+		item_name: row.item_name,
+		qty: flt(row.qty) || 0,
+		uom: row.uom,
+		dosage: row.dosage,
+		route: row.route,
+		frequency: row.frequency,
+		notes: row.notes,
+		billable: row.billable ? 1 : 0,
+		stock_affecting: row.stock_affecting ? 1 : 0,
+		rate: flt(row.rate) || 0,
+		amount: flt(row.amount) || ((flt(row.qty) || 0) * (flt(row.rate) || 0)),
+		pricing_source: row.pricing_source,
+		missing_price: row.missing_price ? 1 : 0,
+	}));
 }
 
 function add_medication_rows(frm, dialog, rows) {
-	let blocked = false;
-	rows.forEach((row) => {
-		if (row.billable && row.item && !flt(row.rate)) {
-			blocked = true;
+	for (const row of rows) {
+		if (!row.item) {
+			frappe.msgprint(__("Select an Item for each medication row."));
+			return;
 		}
-	});
-	if (blocked) {
-		frappe.msgprint(__("Enter a rate for each billable medication item before adding."));
-		return;
+		if (flt(row.qty) <= 0) {
+			frappe.msgprint(__("Enter quantity greater than zero."));
+			return;
+		}
+		if (row.billable && flt(row.rate) <= 0) {
+			frappe.msgprint(__("Rate is required for billable medication where no selling price was found."));
+			return;
+		}
 	}
 	rows.forEach((row) => {
-		const notes = [row.dose && `${__("Dose")}: ${row.dose}`, row.route && `${__("Route")}: ${row.route}`, row.frequency && `${__("Frequency")}: ${row.frequency}`, row.notes].filter(Boolean).join("\n");
+		const notes = [
+			row.dosage && `${__("Dosage")}: ${row.dosage}`,
+			row.route && `${__("Route")}: ${row.route}`,
+			row.frequency && `${__("Frequency")}: ${row.frequency}`,
+			row.notes,
+		].filter(Boolean).join("\n");
 		const activity = append_activity_row(frm, {
 			activity_type: "Medication",
 			clinical_notes: notes,
 			billable: row.billable,
 			stock_affecting: row.stock_affecting,
 			item: row.item,
-			qty: flt(row.qty) || 1,
+			qty: flt(row.qty),
 			uom: row.uom,
 		});
-		if (row.billable && row.item) {
+		if (row.billable) {
 			append_charge_item_for_activity(frm, activity, {
 				item: row.item,
-				description: notes || "Medication",
-				qty: flt(row.qty) || 1,
+				description: notes || row.item_name || "Medication",
+				qty: flt(row.qty),
 				uom: row.uom,
 				rate: flt(row.rate),
+				notes: row.pricing_source,
 			});
 		}
 	});
@@ -851,7 +892,9 @@ function append_charge_item_for_activity(frm, activity, values) {
 	const row = frm.add_child("charge_items");
 	const qty = flt(values.qty) || 1;
 	const rate = flt(values.rate);
-	row.source_activity = activity.name;
+	const sourceActivity = activity.activity_reference || activity.name || make_hospitalisation_activity_reference();
+	activity.activity_reference = sourceActivity;
+	row.source_activity = sourceActivity;
 	row.activity_type = activity.activity_type;
 	row.item = values.item;
 	row.description = values.description || values.clinical_notes || activity.clinical_notes || activity.activity_type;
@@ -860,10 +903,18 @@ function append_charge_item_for_activity(frm, activity, values) {
 	row.rate = rate;
 	row.amount = qty * rate;
 	row.billing_status = "Pending Invoice";
-	row.source_hash = `${frm.doc.name}:${activity.name}`;
+	row.source_hash = `${frm.doc.name}:${sourceActivity}:${values.item}`;
+	row.pricing_source = values.pricing_source;
 	row.notes = values.notes || values.clinical_notes;
 	frm.refresh_field("charge_items");
 	frm.dirty();
+}
+
+function make_hospitalisation_activity_reference() {
+	if (frappe.utils?.get_random) {
+		return frappe.utils.get_random(12);
+	}
+	return `${frappe.datetime.now_datetime()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function preview_stock_usage(frm) {
@@ -957,9 +1008,12 @@ function add_charge_sheet_action_buttons(frm) {
 				frappe.msgprint({
 					title: __("Charge Summary"),
 					message: [
-						`${__("Pending")}: ${format_currency(summary.total_pending || 0)}`,
-						`${__("Invoiced")}: ${format_currency(summary.total_invoiced || 0)}`,
-						`${__("Cancelled")}: ${format_currency(summary.total_cancelled || 0)}`,
+						`${__("Total Hospitalisation Charges")}: ${format_currency(summary.total_charge_amount || 0)}`,
+						`${__("Pending Charges")}: ${format_currency(summary.pending_charge_amount || summary.total_pending || 0)}`,
+						`${__("Invoiced Charges")}: ${format_currency(summary.invoiced_charge_amount || summary.total_invoiced || 0)}`,
+						`${__("Cancelled")}: ${format_currency(summary.cancelled_charge_amount || summary.total_cancelled || 0)}`,
+						`${__("Missing Price")}: ${summary.missing_price_count || 0}`,
+						`${__("Not Billable Activities")}: ${summary.not_billable_count || 0}`,
 						`${__("Linked Invoice")}: ${summary.linked_invoice || "-"}`,
 					].join("<br>"),
 				});

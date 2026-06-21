@@ -64,6 +64,8 @@ def validate_hospitalisation(doc) -> None:
 
 def normalize_hospitalisation_activities(doc) -> None:
 	for row in doc.get("activities") or []:
+		if not row.get("activity_reference"):
+			row.activity_reference = generate_hospitalisation_activity_reference()
 		if not row.get("performed_by"):
 			row.performed_by = getattr(frappe.session, "user", None)
 
@@ -86,10 +88,24 @@ def normalize_hospitalisation_charge_items(doc) -> None:
 	for row in doc.get("charge_items") or []:
 		qty = flt(row.get("qty")) or 1
 		rate = flt(row.get("rate"))
+		if row.get("item") and rate <= 0 and row.get("billing_status") != "Invoiced":
+			pricing = resolve_hospitalisation_charge_pricing(doc, row.get("item"), row.get("uom"))
+			rate = flt(pricing.get("rate"))
+			if rate > 0:
+				row.rate = rate
+				if hasattr(row, "pricing_source"):
+					row.pricing_source = pricing.get("pricing_source")
 		row.qty = qty
 		row.amount = qty * rate
 		if not row.get("billing_status"):
 			row.billing_status = "Pending Invoice"
+
+
+def generate_hospitalisation_activity_reference() -> str:
+	try:
+		return frappe.generate_hash(length=12)
+	except Exception:
+		return frappe.utils.random_string(12)
 
 
 def sync_hospitalisation_title(doc) -> None:
@@ -295,9 +311,10 @@ def build_hospitalisation_charge_items(hospitalisation_name: str) -> dict:
 		if activity.get("billing_status") in {"Charged", "Cancelled"}:
 			skipped.append({"activity": source_activity, "reason": "activity_not_pending"})
 			continue
-		if source_hash in charge_index:
+		existing_row = next((charge_index.get(key) for key in get_activity_charge_lookup_keys(doc.name, activity) if charge_index.get(key)), None)
+		if existing_row:
 			existing += 1
-			update_charge_item_from_activity(charge_index[source_hash], activity, source_activity, source_hash)
+			update_charge_item_from_activity(existing_row, activity, source_activity, source_hash, doc)
 			continue
 
 		append_charge_item(doc, build_charge_item_row(doc, activity, source_activity, source_hash))
@@ -312,26 +329,47 @@ def build_hospitalisation_charge_items(hospitalisation_name: str) -> dict:
 def get_charge_item_index(doc) -> dict[str, object]:
 	index = {}
 	for row in doc.get("charge_items") or []:
-		key = row.get("source_hash") or row.get("source_activity")
-		if key:
-			index[key] = row
+		if row.get("billing_status") == "Cancelled":
+			continue
+		for key in get_charge_item_identity_keys(row):
+			if key:
+				index[key] = row
 	return index
 
 
+def get_charge_item_identity_keys(row) -> list[str]:
+	keys = []
+	if row.get("source_hash"):
+		keys.append(row.get("source_hash"))
+	if row.get("source_activity"):
+		keys.append(row.get("source_activity"))
+		if row.get("item"):
+			keys.append(f"{row.get('source_activity')}:{row.get('item')}")
+	return keys
+
+
 def get_activity_source_name(activity) -> str:
-	return activity.get("name") or str(activity.get("idx") or "")
+	return activity.get("activity_reference") or activity.get("name") or str(activity.get("idx") or "")
 
 
 def get_activity_source_hash(hospitalisation_name: str, activity) -> str:
 	source = get_activity_source_name(activity)
+	return f"{hospitalisation_name}:{source}:{activity.get('item')}" if source else f"{hospitalisation_name}:{activity.get('activity_type')}:{activity.get('item')}:{activity.get('activity_datetime')}:{activity.get('clinical_notes')}"
+
+
+def get_activity_charge_lookup_keys(hospitalisation_name: str, activity) -> list[str]:
+	source = get_activity_source_name(activity)
+	source_hash = get_activity_source_hash(hospitalisation_name, activity)
+	keys = [source_hash]
 	if source:
-		return f"{hospitalisation_name}:{source}"
-	return f"{hospitalisation_name}:{activity.get('activity_type')}:{activity.get('item')}:{activity.get('activity_datetime')}:{activity.get('clinical_notes')}"
+		keys.extend([source, f"{source}:{activity.get('item')}"])
+	return keys
 
 
 def build_charge_item_row(doc, activity, source_activity: str, source_hash: str) -> dict:
 	qty = flt(activity.get("qty")) or 1
-	rate = get_item_rate(activity.get("item"))
+	pricing = resolve_hospitalisation_charge_pricing(doc, activity.get("item"), activity.get("uom")) if doc else {"rate": get_item_rate(activity.get("item")), "pricing_source": None}
+	rate = flt(pricing.get("rate"))
 	return {
 		"source_activity": source_activity,
 		"activity_type": activity.get("activity_type"),
@@ -342,16 +380,21 @@ def build_charge_item_row(doc, activity, source_activity: str, source_hash: str)
 		"uom": activity.get("uom") or get_item_uom(activity.get("item")),
 		"rate": rate,
 		"amount": qty * rate,
+		"pricing_source": pricing.get("pricing_source"),
 		"billing_status": "Pending Invoice",
 		"source_hash": source_hash,
 		"notes": activity.get("clinical_notes"),
 	}
 
 
-def update_charge_item_from_activity(row, activity, source_activity: str, source_hash: str) -> None:
+def update_charge_item_from_activity(row, activity, source_activity: str, source_hash: str, doc=None) -> None:
 	if row.get("billing_status") in {"Invoiced", "Cancelled"}:
 		return
-	values = build_charge_item_row(None, activity, source_activity, source_hash)
+	manual_rate = flt(row.get("rate"))
+	values = build_charge_item_row(doc, activity, source_activity, source_hash)
+	if manual_rate > 0:
+		values["rate"] = manual_rate
+		values["amount"] = (flt(values.get("qty")) or 1) * manual_rate
 	for fieldname, value in values.items():
 		setattr(row, fieldname, value)
 
@@ -383,9 +426,70 @@ def get_item_rate(item: str | None) -> float:
 	return flt(frappe.db.get_value("Item", item, "standard_rate"))
 
 
+def resolve_hospitalisation_charge_pricing(doc, item: str | None, uom: str | None = None) -> dict:
+	if not item:
+		return {"rate": 0, "pricing_source": None}
+	rate = 0
+	pricing_source = None
+	try:
+		from vetedge.services.billing_core import _get_item_selling_rate
+
+		rate = flt(_get_item_selling_rate(item, company=doc.get("company") if doc else None, customer=(doc.get("customer") or doc.get("primary_owner")) if doc else None, branch=(doc.get("service_branch") or doc.get("branch")) if doc else None, uom=uom))
+		pricing_source = "Selling Price" if rate > 0 else None
+	except Exception:
+		rate = 0
+	if rate <= 0:
+		rate = get_item_rate(item)
+		pricing_source = "Item Standard Rate" if rate > 0 else None
+	return {"rate": rate, "pricing_source": pricing_source}
+
+
+@frappe.whitelist()
+def get_hospitalisation_medication_item_context(hospitalisation_name: str, item: str, uom: str | None = None) -> dict:
+	require_internal_user()
+	if not item:
+		return {}
+	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name) if hospitalisation_name else frappe._dict({})
+	item_fields = ["item_name", "stock_uom", "is_stock_item", "standard_rate"]
+	for optional_field in ("sales_uom", "has_serial_no", "has_batch_no"):
+		try:
+			if frappe.get_meta("Item").get_field(optional_field):
+				item_fields.append(optional_field)
+		except Exception:
+			pass
+	item_doc = frappe.db.get_value("Item", item, item_fields, as_dict=True) or {}
+	resolved_uom = uom or item_doc.get("sales_uom") or item_doc.get("stock_uom")
+	pricing = resolve_hospitalisation_charge_pricing(doc, item, resolved_uom)
+	rate = flt(pricing.get("rate"))
+	pricing_source = pricing.get("pricing_source")
+	return {
+		"item": item,
+		"item_name": item_doc.get("item_name") or item,
+		"uom": resolved_uom,
+		"stock_uom": item_doc.get("stock_uom"),
+		"is_stock_item": cint(item_doc.get("is_stock_item")),
+		"has_serial_no": cint(item_doc.get("has_serial_no")),
+		"has_batch_no": cint(item_doc.get("has_batch_no")),
+		"rate": rate,
+		"pricing_source": pricing_source,
+		"missing_price": 0 if rate > 0 else 1,
+	}
+
+
 def get_charge_description(activity) -> str:
 	parts = [activity.get("activity_type"), activity.get("clinical_notes")]
 	return " - ".join(str(part) for part in parts if part)
+
+
+def validate_hospitalisation_charge_prices(doc) -> None:
+	missing = []
+	for row in doc.get("charge_items") or []:
+		if row.get("billing_status") in {"Cancelled", "Invoiced"}:
+			continue
+		if row.get("item") and flt(row.get("qty")) > 0 and (flt(row.get("rate")) <= 0 or flt(row.get("amount")) <= 0):
+			missing.append(row.get("item"))
+	if missing:
+		frappe.throw("Rate is required before syncing hospitalisation charges to invoice for: " + ", ".join(missing), frappe.ValidationError)
 
 
 @frappe.whitelist()
@@ -399,6 +503,8 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	from vetedge.services.billing_core import BILLING_SESSION_DOCTYPE, sync_source_to_billing_session
 
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	normalize_hospitalisation_charge_items(doc)
+	validate_hospitalisation_charge_prices(doc)
 	previous_status = doc.get("status")
 	previous_gate_status = doc.get("payment_gate_status")
 	previous_gate_message = doc.get("payment_gate_message")
@@ -786,19 +892,35 @@ def get_hospitalisation_charge_summary(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
 	pending = invoiced = cancelled = 0
+	missing_price_count = 0
+	not_billable_count = 0
+	for activity in doc.get("activities") or []:
+		if not cint(activity.get("billable")):
+			not_billable_count += 1
 	for row in doc.get("charge_items") or []:
-		amount = flt(row.get("amount"))
+		qty = flt(row.get("qty")) or 1
+		rate = flt(row.get("rate"))
+		amount = flt(row.get("amount")) or qty * rate
 		if row.get("billing_status") == "Invoiced":
 			invoiced += amount
 		elif row.get("billing_status") == "Cancelled":
 			cancelled += amount
 		else:
 			pending += amount
+			if row.get("item") and (rate <= 0 or amount <= 0):
+				missing_price_count += 1
+	total = pending + invoiced + cancelled
 	return {
 		"hospitalisation": doc.name,
 		"total_pending": pending,
 		"total_invoiced": invoiced,
 		"total_cancelled": cancelled,
+		"total_charge_amount": total,
+		"pending_charge_amount": pending,
+		"invoiced_charge_amount": invoiced,
+		"cancelled_charge_amount": cancelled,
+		"not_billable_count": not_billable_count,
+		"missing_price_count": missing_price_count,
 		"linked_invoice": doc.get("sales_invoice"),
 		"invoice_status": doc.get("invoice_status"),
 	}
