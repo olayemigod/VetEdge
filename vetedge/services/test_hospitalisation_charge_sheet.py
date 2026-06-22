@@ -185,6 +185,10 @@ class TestHospitalisationChargeSheet(TestCase):
 			result = hospitalisation.sync_hospitalisation_charges_to_invoice("VHOS-001")
 
 		self.assertEqual(result["invoice"], "SINV-001")
+		self.assertEqual(result["open_invoice_name"], "SINV-001")
+		self.assertTrue(result["updated"])
+		self.assertTrue(result["reload_required"])
+		self.assertIn("Updated draft Sales Invoice", result["message"])
 		self.assertEqual(result["added_count"], 1)
 		self.assertEqual(charge.billing_status, "Invoiced")
 		self.assertEqual(hosp.activities[0].billing_status, "Charged")

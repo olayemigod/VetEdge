@@ -100,6 +100,18 @@
   },
   {
    "role": "VetEdge Front Desk"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "Accounts/Cashier"
+  },
+  {
+   "role": "Accounts Manager"
   }
  ],
  "sequence_id": 2.0,

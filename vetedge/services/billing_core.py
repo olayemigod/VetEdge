@@ -5,7 +5,7 @@ from collections import OrderedDict
 from typing import Iterable
 
 import frappe
-from frappe.utils import cint, flt, nowdate
+from frappe.utils import cint, flt, getdate, nowdate
 
 from vetedge.services.payment_gate import (
 	FULL_PAYMENT_REQUIRED,
@@ -314,6 +314,7 @@ def sync_session_charges_to_invoice(session):
 		charge.billing_status = "Draft Invoiced"
 
 	_prepare_sales_invoice_totals(invoice)
+	normalize_billing_session_invoice_dates(invoice)
 	run_with_billing_core_sync_flag(invoice.save)
 	session = update_session_after_invoice_sync(session.name, invoice.name, [row.get("charge_key") for row in pending])
 	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated}
@@ -347,6 +348,7 @@ def create_or_update_draft_invoice_for_session(session, pending_charges=None):
 	for charge in pending_charges:
 		append_invoice_item_from_charge(invoice, charge)
 	_prepare_sales_invoice_totals(invoice)
+	normalize_billing_session_invoice_dates(invoice)
 	run_with_billing_core_sync_flag(invoice.insert)
 	session.current_draft_invoice = invoice.name
 	session.latest_invoice = invoice.name
@@ -1570,11 +1572,24 @@ def apply_invoice_session_defaults(invoice, session) -> None:
 	invoice.customer = session.customer
 	invoice.company = session.company or get_default_company()
 	invoice.posting_date = nowdate()
-	invoice.due_date = nowdate()
+	invoice.due_date = invoice.get("due_date") or invoice.posting_date
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
 		invoice.branch = session.branch
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = get_billing_cost_center(session.branch, required=False)
+	normalize_billing_session_invoice_dates(invoice)
+
+
+def normalize_billing_session_invoice_dates(invoice) -> None:
+	posting_date = invoice.get("posting_date") or nowdate()
+	due_date = invoice.get("due_date") or posting_date
+	if getdate(due_date) < getdate(posting_date):
+		due_date = posting_date
+	invoice.posting_date = posting_date
+	invoice.due_date = due_date
+	# Hospitalisation/session stock usage is posted explicitly with Stock Entry, not Sales Invoice stock update.
+	if invoice.get("update_stock"):
+		invoice.update_stock = 0
 
 
 def append_invoice_item_from_charge(invoice, charge):

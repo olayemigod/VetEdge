@@ -46,6 +46,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "hospital",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Veterinary Hospitalisation Dashboard",
+   "link_to": "Veterinary Hospitalisation Dashboard",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Sales Manager') || frappe.user.has_role('Branch Manager')",
    "icon": "chart",
    "indent": 0,
@@ -196,6 +209,19 @@
    "show_arrow": 0,
    "type": "Link",
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "map-pinned",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Veterinary Care Location",
+   "link_to": "Veterinary Care Location",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
   },
   {
    "child": 1,
@@ -589,6 +615,82 @@
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Section Break"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "hospital",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Hospitalisation Reports",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Active Hospitalisations",
+   "link_to": "Active Hospitalisations",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Branch Manager')",
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Hospitalisation Charge Summary",
+   "link_to": "Hospitalisation Charge Summary",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Care Location Occupancy",
+   "link_to": "Care Location Occupancy",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Hospitalisation Discharge Watch",
+   "link_to": "Hospitalisation Discharge Watch",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Pending Hospitalisation Actions",
+   "link_to": "Pending Hospitalisation Actions",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
   },
   {
    "child": 1,

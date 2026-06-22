@@ -169,6 +169,12 @@ def get_discharge_readiness_summary(doc) -> str:
 
 
 def get_invoice_payment_summary(doc) -> dict:
+	billing = get_billing_session_report_summary(doc)
+	if billing.get("linked_invoice_count"):
+		return {
+			"payment_status": billing.get("billing_session_payment_status") or doc.get("invoice_status"),
+			"outstanding_amount": billing.get("billing_session_outstanding"),
+		}
 	invoice = doc.get("sales_invoice")
 	if not invoice or not frappe.db.exists("Sales Invoice", invoice):
 		return {"payment_status": "Not Invoiced", "outstanding_amount": 0}
@@ -177,6 +183,49 @@ def get_invoice_payment_summary(doc) -> dict:
 		return {"payment_status": row.get("status") or doc.get("invoice_status"), "outstanding_amount": flt(row.get("outstanding_amount"))}
 	except Exception:
 		return {"payment_status": doc.get("invoice_status"), "outstanding_amount": 0}
+
+
+def get_billing_session_report_summary(doc) -> dict:
+	empty = {
+		"billing_session": None,
+		"billing_session_total": 0.0,
+		"billing_session_outstanding": 0.0,
+		"billing_session_paid": 0.0,
+		"billing_session_payment_status": None,
+		"linked_invoice_count": 0,
+		"linked_invoices": "",
+		"latest_invoice": doc.get("sales_invoice"),
+	}
+	try:
+		from vetedge.services.billing_core import (
+			get_billing_session_invoice_ledger,
+			get_billing_session_summary,
+			is_billing_sessions_enabled,
+			resolve_billing_session,
+		)
+
+		if not is_billing_sessions_enabled():
+			return empty
+		session = resolve_billing_session(HOSPITALISATION_DOCTYPE, doc.name)
+		if not session:
+			return empty
+		summary = get_billing_session_summary(session)
+		ledger = summary.get("invoice_ledger") or get_billing_session_invoice_ledger(session)
+	except Exception:
+		return empty
+
+	invoices = [row for row in ledger.get("invoices") or [] if not row.get("is_cancelled")]
+	invoice_names = [row.get("invoice") or row.get("name") for row in invoices if row.get("invoice") or row.get("name")]
+	return {
+		"billing_session": summary.get("name") or getattr(session, "name", None),
+		"billing_session_total": flt(ledger.get("total_invoiced") or summary.get("total_invoiced") or summary.get("total_charges")),
+		"billing_session_outstanding": flt(ledger.get("outstanding_amount") or summary.get("outstanding_amount")),
+		"billing_session_paid": flt(ledger.get("total_paid") or summary.get("total_paid")),
+		"billing_session_payment_status": ledger.get("payment_status") or summary.get("payment_status"),
+		"linked_invoice_count": len(invoice_names),
+		"linked_invoices": ", ".join(invoice_names),
+		"latest_invoice": summary.get("latest_invoice") or doc.get("sales_invoice"),
+	}
 
 
 ACTIVE_HOSPITALISATIONS_COLUMNS = [
@@ -230,13 +279,18 @@ CHARGE_SUMMARY_COLUMNS = [
 	{"label": "Branch", "fieldname": "branch", "fieldtype": "Link", "options": "Branch", "width": 130},
 	{"label": "Admission Date", "fieldname": "admission_date", "fieldtype": "Date", "width": 120},
 	{"label": "Care Level", "fieldname": "care_level", "fieldtype": "Data", "width": 120},
-	{"label": "Total Charges", "fieldname": "total_charges", "fieldtype": "Currency", "width": 130},
-	{"label": "Pending Charges", "fieldname": "pending_charges", "fieldtype": "Currency", "width": 130},
-	{"label": "Invoiced Charges", "fieldname": "invoiced_charges", "fieldtype": "Currency", "width": 130},
-	{"label": "Cancelled Charges", "fieldname": "cancelled_charges", "fieldtype": "Currency", "width": 130},
+	{"label": "Charge Sheet Total", "fieldname": "charge_sheet_total", "fieldtype": "Currency", "width": 140},
+	{"label": "Charge Sheet Pending", "fieldname": "charge_sheet_pending", "fieldtype": "Currency", "width": 150},
+	{"label": "Charge Sheet Invoiced", "fieldname": "charge_sheet_invoiced", "fieldtype": "Currency", "width": 150},
+	{"label": "Charge Sheet Cancelled", "fieldname": "charge_sheet_cancelled", "fieldtype": "Currency", "width": 150},
+	{"label": "Billing Session Total", "fieldname": "billing_session_total", "fieldtype": "Currency", "width": 150},
+	{"label": "Billing Session Outstanding", "fieldname": "billing_session_outstanding", "fieldtype": "Currency", "width": 180},
+	{"label": "Billing Session Paid", "fieldname": "billing_session_paid", "fieldtype": "Currency", "width": 150},
+	{"label": "Linked Invoice Count", "fieldname": "linked_invoice_count", "fieldtype": "Int", "width": 140},
+	{"label": "Linked Invoices", "fieldname": "linked_invoices", "fieldtype": "Data", "width": 260},
 	{"label": "Missing Price Count", "fieldname": "missing_price_count", "fieldtype": "Int", "width": 130},
 	{"label": "Non-Billable Count", "fieldname": "non_billable_count", "fieldtype": "Int", "width": 130},
-	{"label": "Linked Invoice / Latest Invoice", "fieldname": "linked_invoice", "fieldtype": "Link", "options": "Sales Invoice", "width": 190},
+	{"label": "Latest Invoice", "fieldname": "linked_invoice", "fieldtype": "Link", "options": "Sales Invoice", "width": 190},
 	{"label": "Invoice Status", "fieldname": "invoice_status", "fieldtype": "Data", "width": 120},
 	{"label": "Payment Status", "fieldname": "payment_status", "fieldtype": "Data", "width": 130},
 	{"label": "Outstanding", "fieldname": "outstanding_amount", "fieldtype": "Currency", "width": 120},
@@ -252,7 +306,12 @@ def get_hospitalisation_charge_report(filters=None):
 			continue
 		if cint(filters.get("pending_only")) and not totals["pending_charges"]:
 			continue
-		payment = get_invoice_payment_summary(doc)
+		billing = get_billing_session_report_summary(doc)
+		legacy_payment = get_invoice_payment_summary(doc)
+		payment = {
+			"payment_status": billing.get("billing_session_payment_status") or legacy_payment.get("payment_status"),
+			"outstanding_amount": billing.get("billing_session_outstanding") if billing.get("linked_invoice_count") else legacy_payment.get("outstanding_amount"),
+		}
 		rows.append({
 			"hospitalisation": doc.name,
 			"patient": doc.get("patient"),
@@ -264,9 +323,18 @@ def get_hospitalisation_charge_report(filters=None):
 			"pending_charges": totals["pending_charges"],
 			"invoiced_charges": totals["invoiced_charges"],
 			"cancelled_charges": totals["cancelled_charges"],
+			"charge_sheet_total": totals["total_charges"],
+			"charge_sheet_pending": totals["pending_charges"],
+			"charge_sheet_invoiced": totals["invoiced_charges"],
+			"charge_sheet_cancelled": totals["cancelled_charges"],
+			"billing_session_total": billing.get("billing_session_total"),
+			"billing_session_outstanding": billing.get("billing_session_outstanding"),
+			"billing_session_paid": billing.get("billing_session_paid"),
+			"linked_invoice_count": billing.get("linked_invoice_count"),
+			"linked_invoices": billing.get("linked_invoices"),
 			"missing_price_count": totals["missing_price_count"],
 			"non_billable_count": totals["non_billable_count"],
-			"linked_invoice": doc.get("sales_invoice"),
+			"linked_invoice": billing.get("latest_invoice") or doc.get("sales_invoice"),
 			"invoice_status": doc.get("invoice_status"),
 			"payment_status": payment.get("payment_status"),
 			"outstanding_amount": payment.get("outstanding_amount"),

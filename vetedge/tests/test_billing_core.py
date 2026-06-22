@@ -109,6 +109,24 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["updated_count"], 1)
 		self.assertEqual(len(invoice.get("items")), 1)
 
+	def test_update_existing_draft_invoice_normalizes_due_date_and_disables_stock_update(self):
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[])
+		billing_core.add_or_update_session_charge(session, {**charge_payload("Veterinary Hospitalisation:VHOS-001:Hospitalisation:daily-1"), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001"})
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[])
+		invoice.posting_date = "2026-06-22"
+		invoice.due_date = "2026-06-01"
+		invoice.update_stock = 1
+
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-DRAFT")
+		self.assertEqual(invoice.due_date, invoice.posting_date)
+		self.assertEqual(invoice.update_stock, 0)
+		invoice.save.assert_called_once()
+		self.assertEqual(len(invoice.get("items")), 1)
+
+
 	def test_submitted_current_invoice_creates_new_draft_for_new_charge(self):
 		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[])
 		billing_core.add_or_update_session_charge(session, charge_payload("new-consultation-fee"))

@@ -162,6 +162,30 @@ class TestHospitalisationReports(TestCase):
 		self.assertEqual(result["cancelled_charges"], 20)
 		self.assertEqual(result["total_charges"], 240)
 
+	def test_charge_summary_separates_charge_sheet_and_billing_session_totals(self):
+		stub = make_stub()
+		billing_summary = {
+			"billing_session_total": 107399,
+			"billing_session_outstanding": 52400,
+			"billing_session_paid": 54999,
+			"billing_session_payment_status": "Partially Paid",
+			"linked_invoice_count": 2,
+			"linked_invoices": "SINV-OLD, SINV-DRAFT",
+			"latest_invoice": "SINV-DRAFT",
+		}
+		with self.report_context(stub), patch.object(reports, "get_billing_session_report_summary", return_value=billing_summary):
+			_, data = reports.get_hospitalisation_charge_report({"patient": "VP-1"})
+		result = data[0]
+		self.assertEqual(result["charge_sheet_total"], 240)
+		self.assertEqual(result["charge_sheet_pending"], 150)
+		self.assertEqual(result["billing_session_total"], 107399)
+		self.assertEqual(result["billing_session_outstanding"], 52400)
+		self.assertEqual(result["billing_session_paid"], 54999)
+		self.assertEqual(result["linked_invoice_count"], 2)
+		self.assertEqual(result["linked_invoices"], "SINV-OLD, SINV-DRAFT")
+		self.assertGreaterEqual(result["billing_session_total"], result["billing_session_outstanding"])
+
+
 	def test_missing_price_count_is_correct(self):
 		stub = make_stub()
 		with self.report_context(stub):

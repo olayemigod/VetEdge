@@ -534,13 +534,20 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	doc.payment_gate_status = previous_gate_status
 	doc.payment_gate_message = previous_gate_message
 	doc.save()
+	added_count = result.get("added_count", 0)
+	updated_count = result.get("updated_count", 0)
 	return {
 		"hospitalisation": hospitalisation_name,
+		"updated": bool(invoice and (added_count or updated_count or not result.get("created"))),
 		"invoice": invoice,
-		"added_count": result.get("added_count", 0),
+		"open_invoice_name": invoice,
+		"added_count": added_count,
+		"updated_count": updated_count,
 		"skipped_count": 0,
 		"created_new_invoice": bool(result.get("created")),
 		"billing_session": session_name,
+		"reload_required": True,
+		"message": f"Updated draft Sales Invoice {invoice}." if invoice and not result.get("created") else (f"Created draft Sales Invoice {invoice}." if invoice else "No pending hospitalisation charges to invoice."),
 	}
 
 
