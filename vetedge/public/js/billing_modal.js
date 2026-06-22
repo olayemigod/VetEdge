@@ -82,6 +82,15 @@
 		`;
 	}
 
+	function renderLinkedInvoiceAction(row) {
+		const invoiceName = row.name || row.invoice;
+		const openButton = `<button class="btn btn-default btn-xs" data-action="open-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__("Open")}</button>`;
+		if (row.can_pay) {
+			return `${openButton} <button class="btn btn-primary btn-xs" data-action="pay-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__(row.action_label || "Pay")}</button>`;
+		}
+		return `${openButton} <span class="text-muted small">${escapeHtml(__(row.action_label || ""))}</span>`;
+	}
+
 	function renderLinkedInvoices(state) {
 		const session = state.billing_session || null;
 		const invoices = session?.invoices || session?.invoice_ledger?.invoices || [];
@@ -96,10 +105,12 @@
 						<tr>
 							<th>${__("Invoice")}</th>
 							<th>${__("Status")}</th>
+							<th>${__("Posting Date")}</th>
+							<th>${__("Due Date")}</th>
 							<th class="text-right">${__("Grand Total")}</th>
 							<th class="text-right">${__("Paid")}</th>
 							<th class="text-right">${__("Outstanding")}</th>
-							<th></th>
+							<th>${__("Action")}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -107,10 +118,12 @@
 							<tr>
 								<td>${escapeHtml(row.name || row.invoice)}</td>
 								<td>${escapeHtml(row.status || (row.docstatus === 0 ? __("Draft") : row.docstatus === 1 ? __("Submitted") : __("Cancelled")))}</td>
+								<td>${escapeHtml(row.posting_date || "")}</td>
+								<td>${escapeHtml(row.due_date || "")}</td>
 								<td class="text-right">${money(row.grand_total || row.rounded_total, row.currency)}</td>
 								<td class="text-right">${money(row.paid_amount, row.currency)}</td>
 								<td class="text-right">${money(row.outstanding_amount, row.currency)}</td>
-								<td class="text-right"><button class="btn btn-default btn-xs" data-action="open-ledger-invoice" data-invoice="${escapeHtml(row.name || row.invoice)}">${__("Open")}</button></td>
+								<td>${renderLinkedInvoiceAction(row)}</td>
 							</tr>
 						`).join("")}
 					</tbody>
@@ -310,6 +323,11 @@
 		);
 	}
 
+	function findLinkedInvoice(state, invoiceName) {
+		const session = state.billing_session || null;
+		const invoices = session?.invoices || session?.invoice_ledger?.invoices || [];
+		return invoices.find((row) => (row.name || row.invoice) === invoiceName);
+	}
 	function openFullInvoice(invoice) {
 		if (!invoice) {
 			return;
@@ -322,8 +340,8 @@
 		return { source_doctype: frm.doc.doctype, source_name: frm.doc.name };
 	}
 
-	function showPaymentDialog(parentDialog, frm, ctx, state, onComplete) {
-		const invoice = state.invoice;
+	function showPaymentDialog(parentDialog, frm, ctx, state, onComplete, selectedInvoice) {
+		const invoice = selectedInvoice || state.invoice;
 		const paymentModes = state.payment_modes || [];
 		const paymentDialog = new frappe.ui.Dialog({
 			title: __("Record Payment"),
@@ -485,6 +503,19 @@
 			});
 			wrapper.find("[data-action='open-ledger-invoice']").on("click", (event) => {
 				openFullInvoice(event.currentTarget.dataset.invoice);
+			});
+			wrapper.find("[data-action='pay-ledger-invoice']").on("click", (event) => {
+				const invoiceName = event.currentTarget.dataset.invoice;
+				const invoice = findLinkedInvoice(state, invoiceName);
+				if (!invoice || !invoice.can_pay) {
+					frappe.msgprint(__("This invoice cannot be paid from here."));
+					return;
+				}
+				showPaymentDialog(dialog, frm, ctx, state, async (newState) => {
+					state = newState || state;
+					await refreshSourceForm();
+					paint();
+				}, invoice);
 			});
 		}
 

@@ -313,7 +313,7 @@ class TestBillingModal(TestCase):
 		self.assertIn("Billing Session Total", js)
 		self.assertIn("state.outstanding_amount", js)
 		self.assertIn("currentInvoicePaymentBlock", js)
-		self.assertIn("Current Draft Invoice", js)
+		self.assertIn("Current Draft Invoice", js)`n`t`tself.assertIn("pay-ledger-invoice", js)`n`t`tself.assertIn("selectedInvoice", js)
 
 	def test_billable_source_forms_open_shared_billing_modal(self):
 		for relative_path in (
@@ -502,6 +502,31 @@ class TestBillingModal(TestCase):
 		self.assertEqual(payment_entry.references[0].allocated_amount, 250)
 		self.assertFalse(result["state"]["payment_gate"]["can_proceed"])
 
+	def test_record_modal_invoice_payment_uses_selected_linked_invoice(self):
+		source = frappe._dict(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			sales_invoice="SINV-CURRENT",
+			service_branch="Main",
+		)
+		selected_invoice = make_invoice(name="SINV-OLD", outstanding_amount=400)
+		payment_entry = make_payment_entry("SINV-OLD")
+		state = {
+			"billing_session": {"invoices": [{"name": "SINV-OLD", "docstatus": 1, "outstanding_amount": 400, "can_pay": True}]},
+			"invoice": {"name": "SINV-CURRENT"},
+		}
+
+		with (
+			modal_action_context(source, selected_invoice, state=state),
+			patch.object(billing_modal, "get_billing_session_summary_for_source", return_value=state["billing_session"]),
+			patch("erpnext.accounts.doctype.payment_entry.payment_entry.get_payment_entry", return_value=payment_entry) as get_payment_entry,
+		):
+			result = billing_modal.record_modal_invoice_payment("Veterinary Hospitalisation", "VHOS-001", invoice="SINV-OLD", amount=400)
+
+		get_payment_entry.assert_called_once_with("Sales Invoice", "SINV-OLD")
+		self.assertEqual(result["invoice"], "SINV-OLD")
+		self.assertEqual(payment_entry.paid_amount, 400)
+		self.assertEqual(payment_entry.references[0].allocated_amount, 400)
 	def test_record_modal_invoice_payment_blocks_duplicate_reference(self):
 		source = frappe._dict(
 			doctype="Veterinary Consultation",
@@ -556,7 +581,7 @@ class TestBillingModal(TestCase):
 		invoice.submit.assert_called_once()
 
 
-def make_invoice(docstatus=1, outstanding_amount=1000):
+def make_invoice(name="SINV-001", docstatus=1, outstanding_amount=1000):
 	return frappe._dict(
 		doctype="Sales Invoice",
 		name="SINV-001",
@@ -575,13 +600,13 @@ def make_invoice(docstatus=1, outstanding_amount=1000):
 	)
 
 
-def make_payment_entry():
+def make_payment_entry(invoice_name="SINV-001"):
 	return frappe._dict(
 		doctype="Payment Entry",
 		name="PE-001",
 		paid_amount=0,
 		received_amount=0,
-		references=[frappe._dict(reference_doctype="Sales Invoice", reference_name="SINV-001", allocated_amount=0)],
+		references=[frappe._dict(reference_doctype="Sales Invoice", reference_name=invoice_name, allocated_amount=0)],
 		insert=Mock(),
 		submit=Mock(),
 	)

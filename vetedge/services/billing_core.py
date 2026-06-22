@@ -1177,20 +1177,36 @@ def get_billing_session_invoice_ledger(session) -> dict:
 				total_submitted += invoice_total
 				total_paid += paid_amount
 				outstanding_amount += invoice_outstanding
+		can_pay = bool(is_submitted and not is_cancelled and invoice_outstanding > 0)
+		if can_pay:
+			action_label = "Pay Outstanding"
+		elif is_draft:
+			action_label = "Submit first"
+		elif is_cancelled:
+			action_label = "Cancelled"
+		elif invoice_outstanding <= 0:
+			action_label = "Paid"
+		else:
+			action_label = "Open"
 		invoice_rows.append(
 			{
 				"invoice": invoice.name,
 				"name": invoice.name,
 				"docstatus": docstatus,
 				"status": invoice.get("status"),
+				"posting_date": invoice.get("posting_date"),
+				"due_date": invoice.get("due_date"),
 				"grand_total": grand_total,
 				"rounded_total": rounded_total,
 				"paid_amount": paid_amount,
 				"outstanding_amount": invoice_outstanding,
 				"currency": invoice.get("currency"),
+				"is_current_draft": bool(is_draft and invoice.name == session.get("current_draft_invoice")),
 				"is_draft": is_draft,
 				"is_submitted": is_submitted,
 				"is_cancelled": is_cancelled,
+				"can_pay": can_pay,
+				"action_label": action_label,
 				"blocks_full_payment_gate": blocks_full_payment_gate,
 				"contributes_to_total": contributes,
 			}

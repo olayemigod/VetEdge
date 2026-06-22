@@ -569,6 +569,35 @@ class TestBillingCore(TestCase):
 		self.assertEqual(ledger["outstanding_amount"], 0)
 		self.assertEqual(ledger["total_paid"], 100)
 
+	def test_session_invoice_rows_include_pay_action_flags(self):
+		old_charge = frappe._dict({**charge_payload("old", "OLD-ITEM", 100), "invoice": "SINV-OLD", "billing_status": "Submitted Invoiced"})
+		current_charge = frappe._dict({**charge_payload("current", "CUR-ITEM", 50), "invoice": "SINV-CURRENT", "billing_status": "Paid"})
+		draft_charge = frappe._dict({**charge_payload("draft", "DRAFT-ITEM", 25), "invoice": "SINV-DRAFT", "billing_status": "Draft Invoiced"})
+		cancelled_charge = frappe._dict({**charge_payload("cancelled", "CAN-ITEM", 10), "invoice": "SINV-CAN", "billing_status": "Cancelled"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-CURRENT", charges=[old_charge, current_charge, draft_charge, cancelled_charge])
+		old_invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=40)
+		current_invoice = make_invoice("SINV-CURRENT", docstatus=1, outstanding_amount=0)
+		draft_invoice = make_invoice("SINV-DRAFT", docstatus=0, outstanding_amount=25)
+		cancelled_invoice = make_invoice("SINV-CAN", docstatus=2, outstanding_amount=10)
+
+		with multi_invoice_billing_context(
+			session,
+			{"SINV-OLD": old_invoice, "SINV-CURRENT": current_invoice, "SINV-DRAFT": draft_invoice, "SINV-CAN": cancelled_invoice},
+			{"SINV-OLD": 60, "SINV-CURRENT": 100},
+		):
+			ledger = billing_core.get_billing_session_invoice_ledger(session)
+
+		rows = {row["name"]: row for row in ledger["invoices"]}
+		self.assertTrue(rows["SINV-OLD"]["can_pay"])
+		self.assertEqual(rows["SINV-OLD"]["action_label"], "Pay Outstanding")
+		self.assertFalse(rows["SINV-CURRENT"]["can_pay"])
+		self.assertEqual(rows["SINV-CURRENT"]["action_label"], "Paid")
+		self.assertFalse(rows["SINV-DRAFT"]["can_pay"])
+		self.assertTrue(rows["SINV-DRAFT"]["is_current_draft"])
+		self.assertEqual(rows["SINV-DRAFT"]["action_label"], "Submit first")
+		self.assertFalse(rows["SINV-CAN"]["can_pay"])
+		self.assertEqual(rows["SINV-CAN"]["action_label"], "Cancelled")
+		self.assertEqual(ledger["outstanding_amount"], 40)
 	def test_session_summary_aggregates_multiple_linked_invoices(self):
 		old_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
 		new_charge = frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 50), "invoice": "SINV-NEW", "billing_status": "Draft Invoiced"})
