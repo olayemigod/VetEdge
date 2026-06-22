@@ -10,7 +10,12 @@ from vetedge.services.registration_billing import validate_registration_settings
 class VeterinarySettings(Document):
 	def validate(self) -> None:
 		# Check platform settings protection
-		db_doc = self.get_doc_before_save()
+		db_doc = None
+		try:
+			db_doc = frappe.get_doc("Veterinary Settings")
+		except Exception:
+			pass
+
 		old_mode = db_doc.get("deployment_mode") if db_doc else None
 		new_mode = self.get("deployment_mode")
 		

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
-from vetedge.services.appointment_flow import sync_next_vaccination_appointment_from_record
 from vetedge.services.vaccination import validate_vaccination_record
+
+
+def sync_next_vaccination_appointment_from_record(*args, **kwargs):
+	from vetedge.services.appointment_flow import sync_next_vaccination_appointment_from_record as _sync_next_vaccination_appointment_from_record
+	return _sync_next_vaccination_appointment_from_record(*args, **kwargs)
 
 
 class VeterinaryVaccinationRecord(Document):

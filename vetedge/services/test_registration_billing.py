@@ -28,6 +28,13 @@ from vetedge.services.registration_billing import (
 
 
 class TestRegistrationBilling(TestCase):
+	def setUp(self):
+		self.patcher = patch("vetedge.services.registration_billing.use_billing_core_for_registration", return_value=False)
+		self.patcher.start()
+
+	def tearDown(self):
+		self.patcher.stop()
+
 	def test_registration_without_billing_sets_registered(self):
 		patient = frappe._dict(name="VET-PAT-001", default_branch="Main")
 		rule = RegistrationBillingRule(False, "Main", None, 0, False, False)

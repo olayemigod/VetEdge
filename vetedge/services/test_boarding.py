@@ -9,8 +9,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
-class ValidationError(Exception):
-	pass
+try:
+	import frappe
+	if hasattr(frappe, "ValidationError") and frappe.ValidationError is not Exception:
+		ValidationError = frappe.ValidationError
+	else:
+		class ValidationError(Exception):
+			pass
+except Exception:
+	class ValidationError(Exception):
+		pass
 
 
 class FrappeDict(dict):
@@ -35,7 +43,26 @@ def _to_date(value):
 	return datetime.fromisoformat(str(value).replace(" ", "T")).date() if " " in str(value) else date.fromisoformat(str(value))
 
 
+ORIG_GET_ALL = None
+ORIG_GET_VALUE = None
+ORIG_GET_SINGLE_VALUE = None
+ORIG_GET_DOC = None
+
+if "frappe" in sys.modules and hasattr(sys.modules["frappe"], "db") and hasattr(sys.modules["frappe"].db, "sql"):
+	import frappe
+	ORIG_GET_ALL = getattr(frappe, "get_all", None)
+	if hasattr(frappe, "db"):
+		ORIG_GET_VALUE = getattr(frappe.db, "get_value", None)
+		ORIG_GET_SINGLE_VALUE = getattr(frappe.db, "get_single_value", None)
+	ORIG_GET_DOC = getattr(frappe, "get_doc", None)
+
+
 def load_boarding_module():
+	if "frappe" in sys.modules and hasattr(sys.modules["frappe"], "db") and hasattr(sys.modules["frappe"].db, "sql"):
+		import vetedge.services.boarding as module
+		module.use_billing_core_for_boarding = lambda: False
+		return module
+
 	frappe_module = types.ModuleType("frappe")
 	frappe_module.ValidationError = ValidationError
 	frappe_module.PermissionError = PermissionError
@@ -100,8 +127,18 @@ class BoardingAvailabilityHarness:
 		self.module.frappe.get_all = self.get_all
 		self.module.frappe.db.get_value = self.get_value
 
-	def get_value(self, doctype, name, fields=None, as_dict=False):
-		if doctype == self.module.KENNEL_DOCTYPE:
+	def get_value(self, doctype, name=None, fields=None, as_dict=False, *args, **kwargs):
+		boarding_doctypes = {
+			getattr(self.module, "KENNEL_DOCTYPE", "Kennel"),
+			getattr(self.module, "PET_BOARDING_BOOKING_DOCTYPE", "Pet Boarding Booking"),
+			getattr(self.module, "PET_BOARDING_STAY_DOCTYPE", "Pet Boarding Stay")
+		}
+		if doctype not in boarding_doctypes:
+			if ORIG_GET_VALUE:
+				return ORIG_GET_VALUE(doctype, name, fields, as_dict, *args, **kwargs)
+			return None
+
+		if doctype == getattr(self.module, "KENNEL_DOCTYPE", "Kennel"):
 			for row in self.kennels:
 				if row["name"] == name:
 					if isinstance(fields, list):
@@ -125,12 +162,22 @@ class BoardingAvailabilityHarness:
 			return self.module.frappe._dict(dict(row))
 		return self.module.frappe._dict({field: row.get(field) for field in fields})
 
-	def get_all(self, doctype, filters=None, fields=None, order_by=None, **kwargs):
-		if doctype == self.module.KENNEL_DOCTYPE:
+	def get_all(self, doctype, filters=None, fields=None, order_by=None, *args, **kwargs):
+		boarding_doctypes = {
+			getattr(self.module, "KENNEL_DOCTYPE", "Kennel"),
+			getattr(self.module, "PET_BOARDING_BOOKING_DOCTYPE", "Pet Boarding Booking"),
+			getattr(self.module, "PET_BOARDING_STAY_DOCTYPE", "Pet Boarding Stay")
+		}
+		if doctype not in boarding_doctypes:
+			if ORIG_GET_ALL:
+				return ORIG_GET_ALL(doctype, filters=filters, fields=fields, order_by=order_by, *args, **kwargs)
+			return []
+
+		if doctype == getattr(self.module, "KENNEL_DOCTYPE", "Kennel"):
 			rows = self.kennels
-		elif doctype == self.module.PET_BOARDING_BOOKING_DOCTYPE:
+		elif doctype == getattr(self.module, "PET_BOARDING_BOOKING_DOCTYPE", "Pet Boarding Booking"):
 			rows = self.bookings
-		elif doctype == self.module.PET_BOARDING_STAY_DOCTYPE:
+		elif doctype == getattr(self.module, "PET_BOARDING_STAY_DOCTYPE", "Pet Boarding Stay"):
 			rows = self.stays
 		else:
 			rows = []
@@ -149,6 +196,51 @@ class TestBoardingBusinessRulesDocumentation(unittest.TestCase):
 
 
 class TestKennelAvailabilityBoard(unittest.TestCase):
+	def setUp(self):
+		import frappe
+		self.orig_get_all = getattr(frappe, "get_all", None)
+		self.orig_get_doc = getattr(frappe, "get_doc", None)
+		self.orig_get_value = getattr(frappe.db, "get_value", None)
+		self.orig_get_single_value = getattr(frappe.db, "get_single_value", None)
+
+		# Back up module level functions to prevent pollution
+		self.module = load_boarding_module()
+		self._orig_module_funcs = {}
+		funcs_to_backup = [
+			"ensure_boarding_enabled",
+			"boarding_requires_payment_before_check_in",
+			"validate_kennel_available",
+			"create_boarding_stay_from_booking_doc",
+			"emit_boarding_event",
+			"is_active_sales_invoice",
+			"calculate_boarding_charges",
+			"get_billing_cost_center",
+			"get_boarding_invoice_documents",
+			"build_boarding_invoice_item",
+			"update_draft_boarding_invoice",
+			"create_boarding_sales_invoice",
+			"get_existing_active_stay",
+			"use_billing_core_for_boarding"
+		]
+		for name in funcs_to_backup:
+			if hasattr(self.module, name):
+				self._orig_module_funcs[name] = getattr(self.module, name)
+
+	def tearDown(self):
+		import frappe
+		if hasattr(self, "orig_get_all") and self.orig_get_all:
+			frappe.get_all = self.orig_get_all
+		if hasattr(self, "orig_get_doc") and self.orig_get_doc:
+			frappe.get_doc = self.orig_get_doc
+		if hasattr(self, "orig_get_value") and self.orig_get_value:
+			frappe.db.get_value = self.orig_get_value
+		if hasattr(self, "orig_get_single_value") and self.orig_get_single_value:
+			frappe.db.get_single_value = self.orig_get_single_value
+
+		if hasattr(self, "_orig_module_funcs"):
+			for name, func in self._orig_module_funcs.items():
+				setattr(self.module, name, func)
+
 	def test_available_kennel_with_no_bookings(self):
 		harness = BoardingAvailabilityHarness(
 			kennels=[{"name": "KEN-1", "kennel_name": "Suite A", "branch": "Main Branch", "capacity": 1, "is_active": 1}],
@@ -226,7 +318,7 @@ class TestKennelAvailabilityBoard(unittest.TestCase):
 			total_boarding_charge=None,
 		)
 		harness.module.validate_sales_item = lambda *args, **kwargs: None
-		harness.module.frappe.db.get_value = lambda doctype, name, field, as_dict=False: 2500 if doctype == "Item" else None
+		harness.module.frappe.db.get_value = lambda doctype, name, field=None, as_dict=False, *args, **kwargs: 2500 if doctype == "Item" else ("Veterinary Settings" if doctype == "DocType" else None)
 		harness.module.sync_boarding_charge_fields(doc)
 		self.assertEqual(doc.daily_rate, 4000.0)
 		self.assertEqual(doc.billable_days, 3)
@@ -251,7 +343,7 @@ class TestKennelAvailabilityBoard(unittest.TestCase):
 			total_boarding_charge=None,
 		)
 		harness.module.validate_sales_item = lambda *args, **kwargs: None
-		harness.module.frappe.db.get_value = lambda doctype, name, field, as_dict=False: 2500 if doctype == "Item" else None
+		harness.module.frappe.db.get_value = lambda doctype, name, field=None, as_dict=False, *args, **kwargs: 2500 if doctype == "Item" else ("Veterinary Settings" if doctype == "DocType" else None)
 		harness.module.sync_boarding_charge_fields(doc)
 		self.assertEqual(doc.billing_item, "BOARDING-SVC")
 		self.assertEqual(doc.daily_rate, 2500)
@@ -333,13 +425,16 @@ class TestKennelAvailabilityBoard(unittest.TestCase):
 		module = load_boarding_module()
 		module.calculate_boarding_charges = lambda doc: {"daily_rate": 2500, "billable_days": 3, "total_boarding_charge": 7500}
 		module.get_billing_cost_center = lambda *args, **kwargs: "Main - CC"
-		module.get_boarding_invoice_documents = lambda doc: [SimpleNamespace(name="SINV-DRAFT", docstatus=0)]
+		module.get_boarding_invoice_documents = lambda doc: [SimpleNamespace(name="SINV-DRAFT", docstatus=0, outstanding_amount=7500, grand_total=7500, posting_date="2026-05-01", currency="USD", status="Draft")]
 		module.build_boarding_invoice_item = lambda doc, cc: {"item_code": "BOARDING-SVC", "qty": doc.billable_days, "rate": doc.daily_rate, "amount": doc.total_boarding_charge, "cost_center": cc}
-		module.update_draft_boarding_invoice = lambda invoice_name, doc, item_payload, cost_center: SimpleNamespace(name=invoice_name)
+		module.update_draft_boarding_invoice = lambda invoice_name, doc, item_payload, cost_center: SimpleNamespace(name=invoice_name, docstatus=0, outstanding_amount=7500, grand_total=7500, posting_date="2026-05-01", currency="USD", status="Draft")
 		saved = []
 		doc = SimpleNamespace(
 			name="PBB-1",
 			status="Reserved",
+			check_in_date="2026-05-01",
+			expected_check_out_date="2026-05-03",
+			actual_check_out_date=None,
 			service_branch="Main Branch",
 			primary_owner="CUST-1",
 			billing_item="BOARDING-SVC",
@@ -365,17 +460,25 @@ class TestKennelAvailabilityBoard(unittest.TestCase):
 		prior_invoice = SimpleNamespace(
 			name="SINV-OLD",
 			docstatus=1,
+			outstanding_amount=0,
+			grand_total=5000,
+			posting_date="2026-05-01",
+			currency="USD",
+			status="Paid",
 			items=[SimpleNamespace(item_code="BOARDING-SVC", qty=2, rate=2500, amount=5000)],
 		)
 		module.get_boarding_invoice_documents = lambda doc: [prior_invoice]
 		module.build_invoice_item = lambda item_code, qty, uom, rate, cost_center: {"item_code": item_code, "qty": qty, "rate": rate, "amount": qty * rate, "cost_center": cost_center}
 		created = []
-		module.create_boarding_sales_invoice = lambda doc, item_payload, cost_center, adjustment=False: created.append({"item_payload": item_payload, "cost_center": cost_center, "adjustment": adjustment}) or SimpleNamespace(name="SINV-BAL")
+		module.create_boarding_sales_invoice = lambda doc, item_payload, cost_center, adjustment=False: created.append({"item_payload": item_payload, "cost_center": cost_center, "adjustment": adjustment}) or SimpleNamespace(name="SINV-BAL", docstatus=1, outstanding_amount=5000, grand_total=5000, posting_date="2026-05-01", currency="USD", status="Unpaid")
 		module.emit_boarding_event = lambda *args, **kwargs: {}
 		saved = []
 		doc = SimpleNamespace(
 			name="PBB-1",
 			status="Checked Out",
+			check_in_date="2026-05-01",
+			expected_check_out_date="2026-05-05",
+			actual_check_out_date=None,
 			service_branch="Main Branch",
 			primary_owner="CUST-1",
 			billing_item="BOARDING-SVC",

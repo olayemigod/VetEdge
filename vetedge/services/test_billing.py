@@ -20,6 +20,13 @@ from vetedge.services.billing import (
 
 
 class TestConsultationBilling(TestCase):
+	def setUp(self):
+		self.patcher = patch("vetedge.services.billing.use_billing_core_for_source", return_value=False)
+		self.patcher.start()
+
+	def tearDown(self):
+		self.patcher.stop()
+
 	def test_disabled_consultation_billing_blocks_invoice_creation(self):
 		consultation = frappe._dict(
 			name="VCON-001",

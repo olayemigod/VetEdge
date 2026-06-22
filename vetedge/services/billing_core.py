@@ -304,7 +304,8 @@ def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation
 						"removed_count": removed_count,
 						"requires_confirmation": True,
 						"confirmation_type": "remove_empty_draft_invoice",
-						"message": f"Removing these charges will leave the draft invoice empty. Confirm to remove the draft invoice {active_draft.name}.",
+						"billing_session": session.name,
+						"message": "Removing these charges will leave the draft invoice empty. Confirm to remove the draft invoice.",
 						"reload_required": True,
 					}
 				return remove_empty_draft_invoice_for_session(session, active_draft, removed_count)
@@ -732,19 +733,13 @@ def remove_empty_draft_invoice_for_session(session, invoice, removed_count: int 
 	if invoice.get("items"):
 		frappe.throw("Draft Sales Invoice still has items and cannot be removed as empty.", frappe.ValidationError)
 	invoice_name = invoice.name
+	session = detach_invoice_from_billing_session(session, invoice_name, reason="empty_draft_invoice")
 	run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))
-	for row in session.get("charges") or []:
-		if row.get("invoice") == invoice_name and row.get("billing_status") in {"Cancelled", "Skipped"}:
-			row.invoice = None
-			row.invoice_item_name = None
-	if session.get("current_draft_invoice") == invoice_name:
-		session.current_draft_invoice = None
-	if session.get("latest_invoice") == invoice_name:
-		session.latest_invoice = get_latest_existing_session_invoice_name(session, exclude=invoice_name)
 	refresh_billing_session_totals(session)
 	session.save()
 	return {
 		"session": session.name,
+		"billing_session": session.name,
 		"invoice": invoice_name,
 		"created": False,
 		"added_count": 0,
@@ -754,6 +749,22 @@ def remove_empty_draft_invoice_for_session(session, invoice, removed_count: int 
 		"message": f"Empty draft invoice {invoice_name} removed.",
 		"reload_required": True,
 	}
+
+
+def detach_invoice_from_billing_session(session, invoice_name: str, *, reason: str | None = None):
+	session = ensure_session_doc(session.name if hasattr(session, "name") else session)
+	if session.get("current_draft_invoice") == invoice_name:
+		session.current_draft_invoice = None
+	if session.get("latest_invoice") == invoice_name:
+		session.latest_invoice = get_latest_existing_session_invoice_name(session, exclude=invoice_name)
+	for row in session.get("charges") or []:
+		if row.get("invoice") == invoice_name:
+			row.invoice = None
+			row.invoice_item_name = None
+			if reason and row.get("billing_status") not in {"Cancelled", "Skipped"}:
+				row.notes = "; ".join(part for part in [row.get("notes"), f"Detached invoice: {reason}"] if part)
+	session.save()
+	return session
 
 
 def get_latest_existing_session_invoice_name(session, exclude: str | None = None) -> str | None:
@@ -795,7 +806,8 @@ def get_retired_submitted_invoice_action(session, confirm: bool = False, confirm
 				"blocked": True,
 				"reason": "paid_invoice_requires_credit_note",
 				"invoice": invoice_name,
-				"message": "This charge belongs to a paid or partly paid invoice. Create a Credit Note or adjustment instead.",
+				"billing_session": session.name,
+				"message": "This invoice is paid or partly paid. Create a Credit Note or adjustment instead.",
 				"reload_required": True,
 			}
 		if not (confirm and confirmation_type == "cancel_unpaid_invoice"):
@@ -803,9 +815,11 @@ def get_retired_submitted_invoice_action(session, confirm: bool = False, confirm
 				"requires_confirmation": True,
 				"confirmation_type": "cancel_unpaid_invoice",
 				"invoice": invoice_name,
+				"billing_session": session.name,
 				"message": "This submitted unpaid invoice must be cancelled before removing invoiced charges.",
 				"reload_required": True,
 			}
+		session = detach_invoice_from_billing_session(session, invoice_name, reason="cancel_unpaid_invoice")
 		run_with_billing_core_sync_flag(invoice.cancel)
 		for row in retired_by_invoice[invoice_name]:
 			row.billing_status = "Cancelled"
@@ -817,6 +831,7 @@ def get_retired_submitted_invoice_action(session, confirm: bool = False, confirm
 			"cancelled_invoice": True,
 			"invoice": invoice_name,
 			"session": session.name,
+			"billing_session": session.name,
 			"message": f"Cancelled unpaid invoice {invoice_name}.",
 			"reload_required": True,
 		}

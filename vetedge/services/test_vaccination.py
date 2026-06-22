@@ -9,6 +9,9 @@ from unittest.mock import Mock, patch
 
 
 def _install_stub_modules() -> None:
+	if "frappe" in sys.modules and hasattr(sys.modules["frappe"], "db") and hasattr(sys.modules["frappe"].db, "sql"):
+		return
+
 	if "frappe" not in sys.modules:
 		frappe = ModuleType("frappe")
 		frappe.ValidationError = Exception
@@ -291,7 +294,9 @@ class VaccinationWorkflowTests(TestCase):
 		doc = SimpleNamespace(vaccine="Rabies", service_branch="Main Branch", linked_invoice=None, linked_consultation="CONS-001", primary_owner="CUST-001", company="VetEdge Co", administered_on="2026-04-30", name="VVAC-001")
 		with patch.object(vaccination, "get_vaccine_defaults", return_value=vaccination.VaccineDefaults(default_item="ITEM-001")), patch.object(
 			vaccination, "create_consultation_invoice", return_value={"invoice": "SINV-CONS-001"}
-		) as create_invoice:
+		) as create_invoice, patch.object(
+			vaccination, "use_billing_core_for_vaccination", return_value=False
+		):
 			invoice_name = vaccination.create_vaccination_invoice(doc)
 
 		self.assertEqual(invoice_name, "SINV-CONS-001")

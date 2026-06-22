@@ -192,7 +192,7 @@ EXPECTED_REPORT_ROLES = {
 }
 
 EXPECTED_REPORT_FILTER_FIELDS = {
-	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status"},
+	"report/consultation_register/consultation_register.json": {"from_date", "to_date", "branch", "practitioner", "consultation_type", "patient", "owner", "status", "payment_status", "has_follow_up", "has_vaccination", "created_by"},
 	"report/planned_treatment/planned_treatment.json": {"from_date", "to_date", "branch", "patient", "owner", "practitioner", "consultation_type", "item", "consultation_status"},
 	"report/patient_register/patient_register.json": {"branch", "owner", "species", "registration_status"},
 	"report/owner_register/owner_register.json": {"branch", "owner", "outstanding_only"},

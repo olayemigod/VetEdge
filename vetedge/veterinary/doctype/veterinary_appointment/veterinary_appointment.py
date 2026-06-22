@@ -3,12 +3,21 @@ from __future__ import annotations
 from frappe.model.document import Document
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
-from vetedge.services.appointment_flow import sync_missed_appointment_from_source, validate_appointment
 from vetedge.services.appointment_notifications import (
 	notify_appointment_checked_in,
 	notify_appointment_completed,
 )
 from vetedge.services.notifications import notify_appointment_event
+
+
+def validate_appointment(*args, **kwargs):
+	from vetedge.services.appointment_flow import validate_appointment as _validate_appointment
+	return _validate_appointment(*args, **kwargs)
+
+
+def sync_missed_appointment_from_source(*args, **kwargs):
+	from vetedge.services.appointment_flow import sync_missed_appointment_from_source as _sync_missed_appointment_from_source
+	return _sync_missed_appointment_from_source(*args, **kwargs)
 
 
 class VeterinaryAppointment(Document):

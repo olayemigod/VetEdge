@@ -37,6 +37,9 @@ class FakeMissedAppointment(AttrDict):
 
 
 def _install_stub_modules() -> None:
+	if "frappe" in sys.modules and hasattr(sys.modules["frappe"], "db") and hasattr(sys.modules["frappe"].db, "sql"):
+		return
+
 	if "frappe" not in sys.modules:
 		frappe = ModuleType("frappe")
 		frappe._ = lambda value: value

@@ -35,6 +35,13 @@ def invoice(docstatus=1, outstanding_amount=0, grand_total=1000, paid_amount=0, 
 
 
 class TestConsultationPaymentGate(TestCase):
+	def setUp(self):
+		self.patcher = patch("vetedge.services.payment_gate.use_billing_core_for_payment_gate", return_value=False)
+		self.patcher.start()
+
+	def tearDown(self):
+		self.patcher.stop()
+
 	def test_default_setting_is_full_payment_required(self):
 		frappe_stub = SimpleNamespace(db=SimpleNamespace(exists=Mock(return_value=False)))
 

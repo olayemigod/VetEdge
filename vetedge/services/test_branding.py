@@ -9,7 +9,7 @@ import frappe
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.feature_flags import is_enabled
 from vetedge.services.medical_history import get_patient_medical_history_view
-from vetedge.services.notifications import get_email_message, get_email_subject
+from vetedge.services.notification_backends.local_backend import LocalNotificationBackend
 from vetedge.services.registration_billing import get_billing_cost_center
 
 
@@ -39,16 +39,16 @@ class TestBranding(TestCase):
 			self.assertEqual(get_clinic_brand_name(), "Acme Vet Hospital")
 
 	def test_notification_subject_and_message_use_clinic_brand(self):
-		with patch("vetedge.services.notifications.get_clinic_brand_name", return_value="BluePaw Vet"):
-			subject = get_email_subject({"event": "invoice_created"})
-			message = get_email_message(
-				{
-					"event": "invoice_created",
-					"reference_doctype": "Sales Invoice",
-					"reference_name": "SINV-0001",
-					"payload": {"customer": "CUST-0001"},
-				}
-			)
+		backend = LocalNotificationBackend()
+		event_def = SimpleNamespace(event_label="Invoice Created")
+		context = {
+			"clinic_name": "BluePaw Vet",
+			"event": "invoice_created",
+			"reference_doctype": "Sales Invoice",
+			"reference_name": "SINV-0001",
+			"customer": "CUST-0001",
+		}
+		subject, message, _ = backend._build_fallback_email(event_def, context)
 
 		self.assertEqual(subject, "BluePaw Vet: Invoice Created")
 		self.assertIn("BluePaw Vet", message)
@@ -90,7 +90,9 @@ class TestBranding(TestCase):
 			_dict=frappe._dict,
 		)
 
-		with patch("vetedge.services.medical_history.frappe", frappe_stub):
+		with patch("vetedge.services.medical_history.frappe", frappe_stub), patch(
+			"vetedge.services.medical_history.can_access_medical_history", return_value=True
+		):
 			view = get_patient_medical_history_view("VP-001", "2026-04-01", "2026-04-30")
 
 		self.assertIn("vaccinations", view)

@@ -8,6 +8,9 @@ from unittest.mock import Mock, patch
 
 
 def _install_frappe_stub() -> None:
+	if "frappe" in sys.modules and hasattr(sys.modules["frappe"], "db") and hasattr(sys.modules["frappe"].db, "sql"):
+		return
+
 	if "frappe" not in sys.modules:
 		frappe = ModuleType("frappe")
 		frappe.__path__ = []

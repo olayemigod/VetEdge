@@ -174,7 +174,7 @@ def make_frappe_stub(**overrides):
 		raise frappe.ValidationError()
 
 	stub = SimpleNamespace(
-		db=SimpleNamespace(get_value=lambda *args, **kwargs: None),
+		db=SimpleNamespace(get_value=lambda *args, **kwargs: None, exists=lambda *args, **kwargs: True),
 		get_list=lambda *args, **kwargs: [],
 		get_meta=lambda doctype: SimpleNamespace(
 			get_title_field=lambda: "patient_name" if doctype == "Veterinary Patient" else "name"
@@ -190,5 +190,7 @@ def make_frappe_stub(**overrides):
 		PermissionError=frappe.PermissionError,
 	)
 	for key, value in overrides.items():
+		if key == "db" and not hasattr(value, "exists"):
+			value.exists = lambda *args, **kwargs: True
 		setattr(stub, key, value)
 	return stub

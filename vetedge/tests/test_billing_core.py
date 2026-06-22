@@ -138,7 +138,24 @@ class TestBillingCore(TestCase):
 		self.assertIsNone(session.current_draft_invoice)
 		self.assertIsNone(session.latest_invoice)
 		self.assertIsNone(charge.invoice)
+		self.assertIsNone(charge.invoice_item_name)
 
+	def test_submitted_unpaid_invoice_cancellation_detaches_session_link_first(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-SUB", "billing_status": "Cancelled"})
+		session = make_session(latest_invoice="SINV-SUB", charges=[charge])
+		invoice = make_invoice("SINV-SUB", docstatus=1, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}"})], outstanding_amount=100)
+		invoice.cancel = Mock()
+
+		with billing_core_context(session, invoice, paid_amount=0):
+			result = billing_core.sync_session_charges_to_invoice(session, confirm=True, confirmation_type="cancel_unpaid_invoice")
+
+		self.assertTrue(result["cancelled_invoice"])
+		self.assertEqual(result["billing_session"], "VBS-001")
+		invoice.cancel.assert_called_once()
+		self.assertNotEqual(session.latest_invoice, "SINV-SUB")
+		self.assertIsNone(charge.invoice)
+		self.assertIsNone(charge.invoice_item_name)
 	def test_paid_invoice_retired_charge_is_blocked_for_credit_note(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
 		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-PAID", "billing_status": "Cancelled"})
@@ -1369,6 +1386,10 @@ class multi_invoice_billing_context:
 			return None
 
 		def delete_doc(doctype, name):
+			if self.session.get("current_draft_invoice") == name or self.session.get("latest_invoice") == name:
+				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session pointers")
+			if any(row.get("invoice") == name for row in self.session.get("charges") or []):
+				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session charges")
 			self.deleted_docs.append((doctype, name))
 
 		frappe_stub = SimpleNamespace(
@@ -1444,6 +1465,10 @@ class billing_core_context:
 			return None
 
 		def delete_doc(doctype, name):
+			if self.session.get("current_draft_invoice") == name or self.session.get("latest_invoice") == name:
+				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session pointers")
+			if any(row.get("invoice") == name for row in self.session.get("charges") or []):
+				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session charges")
 			self.deleted_docs.append((doctype, name))
 
 		frappe_stub = SimpleNamespace(

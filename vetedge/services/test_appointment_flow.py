@@ -350,7 +350,7 @@ class TestAppointmentFlow(TestCase):
 
 		self.assertEqual(result["status"], "Confirmed")
 		self.assertEqual(saved, [appointment])
-		self.assertEqual(emit.call_args.kwargs["event"], "appointment_confirmed")
+		self.assertEqual(emit.call_args.kwargs.get("event_key") or emit.call_args.kwargs.get("event"), "appointment_confirmed")
 
 
 def make_appointment_doc(**overrides):
@@ -383,7 +383,7 @@ def make_frappe_stub(**overrides):
 
 	stub = SimpleNamespace(
 		db=SimpleNamespace(
-			exists=lambda *args, **kwargs: False,
+			exists=lambda dt, name=None: True if (dt == "Veterinary Settings" or name == "Veterinary Settings" or (dt == "DocType" and name == "Veterinary Settings")) else False,
 			get_value=get_value_for_patient_and_user,
 		),
 		get_all=lambda *args, **kwargs: [],
