@@ -482,6 +482,12 @@ def create_vaccination_from_consultation(
 	)
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
 	can_access_consultation(get_current_user(), consultation, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_vaccination_from_consultation",
+		reference_doctype="Veterinary Consultation",
+		reference_name=consultation
+	)
 	require_vaccination_branch_access(get_current_user(), consultation_doc.service_branch, context=consultation_doc)
 
 	doc = frappe.get_doc(
@@ -529,6 +535,12 @@ def administer_vaccination(record: str, batch_no: str | None = None, create_invo
 	if doc.status not in {"Draft", "Awaiting Payment", "Pending Administration"}:
 		frappe.throw("Only Draft, Awaiting Payment, or Pending Administration vaccination records can be administered.", frappe.ValidationError)
 	can_administer_vaccine(get_current_user(), doc, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="administer_vaccination",
+		reference_doctype="Veterinary Vaccination Record",
+		reference_name=record
+	)
 	enforce_vaccination_payment_before_administration(doc)
 
 	if batch_no:
@@ -545,6 +557,12 @@ def create_or_update_vaccination_invoice(record: str) -> dict:
 	doc = frappe.get_doc(VACCINATION_RECORD_DOCTYPE, record)
 	if doc.status == "Cancelled":
 		frappe.throw("Cancelled vaccination records cannot be billed.", frappe.ValidationError)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_or_update_vaccination_invoice",
+		reference_doctype="Veterinary Vaccination Record",
+		reference_name=record
+	)
 	if use_billing_core_for_vaccination():
 		from vetedge.services.billing_core import sync_source_to_billing_session
 

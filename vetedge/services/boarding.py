@@ -884,6 +884,12 @@ def create_boarding_invoice_doc(booking_doc) -> dict:
 def reserve_boarding_booking(booking: str) -> dict:
     require_internal_user()
     ensure_boarding_enabled()
+    from vetedge.services.platform_access import require_vetedge_platform_access
+    require_vetedge_platform_access(
+        action="reserve_boarding_booking",
+        reference_doctype=PET_BOARDING_BOOKING_DOCTYPE,
+        reference_name=booking
+    )
     doc = frappe.get_doc(PET_BOARDING_BOOKING_DOCTYPE, booking)
     return reserve_boarding_booking_doc(doc)
 
@@ -901,6 +907,12 @@ def use_billing_core_for_boarding() -> bool:
 def check_in_boarding_booking(booking: str) -> dict:
     require_internal_user()
     ensure_boarding_enabled()
+    from vetedge.services.platform_access import require_vetedge_platform_access
+    require_vetedge_platform_access(
+        action="check_in_boarding_booking",
+        reference_doctype=PET_BOARDING_BOOKING_DOCTYPE,
+        reference_name=booking
+    )
     doc = frappe.get_doc(PET_BOARDING_BOOKING_DOCTYPE, booking)
     return check_in_boarding_booking_doc(doc)
 
@@ -910,6 +922,12 @@ def check_in_boarding_booking(booking: str) -> dict:
 def check_out_boarding_booking(booking: str) -> dict:
     require_internal_user()
     ensure_boarding_enabled()
+    from vetedge.services.platform_access import require_vetedge_platform_access
+    require_vetedge_platform_access(
+        action="check_out_boarding_booking",
+        reference_doctype=PET_BOARDING_BOOKING_DOCTYPE,
+        reference_name=booking
+    )
     doc = frappe.get_doc(PET_BOARDING_BOOKING_DOCTYPE, booking)
     return check_out_boarding_booking_doc(doc)
 
@@ -927,6 +945,12 @@ def cancel_boarding_booking(booking: str) -> dict:
 def create_boarding_invoice(booking: str) -> dict:
     require_internal_user()
     ensure_boarding_enabled()
+    from vetedge.services.platform_access import require_vetedge_platform_access
+    require_vetedge_platform_access(
+        action="create_boarding_invoice",
+        reference_doctype=PET_BOARDING_BOOKING_DOCTYPE,
+        reference_name=booking
+    )
     doc = frappe.get_doc(PET_BOARDING_BOOKING_DOCTYPE, booking)
     return create_boarding_invoice_doc(doc)
 

@@ -552,6 +552,16 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 
 @frappe.whitelist()
 def create_invoice_from_modal(source_doctype: str, source_name: str) -> dict:
+	require_internal_user()
+	config = get_billing_source_config(source_doctype)
+	doc = frappe.get_doc(source_doctype, source_name)
+	assert_can_act_on_source(doc, config)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_invoice_from_modal",
+		reference_doctype=source_doctype,
+		reference_name=source_name
+	)
 	return create_or_update_modal_invoice(source_doctype, source_name)
 
 
@@ -564,6 +574,12 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 	doc = frappe.get_doc(source_doctype, source_name)
 	assert_can_act_on_source(doc, config)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_or_update_modal_invoice",
+		reference_doctype=source_doctype,
+		reference_name=source_name
+	)
 	invoice_name = get_linked_invoice_name(doc, config)
 	invoice_summary = get_invoice_summary(invoice_name)
 	if source_supports_billing_session(source_doctype):
@@ -590,6 +606,16 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 @frappe.whitelist()
 def create_payment_from_modal(source_doctype: str, source_name: str, mode_of_payment: str | None = None) -> dict:
+	require_internal_user()
+	config = get_billing_source_config(source_doctype)
+	doc = frappe.get_doc(source_doctype, source_name)
+	assert_can_act_on_source(doc, config)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_payment_from_modal",
+		reference_doctype=source_doctype,
+		reference_name=source_name
+	)
 	return record_modal_invoice_payment(
 		source_doctype=source_doctype,
 		source_name=source_name,
@@ -603,6 +629,12 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 	config = get_billing_source_config(source_doctype)
 	doc = frappe.get_doc(source_doctype, source_name)
 	assert_can_act_on_source(doc, config)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="submit_modal_invoice",
+		reference_doctype=source_doctype,
+		reference_name=source_name
+	)
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)
@@ -636,6 +668,12 @@ def record_modal_invoice_payment(
 	config = get_billing_source_config(source_doctype)
 	doc = frappe.get_doc(source_doctype, source_name)
 	assert_can_act_on_source(doc, config)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="record_modal_invoice_payment",
+		reference_doctype=source_doctype,
+		reference_name=source_name
+	)
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)

@@ -262,6 +262,12 @@ def create_follow_up_from_consultation(
 	require_internal_user()
 	ensure_appointments_enabled()
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_follow_up_from_consultation",
+		reference_doctype="Veterinary Consultation",
+		reference_name=consultation
+	)
 	consultation_doc = frappe.get_doc("Veterinary Consultation", consultation)
 	if not consultation_doc.patient:
 		frappe.throw("Consultation must have a patient before creating a follow-up appointment.")
@@ -301,6 +307,12 @@ def create_follow_up_from_consultation(
 def create_consultation_from_appointment(appointment: str) -> dict:
 	require_internal_user()
 	ensure_appointments_enabled()
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_consultation_from_appointment",
+		reference_doctype="Veterinary Appointment",
+		reference_name=appointment
+	)
 	appointment_doc = frappe.get_doc("Veterinary Appointment", appointment)
 	normalize_consultation_links(appointment_doc)
 	validate_start_consultation_from_appointment(appointment_doc)

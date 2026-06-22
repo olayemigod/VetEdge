@@ -356,6 +356,12 @@ def create_lab_order_from_consultation(
 
 	validate_consultation_allows_new_clinical_entries(consultation_doc, entry_type="lab orders")
 	can_request_lab_tests(get_current_user(), consultation_doc, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_lab_order_from_consultation",
+		reference_doctype="Veterinary Consultation",
+		reference_name=consultation
+	)
 
 	rows = normalize_lab_tests_payload(lab_tests)
 	if not rows:
@@ -524,6 +530,12 @@ def create_standalone_lab_order(
 ) -> dict:
 	require_internal_user()
 	can_request_lab_tests(get_current_user(), raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_standalone_lab_order",
+		reference_doctype="Veterinary Patient",
+		reference_name=patient
+	)
 	rows = normalize_lab_tests_payload(lab_tests)
 	if not rows:
 		frappe.throw("Select at least one lab test before creating a lab order.", frappe.ValidationError)
@@ -560,6 +572,12 @@ def create_lab_order_invoice(lab_order: str) -> dict:
 
 	require_internal_user()
 	can_access_lab_order(get_current_user(), lab_order, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_lab_order_invoice",
+		reference_doctype="Veterinary Lab Order",
+		reference_name=lab_order
+	)
 
 	order = frappe.get_doc(LAB_ORDER_DOCTYPE, lab_order)
 	if is_persisted_lab_order_for_billing_core(order) and use_billing_core_for_lab_order():

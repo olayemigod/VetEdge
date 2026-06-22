@@ -567,6 +567,12 @@ def create_grooming_session_from_appointment(appointment: str, values: dict | st
 		frappe.throw("Grooming Appointment is required.", frappe.ValidationError)
 	appointment_doc = frappe.get_doc(GROOMING_APPOINTMENT_DOCTYPE, appointment)
 	can_create_grooming_session(get_current_user(), appointment_doc, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_grooming_session_from_appointment",
+		reference_doctype=GROOMING_APPOINTMENT_DOCTYPE,
+		reference_name=appointment
+	)
 	if appointment_doc.status in {"Completed", "Cancelled", "No Show"}:
 		frappe.throw("Cannot start a grooming session from a completed, cancelled, or no-show appointment.", frappe.ValidationError)
 	existing = frappe.get_all(
@@ -656,6 +662,12 @@ def create_or_update_grooming_invoice(session: str) -> dict:
 	ensure_grooming_enabled()
 	doc = frappe.get_doc(GROOMING_SESSION_DOCTYPE, session)
 	can_manage_grooming_billing(get_current_user(), doc, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_or_update_grooming_invoice",
+		reference_doctype=GROOMING_SESSION_DOCTYPE,
+		reference_name=session
+	)
 	if doc.status == "Cancelled":
 		frappe.throw("Cancelled grooming sessions cannot be billed.", frappe.ValidationError)
 	invoice_name, created = create_grooming_invoice(doc)

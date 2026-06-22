@@ -313,7 +313,9 @@ class TestBillingModal(TestCase):
 		self.assertIn("Billing Session Total", js)
 		self.assertIn("state.outstanding_amount", js)
 		self.assertIn("currentInvoicePaymentBlock", js)
-		self.assertIn("Current Draft Invoice", js)`n`t`tself.assertIn("pay-ledger-invoice", js)`n`t`tself.assertIn("selectedInvoice", js)
+		self.assertIn("Current Draft Invoice", js)
+		self.assertIn("pay-ledger-invoice", js)
+		self.assertIn("selectedInvoice", js)
 
 	def test_billable_source_forms_open_shared_billing_modal(self):
 		for relative_path in (
@@ -584,7 +586,7 @@ class TestBillingModal(TestCase):
 def make_invoice(name="SINV-001", docstatus=1, outstanding_amount=1000):
 	return frappe._dict(
 		doctype="Sales Invoice",
-		name="SINV-001",
+		name=name,
 		docstatus=docstatus,
 		status="Draft" if docstatus == 0 else "Unpaid",
 		customer="CUST-001",

@@ -449,6 +449,12 @@ def get_hospitalisation_patient_context(patient: str) -> dict:
 def create_hospitalisation_from_consultation(consultation_name: str) -> str:
 	require_internal_user()
 	assert_hospitalisation_enabled()
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="create_hospitalisation_from_consultation",
+		reference_doctype="Veterinary Consultation",
+		reference_name=consultation_name
+	)
 	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
 
 	existing = get_active_hospitalisation_for_consultation(consultation.name)
@@ -770,6 +776,12 @@ def validate_hospitalisation_charge_prices(doc) -> None:
 def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str, confirm: bool = False, confirmation_type: str | None = None) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="sync_hospitalisation_charges_to_invoice",
+		reference_doctype="Veterinary Hospitalisation",
+		reference_name=hospitalisation_name
+	)
 	return sync_hospitalisation_charges_with_billing_core(hospitalisation_name, confirm=confirm, confirmation_type=confirmation_type)
 
 
@@ -1758,6 +1770,12 @@ def normalize_discharge_details(discharge_summary=None, discharge_details=None) 
 def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="admit_hospitalisation",
+		reference_doctype="Veterinary Hospitalisation",
+		reference_name=hospitalisation_name
+	)
 	from vetedge.services.billing_core import get_billing_session_summary, get_payment_gate_status, sync_source_to_billing_session
 
 	source_doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
@@ -1810,6 +1828,12 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str | None = None, discharge_details=None, force: bool = False) -> dict:
 	require_internal_user()
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="discharge_hospitalisation",
+		reference_doctype=HOSPITALISATION_DOCTYPE,
+		reference_name=hospitalisation_name
+	)
 	if doc.get("status") == "Cancelled":
 		frappe.throw("Cancelled hospitalisations cannot be discharged.", frappe.ValidationError)
 	if doc.get("status") == "Discharged":

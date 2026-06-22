@@ -176,6 +176,12 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 	ensure_consultations_enabled()
 	doc = frappe.get_doc("Veterinary Consultation", consultation)
 	can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+	from vetedge.services.platform_access import require_vetedge_platform_access
+	require_vetedge_platform_access(
+		action="transition_consultation_status",
+		reference_doctype="Veterinary Consultation",
+		reference_name=consultation
+	)
 	validate_consultation_status_transition(doc.status, status)
 	assert_consultation_can_proceed(doc, status)
 	previous = SimpleNamespace(status=doc.status)

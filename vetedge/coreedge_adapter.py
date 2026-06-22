@@ -126,11 +126,21 @@ def has_vetedge_access(product_app: str | None = None, tenant: str | None = None
 	app = product_app or get_vetedge_product_app()
 	try:
 		from coreedge.adapters.access import has_product_access
-		return has_product_access(product_app=app, tenant=tenant, user=user)
+		try:
+			return has_product_access(product_code=app, tenant=tenant, user=user)
+		except TypeError:
+			return has_product_access(product_app=app, tenant=tenant, user=user)
 	except (ImportError, ModuleNotFoundError):
 		return True
 
-def require_vetedge_access(product_app: str | None = None, tenant: str | None = None, user: str | None = None) -> None:
+def require_vetedge_access(
+	product_app: str | None = None,
+	tenant: str | None = None,
+	user: str | None = None,
+	action: str | None = None,
+	reference_doctype: str | None = None,
+	reference_name: str | None = None,
+) -> None:
 	app = product_app or get_vetedge_product_app()
 	
 	is_enabled = is_coreedge_enabled()
@@ -151,7 +161,30 @@ def require_vetedge_access(product_app: str | None = None, tenant: str | None = 
 
 	try:
 		from coreedge.adapters.access import require_product_access
-		require_product_access(product_app=app, tenant=tenant, user=user)
+		try:
+			require_product_access(
+				product_code=app,
+				tenant=tenant,
+				user=user,
+				source_app=action,
+				source_doctype=reference_doctype,
+				source_docname=reference_name
+			)
+		except TypeError:
+			try:
+				require_product_access(
+					product_app=app,
+					tenant=tenant,
+					user=user,
+					source_app=action,
+					source_doctype=reference_doctype,
+					source_docname=reference_name
+				)
+			except TypeError:
+				try:
+					require_product_access(product_code=app, tenant=tenant, user=user)
+				except TypeError:
+					require_product_access(product_app=app, tenant=tenant, user=user)
 	except (ImportError, ModuleNotFoundError):
 		if fail_closed:
 			frappe.throw(
@@ -166,7 +199,13 @@ def get_vetedge_access_context(product_app: str | None = None, tenant: str | Non
 	app = product_app or get_vetedge_product_app()
 	try:
 		from coreedge.adapters.access import get_access_context
-		return get_access_context(product_app=app, tenant=tenant, user=user)
+		try:
+			return get_access_context(product_code=app, tenant=tenant, user=user)
+		except TypeError:
+			try:
+				return get_access_context(product_app=app, tenant=tenant, user=user)
+			except TypeError:
+				return get_access_context(user=user)
 	except (ImportError, ModuleNotFoundError):
 		return {"allowed": True, "enforcement_action": "Allow", "primary_reason_code": "PLATFORM_MISSING"}
 
