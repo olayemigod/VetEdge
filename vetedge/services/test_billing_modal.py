@@ -217,6 +217,104 @@ class TestBillingModal(TestCase):
 		self.assertIn("state?.actions?.open_invoice_name", js)
 		self.assertNotIn("Open Full Invoice", js)
 
+	def test_billing_modal_totals_use_session_ledger_and_keep_current_invoice_separate(self):
+		invoice_summary = {
+			"name": "SINV-DRAFT",
+			"docstatus": 0,
+			"status": "Draft",
+			"payment_status": "Draft",
+			"grand_total": 5000,
+			"paid_amount": 0,
+			"outstanding_amount": 5000,
+			"currency": "NGN",
+		}
+		session_summary = {
+			"name": "VBS-001",
+			"total_invoiced": 107399,
+			"total_paid": 25000,
+			"outstanding_amount": 77399,
+			"payment_status": "Partly Paid",
+			"invoices": [
+				{"name": "SINV-OLD", "docstatus": 1, "grand_total": 102399, "paid_amount": 25000, "outstanding_amount": 77399},
+				{"name": "SINV-DRAFT", "docstatus": 0, "grand_total": 5000, "paid_amount": 0, "outstanding_amount": 5000},
+				{"name": "SINV-CANCELLED", "docstatus": 2, "grand_total": 9999, "paid_amount": 0, "outstanding_amount": 9999},
+			],
+			"invoice_ledger": {"currency": "NGN", "payment_status": "Partly Paid"},
+		}
+
+		totals = billing_modal.get_billing_modal_totals(session_summary, invoice_summary)
+
+		self.assertEqual(totals["total_amount"], 107399)
+		self.assertEqual(totals["paid_amount"], 25000)
+		self.assertEqual(totals["outstanding_amount"], 77399)
+		self.assertEqual(totals["billing_session_outstanding"], 77399)
+		self.assertEqual(totals["linked_invoice_count"], 2)
+		self.assertEqual(totals["linked_invoices"], ["SINV-OLD", "SINV-DRAFT"])
+		self.assertEqual(totals["current_invoice_name"], "SINV-DRAFT")
+		self.assertEqual(totals["current_invoice_outstanding"], 5000)
+
+	def test_billing_modal_state_uses_session_totals_without_syncing_charges(self):
+		source = frappe._dict(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			status="Under Care",
+			patient="VP-001",
+			customer="CUST-001",
+			sales_invoice="SINV-DRAFT",
+		)
+		invoice_summary = {
+			"name": "SINV-DRAFT",
+			"docstatus": 0,
+			"is_draft": True,
+			"grand_total": 5000,
+			"paid_amount": 0,
+			"outstanding_amount": 5000,
+			"currency": "NGN",
+		}
+		session_summary = {
+			"name": "VBS-001",
+			"current_draft_invoice": "SINV-DRAFT",
+			"latest_invoice": "SINV-DRAFT",
+			"total_invoiced": 107399,
+			"total_paid": 25000,
+			"outstanding_amount": 77399,
+			"payment_status": "Partly Paid",
+			"payment_gate": {"gate": "Partial Payment Gate", "can_proceed": True, "message": "Session has partial payment and outstanding balance."},
+			"invoices": [
+				{"name": "SINV-OLD", "docstatus": 1, "grand_total": 102399, "paid_amount": 25000, "outstanding_amount": 77399},
+				{"name": "SINV-DRAFT", "docstatus": 0, "grand_total": 5000, "paid_amount": 0, "outstanding_amount": 5000},
+			],
+			"charges": [],
+			"invoice_ledger": {"currency": "NGN", "payment_status": "Partly Paid"},
+		}
+
+		with (
+			patch.object(billing_modal, "require_internal_user"),
+			patch.object(billing_modal.frappe, "get_doc", return_value=source),
+			patch.object(billing_modal, "assert_can_read_source"),
+			patch.object(billing_modal, "get_linked_invoice_name", return_value="SINV-DRAFT"),
+			patch.object(billing_modal, "get_invoice_summary", return_value=invoice_summary),
+			patch.object(billing_modal, "get_payment_modes", return_value=[]),
+			patch("vetedge.services.billing_core.resolve_billing_session", return_value=frappe._dict(name="VBS-001")),
+			patch("vetedge.services.billing_core.get_billing_session_summary", return_value=session_summary),
+			patch("vetedge.services.billing_core.sync_source_charge_payloads_to_billing_session", side_effect=AssertionError("summary must not sync charges")),
+			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+		):
+			state = billing_modal.get_billing_modal_state("Veterinary Hospitalisation", "VHOS-001")
+
+		self.assertEqual(state["billing_session_total"], 107399)
+		self.assertEqual(state["outstanding_amount"], 77399)
+		self.assertEqual(state["current_invoice_outstanding"], 5000)
+		self.assertEqual(state["payment_gate"]["message"], "Session has partial payment and outstanding balance.")
+
+	def test_billing_modal_js_renders_session_payment_summary(self):
+		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+
+		self.assertIn("Billing Session Total", js)
+		self.assertIn("state.outstanding_amount", js)
+		self.assertIn("currentInvoicePaymentBlock", js)
+		self.assertIn("Current Draft Invoice", js)
+
 	def test_billable_source_forms_open_shared_billing_modal(self):
 		for relative_path in (
 			"vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js",

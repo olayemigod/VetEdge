@@ -172,16 +172,35 @@
 			`
 			: `<div class="text-muted">${__("No invoice is linked yet.")}</div>`;
 
-		const paymentBlock = invoice
+		const paymentCurrency = state.currency || invoice?.currency;
+		const hasSession = Boolean(state.billing_session);
+		const paymentBlock = hasSession || invoice
 			? `
 				<div class="ve-billing-grid">
-					${labelValue(__("Payment Status"), invoice.payment_status)}
-					${labelValue(__("Paid Amount"), money(invoice.paid_amount, invoice.currency))}
-					${labelValue(__("Outstanding Amount"), money(invoice.outstanding_amount, invoice.currency))}
+					${labelValue(__("Payment Status"), state.payment_status || invoice?.payment_status)}
+					${labelValue(hasSession ? __("Billing Session Total") : __("Invoice Total"), money(state.total_amount ?? invoice?.grand_total, paymentCurrency))}
+					${labelValue(__("Paid Amount"), money(state.paid_amount ?? invoice?.paid_amount, paymentCurrency))}
+					${labelValue(__("Outstanding Amount"), money(state.outstanding_amount ?? invoice?.outstanding_amount, paymentCurrency))}
+					${hasSession ? labelValue(__("Linked Invoices"), state.linked_invoice_count || 0) : ""}
 				</div>
-				${actions.is_paid ? `<div class="alert alert-success" style="margin-top: 10px;">${__("Paid / No outstanding amount.")}</div>` : ""}
+				${state.outstanding_amount <= 0 && (hasSession || actions.is_paid) ? `<div class="alert alert-success" style="margin-top: 10px;">${__("Paid / No outstanding amount.")}</div>` : ""}
 			`
 			: `<div class="text-muted">${__("Create and submit an invoice before recording payment.")}</div>`;
+
+		const currentInvoicePaymentBlock = hasSession && invoice
+			? `
+				<div class="ve-billing-section">
+					<h4>${invoice.is_draft ? __("Current Draft Invoice") : __("Current / Latest Invoice")}</h4>
+					<div class="ve-billing-grid">
+						${labelValue(__("Invoice"), state.current_invoice_name || invoice.name)}
+						${labelValue(__("Status"), state.current_invoice_status || invoice.payment_status || invoice.status)}
+						${labelValue(__("Invoice Total"), money(state.current_invoice_total, paymentCurrency))}
+						${labelValue(__("Invoice Paid"), money(state.current_invoice_paid, paymentCurrency))}
+						${labelValue(__("Invoice Outstanding"), money(state.current_invoice_outstanding, paymentCurrency))}
+					</div>
+				</div>
+			`
+			: "";
 
 		const gateBlock = gate
 			? `
@@ -263,6 +282,7 @@
 				<h4>${__("Payment")}</h4>
 				${paymentBlock}
 			</div>
+			${currentInvoicePaymentBlock}
 			<div class="ve-billing-section">
 				<h4>${__("Payment Gate / Proceed Status")}</h4>
 				${gateBlock || `<div class="text-muted">${__("No consultation payment gate applies to this document.")}</div>`}
