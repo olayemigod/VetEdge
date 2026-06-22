@@ -43,27 +43,32 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertIn("VetEdge Front Desk", link.get("display_depends_on", ""))
 		self.assertIn("Branch Manager", link.get("display_depends_on", ""))
 
-	def test_hospitalisation_links_are_grouped_in_dedicated_section(self):
+	def test_hospitalisation_navigation_uses_dedicated_operational_sections(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
-		section_index = labels.index("Hospitalisation")
+		dashboards_index = labels.index("Dashboards")
+		hospitalisation_index = labels.index("Hospitalisation")
 		records_index = labels.index("Veterinary Records")
 		masters_index = labels.index("Veterinary Masters")
+		reports_index = labels.index("Reports")
+
+		self.assertGreater(labels.index("Veterinary Hospitalisation Dashboard"), dashboards_index)
+		self.assertLess(labels.index("Veterinary Hospitalisation Dashboard"), hospitalisation_index)
+		self.assertGreater(labels.index("Veterinary Hospitalisation"), hospitalisation_index)
+		self.assertLess(labels.index("Veterinary Hospitalisation"), records_index)
+		self.assertGreater(labels.index("Veterinary Care Location"), masters_index)
+		self.assertLess(labels.index("Veterinary Care Location"), labels.index("Veterinary Species"))
 
 		for label in (
-			"Veterinary Hospitalisation Dashboard",
-			"Veterinary Hospitalisation",
-			"Veterinary Care Location",
 			"Active Hospitalisations",
 			"Hospitalisation Charge Summary",
 			"Care Location Occupancy",
 			"Hospitalisation Discharge Watch",
 			"Pending Hospitalisation Actions",
 		):
-			self.assertGreater(labels.index(label), section_index)
-			self.assertLess(labels.index(label), records_index)
+			self.assertGreater(labels.index(label), reports_index)
+			self.assertLess(labels.index(label), labels.index("Consultation Register"))
 
-		self.assertLess(records_index, masters_index)
 		link = _links_by_label(items)["Veterinary Hospitalisation"]
 		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
 		self.assertEqual(link["link_type"], "DocType")
