@@ -19,6 +19,7 @@ frappe.ui.form.on("Veterinary Settings", {
 	refresh(frm) {
 		set_registration_billing_read_only(frm);
 		set_consultation_billing_read_only(frm);
+		set_coreedge_platform_visibility(frm);
 	},
 
 	enable_registration_billing(frm) {
@@ -29,6 +30,14 @@ frappe.ui.form.on("Veterinary Settings", {
 		set_consultation_billing_read_only(frm);
 	},
 });
+
+function set_coreedge_platform_visibility(frm) {
+	const is_available = frappe.boot && frappe.boot.is_coreedge_available;
+	frm.toggle_display("coreedge_platform_section", !!is_available);
+	frm.toggle_display("enable_coreedge_platform", !!is_available);
+	frm.toggle_display("coreedge_product_app", !!is_available);
+	frm.toggle_display("fail_closed_when_coreedge_missing", !!is_available);
+}
 
 function set_registration_billing_read_only(frm) {
 	const read_only = !frm.doc.enable_registration_billing;

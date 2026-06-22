@@ -103,6 +103,7 @@ get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website
 # before_install = "vetedge.install.before_install"
 after_install = "vetedge.install.after_install"
 after_migrate = "vetedge.install.after_migrate"
+boot_session = ["vetedge.coreedge_adapter.filter_bootinfo_for_coreedge_platform"]
 
 # Uninstallation
 # ------------

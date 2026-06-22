@@ -5,7 +5,6 @@ from urllib.parse import quote, urlencode
 import frappe
 from frappe.utils import cint, get_datetime, nowdate
 
-from vetedge.services.appointment_flow import emit_appointment_status_notification
 from vetedge.install.print_formats import OWNER_INVOICE_PRINT_FORMAT
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.portal_access import (
@@ -561,6 +560,8 @@ def get_owner_invoice_pdf_url(invoice_name: str) -> str:
 
 @frappe.whitelist()
 def request_owner_appointment_change(appointment: str, action: str, appointment_datetime: str | None = None) -> dict:
+	from vetedge.services.appointment_flow import emit_appointment_status_notification
+
 	owner_context = get_owner_context()
 	settings = get_portal_settings()
 	validate_owner_appointment_access(appointment, owner_context)

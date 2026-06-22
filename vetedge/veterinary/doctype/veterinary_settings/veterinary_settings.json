@@ -8,6 +8,10 @@
   "general_tab",
   "general_section",
   "enable_vetedge",
+  "coreedge_platform_section",
+  "enable_coreedge_platform",
+  "coreedge_product_app",
+  "fail_closed_when_coreedge_missing",
   "registration_billing_section",
   "enable_registration_billing",
   "default_registration_item",
@@ -151,6 +155,33 @@
    "fieldname": "enable_vetedge",
    "fieldtype": "Check",
    "label": "Enable VetEdge"
+  },
+  {
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "coreedge_platform_section",
+   "fieldtype": "Section Break",
+   "label": "CoreEdge Platform"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_coreedge_platform",
+   "fieldtype": "Check",
+   "label": "Enable CoreEdge Platform"
+  },
+  {
+   "default": "VetEdge",
+   "depends_on": "eval:doc.enable_coreedge_platform",
+   "fieldname": "coreedge_product_app",
+   "fieldtype": "Data",
+   "label": "CoreEdge Product App"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_coreedge_platform",
+   "fieldname": "fail_closed_when_coreedge_missing",
+   "fieldtype": "Check",
+   "label": "Require CoreEdge When Platform Is Enabled"
   },
   {
    "fieldname": "registration_billing_section",
