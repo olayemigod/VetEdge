@@ -1355,6 +1355,24 @@ function open_discharge_dialog(frm) {
 				freeze: true,
 				callback(result) {
 					const response = result.message || {};
+					if (response.blocked) {
+						const show_block = () => {
+							frappe.msgprint({
+								title: __("Discharge Blocked"),
+								message: frappe.utils.escape_html(response.message || __("Hospitalisation is not ready for discharge.")),
+								indicator: "orange",
+							});
+							if (response.open_stock_action) {
+								show_stock_posting_preview(frm);
+							}
+						};
+						if (response.reload_required) {
+							frm.reload_doc().then(show_block);
+						} else {
+							show_block();
+						}
+						return;
+					}
 					frappe.show_alert({ message: __("Hospitalisation discharged"), indicator: "green" });
 					if (response.readiness?.messages?.length) {
 						frappe.msgprint(response.readiness.messages.join("<br>"));

@@ -1555,7 +1555,7 @@ def get_pending_stock_activities(doc) -> list[dict]:
 	return [
 		{"activity": get_activity_source_name(row), "activity_type": row.get("activity_type"), "item": row.get("item"), "stock_status": row.get("stock_status")}
 		for row in doc.get("activities") or []
-		if cint(row.get("stock_affecting")) and row.get("stock_status") != "Posted" and not row.get("stock_entry")
+		if cint(row.get("stock_affecting")) and row.get("stock_status") not in {"Posted", "Not Applicable"} and not row.get("stock_entry")
 	]
 
 
@@ -1681,7 +1681,16 @@ def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str 
 
 	readiness = build_hospitalisation_discharge_readiness(doc, discharge_summary=summary)
 	if readiness.get("pending_stock_activities"):
-		frappe.throw("Stock usage must be posted before discharge. Use Stock → Post Stock Usage.", frappe.ValidationError)
+		return {
+			"blocked": True,
+			"reload_required": True,
+			"reason": "pending_stock_posting",
+			"message": "Stock usage must be posted before discharge. Use Stock → Post Stock Usage.",
+			"open_stock_action": True,
+			"hospitalisation": doc.name,
+			"status": doc.get("status"),
+			"readiness": readiness,
+		}
 	if not readiness.get("can_discharge") and not cint(force):
 		doc.discharge_billing_status = readiness.get("discharge_billing_status")
 		doc.discharge_message = " ".join(readiness.get("messages") or [])[:1000]

@@ -91,7 +91,7 @@ class TestHospitalisationDischarge(TestCase):
 			result = hospitalisation.get_hospitalisation_discharge_readiness("VHOS-001")
 		self.assertEqual(len(result["pending_stock_activities"]), 1)
 		self.assertIn("Post Stock Usage", result["recommended_actions"])
-		self.assertTrue(result["can_discharge"])
+		self.assertFalse(result["can_discharge"])
 
 	def test_discharge_blocks_cancelled_hospitalisation(self):
 		doc = hosp(status="Cancelled")
@@ -144,8 +144,27 @@ class TestHospitalisationDischarge(TestCase):
 		invoice.save.assert_not_called()
 		invoice.submit.assert_not_called()
 
+	def test_discharge_stock_gate_returns_structured_block_without_traceback(self):
+		doc = hosp(activities=[row(name="ACT-1", stock_affecting=1, stock_status="Pending", activity_type="Medication")])
+		with discharge_context(doc, billing_summary(), gate()):
+			with patch.object(hospitalisation, "post_hospitalisation_activity_stock", side_effect=AssertionError("stock posted")), patch.object(hospitalisation, "build_hospitalisation_charge_items", side_effect=AssertionError("charge sheet built")):
+				result = hospitalisation.discharge_hospitalisation("VHOS-001", "Done")
+		self.assertTrue(result["blocked"])
+		self.assertEqual(result["reason"], "pending_stock_posting")
+		self.assertTrue(result["open_stock_action"])
+		self.assertEqual(result["message"], "Stock usage must be posted before discharge. Use Stock → Post Stock Usage.")
+		self.assertEqual(doc.status, "Under Care")
+		doc.save.assert_not_called()
+
+	def test_discharge_after_stock_posting_can_proceed(self):
+		doc = hosp(activities=[row(name="ACT-1", stock_affecting=1, stock_status="Posted", stock_entry="STE-001", activity_type="Medication")])
+		with discharge_context(doc, billing_summary(), gate()):
+			result = hospitalisation.discharge_hospitalisation("VHOS-001", "Done")
+		self.assertEqual(result["status"], "Discharged")
+		self.assertEqual(doc.status, "Discharged")
+
 	def test_discharge_does_not_post_stock_or_build_charge_sheet(self):
-		doc = hosp(activities=[row(name="ACT-1", stock_affecting=1, stock_status="Pending")])
+		doc = hosp(activities=[row(name="ACT-1", stock_affecting=1, stock_status="Posted", stock_entry="STE-001")])
 		with discharge_context(doc, billing_summary(), gate()):
 			with patch.object(hospitalisation, "post_hospitalisation_activity_stock", side_effect=AssertionError("stock posted")), patch.object(hospitalisation, "build_hospitalisation_charge_items", side_effect=AssertionError("charge sheet built")):
 				hospitalisation.discharge_hospitalisation("VHOS-001", "Done")
