@@ -109,6 +109,53 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["updated_count"], 1)
 		self.assertEqual(len(invoice.get("items")), 1)
 
+	def test_removed_source_charge_is_removed_from_draft_invoice(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge])
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}", "qty": 1, "rate": 50, "amount": 50})])
+
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["removed_count"], 1)
+		self.assertEqual(invoice.get("items"), [])
+		invoice.save.assert_called_once()
+		self.assertEqual(session.total_charges, 0)
+
+	def test_draft_invoice_item_updates_when_charge_qty_and_rate_change(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 150), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "qty": 3, "rate": 50, "amount": 150, "invoice": "SINV-DRAFT", "billing_status": "Draft Invoiced"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge])
+		invoice_item = frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}", "qty": 1, "rate": 10, "amount": 10})
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[invoice_item])
+
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["updated_count"], 1)
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertEqual(invoice.get("items")[0].qty, 3)
+		self.assertEqual(invoice.get("items")[0].rate, 50)
+		self.assertEqual(invoice.get("items")[0].amount, 150)
+
+	def test_missing_source_payload_retires_draft_charge_but_keeps_submitted_charge(self):
+		draft_key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:DRAFT"
+		submitted_key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:SUBMITTED"
+		draft_charge = frappe._dict({**charge_payload(draft_key), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Draft Invoiced"})
+		submitted_charge = frappe._dict({**charge_payload(submitted_key), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"})
+		session = make_session(charges=[draft_charge, submitted_charge])
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[]),
+			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name in {"SINV-DRAFT", "SINV-SUB"}),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=lambda doctype, name, fieldname=None, **kwargs: 0 if name == "SINV-DRAFT" else 1),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Hospitalisation", "VHOS-001")
+
+		self.assertEqual(draft_charge.billing_status, "Cancelled")
+		self.assertEqual(submitted_charge.billing_status, "Submitted Invoiced")
+
 	def test_update_existing_draft_invoice_normalizes_due_date_and_disables_stock_update(self):
 		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[])
 		billing_core.add_or_update_session_charge(session, {**charge_payload("Veterinary Hospitalisation:VHOS-001:Hospitalisation:daily-1"), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001"})

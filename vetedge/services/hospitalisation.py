@@ -217,10 +217,13 @@ def resolve_hospitalisation_initial_billing_source(doc, gate: str) -> dict:
 
 
 def validate_hospitalisation(doc) -> None:
-	if doc.is_new():
+	is_new = getattr(doc, "is_new", None)
+	if callable(is_new) and is_new():
 		assert_hospitalisation_enabled()
 	sync_hospitalisation_title(doc)
 	validate_locked_hospitalisation_charge_items(doc)
+	reconcile_removed_hospitalisation_activity_charges(doc)
+	reconcile_removed_hospitalisation_charge_items(doc)
 	normalize_hospitalisation_activities(doc)
 	normalize_hospitalisation_charge_items(doc)
 
@@ -280,16 +283,92 @@ def validate_locked_hospitalisation_charge_items(doc) -> None:
 	if not old:
 		return
 	old_rows = {row.name: row for row in old.get("charge_items") or [] if row.get("name")}
+	current_names = {row.get("name") for row in doc.get("charge_items") or [] if row.get("name")}
 	financial_fields = ("item", "qty", "uom", "rate", "amount")
+	for old_row in old_rows.values():
+		if old_row.get("name") not in current_names and is_hospitalisation_charge_row_locked(old_row):
+			frappe.throw("This charge is already invoiced. Create an adjustment charge instead.", frappe.ValidationError)
 	for row in doc.get("charge_items") or []:
 		old_row = old_rows.get(row.get("name"))
-		if not old_row:
+		if not old_row or not is_hospitalisation_charge_row_locked(old_row):
 			continue
-		locked = old_row.get("billing_status") == "Invoiced" and old_row.get("sales_invoice") and is_sales_invoice_submitted_or_paid(old_row.get("sales_invoice"))
-		if not locked:
-			continue
+		if row.get("billing_status") == "Cancelled":
+			frappe.throw("This charge is already invoiced. Create an adjustment charge instead.", frappe.ValidationError)
 		if any(row.get(fieldname) != old_row.get(fieldname) for fieldname in financial_fields):
 			frappe.throw("This charge is already invoiced. Create an adjustment charge instead.", frappe.ValidationError)
+
+
+def is_hospitalisation_charge_row_locked(row) -> bool:
+	return row.get("billing_status") == "Invoiced" and row.get("sales_invoice") and is_sales_invoice_submitted_or_paid(row.get("sales_invoice"))
+
+
+def reconcile_removed_hospitalisation_activity_charges(doc) -> None:
+	active_activity_keys = set()
+	current_activities_by_key = {}
+	for activity in doc.get("activities") or []:
+		keys = set(get_activity_charge_lookup_keys(doc.name, activity))
+		for key in keys:
+			current_activities_by_key[key] = activity
+		if cint(activity.get("billable")) and activity.get("item") and activity.get("billing_status") not in {"Cancelled"}:
+			active_activity_keys.update(keys)
+
+	for charge in doc.get("charge_items") or []:
+		if not is_activity_backed_hospitalisation_charge(charge):
+			continue
+		charge_keys = set(get_charge_item_identity_keys(charge))
+		if not charge_keys:
+			continue
+		if charge.get("billing_status") == "Cancelled":
+			continue
+		if charge_keys.intersection(active_activity_keys):
+			continue
+		if is_hospitalisation_charge_row_locked(charge):
+			frappe.throw("This activity has already been invoiced. Cancel the invoice or create an adjustment before removing it.", frappe.ValidationError)
+		charge.billing_status = "Cancelled"
+		for key in charge_keys:
+			activity = current_activities_by_key.get(key)
+			if activity:
+				activity.billing_status = "Not Billable" if not cint(activity.get("billable")) else "Cancelled"
+
+
+def reconcile_removed_hospitalisation_charge_items(doc) -> None:
+	if not getattr(doc, "get_doc_before_save", None):
+		return
+	old = doc.get_doc_before_save()
+	if not old:
+		return
+	current_names = {row.get("name") for row in doc.get("charge_items") or [] if row.get("name")}
+	current_charge_keys = set()
+	for row in doc.get("charge_items") or []:
+		current_charge_keys.update(get_charge_item_identity_keys(row))
+	for old_row in old.get("charge_items") or []:
+		if old_row.get("name") and old_row.get("name") in current_names:
+			continue
+		if set(get_charge_item_identity_keys(old_row)).intersection(current_charge_keys):
+			continue
+		if is_hospitalisation_charge_row_locked(old_row):
+			frappe.throw("This charge is already invoiced. Create an adjustment charge instead.", frappe.ValidationError)
+		mark_matching_activity_charge_cancelled(doc, old_row)
+
+
+def mark_matching_activity_charge_cancelled(doc, charge) -> None:
+	charge_keys = set(get_charge_item_identity_keys(charge))
+	if not charge_keys:
+		return
+	for activity in doc.get("activities") or []:
+		if charge_keys.intersection(get_activity_charge_lookup_keys(doc.name, activity)):
+			activity.billing_status = "Cancelled"
+			return
+
+
+def is_activity_backed_hospitalisation_charge(charge) -> bool:
+	category = charge.get("charge_category")
+	if category:
+		return category == "Activity"
+	for key in get_charge_item_identity_keys(charge):
+		if str(key).startswith(("admission-fee::", "daily-stay::")):
+			return False
+	return bool(charge.get("activity_type") or charge.get("source_activity"))
 
 
 def generate_hospitalisation_activity_reference() -> str:
@@ -576,6 +655,8 @@ def build_charge_item_row(doc, activity, source_activity: str, source_hash: str)
 		"pricing_source": pricing.get("pricing_source"),
 		"billing_status": "Pending Invoice",
 		"source_hash": source_hash,
+		"source_key": source_hash,
+		"charge_category": "Activity",
 		"notes": activity.get("clinical_notes"),
 	}
 

@@ -78,7 +78,7 @@ class TestVeterinaryHospitalisationStructure(TestCase):
 		self.assertFalse(fields["care_location_type"].get("reqd"))
 		self.assertFalse(fields["care_location"].get("reqd"))
 		self.assertEqual(fields["care_location_type"]["default"], "Not Assigned")
-		self.assertEqual(fields["care_location"]["options"], "Kennel")
+		self.assertEqual(fields["care_location"]["options"], "Veterinary Care Location")
 
 	def test_required_fields_work(self):
 		fields = fields_by_name(load_json(HOSPITALISATION_JSON))

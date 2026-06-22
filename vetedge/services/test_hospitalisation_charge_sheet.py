@@ -139,6 +139,57 @@ class TestHospitalisationChargeSheet(TestCase):
 		self.assertEqual(hosp.charge_items[0].rate, 99)
 		self.assertEqual(hosp.charge_items[0].amount, 297)
 
+	def test_activity_made_non_billable_cancels_pending_charge(self):
+		old_charge = make_charge("VHOS-001:ACT-1")
+		old_charge.name = "CHG-1"
+		old_doc = hospitalisation_doc(activities=[activity(name="ACT-1")], charge_items=[old_charge])
+		new_charge = make_charge("VHOS-001:ACT-1")
+		new_charge.name = "CHG-1"
+		new_doc = hospitalisation_doc(activities=[activity(name="ACT-1", billable=0, billing_status="Pending Charge")], charge_items=[new_charge])
+		new_doc.get_doc_before_save = Mock(return_value=old_doc)
+
+		with charge_context(new_doc):
+			hospitalisation.validate_hospitalisation(new_doc)
+
+		self.assertEqual(new_doc.charge_items[0].billing_status, "Cancelled")
+		self.assertEqual(new_doc.activities[0].billing_status, "Not Billable")
+
+	def test_removed_pending_charge_marks_activity_cancelled(self):
+		old_charge = make_charge("VHOS-001:ACT-1")
+		old_charge.name = "CHG-1"
+		old_doc = hospitalisation_doc(activities=[activity(name="ACT-1")], charge_items=[old_charge])
+		new_doc = hospitalisation_doc(activities=[activity(name="ACT-1")], charge_items=[])
+		new_doc.get_doc_before_save = Mock(return_value=old_doc)
+
+		with charge_context(new_doc):
+			hospitalisation.validate_hospitalisation(new_doc)
+
+		self.assertEqual(new_doc.activities[0].billing_status, "Cancelled")
+
+	def test_submitted_charge_cannot_be_removed(self):
+		old_charge = make_charge("VHOS-001:ACT-1")
+		old_charge.name = "CHG-1"
+		old_charge.billing_status = "Invoiced"
+		old_charge.sales_invoice = "SINV-SUB"
+		old_doc = hospitalisation_doc(activities=[activity(name="ACT-1")], charge_items=[old_charge])
+		new_doc = hospitalisation_doc(activities=[activity(name="ACT-1")], charge_items=[])
+		new_doc.get_doc_before_save = Mock(return_value=old_doc)
+
+		with charge_context(new_doc):
+			with self.assertRaises(frappe.ValidationError):
+				hospitalisation.validate_hospitalisation(new_doc)
+
+	def test_submitted_activity_charge_cannot_be_made_non_billable(self):
+		charge = make_charge("VHOS-001:ACT-1")
+		charge.name = "CHG-1"
+		charge.billing_status = "Invoiced"
+		charge.sales_invoice = "SINV-SUB"
+		doc = hospitalisation_doc(activities=[activity(name="ACT-1", billable=0, billing_status="Pending Charge")], charge_items=[charge])
+
+		with charge_context(doc):
+			with self.assertRaises(frappe.ValidationError):
+				hospitalisation.validate_hospitalisation(doc)
+
 	def test_missing_price_blocks_invoice_sync(self):
 		charge = make_charge("VHOS-001:ACT-1")
 		charge.rate = 0
@@ -376,6 +427,10 @@ class charge_context:
 				return "Nos"
 			if doctype == "Item" and fieldname == "standard_rate":
 				return 10
+			if doctype == "Sales Invoice" and fieldname == "docstatus":
+				return 1 if name == "SINV-SUB" else 0
+			if doctype == "Sales Invoice" and isinstance(fieldname, (list, tuple)):
+				return {"docstatus": 1 if name == "SINV-SUB" else 0, "status": "Unpaid", "outstanding_amount": 100}
 			return None
 
 		def get_doc(doctype, name=None):

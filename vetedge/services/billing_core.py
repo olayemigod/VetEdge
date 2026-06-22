@@ -285,11 +285,16 @@ def sync_session_charges_to_invoice(session):
 	session = ensure_session_doc(session)
 	reconcile_session_charge_statuses(session)
 	active_draft = _get_active_draft_invoice(session)
+	removed_count = remove_retired_charge_items_from_draft_invoice(session, active_draft)
 	pending = _get_pending_charges_for_invoice(session, active_draft)
 	if not pending:
+		if active_draft and removed_count:
+			_prepare_sales_invoice_totals(active_draft)
+			normalize_billing_session_invoice_dates(active_draft)
+			run_with_billing_core_sync_flag(active_draft.save)
 		refresh_billing_session_totals(session)
 		session.save()
-		return {"session": session.name, "invoice": active_draft.name if active_draft else None, "created": False, "added_count": 0, "updated_count": 0}
+		return {"session": session.name, "invoice": active_draft.name if active_draft else None, "created": False, "added_count": 0, "updated_count": 0, "removed_count": removed_count}
 
 	invoice, created = create_or_update_draft_invoice_for_session(session, pending)
 	if not invoice:
@@ -317,7 +322,7 @@ def sync_session_charges_to_invoice(session):
 	normalize_billing_session_invoice_dates(invoice)
 	run_with_billing_core_sync_flag(invoice.save)
 	session = update_session_after_invoice_sync(session.name, invoice.name, [row.get("charge_key") for row in pending])
-	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated}
+	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated, "removed_count": removed_count}
 
 
 def create_or_update_draft_invoice_for_session(session, pending_charges=None):
@@ -380,6 +385,8 @@ def _get_pending_charges_for_invoice(session, draft_invoice=None):
 	draft_invoice_name = draft_invoice.name if draft_invoice else None
 	pending = []
 	for row in session.get("charges") or []:
+		if row.get("billing_status") in {"Cancelled", "Skipped"}:
+			continue
 		invoice_name = row.get("invoice")
 		if not invoice_name:
 			if row.get("billing_status") not in FINAL_INVOICE_STATUSES:
@@ -640,8 +647,10 @@ def sync_source_charge_payloads_to_billing_session(source_doctype: str, source_n
 
 def sync_single_source_to_billing_session(session, source_doctype: str, source_name: str):
 	session = ensure_session_doc(session)
-	for payload in get_source_charge_payloads(source_doctype, source_name, session):
+	payloads = get_source_charge_payloads(source_doctype, source_name, session)
+	for payload in payloads:
 		add_or_update_session_charge(session, payload)
+	retire_missing_source_charges(session, source_doctype, source_name, payloads)
 	session.save()
 	return session
 
@@ -650,10 +659,52 @@ def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=
 	session = ensure_session_doc(session)
 	for source_doctype, source_name in find_related_billable_sources_for_session(session, trigger_source_doctype, trigger_source_name):
 		if source_doctype and source_name:
-			for payload in get_source_charge_payloads(source_doctype, source_name, session):
+			payloads = get_source_charge_payloads(source_doctype, source_name, session)
+			for payload in payloads:
 				add_or_update_session_charge(session, payload)
+			retire_missing_source_charges(session, source_doctype, source_name, payloads)
 	session.save()
 	return session
+
+
+def retire_missing_source_charges(session, source_doctype: str, source_name: str, active_payloads: list[dict]) -> int:
+	active_keys = {payload.get("charge_key") or build_charge_key(payload) for payload in active_payloads}
+	retired = 0
+	for row in session.get("charges") or []:
+		if row.get("source_doctype") != source_doctype or row.get("source_name") != source_name:
+			continue
+		if row.get("charge_key") in active_keys:
+			continue
+		if is_charge_already_submitted(row) or row.get("billing_status") in {"Submitted Invoiced", "Paid"}:
+			continue
+		if row.get("billing_status") != "Cancelled":
+			row.billing_status = "Cancelled"
+			retired += 1
+	return retired
+
+
+def remove_retired_charge_items_from_draft_invoice(session, invoice) -> int:
+	if not invoice or cint(invoice.get("docstatus")) != 0:
+		return 0
+	retired_keys = {
+		row.get("charge_key")
+		for row in session.get("charges") or []
+		if row.get("invoice") == invoice.name and row.get("billing_status") in {"Cancelled", "Skipped"}
+	}
+	if not retired_keys:
+		return 0
+	kept = []
+	removed = 0
+	for row in invoice.get("items") or []:
+		if extract_charge_key_from_invoice_item(row) in retired_keys:
+			removed += 1
+			continue
+		kept.append(row)
+	invoice.items = kept
+	for row in session.get("charges") or []:
+		if row.get("charge_key") in retired_keys:
+			row.invoice_item_name = None
+	return removed
 
 
 
@@ -1672,6 +1723,8 @@ def extract_charge_key_from_invoice_item(row) -> str | None:
 
 def reconcile_session_charge_statuses(session) -> None:
 	for row in session.get("charges") or []:
+		if row.get("billing_status") in {"Cancelled", "Skipped"}:
+			continue
 		if not row.get("invoice") or not frappe.db.exists("Sales Invoice", row.invoice):
 			if row.get("billing_status") != "Skipped":
 				row.billing_status = "Pending"

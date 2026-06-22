@@ -215,6 +215,42 @@ function set_activity_help(frm) {
 	);
 }
 
+function recalculate_charge_item_amount(frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row) {
+		return;
+	}
+	frappe.model.set_value(cdt, cdn, "amount", flt(row.qty || 1) * flt(row.rate || 0));
+}
+
+function mark_charge_item_invoice_sync_needed(frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || row.billing_status !== "Invoiced") {
+		return;
+	}
+	frappe.show_alert({
+		message: __("Update Draft Invoice to refresh billing. Submitted or paid invoice charges cannot be changed."),
+		indicator: "orange",
+	});
+}
+
+frappe.ui.form.on("Veterinary Hospitalisation Charge Item", {
+	item(frm, cdt, cdn) {
+		mark_charge_item_invoice_sync_needed(frm, cdt, cdn);
+	},
+	qty(frm, cdt, cdn) {
+		recalculate_charge_item_amount(frm, cdt, cdn);
+		mark_charge_item_invoice_sync_needed(frm, cdt, cdn);
+	},
+	uom(frm, cdt, cdn) {
+		mark_charge_item_invoice_sync_needed(frm, cdt, cdn);
+	},
+	rate(frm, cdt, cdn) {
+		recalculate_charge_item_amount(frm, cdt, cdn);
+		mark_charge_item_invoice_sync_needed(frm, cdt, cdn);
+	},
+});
+
 frappe.ui.form.on("Veterinary Hospitalisation Activity", {
 	billable(frm, cdt, cdn) {
 		set_activity_row_status_defaults(cdt, cdn);
