@@ -156,6 +156,56 @@ class TestBillingCore(TestCase):
 		self.assertNotEqual(session.latest_invoice, "SINV-SUB")
 		self.assertIsNone(charge.invoice)
 		self.assertIsNone(charge.invoice_item_name)
+
+	def test_empty_draft_invoice_removal_detaches_consultation_links_before_delete(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge])
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}"})])
+		source_links = [
+			frappe._dict({"doctype": "Veterinary Consultation", "name": "VCON-001", "field": "linked_invoice", "value": "SINV-DRAFT", "payment_status": "Unpaid"}),
+			frappe._dict({"doctype": "Consultation Invoice Reference", "name": "CIR-001", "field": "sales_invoice", "value": "SINV-DRAFT", "parent": "VCON-001", "parenttype": "Veterinary Consultation", "parentfield": "consultation_invoices"}),
+		]
+
+		with billing_core_context(session, invoice, source_links=source_links) as ctx:
+			result = billing_core.sync_session_charges_to_invoice(session, confirm=True, confirmation_type="remove_empty_draft_invoice")
+
+		self.assertTrue(result["removed_empty_invoice"])
+		self.assertEqual(ctx.deleted_docs, [("Sales Invoice", "SINV-DRAFT")])
+		self.assertIsNone(source_links[0].value)
+		self.assertEqual(source_links[0].payment_status, "Not Billed")
+		self.assertEqual(source_links[1].get("deleted"), True)
+
+	def test_submitted_unpaid_invoice_cancellation_detaches_consultation_link_before_cancel(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-SUB", "billing_status": "Cancelled"})
+		session = make_session(latest_invoice="SINV-SUB", charges=[charge])
+		invoice = make_invoice("SINV-SUB", docstatus=1, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}"})], outstanding_amount=100)
+		invoice.cancel = Mock(side_effect=lambda: (_ for _ in ()).throw(frappe.LinkExistsError("Sales Invoice is still linked from Consultation")) if any(link.get("value") == "SINV-SUB" and not link.get("deleted") for link in source_links) else None)
+		source_links = [frappe._dict({"doctype": "Veterinary Consultation", "name": "VCON-001", "field": "linked_invoice", "value": "SINV-SUB", "payment_status": "Unpaid"})]
+
+		with billing_core_context(session, invoice, paid_amount=0, source_links=source_links):
+			result = billing_core.sync_session_charges_to_invoice(session, confirm=True, confirmation_type="cancel_unpaid_invoice")
+
+		self.assertTrue(result["cancelled_invoice"])
+		invoice.cancel.assert_called_once()
+		self.assertIsNone(source_links[0].value)
+		self.assertEqual(source_links[0].payment_status, "Not Billed")
+
+	def test_paid_invoice_cleanup_does_not_detach_consultation_link(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-PAID", "billing_status": "Cancelled"})
+		session = make_session(latest_invoice="SINV-PAID", charges=[charge])
+		invoice = make_invoice("SINV-PAID", docstatus=1, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}"})], outstanding_amount=0)
+		source_links = [frappe._dict({"doctype": "Veterinary Consultation", "name": "VCON-001", "field": "linked_invoice", "value": "SINV-PAID", "payment_status": "Paid"})]
+
+		with billing_core_context(session, invoice, paid_amount=100, source_links=source_links):
+			result = billing_core.sync_session_charges_to_invoice(session, confirm=True, confirmation_type="cancel_unpaid_invoice")
+
+		self.assertTrue(result["blocked"])
+		self.assertEqual(result["reason"], "paid_invoice_requires_credit_note")
+		self.assertEqual(source_links[0].value, "SINV-PAID")
+		self.assertEqual(source_links[0].payment_status, "Paid")
 	def test_paid_invoice_retired_charge_is_blocked_for_credit_note(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
 		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-PAID", "billing_status": "Cancelled"})
@@ -1427,14 +1477,14 @@ class multi_invoice_billing_context:
 		for patcher in reversed(self.patches):
 			patcher.stop()
 
-
 class billing_core_context:
-	def __init__(self, session, linked_invoice, created_invoice=None, paid_amount=0):
+	def __init__(self, session, linked_invoice, created_invoice=None, paid_amount=0, source_links=None):
 		self.deleted_docs = []
 		self.session = session
 		self.linked_invoice = linked_invoice
 		self.created_invoice = created_invoice or make_invoice("SINV-NEW")
 		self.paid_amount = paid_amount
+		self.source_links = source_links or []
 		self.patches = []
 
 	def __enter__(self):
@@ -1464,20 +1514,62 @@ class billing_core_context:
 				return self.created_invoice.docstatus
 			return None
 
+		def get_all(doctype, filters=None, fields=None, **kwargs):
+			filters = filters or {}
+			rows = []
+			for link in self.source_links:
+				if link.get("deleted") or link.get("doctype") != doctype:
+					continue
+				if any(link.get("field") == field and link.get("value") != value for field, value in filters.items()):
+					continue
+				row = frappe._dict({"name": link.name})
+				for field in fields or []:
+					if field != "name":
+						row[field] = link.get(field)
+				rows.append(row)
+			return rows
+
+		def set_value(doctype, name, fieldname, value=None, **kwargs):
+			values = fieldname if isinstance(fieldname, dict) else {fieldname: value}
+			for link in self.source_links:
+				if link.get("doctype") == doctype and link.get("name") == name:
+					for key, val in values.items():
+						if key == link.get("field"):
+							link.value = val
+						else:
+							link[key] = val
+
 		def delete_doc(doctype, name):
-			if self.session.get("current_draft_invoice") == name or self.session.get("latest_invoice") == name:
-				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session pointers")
-			if any(row.get("invoice") == name for row in self.session.get("charges") or []):
-				raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session charges")
-			self.deleted_docs.append((doctype, name))
+			if doctype == "Sales Invoice":
+				if self.session.get("current_draft_invoice") == name or self.session.get("latest_invoice") == name:
+					raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session pointers")
+				if any(row.get("invoice") == name for row in self.session.get("charges") or []):
+					raise frappe.LinkExistsError(f"{doctype} {name} is still linked from Billing Session charges")
+				if any(link.get("value") == name and not link.get("deleted") for link in self.source_links):
+					raise frappe.LinkExistsError(f"{doctype} {name} is still linked from VetEdge source")
+				self.deleted_docs.append((doctype, name))
+				return
+			for link in self.source_links:
+				if link.get("doctype") == doctype and link.get("name") == name:
+					link.deleted = True
+
+		def get_meta(doctype):
+			fields = {
+				"Veterinary Consultation": {"linked_invoice", "payment_status"},
+				"Consultation Invoice Reference": {"sales_invoice", "parent", "parenttype", "parentfield"},
+				"Consultation Billing Source": {"sales_invoice"},
+				"Veterinary Hospitalisation": {"sales_invoice", "invoice_status"},
+				"Veterinary Hospitalisation Charge Item": {"sales_invoice", "sales_invoice_item", "parent", "parenttype", "parentfield"},
+			}
+			return SimpleNamespace(has_field=lambda fieldname: fieldname in fields.get(doctype, set()))
 
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(exists=exists, get_value=get_value),
+			db=SimpleNamespace(exists=exists, get_value=get_value, set_value=set_value),
 			get_doc=get_doc,
 			delete_doc=delete_doc,
-			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_meta=get_meta,
 			get_single=lambda doctype: frappe._dict(enable_billing_sessions=1),
-			get_all=Mock(return_value=[]),
+			get_all=get_all,
 			_dict=frappe._dict,
 			ValidationError=frappe.ValidationError,
 			throw=Mock(side_effect=frappe.ValidationError),

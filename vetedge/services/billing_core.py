@@ -37,6 +37,23 @@ SUPPORTED_BILLING_SOURCE_DOCTYPES = {
 	"Pet Grooming Session",
 	"Pet Boarding Booking",
 }
+SAFE_SOURCE_INVOICE_LINK_FIELDS = {
+	"Veterinary Consultation": {"field": "linked_invoice", "status_field": "payment_status", "empty_status": "Not Billed"},
+	"Veterinary Lab Order": {"field": "linked_invoice"},
+	"Veterinary Vaccination Record": {"field": "linked_invoice"},
+	"Veterinary Hospitalisation": {"field": "sales_invoice", "status_field": "invoice_status", "empty_status": "Not Invoiced"},
+	"Veterinary Patient": {"field": "registration_invoice", "extra_values": {"registration_billed": 0}},
+	"Pet Grooming Session": {"field": "linked_invoice"},
+	"Pet Grooming Appointment": {"field": "linked_invoice"},
+	"Pet Boarding Booking": {"field": "linked_invoice"},
+	"Veterinary Guest Booking Request": {"field": "registration_invoice"},
+}
+SAFE_SOURCE_INVOICE_CHILD_LINK_FIELDS = {
+	"Consultation Invoice Reference": {"field": "sales_invoice", "action": "delete"},
+	"Consultation Billing Source": {"field": "sales_invoice", "action": "clear"},
+	"Boarding Invoice Reference": {"field": "sales_invoice", "action": "delete"},
+	"Veterinary Hospitalisation Charge Item": {"field": "sales_invoice", "action": "clear", "extra_values": {"sales_invoice_item": None}},
+}
 
 
 def is_billing_sessions_enabled() -> bool:
@@ -734,6 +751,7 @@ def remove_empty_draft_invoice_for_session(session, invoice, removed_count: int 
 		frappe.throw("Draft Sales Invoice still has items and cannot be removed as empty.", frappe.ValidationError)
 	invoice_name = invoice.name
 	session = detach_invoice_from_billing_session(session, invoice_name, reason="empty_draft_invoice")
+	detach_invoice_from_vetedge_sources(invoice_name, reason="empty_draft_invoice", session=session)
 	run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))
 	refresh_billing_session_totals(session)
 	session.save()
@@ -765,6 +783,65 @@ def detach_invoice_from_billing_session(session, invoice_name: str, *, reason: s
 				row.notes = "; ".join(part for part in [row.get("notes"), f"Detached invoice: {reason}"] if part)
 	session.save()
 	return session
+
+
+def detach_invoice_from_vetedge_sources(invoice_name: str, *, reason: str | None = None, session=None) -> list[dict]:
+	"""Clear cleanup-safe VetEdge source links before Sales Invoice delete/cancel."""
+	detached: list[dict] = []
+	for doctype, config in SAFE_SOURCE_INVOICE_LINK_FIELDS.items():
+		if not safe_doctype_exists(doctype):
+			continue
+		fieldname = config.get("field")
+		if not fieldname or not safe_meta_has_field(doctype, fieldname):
+			continue
+		for row in frappe.get_all(doctype, filters={fieldname: invoice_name}, fields=["name"]):
+			values = {fieldname: None}
+			status_field = config.get("status_field")
+			if status_field and safe_meta_has_field(doctype, status_field):
+				values[status_field] = config.get("empty_status")
+			for key, value in (config.get("extra_values") or {}).items():
+				if safe_meta_has_field(doctype, key):
+					values[key] = value
+			frappe.db.set_value(doctype, row.name, values, update_modified=False)
+			detached.append({"doctype": doctype, "name": row.name, "field": fieldname})
+
+	for child_doctype, config in SAFE_SOURCE_INVOICE_CHILD_LINK_FIELDS.items():
+		if not safe_doctype_exists(child_doctype):
+			continue
+		fieldname = config.get("field")
+		if not fieldname or not safe_meta_has_field(child_doctype, fieldname):
+			continue
+		fields = ["name"]
+		meta = frappe.get_meta(child_doctype)
+		for child_field in ("parent", "parenttype", "parentfield"):
+			if meta.has_field(child_field):
+				fields.append(child_field)
+		for row in frappe.get_all(child_doctype, filters={fieldname: invoice_name}, fields=fields):
+			if config.get("action") == "delete":
+				run_with_billing_core_sync_flag(lambda row_name=row.name, doctype=child_doctype: frappe.delete_doc(doctype, row_name))
+			else:
+				values = {fieldname: None}
+				for key, value in (config.get("extra_values") or {}).items():
+					if safe_meta_has_field(child_doctype, key):
+						values[key] = value
+				frappe.db.set_value(child_doctype, row.name, values, update_modified=False)
+			detached.append({"doctype": child_doctype, "name": row.name, "field": fieldname})
+	return detached
+
+
+def safe_doctype_exists(doctype: str) -> bool:
+	try:
+		return bool(frappe.db.exists("DocType", doctype))
+	except Exception:
+		return False
+
+
+def safe_meta_has_field(doctype: str, fieldname: str) -> bool:
+	try:
+		meta = frappe.get_meta(doctype)
+		return bool(meta.has_field(fieldname) or fieldname in {"name", "parent", "parenttype", "parentfield"})
+	except Exception:
+		return False
 
 
 def get_latest_existing_session_invoice_name(session, exclude: str | None = None) -> str | None:
@@ -820,6 +897,7 @@ def get_retired_submitted_invoice_action(session, confirm: bool = False, confirm
 				"reload_required": True,
 			}
 		session = detach_invoice_from_billing_session(session, invoice_name, reason="cancel_unpaid_invoice")
+		detach_invoice_from_vetedge_sources(invoice_name, reason="cancel_unpaid_invoice", session=session)
 		run_with_billing_core_sync_flag(invoice.cancel)
 		for row in retired_by_invoice[invoice_name]:
 			row.billing_status = "Cancelled"
