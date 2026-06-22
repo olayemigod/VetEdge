@@ -118,6 +118,28 @@ def has_real_hospitalisation_charge_or_invoice(doc) -> bool:
 	return False
 
 
+def has_existing_billing_session_for_hospitalisation_context(doc) -> bool:
+	customer = doc.get("customer")
+	patient = doc.get("patient") or doc.get("animal")
+	if not customer or not patient:
+		return False
+	try:
+		meta = frappe.get_meta("Veterinary Billing Session")
+		filters = {"status": ("in", ["Active", "Partially Paid", "Paid"])}
+		if meta.has_field("customer"):
+			filters["customer"] = customer
+		if meta.has_field("animal"):
+			filters["animal"] = patient
+		elif meta.has_field("patient"):
+			filters["patient"] = patient
+		else:
+			return False
+		rows = frappe.get_all("Veterinary Billing Session", filters=filters, fields=["name"], limit=1)
+	except Exception:
+		return False
+	return bool(rows)
+
+
 def ensure_hospitalisation_admission_fee_charge(doc, settings) -> dict:
 	item = settings.get("admission_fee_item")
 	if not item:
@@ -178,7 +200,11 @@ def resolve_hospitalisation_initial_billing_source(doc, gate: str) -> dict:
 			return blocked_admission_response(doc, "Hospitalisation Initial Billing Source cannot be None when Full or Partial payment gate is enabled.")
 		return {"created_or_resolved": False}
 	if source == HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION:
-		return {"created_or_resolved": bool(doc.get("linked_consultation"))}
+		if doc.get("linked_consultation") or has_existing_billing_session_for_hospitalisation_context(doc):
+			return {"created_or_resolved": True}
+		if gate != NO_PAYMENT_GATE:
+			return blocked_admission_response(doc, "Link a Consultation before admission or choose another Hospitalisation Initial Billing Source.")
+		return {"created_or_resolved": False}
 	if source == HOSPITALISATION_INITIAL_SOURCE_ADMISSION_FEE:
 		return ensure_hospitalisation_admission_fee_charge(doc, settings)
 	if source == HOSPITALISATION_INITIAL_SOURCE_DAY_ONE:

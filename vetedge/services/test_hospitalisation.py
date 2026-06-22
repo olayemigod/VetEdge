@@ -296,7 +296,9 @@ class TestHospitalisationActions(TestCase):
 			name="VHOS-001",
 			status="Draft",
 			customer="CUST-001",
+			patient="VP-001",
 			company="Company A",
+			linked_consultation="VCON-001",
 			sales_invoice=None,
 		)
 		draft_invoice = invoice(docstatus=0, outstanding_amount=1000)
@@ -329,8 +331,35 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(hosp.payment_gate_status, "Blocked")
 		self.assertEqual(hosp.sales_invoice, "SINV-001")
 
+	def test_linked_consultation_billing_source_blocks_without_link_or_session(self):
+		hosp = doc(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			status="Draft",
+			customer="CUST-001",
+			patient="VP-001",
+			linked_consultation=None,
+			sales_invoice=None,
+		)
+		frappe_stub = make_frappe_stub(
+			get_doc=lambda doctype, name=None: hosp,
+			get_all=Mock(return_value=[]),
+			settings_doc=settings(requires_consultation=0, allow_direct_admission=1),
+		)
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch("vetedge.services.billing_core.sync_source_to_billing_session") as sync,
+		):
+			result = hospitalisation.admit_hospitalisation("VHOS-001")
+
+		sync.assert_not_called()
+		self.assertTrue(result["blocked"])
+		self.assertIn("Link a Consultation", result["message"])
+		self.assertEqual(hosp.status, "Draft")
+
 	def test_admit_uses_billing_core_and_allows_when_gate_passes(self):
-		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation="VCON-001", sales_invoice=None)
 		paid_invoice = invoice(docstatus=1, outstanding_amount=0)
 		session = billing_session(status="Paid")
 
@@ -361,10 +390,10 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(hosp.payment_gate_status, "Allowed")
 
 	def test_admit_refetches_after_billing_core_updates_hospitalisation(self):
-		stale_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		stale_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation="VCON-001", sales_invoice=None)
 		stale_hosp.save = Mock(side_effect=AssertionError("stale hospitalisation document saved"))
-		gate_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
-		admit_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice="SINV-001")
+		gate_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation="VCON-001", sales_invoice=None)
+		admit_hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation="VCON-001", sales_invoice="SINV-001")
 		paid_invoice = invoice(docstatus=1, outstanding_amount=0)
 		session = billing_session(status="Paid")
 		hospitalisation_docs = [stale_hosp, gate_hosp, admit_hosp]
@@ -405,7 +434,7 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(admit_hosp.admitted_by, "vet@example.com")
 
 	def test_admit_no_payment_gate_allows_after_billing_core_invoice_generation(self):
-		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", sales_invoice=None)
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation="VCON-001", sales_invoice=None)
 		draft_invoice = invoice(docstatus=0, outstanding_amount=1000)
 		session = billing_session(payment_gate_mode="No Payment Gate")
 
