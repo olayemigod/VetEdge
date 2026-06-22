@@ -109,19 +109,67 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["updated_count"], 1)
 		self.assertEqual(len(invoice.get("items")), 1)
 
-	def test_removed_source_charge_is_removed_from_draft_invoice(self):
+	def test_empty_draft_invoice_removal_requires_confirmation(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
 		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
 		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge])
 		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}", "qty": 1, "rate": 50, "amount": 50})])
 
+		with billing_core_context(session, invoice) as ctx:
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertTrue(result["requires_confirmation"])
+		self.assertEqual(result["confirmation_type"], "remove_empty_draft_invoice")
+		self.assertEqual(invoice.get("items"), [])
+		invoice.save.assert_not_called()
+		self.assertEqual(ctx.deleted_docs, [])
+
+	def test_confirmed_empty_draft_invoice_removal_clears_session_pointer(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge])
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}", "qty": 1, "rate": 50, "amount": 50})])
+
+		with billing_core_context(session, invoice) as ctx:
+			result = billing_core.sync_session_charges_to_invoice(session, confirm=True, confirmation_type="remove_empty_draft_invoice")
+
+		self.assertTrue(result["removed_empty_invoice"])
+		self.assertEqual(ctx.deleted_docs, [("Sales Invoice", "SINV-DRAFT")])
+		self.assertIsNone(session.current_draft_invoice)
+		self.assertIsNone(session.latest_invoice)
+		self.assertIsNone(charge.invoice)
+
+	def test_paid_invoice_retired_charge_is_blocked_for_credit_note(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-PAID", "billing_status": "Cancelled"})
+		session = make_session(latest_invoice="SINV-PAID", charges=[charge])
+		invoice = make_invoice("SINV-PAID", docstatus=1, items=[frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}"})], outstanding_amount=0)
+
+		with billing_core_context(session, invoice, paid_amount=50):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertTrue(result["blocked"])
+		self.assertEqual(result["reason"], "paid_invoice_requires_credit_note")
+		self.assertEqual(invoice.get("items")[0].description, f"Medication\nVetEdge billing charge: {key}")
+
+	def test_draft_invoice_item_is_removed_when_other_items_remain(self):
+		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
+		other_key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-2"
+		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
+		other_charge = frappe._dict({**charge_payload(other_key, "OTHER-ITEM", 25), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-DRAFT", "billing_status": "Draft Invoiced"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[charge, other_charge])
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[
+			frappe._dict({"description": f"Medication\nVetEdge billing charge: {key}", "qty": 1, "rate": 50, "amount": 50}),
+			frappe._dict({"description": f"Other\nVetEdge billing charge: {other_key}", "qty": 1, "rate": 25, "amount": 25}),
+		])
+
 		with billing_core_context(session, invoice):
 			result = billing_core.sync_session_charges_to_invoice(session)
 
 		self.assertEqual(result["removed_count"], 1)
-		self.assertEqual(invoice.get("items"), [])
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertIn(other_key, invoice.get("items")[0].description)
 		invoice.save.assert_called_once()
-		self.assertEqual(session.total_charges, 0)
 
 	def test_draft_invoice_item_updates_when_charge_qty_and_rate_change(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
@@ -1320,9 +1368,13 @@ class multi_invoice_billing_context:
 				return self.invoices[name].docstatus
 			return None
 
+		def delete_doc(doctype, name):
+			self.deleted_docs.append((doctype, name))
+
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists, get_value=get_value),
 			get_doc=get_doc,
+			delete_doc=delete_doc,
 			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
 			get_single=lambda doctype: frappe._dict(enable_billing_sessions=1),
 			get_all=Mock(return_value=[]),
@@ -1357,6 +1409,7 @@ class multi_invoice_billing_context:
 
 class billing_core_context:
 	def __init__(self, session, linked_invoice, created_invoice=None, paid_amount=0):
+		self.deleted_docs = []
 		self.session = session
 		self.linked_invoice = linked_invoice
 		self.created_invoice = created_invoice or make_invoice("SINV-NEW")
@@ -1390,9 +1443,13 @@ class billing_core_context:
 				return self.created_invoice.docstatus
 			return None
 
+		def delete_doc(doctype, name):
+			self.deleted_docs.append((doctype, name))
+
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists, get_value=get_value),
 			get_doc=get_doc,
+			delete_doc=delete_doc,
 			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
 			get_single=lambda doctype: frappe._dict(enable_billing_sessions=1),
 			get_all=Mock(return_value=[]),

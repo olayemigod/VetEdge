@@ -9,6 +9,7 @@
   "general_section",
   "enable_vetedge",
   "coreedge_platform_section",
+  "deployment_mode",
   "enable_coreedge_platform",
   "coreedge_product_app",
   "fail_closed_when_coreedge_missing",
@@ -161,6 +162,14 @@
    "fieldname": "coreedge_platform_section",
    "fieldtype": "Section Break",
    "label": "CoreEdge Platform"
+  },
+  {
+   "default": "Local",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "deployment_mode",
+   "fieldtype": "Select",
+   "label": "Deployment Mode",
+   "options": "Local\nHosted Platform"
   },
   {
    "default": "0",

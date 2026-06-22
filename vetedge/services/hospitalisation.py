@@ -767,13 +767,13 @@ def validate_hospitalisation_charge_prices(doc) -> None:
 
 
 @frappe.whitelist()
-def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str) -> dict:
+def sync_hospitalisation_charges_to_invoice(hospitalisation_name: str, confirm: bool = False, confirmation_type: str | None = None) -> dict:
 	require_internal_user()
 	assert_hospitalisation_enabled()
-	return sync_hospitalisation_charges_with_billing_core(hospitalisation_name)
+	return sync_hospitalisation_charges_with_billing_core(hospitalisation_name, confirm=confirm, confirmation_type=confirmation_type)
 
 
-def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) -> dict:
+def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str, confirm: bool = False, confirmation_type: str | None = None) -> dict:
 	from vetedge.services.billing_core import BILLING_SESSION_DOCTYPE, sync_source_to_billing_session
 
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
@@ -783,7 +783,11 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	previous_gate_status = doc.get("payment_gate_status")
 	previous_gate_message = doc.get("payment_gate_message")
 
-	result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, hospitalisation_name, confirm=confirm, confirmation_type=confirmation_type)
+	if result.get("requires_confirmation") or result.get("blocked") or result.get("removed_empty_invoice") or result.get("cancelled_invoice"):
+		result.setdefault("hospitalisation", hospitalisation_name)
+		result.setdefault("reload_required", True)
+		return result
 	doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
 	invoice = result.get("invoice")
 	if invoice:
@@ -801,6 +805,7 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 	doc.save()
 	added_count = result.get("added_count", 0)
 	updated_count = result.get("updated_count", 0)
+	removed_count = result.get("removed_count", 0)
 	return {
 		"hospitalisation": hospitalisation_name,
 		"updated": bool(invoice and (added_count or updated_count or not result.get("created"))),
@@ -808,6 +813,7 @@ def sync_hospitalisation_charges_with_billing_core(hospitalisation_name: str) ->
 		"open_invoice_name": invoice,
 		"added_count": added_count,
 		"updated_count": updated_count,
+		"removed_count": removed_count,
 		"skipped_count": 0,
 		"created_new_invoice": bool(result.get("created")),
 		"billing_session": session_name,

@@ -22,12 +22,14 @@ from vetedge.coreedge_adapter import (
 
 class TestCoreEdgeAdapter(unittest.TestCase):
 	def setUp(self):
+		frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Local")
 		frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 0)
 		frappe.db.set_single_value("Veterinary Settings", "coreedge_product_app", "VetEdge")
 		frappe.db.set_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing", 0)
 		frappe.db.commit()
 
 	def tearDown(self):
+		frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Local")
 		frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 0)
 		frappe.db.set_single_value("Veterinary Settings", "coreedge_product_app", "VetEdge")
 		frappe.db.set_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing", 0)
@@ -52,9 +54,7 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 			self.assertFalse(should_show_coreedge_controls())
 			context = get_current_vetedge_context()
 			self.assertEqual(context.get("active_product_app"), "VetEdge")
-			# Verify no crash on access check
 			self.assertTrue(has_vetedge_access())
-			# Verify no crash on require access
 			require_vetedge_access()
 
 	def test_coreedge_missing_and_platform_enabled_and_fail_closed_raises_controlled_error(self):
@@ -109,8 +109,6 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 			self.assertIn("Onboarding", labels)
 
 	def test_lazy_imports_do_not_break_vetedge_at_import_time(self):
-		# Verify that importing the module works fine when coreedge is unavailable
-		# Since it's already imported above, we just check that no global references crash.
 		self.assertTrue(callable(is_coreedge_available))
 		self.assertTrue(callable(get_current_vetedge_context))
 
@@ -130,10 +128,118 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 		self.assertEqual(len(visible_settings), 2)
 
 	def test_no_workflow_gating_happens_in_this_phase(self):
-		# Verify that has_vetedge_access and require_vetedge_access default to True/no-op when platform is disabled
 		frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 0)
 		frappe.db.commit()
 
 		self.assertTrue(has_vetedge_access())
-		# should not raise any exceptions
 		require_vetedge_access()
+
+	# --- Hosted Platform Mode Extensions ---
+
+	def test_local_mode_can_disable_coreedge_platform(self):
+		frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Local")
+		frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 1)
+		frappe.db.commit()
+
+		settings = frappe.get_doc("Veterinary Settings")
+		settings.enable_coreedge_platform = 0
+		settings.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_single_value("Veterinary Settings", "enable_coreedge_platform"), 0)
+
+	def test_tenant_admin_cannot_change_hosted_platform_to_local(self):
+		old_user = frappe.session.user
+		try:
+			with patch("frappe.get_roles", return_value=["Desk User"]):
+				frappe.session.user = "Administrator"
+				frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+				frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 1)
+				frappe.db.commit()
+
+				frappe.session.user = "test_user"
+				settings = frappe.get_doc("Veterinary Settings")
+				settings.deployment_mode = "Local"
+				with self.assertRaises(frappe.PermissionError):
+					settings.save(ignore_permissions=True)
+		finally:
+			frappe.session.user = old_user
+
+	def test_tenant_admin_cannot_disable_coreedge_when_old_mode_was_hosted_platform(self):
+		old_user = frappe.session.user
+		try:
+			with patch("frappe.get_roles", return_value=["Desk User"]):
+				frappe.session.user = "Administrator"
+				frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+				frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 1)
+				frappe.db.commit()
+
+				frappe.session.user = "test_user"
+				settings = frappe.get_doc("Veterinary Settings")
+				settings.enable_coreedge_platform = 0
+				with self.assertRaises(frappe.PermissionError):
+					settings.save(ignore_permissions=True)
+		finally:
+			frappe.session.user = old_user
+
+	def test_tenant_admin_cannot_turn_off_fail_closed_when_old_mode_was_hosted_platform(self):
+		old_user = frappe.session.user
+		try:
+			with patch("frappe.get_roles", return_value=["Desk User"]):
+				frappe.session.user = "Administrator"
+				frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+				frappe.db.set_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing", 1)
+				frappe.db.commit()
+
+				frappe.session.user = "test_user"
+				settings = frappe.get_doc("Veterinary Settings")
+				settings.fail_closed_when_coreedge_missing = 0
+				with self.assertRaises(frappe.PermissionError):
+					settings.save(ignore_permissions=True)
+		finally:
+			frappe.session.user = old_user
+
+	def test_platform_admin_can_change_local_to_hosted_platform(self):
+		old_user = frappe.session.user
+		try:
+			with patch("frappe.get_roles", return_value=["System Manager", "Desk User"]):
+				frappe.session.user = "test_user"
+				frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Local")
+				frappe.db.commit()
+
+				settings = frappe.get_doc("Veterinary Settings")
+				settings.deployment_mode = "Hosted Platform"
+				settings.save(ignore_permissions=True)
+				self.assertEqual(frappe.db.get_single_value("Veterinary Settings", "deployment_mode"), "Hosted Platform")
+		finally:
+			frappe.session.user = old_user
+
+	def test_platform_admin_can_change_hosted_platform_to_local_if_needed(self):
+		old_user = frappe.session.user
+		try:
+			with patch("frappe.get_roles", return_value=["CoreEdge Platform Admin", "Desk User"]):
+				frappe.session.user = "Administrator"
+				frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+				frappe.db.commit()
+
+				frappe.session.user = "test_user"
+				settings = frappe.get_doc("Veterinary Settings")
+				settings.deployment_mode = "Local"
+				settings.save(ignore_permissions=True)
+				self.assertEqual(frappe.db.get_single_value("Veterinary Settings", "deployment_mode"), "Local")
+		finally:
+			frappe.session.user = old_user
+
+	def test_hosted_platform_forces_effective_coreedge_enabled(self):
+		frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+		frappe.db.set_single_value("Veterinary Settings", "enable_coreedge_platform", 0)
+		frappe.db.commit()
+
+		self.assertTrue(is_coreedge_enabled())
+
+	def test_hosted_platform_forces_effective_fail_closed_even_if_checkbox_value_is_0(self):
+		frappe.db.set_single_value("Veterinary Settings", "deployment_mode", "Hosted Platform")
+		frappe.db.set_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing", 0)
+		frappe.db.commit()
+
+		with patch("vetedge.coreedge_adapter.is_coreedge_available", return_value=False):
+			with self.assertRaises(frappe.PermissionError):
+				require_vetedge_access()

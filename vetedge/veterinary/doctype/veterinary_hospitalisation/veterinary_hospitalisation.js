@@ -1262,20 +1262,51 @@ function add_charge_sheet_action_buttons(frm) {
 	}, __("Billing"));
 
 	frm.add_custom_button(__("Sync Charges to Invoice"), () => {
-		frappe.call({
-			method: "vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice",
-			args: { hospitalisation_name: frm.doc.name },
-			freeze: true,
-			callback(result) {
-				const summary = result.message || {};
-				frappe.show_alert({
-					message: __(`Synced ${summary.added_count || 0} charge item(s) to invoice.`),
-					indicator: "green",
-				});
-				frm.reload_doc();
-			},
-		});
+		sync_hospitalisation_charges_to_invoice(frm);
 	}, __("Billing"));
+}
+
+function sync_hospitalisation_charges_to_invoice(frm, extraArgs = {}) {
+	frappe.call({
+		method: "vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice",
+		args: Object.assign({ hospitalisation_name: frm.doc.name }, extraArgs),
+		freeze: true,
+		callback(result) {
+			const summary = result.message || {};
+			if (summary.requires_confirmation) {
+				handle_hospitalisation_invoice_confirmation(frm, summary);
+				return;
+			}
+			if (summary.blocked) {
+				if (summary.reload_required) {
+					frm.reload_doc();
+				}
+				frappe.msgprint({
+					title: __("Invoice Sync Blocked"),
+					message: summary.message || __("Invoice sync was blocked."),
+					indicator: "red",
+				});
+				return;
+			}
+			frappe.show_alert({
+				message: summary.message || __(`Synced ${summary.added_count || 0} charge item(s) to invoice.`),
+				indicator: "green",
+			});
+			frm.reload_doc();
+		},
+	});
+}
+
+function handle_hospitalisation_invoice_confirmation(frm, summary) {
+	const message = summary.confirmation_type === "remove_empty_draft_invoice"
+		? __("Removing these charges will leave the draft invoice empty. Remove the empty draft invoice?")
+		: __("This will cancel the unpaid submitted invoice. Continue?");
+	frappe.confirm(message, () => {
+		sync_hospitalisation_charges_to_invoice(frm, {
+			confirm: 1,
+			confirmation_type: summary.confirmation_type,
+		});
+	});
 }
 
 function add_hospitalisation_action_buttons(frm) {

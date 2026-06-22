@@ -281,14 +281,33 @@ def upsert_source_charge_payload(session, payload: dict):
 	return row
 
 
-def sync_session_charges_to_invoice(session):
+def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation_type: str | None = None):
+	confirm = bool(cint(confirm))
 	session = ensure_session_doc(session)
 	reconcile_session_charge_statuses(session)
+	submitted_action = get_retired_submitted_invoice_action(session, confirm=confirm, confirmation_type=confirmation_type)
+	if submitted_action:
+		return submitted_action
 	active_draft = _get_active_draft_invoice(session)
 	removed_count = remove_retired_charge_items_from_draft_invoice(session, active_draft)
 	pending = _get_pending_charges_for_invoice(session, active_draft)
 	if not pending:
 		if active_draft and removed_count:
+			if not (active_draft.get("items") or []):
+				if not (confirm and confirmation_type == "remove_empty_draft_invoice"):
+					return {
+						"session": session.name,
+						"invoice": active_draft.name,
+						"created": False,
+						"added_count": 0,
+						"updated_count": 0,
+						"removed_count": removed_count,
+						"requires_confirmation": True,
+						"confirmation_type": "remove_empty_draft_invoice",
+						"message": f"Removing these charges will leave the draft invoice empty. Confirm to remove the draft invoice {active_draft.name}.",
+						"reload_required": True,
+					}
+				return remove_empty_draft_invoice_for_session(session, active_draft, removed_count)
 			_prepare_sales_invoice_totals(active_draft)
 			normalize_billing_session_invoice_dates(active_draft)
 			run_with_billing_core_sync_flag(active_draft.save)
@@ -568,10 +587,10 @@ def can_proceed_with_payment_gate(session) -> bool:
 
 
 @frappe.whitelist()
-def create_or_update_invoice_for_billing_session(session_name: str):
+def create_or_update_invoice_for_billing_session(session_name: str, confirm: bool = False, confirmation_type: str | None = None):
 	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)
 	session.check_permission("write")
-	result = sync_session_charges_to_invoice(session.name)
+	result = sync_session_charges_to_invoice(session.name, confirm=confirm, confirmation_type=confirmation_type)
 	summary = get_billing_session_summary(result.get("session") or session.name)
 	result["billing_session"] = summary
 	return result
@@ -626,9 +645,9 @@ def cancel_billing_session(session):
 	return session
 
 
-def sync_source_to_billing_session(source_doctype: str, source_name: str):
+def sync_source_to_billing_session(source_doctype: str, source_name: str, confirm: bool = False, confirmation_type: str | None = None):
 	session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
-	result = sync_session_charges_to_invoice(session.name)
+	result = sync_session_charges_to_invoice(session.name, confirm=confirm, confirmation_type=confirmation_type)
 	summary = get_billing_session_summary(result.get("session") or session.name)
 	update_all_session_source_compatibility_fields(summary)
 	result["session"] = summary.get("name")
@@ -705,6 +724,103 @@ def remove_retired_charge_items_from_draft_invoice(session, invoice) -> int:
 		if row.get("charge_key") in retired_keys:
 			row.invoice_item_name = None
 	return removed
+
+
+def remove_empty_draft_invoice_for_session(session, invoice, removed_count: int = 0) -> dict:
+	if not invoice or cint(invoice.get("docstatus")) != 0:
+		frappe.throw("Only draft Sales Invoices can be removed by this action.", frappe.ValidationError)
+	if invoice.get("items"):
+		frappe.throw("Draft Sales Invoice still has items and cannot be removed as empty.", frappe.ValidationError)
+	invoice_name = invoice.name
+	run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))
+	for row in session.get("charges") or []:
+		if row.get("invoice") == invoice_name and row.get("billing_status") in {"Cancelled", "Skipped"}:
+			row.invoice = None
+			row.invoice_item_name = None
+	if session.get("current_draft_invoice") == invoice_name:
+		session.current_draft_invoice = None
+	if session.get("latest_invoice") == invoice_name:
+		session.latest_invoice = get_latest_existing_session_invoice_name(session, exclude=invoice_name)
+	refresh_billing_session_totals(session)
+	session.save()
+	return {
+		"session": session.name,
+		"invoice": invoice_name,
+		"created": False,
+		"added_count": 0,
+		"updated_count": 0,
+		"removed_count": removed_count,
+		"removed_empty_invoice": True,
+		"message": f"Empty draft invoice {invoice_name} removed.",
+		"reload_required": True,
+	}
+
+
+def get_latest_existing_session_invoice_name(session, exclude: str | None = None) -> str | None:
+	for name in reversed(get_session_invoice_names(session)):
+		if name and name != exclude and name != session.get("current_draft_invoice") and frappe.db.exists("Sales Invoice", name):
+			return name
+	return None
+
+
+def get_retired_submitted_invoice_action(session, confirm: bool = False, confirmation_type: str | None = None) -> dict | None:
+	retired_by_invoice = {}
+	active_by_invoice = {}
+	for row in session.get("charges") or []:
+		invoice_name = row.get("invoice")
+		if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+			continue
+		if cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) != 1:
+			continue
+		if row.get("billing_status") in {"Cancelled", "Skipped"}:
+			retired_by_invoice.setdefault(invoice_name, []).append(row)
+		else:
+			active_by_invoice.setdefault(invoice_name, []).append(row)
+	for invoice_name in retired_by_invoice:
+		if active_by_invoice.get(invoice_name):
+			return {
+				"blocked": True,
+				"reason": "submitted_invoice_has_active_charges",
+				"invoice": invoice_name,
+				"message": "This submitted invoice still has active charges. Create an adjustment charge instead.",
+				"reload_required": True,
+			}
+		state = get_invoice_payment_state(invoice_name)
+		invoice = frappe.get_doc("Sales Invoice", invoice_name)
+		paid = flt(state.get("paid_amount"))
+		outstanding = flt(state.get("outstanding_amount"))
+		total = flt(invoice.get("grand_total"))
+		if paid > 0 or outstanding < total:
+			return {
+				"blocked": True,
+				"reason": "paid_invoice_requires_credit_note",
+				"invoice": invoice_name,
+				"message": "This charge belongs to a paid or partly paid invoice. Create a Credit Note or adjustment instead.",
+				"reload_required": True,
+			}
+		if not (confirm and confirmation_type == "cancel_unpaid_invoice"):
+			return {
+				"requires_confirmation": True,
+				"confirmation_type": "cancel_unpaid_invoice",
+				"invoice": invoice_name,
+				"message": "This submitted unpaid invoice must be cancelled before removing invoiced charges.",
+				"reload_required": True,
+			}
+		run_with_billing_core_sync_flag(invoice.cancel)
+		for row in retired_by_invoice[invoice_name]:
+			row.billing_status = "Cancelled"
+			row.invoice_item_name = None
+		refresh_billing_session_totals(session)
+		session.save()
+		return {
+			"removed_empty_invoice": False,
+			"cancelled_invoice": True,
+			"invoice": invoice_name,
+			"session": session.name,
+			"message": f"Cancelled unpaid invoice {invoice_name}.",
+			"reload_required": True,
+		}
+	return None
 
 
 

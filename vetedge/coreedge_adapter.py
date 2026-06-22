@@ -12,7 +12,19 @@ def is_coreedge_available() -> bool:
 
 def is_coreedge_enabled() -> bool:
 	try:
+		deployment_mode = frappe.db.get_single_value("Veterinary Settings", "deployment_mode")
+		if deployment_mode == "Hosted Platform":
+			return True
 		return bool(frappe.db.get_single_value("Veterinary Settings", "enable_coreedge_platform"))
+	except Exception:
+		return False
+
+def should_fail_closed_when_coreedge_missing() -> bool:
+	try:
+		deployment_mode = frappe.db.get_single_value("Veterinary Settings", "deployment_mode")
+		if deployment_mode == "Hosted Platform":
+			return True
+		return bool(frappe.db.get_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing"))
 	except Exception:
 		return False
 
@@ -87,9 +99,10 @@ def require_vetedge_access(product_app: str | None = None, tenant: str | None = 
 	
 	is_enabled = is_coreedge_enabled()
 	is_available = is_coreedge_available()
+	fail_closed = should_fail_closed_when_coreedge_missing()
 	
 	if is_enabled and not is_available:
-		if frappe.db.get_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing"):
+		if fail_closed:
 			frappe.throw(
 				_("CoreEdge Platform is required but not installed or available."),
 				exc=frappe.PermissionError,
@@ -104,7 +117,7 @@ def require_vetedge_access(product_app: str | None = None, tenant: str | None = 
 		from coreedge.adapters.access import require_product_access
 		require_product_access(product_app=app, tenant=tenant, user=user)
 	except (ImportError, ModuleNotFoundError):
-		if frappe.db.get_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing"):
+		if fail_closed:
 			frappe.throw(
 				_("CoreEdge Platform is required but not installed or available."),
 				exc=frappe.PermissionError,
