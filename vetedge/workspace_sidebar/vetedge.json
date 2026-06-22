@@ -8,7 +8,7 @@
  "items": [
   {
    "child": 0,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "chart",
    "indent": 0,
@@ -32,7 +32,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
    "icon": "stethoscope",
    "indent": 0,
@@ -45,7 +45,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Sales Manager') || frappe.user.has_role('Branch Manager')",
    "icon": "chart",
    "indent": 0,
@@ -58,7 +58,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Dispensary User') || frappe.user.has_role('Branch Manager')",
    "icon": "pill",
    "indent": 0,
@@ -71,7 +71,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Lab Technician') || frappe.user.has_role('Branch Manager')",
    "icon": "activity",
    "indent": 0,
@@ -84,7 +84,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
    "icon": "shield-check",
    "indent": 0,
@@ -97,7 +97,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "hotel",
    "indent": 0,
@@ -110,7 +110,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Groomer') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "scissors",
    "indent": 0,
@@ -123,7 +123,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Branch Manager')",
    "icon": "user-round-search",
    "indent": 0,
@@ -136,7 +136,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
    "icon": "building-2",
    "indent": 0,
@@ -160,7 +160,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "layout-dashboard",
    "indent": 0,
@@ -173,7 +173,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "hospital",
    "indent": 0,
@@ -186,7 +186,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "map-pinned",
    "indent": 0,
@@ -199,7 +199,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -212,7 +212,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -225,7 +225,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -238,7 +238,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -251,7 +251,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -275,7 +275,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "users-round",
    "indent": 0,
    "keep_closed": 0,
@@ -288,7 +288,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "notepad-text",
    "indent": 0,
    "keep_closed": 0,
@@ -301,7 +301,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "calendar-days",
    "indent": 0,
    "keep_closed": 0,
@@ -314,7 +314,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "calendar-x",
    "indent": 0,
    "keep_closed": 0,
@@ -327,7 +327,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "file-question-mark",
    "indent": 0,
    "keep_closed": 0,
@@ -340,7 +340,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "list-tree",
    "indent": 0,
    "keep_closed": 0,
@@ -353,7 +353,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "clipboard-check",
    "indent": 0,
    "keep_closed": 0,
@@ -366,7 +366,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "scroll-text",
    "indent": 0,
    "keep_closed": 0,
@@ -379,7 +379,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Lab Technician') || frappe.user.has_role('Branch Manager')",
    "icon": "activity",
    "indent": 0,
@@ -392,7 +392,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "shield-check",
    "indent": 0,
    "keep_closed": 0,
@@ -404,7 +404,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "customer",
    "indent": 0,
    "keep_closed": 0,
@@ -428,7 +428,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "sprout",
    "indent": 0,
    "keep_closed": 0,
@@ -441,7 +441,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "list-tree",
    "indent": 0,
    "keep_closed": 0,
@@ -454,7 +454,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "activity",
    "indent": 0,
    "keep_closed": 0,
@@ -467,7 +467,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "file-question-mark",
    "indent": 0,
    "keep_closed": 0,
@@ -480,7 +480,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "folder-tree",
    "indent": 0,
    "keep_closed": 0,
@@ -493,7 +493,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "tool",
    "indent": 0,
    "keep_closed": 0,
@@ -506,7 +506,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "stock",
    "indent": 0,
    "keep_closed": 0,
@@ -518,7 +518,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "settings",
    "indent": 0,
    "keep_closed": 0,
@@ -531,7 +531,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Lab Technician') || frappe.user.has_role('Branch Manager')",
    "icon": "file-question-mark",
    "indent": 0,
@@ -544,7 +544,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "heart-pulse",
    "indent": 0,
    "keep_closed": 0,
@@ -568,7 +568,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "scissors",
    "indent": 0,
    "keep_closed": 0,
@@ -581,7 +581,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "calendar-days",
    "indent": 0,
    "keep_closed": 0,
@@ -594,7 +594,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "clipboard-list",
    "indent": 0,
    "keep_closed": 0,
@@ -618,7 +618,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "hotel",
    "indent": 0,
@@ -631,7 +631,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "bed-single",
    "indent": 0,
@@ -644,7 +644,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "clipboard-check",
    "indent": 0,
@@ -657,7 +657,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "warehouse",
    "indent": 0,
@@ -670,7 +670,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "chart",
    "indent": 0,
@@ -694,7 +694,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -707,7 +707,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -720,7 +720,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -733,7 +733,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -746,7 +746,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -759,7 +759,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -772,7 +772,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Sales Manager') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -785,7 +785,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts Manager') || frappe.user.has_role('Sales Manager') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -798,7 +798,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Dispensary User') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -811,7 +811,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Dispensary User') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -824,7 +824,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Lab Technician') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -837,7 +837,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -850,7 +850,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -863,7 +863,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -876,7 +876,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Groomer') || frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,
@@ -900,7 +900,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "receipt-text",
    "indent": 0,
    "keep_closed": 0,
@@ -913,7 +913,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "money-coins-1",
    "indent": 0,
    "keep_closed": 0,
@@ -926,7 +926,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "accounting",
    "indent": 0,
    "keep_closed": 0,
@@ -939,7 +939,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "stock",
    "indent": 0,
    "keep_closed": 0,
@@ -963,7 +963,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "organization",
    "indent": 0,
    "keep_closed": 0,
@@ -976,7 +976,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
    "icon": "users",
    "indent": 0,
@@ -989,7 +989,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Branch Manager')",
    "icon": "user-round-check",
    "indent": 0,
@@ -1002,7 +1002,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "book-user",
    "indent": 0,
@@ -1015,7 +1015,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "icon": "sheet",
    "indent": 0,
    "keep_closed": 0,
@@ -1028,7 +1028,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "settings",
    "indent": 0,
@@ -1041,7 +1041,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "bell-ring",
    "indent": 0,
@@ -1054,7 +1054,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "bell",
    "indent": 0,
@@ -1067,7 +1067,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "logs",
    "indent": 0,
@@ -1080,7 +1080,7 @@
   },
   {
    "child": 1,
-   "collapsible": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator')",
    "icon": "user-cog",
    "indent": 0,

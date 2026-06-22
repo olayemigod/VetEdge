@@ -43,14 +43,27 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertIn("VetEdge Front Desk", link.get("display_depends_on", ""))
 		self.assertIn("Branch Manager", link.get("display_depends_on", ""))
 
-	def test_veterinary_hospitalisation_is_in_veterinary_records(self):
+	def test_hospitalisation_links_are_grouped_in_dedicated_section(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
-		hospitalisation_index = labels.index("Veterinary Hospitalisation")
+		section_index = labels.index("Hospitalisation")
+		records_index = labels.index("Veterinary Records")
+		masters_index = labels.index("Veterinary Masters")
 
-		self.assertGreater(hospitalisation_index, labels.index("Veterinary Consultation"))
-		self.assertLess(hospitalisation_index, labels.index("Veterinary Appointment"))
+		for label in (
+			"Veterinary Hospitalisation Dashboard",
+			"Veterinary Hospitalisation",
+			"Veterinary Care Location",
+			"Active Hospitalisations",
+			"Hospitalisation Charge Summary",
+			"Care Location Occupancy",
+			"Hospitalisation Discharge Watch",
+			"Pending Hospitalisation Actions",
+		):
+			self.assertGreater(labels.index(label), section_index)
+			self.assertLess(labels.index(label), records_index)
 
+		self.assertLess(records_index, masters_index)
 		link = _links_by_label(items)["Veterinary Hospitalisation"]
 		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
 		self.assertEqual(link["link_type"], "DocType")
@@ -110,7 +123,7 @@ class TestWorkspaceSidebar(TestCase):
 			if item.get("type") == "Section Break"
 		}
 
-		for label in ("Dashboards", "Veterinary Records", "Veterinary Masters", "Reports"):
+		for label in ("Dashboards", "Hospitalisation", "Veterinary Records", "Veterinary Masters", "Reports"):
 			self.assertEqual(sections[label]["collapsible"], 1)
 			self.assertEqual(sections[label]["keep_closed"], 1)
 			self.assertEqual(sections[label]["show_arrow"], 0)
@@ -126,6 +139,16 @@ class TestWorkspaceSidebar(TestCase):
 		for section in sections:
 			self.assertEqual(section["collapsible"], 1)
 			self.assertEqual(section["show_arrow"], 0)
+
+
+	def test_sidebar_links_do_not_use_section_collapse_defaults(self):
+		links = [item for item in _load_sidebar()["items"] if item.get("type") == "Link"]
+
+		self.assertGreater(len(links), 0)
+		for link in links:
+			self.assertEqual(link["collapsible"], 0)
+			self.assertEqual(link["keep_closed"], 0)
+			self.assertEqual(link["show_arrow"], 0)
 
 	def test_planned_treatment_report_is_in_collapsed_reports_section(self):
 		items = _load_sidebar()["items"]
