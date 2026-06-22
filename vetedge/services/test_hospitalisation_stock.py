@@ -98,13 +98,53 @@ class TestHospitalisationStockPosting(TestCase):
 	def test_stock_affecting_medication_activity_creates_one_stock_entry(self):
 		row = activity(activity_type="Medication")
 		hosp = hospitalisation_doc(activities=[row])
-		with stock_context(hosp) as ctx:
+		with stock_context(hosp, available_qty=5) as ctx:
 			result = hospitalisation.post_hospitalisation_activity_stock("VHOS-001")
 
 		self.assertEqual(result["posted_count"], 1)
 		self.assertEqual(len(ctx.created_entries), 1)
 		self.assertEqual(ctx.created_entries[0].doctype, "Stock Entry")
 		self.assertEqual(ctx.created_entries[0].purpose, "Material Issue")
+
+	def test_stock_posting_blocks_when_available_qty_is_short(self):
+		row = activity(qty=4)
+		hosp = hospitalisation_doc(activities=[row])
+		with stock_context(hosp, available_qty=2) as ctx:
+			result = hospitalisation.post_hospitalisation_activity_stock("VHOS-001")
+
+		self.assertEqual(result["posted_count"], 0)
+		self.assertEqual(result["blocked_count"], 1)
+		self.assertEqual(ctx.created_entries, [])
+		self.assertEqual(row.stock_status, "Pending")
+		self.assertIn("Insufficient stock", row.stock_posting_message)
+		self.assertEqual(result["blocked"][0]["available_qty"], 2)
+		self.assertEqual(result["blocked"][0]["required_qty"], 4)
+		self.assertEqual(result["blocked"][0]["shortage_qty"], 2)
+
+	def test_stock_posting_blocks_whole_batch_when_any_item_has_shortage(self):
+		first = activity(name="ACT-001", qty=1, item="ITEM-STOCK")
+		second = activity(name="ACT-002", qty=4, item="ITEM-LOW")
+		hosp = hospitalisation_doc(activities=[first, second])
+		with stock_context(hosp, available_qty={"ITEM-STOCK": 5, "ITEM-LOW": 2}) as ctx:
+			result = hospitalisation.post_hospitalisation_activity_stock("VHOS-001")
+
+		self.assertEqual(result["posted_count"], 0)
+		self.assertEqual(result["blocked_count"], 1)
+		self.assertEqual(ctx.created_entries, [])
+		self.assertEqual(first.stock_status, "Pending")
+		self.assertEqual(second.stock_status, "Pending")
+
+	def test_stock_posting_blocks_when_warehouse_is_missing(self):
+		row = activity()
+		hosp = hospitalisation_doc(activities=[row])
+		with stock_context(hosp, warehouse=None) as ctx:
+			result = hospitalisation.post_hospitalisation_activity_stock("VHOS-001")
+
+		self.assertEqual(result["posted_count"], 0)
+		self.assertEqual(result["blocked_count"], 1)
+		self.assertEqual(ctx.created_entries, [])
+		self.assertEqual(result["blocked"][0]["status"], "Missing Warehouse")
+		self.assertEqual(row.stock_status, "Pending")
 
 	def test_stock_affecting_vaccination_activity_creates_one_stock_entry(self):
 		row = activity(activity_type="Vaccination")
@@ -123,7 +163,11 @@ class TestHospitalisationStockPosting(TestCase):
 			preview = hospitalisation.get_hospitalisation_stock_posting_preview("VHOS-001")
 
 		self.assertEqual(preview["to_post_count"], 1)
+		self.assertTrue(preview["can_post"])
+		self.assertEqual(preview["items"][0]["status"], "Available")
 		self.assertEqual(preview["items"][0]["warehouse"], "Stores - A")
+		self.assertEqual(preview["items"][0]["available_qty"], 10)
+		self.assertEqual(preview["items"][0]["required_qty"], 2)
 		self.assertEqual(ctx.created_entries, [])
 		hosp.save.assert_not_called()
 		self.assertEqual(row.stock_status, "Pending")
@@ -138,6 +182,21 @@ class TestHospitalisationStockPosting(TestCase):
 		self.assertEqual(ctx.created_entries, [])
 		hosp.save.assert_not_called()
 		self.assertFalse(row.get("stock_posting_message"))
+
+	def test_stock_preview_returns_shortage_details(self):
+		row = activity(qty=5)
+		hosp = hospitalisation_doc(activities=[row])
+		with stock_context(hosp, available_qty=3) as ctx:
+			preview = hospitalisation.get_hospitalisation_stock_posting_preview("VHOS-001")
+
+		self.assertFalse(preview["can_post"])
+		self.assertEqual(preview["blocked_count"], 1)
+		self.assertEqual(preview["shortage_count"], 1)
+		self.assertEqual(preview["blocked"][0]["status"], "Shortage")
+		self.assertEqual(preview["blocked"][0]["available_qty"], 3)
+		self.assertEqual(preview["blocked"][0]["required_qty"], 5)
+		self.assertEqual(preview["blocked"][0]["shortage_qty"], 2)
+		self.assertEqual(ctx.created_entries, [])
 
 	def test_running_stock_posting_twice_does_not_create_duplicate_entries(self):
 		hosp = hospitalisation_doc(activities=[activity()])
@@ -197,10 +256,12 @@ class TestHospitalisationStockPosting(TestCase):
 
 
 class stock_context:
-	def __init__(self, hosp, profile=None, invoice=None):
+	def __init__(self, hosp, profile=None, invoice=None, available_qty=10, warehouse="Stores - A"):
 		self.hosp = hosp
 		self.profile = profile or stock_profile()
 		self.invoice = invoice or frappe._dict(name="SINV-001", items=[])
+		self.available_qty = available_qty
+		self.warehouse = warehouse
 		self.created_entries = []
 		self.stack = ExitStack()
 
@@ -247,12 +308,18 @@ class stock_context:
 			)
 		)
 		self.stack.enter_context(patch("vetedge.services.stock.validate_warehouse_company"))
-		self.stack.enter_context(patch("vetedge.services.stock.get_branch_dispensary_warehouse", return_value="Stores - A"))
+		self.stack.enter_context(patch("vetedge.services.stock.get_branch_dispensary_warehouse", return_value=self.warehouse))
 		self.stack.enter_context(patch("vetedge.services.stock.validate_stock_availability"))
+		self.stack.enter_context(patch.object(hospitalisation, "get_hospitalisation_available_stock_qty", side_effect=self.get_available_qty))
 		self.stack.enter_context(patch("vetedge.services.stock.build_stock_entry_rows", return_value=[{"item_code": "ITEM-STOCK", "qty": 2, "s_warehouse": "Stores - A"}]))
 		self.stack.enter_context(patch("vetedge.services.expiry_control.allocate_item_batches", return_value=[]))
 		self.stack.enter_context(patch.object(hospitalisation, "now", return_value="2026-06-20 10:00:00"))
 		return self
+
+	def get_available_qty(self, item_code, warehouse, activity=None):
+		if isinstance(self.available_qty, dict):
+			return self.available_qty.get(item_code, 0)
+		return self.available_qty
 
 	def __exit__(self, exc_type, exc, tb):
 		return self.stack.__exit__(exc_type, exc, tb)

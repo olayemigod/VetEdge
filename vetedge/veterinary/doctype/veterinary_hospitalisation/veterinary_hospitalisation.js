@@ -965,6 +965,7 @@ function show_stock_usage_preview(frm, summary) {
 		`${__("Ready to Post")}: ${summary.to_post_count || 0}`,
 		`${__("Skipped")}: ${summary.skipped_count || 0}`,
 		`${__("Blocked")}: ${summary.blocked_count || 0}`,
+		`${__("Shortages")}: ${summary.shortage_count || 0}`,
 		readyRows.length ? `<br><b>${__("Items")}</b><br>${readyRows.map(format_stock_preview_row).join("<br>")}` : null,
 		blockedRows.length ? `<br><b>${__("Blocked")}</b><br>${blockedRows.map(format_stock_preview_row).join("<br>")}` : null,
 		skippedRows.length ? `<br><b>${__("Skipped")}</b><br>${skippedRows.map(format_stock_preview_row).join("<br>")}` : null,
@@ -974,8 +975,8 @@ function show_stock_usage_preview(frm, summary) {
 		fields: [{ fieldname: "preview", fieldtype: "HTML", options: message }],
 		primary_action_label: __("Confirm Post"),
 		primary_action() {
-			if (!readyRows.length) {
-				frappe.msgprint(__("There are no stock rows ready to post."));
+			if (!summary.can_post) {
+				frappe.msgprint(__("Stock usage cannot be posted until all shortages and blocked rows are resolved."));
 				return;
 			}
 			dialog.hide();
@@ -983,10 +984,22 @@ function show_stock_usage_preview(frm, summary) {
 		},
 	});
 	dialog.show();
+	if (!summary.can_post) {
+		dialog.disable_primary_action();
+	}
 }
 
 function format_stock_preview_row(row) {
-	return frappe.utils.escape_html([row.activity_type, row.item, row.qty, row.uom, row.warehouse, row.message].filter(Boolean).join(" | "));
+	return frappe.utils.escape_html([
+		row.status,
+		row.activity_type,
+		row.item_name || row.item,
+		`${__("Required")}: ${row.required_qty || row.qty || 0}`,
+		`${__("Available")}: ${row.available_qty == null ? "-" : row.available_qty}`,
+		row.shortage_qty ? `${__("Shortage")}: ${row.shortage_qty}` : null,
+		row.warehouse,
+		row.message,
+	].filter(Boolean).join(" | "));
 }
 
 function post_stock_usage(frm) {

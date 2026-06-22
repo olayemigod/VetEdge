@@ -5,7 +5,7 @@ import uuid
 
 import frappe
 from frappe import _dict
-from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now, nowdate
+from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now, now_datetime, nowdate
 
 from vetedge.services.billing import get_invoice_payment_status
 from vetedge.services.payment_gate import (
@@ -842,15 +842,18 @@ def get_hospitalisation_stock_posting_preview(hospitalisation_name: str, activit
 	}
 	for activity in activities:
 		result = preview_single_hospitalisation_activity_stock(doc, activity)
-		if result.get("status") == "ready":
+		if result.get("status") == "Available":
 			summary["to_post_count"] += 1
 			summary["items"].append(result)
-		elif result.get("status") == "blocked":
+		elif result.get("status") in {"Shortage", "Missing Warehouse", "Blocked"}:
 			summary["blocked_count"] += 1
 			summary["blocked"].append(result)
 		else:
 			summary["skipped_count"] += 1
 			summary["skipped"].append(result)
+	summary["shortage_count"] = len([row for row in summary["blocked"] if row.get("status") == "Shortage"])
+	summary["missing_warehouse_count"] = len([row for row in summary["blocked"] if row.get("status") == "Missing Warehouse"])
+	summary["can_post"] = bool(summary["to_post_count"]) and not summary["blocked_count"]
 	return summary
 
 
@@ -864,24 +867,49 @@ def preview_single_hospitalisation_activity_stock(doc, activity) -> dict:
 		"uom": activity.get("uom"),
 	}
 	if not cint(activity.get("stock_affecting")):
-		return {**base, "status": "skipped", "message": "Activity is not marked stock affecting."}
+		return {**base, "status": "Skipped", "message": "Activity is not marked stock affecting."}
 	if activity.get("stock_status") == "Posted" or activity.get("stock_entry"):
-		return {**base, "status": "skipped", "message": "Stock has already been posted for this activity.", "stock_entry": activity.get("stock_entry")}
+		return {**base, "status": "Skipped", "message": "Stock has already been posted for this activity.", "stock_entry": activity.get("stock_entry")}
 	if not activity.get("item"):
-		return {**base, "status": "blocked", "message": "A stock Item is required before stock usage can be posted."}
+		return {**base, "status": "Blocked", "message": "A stock Item is required before stock usage can be posted."}
 	qty = flt(activity.get("qty"))
 	if qty <= 0:
-		return {**base, "status": "blocked", "message": "Stock quantity must be greater than zero."}
+		return {**base, "status": "Blocked", "message": "Stock quantity must be greater than zero."}
 	try:
 		profile = get_hospitalisation_activity_item_stock_profile(activity.get("item"))
+		item_name = getattr(profile, "item_name", None) or activity.get("item")
 		if not profile.is_stock_item:
-			return {**base, "status": "blocked", "message": f"Item {activity.get('item')} is not a stock item."}
+			return {**base, "status": "Blocked", "message": f"Item {activity.get('item')} is not a stock item.", "item_name": item_name}
 		warehouse = resolve_hospitalisation_activity_source_warehouse(doc, activity)
 	except Exception as exc:
-		return {**base, "status": "blocked", "message": str(exc)}
+		return {**base, "status": "Blocked", "message": str(exc)}
 	if not warehouse:
-		return {**base, "status": "blocked", "message": "A source warehouse is required before stock usage can be posted."}
-	return {**base, "status": "ready", "message": "Ready to post stock usage.", "warehouse": warehouse, "uom": activity.get("uom") or profile.stock_uom}
+		return {**base, "status": "Missing Warehouse", "message": "A source warehouse is required before stock usage can be posted.", "item_name": item_name}
+	available_qty = get_hospitalisation_available_stock_qty(activity.get("item"), warehouse, activity)
+	shortage_qty = max(qty - available_qty, 0)
+	if shortage_qty > 0:
+		return {
+			**base,
+			"status": "Shortage",
+			"message": f"Insufficient stock for Item {activity.get('item')} in warehouse {warehouse}. Available {available_qty}, required {qty}.",
+			"warehouse": warehouse,
+			"required_qty": qty,
+			"available_qty": available_qty,
+			"shortage_qty": shortage_qty,
+			"item_name": item_name,
+			"uom": activity.get("uom") or profile.stock_uom,
+		}
+	return {
+		**base,
+		"status": "Available",
+		"message": "Ready to post stock usage.",
+		"warehouse": warehouse,
+		"required_qty": qty,
+		"available_qty": available_qty,
+		"shortage_qty": 0,
+		"item_name": item_name,
+		"uom": activity.get("uom") or profile.stock_uom,
+	}
 
 
 @frappe.whitelist()
@@ -893,14 +921,28 @@ def post_hospitalisation_activity_stock(hospitalisation_name: str, activity_row_
 		frappe.throw("Cancelled hospitalisations cannot post stock usage.", frappe.ValidationError)
 
 	activities = get_stock_posting_activities(doc, activity_row_name)
+	preview = get_hospitalisation_stock_posting_preview(hospitalisation_name, activity_row_name)
 	summary = {
 		"hospitalisation": doc.name,
 		"posted_count": 0,
 		"skipped_count": 0,
-		"blocked_count": 0,
+		"blocked_count": preview.get("blocked_count", 0),
 		"stock_entries": [],
 		"messages": [],
+		"blocked": preview.get("blocked", []),
+		"can_post": preview.get("can_post"),
 	}
+	if preview.get("blocked_count"):
+		for activity in activities:
+			activity_name = get_activity_source_name(activity)
+			blocked = next((row for row in preview.get("blocked", []) if row.get("activity") == activity_name), None)
+			if blocked:
+				activity.stock_status = "Pending"
+				activity.stock_posting_message = blocked.get("message")
+				summary["messages"].append(blocked)
+		doc.save()
+		summary["blocked"] = preview.get("blocked", [])
+		return summary
 	for activity in activities:
 		result = post_single_hospitalisation_activity_stock(doc, activity)
 		summary["messages"].append(result)
@@ -968,6 +1010,20 @@ def get_hospitalisation_activity_item_stock_profile(item_code: str):
 	from vetedge.services.stock import get_item_stock_profile
 
 	return get_item_stock_profile(item_code)
+
+
+def get_hospitalisation_available_stock_qty(item_code: str, warehouse: str, activity=None) -> float:
+	from erpnext.stock.utils import get_stock_balance
+
+	posting_datetime = get_datetime(activity.get("activity_datetime")) if activity and activity.get("activity_datetime") else now_datetime()
+	return flt(
+		get_stock_balance(
+			item_code,
+			warehouse,
+			posting_date=posting_datetime.date(),
+			posting_time=posting_datetime.time(),
+		)
+	)
 
 
 def resolve_hospitalisation_activity_source_warehouse(doc, activity) -> str | None:
