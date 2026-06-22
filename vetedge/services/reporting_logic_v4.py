@@ -38,6 +38,7 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         "vaccination": _("Vaccination Dashboard"),
         "boarding": _("Boarding Dashboard"),
         "grooming": _("Grooming Dashboard"),
+        "hospitalisation": _("Hospitalisation Dashboard"),
     }
 
     payload = {
@@ -169,6 +170,32 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         payload["charts"] = [_boarding_chart(_rows("Kennel Availability Report", filters or {"from_date": today, "to_date": add_days(today, 7)}))]
         return payload
 
+
+    if key == "hospitalisation":
+        active_columns, active_rows = _hospitalisation_rows("active", filters)
+        charge_columns, charge_rows = _hospitalisation_rows("charges", filters)
+        occupancy_columns, occupancy_rows = _hospitalisation_rows("occupancy", filters)
+        discharge_columns, discharge_rows = _hospitalisation_rows("discharge", filters)
+        actions_columns, action_rows = _hospitalisation_rows("actions", filters)
+        payload["kpis"] = [
+            _kpi(_("Active Hospitalisations"), len(active_rows)),
+            _kpi(_("Pending Charges"), _currency(sum(flt(row.get("charge_sheet_pending") or row.get("pending_charges")) for row in charge_rows))),
+            _kpi(_("Billing Session Outstanding"), _currency(sum(flt(row.get("billing_session_outstanding") or row.get("outstanding_amount")) for row in charge_rows))),
+            _kpi(_("Missing Price Charges"), sum(int(row.get("missing_price_count") or 0) for row in charge_rows)),
+            _kpi(_("Pending Stock Posting"), sum(1 for row in action_rows if cstr(row.get("action_type")) == "Pending Stock Posting")),
+            _kpi(_("Occupied Care Locations"), sum(1 for row in occupancy_rows if int(row.get("active_occupancy") or 0) > 0)),
+            _kpi(_("Ready / Due for Discharge"), len(discharge_rows)),
+            _kpi(_("Long Stay Patients"), sum(1 for row in discharge_rows if int(row.get("days_admitted") or 0) >= 3)),
+        ]
+        payload["charts"] = [
+            _grouped_count_chart(_("Hospitalisations by Care Level"), active_rows, "care_level", "#0ea5e9"),
+            _grouped_count_chart(_("Hospitalisations by Status"), active_rows, "status", "#6366f1"),
+            _daily_vs_activity_charge_chart(charge_rows),
+            _occupancy_by_type_chart(occupancy_rows),
+            _grouped_count_chart(_("Pending Actions by Type"), action_rows, "action_type", "#f59e0b"),
+        ]
+        return payload
+
     if key == "practitioner_performance":
         practitioner_rows = _rows("Practitioner Performance Report", month_filters)
         payload["kpis"] = [
@@ -198,6 +225,7 @@ def _dashboard_report_links(key):
         "vaccination": ["Vaccination Report"],
         "boarding": ["Boarding Report", "Kennel Availability Report"],
         "grooming": ["Grooming Report"],
+        "hospitalisation": ["Active Hospitalisations", "Hospitalisation Charge Summary", "Care Location Occupancy", "Hospitalisation Discharge Watch", "Pending Hospitalisation Actions"],
     }
     return [{"label": label, "report": label} for label in links.get(key, [])]
 
@@ -446,3 +474,46 @@ def _is_multi_day_range(filters) -> bool:
         return getdate(to_date) > getdate(from_date)
     except Exception:
         return True
+
+
+def _hospitalisation_rows(kind, filters):
+    from vetedge.services import hospitalisation_reports
+
+    methods = {
+        "active": hospitalisation_reports.get_active_hospitalisations,
+        "charges": hospitalisation_reports.get_hospitalisation_charge_report,
+        "occupancy": hospitalisation_reports.get_care_location_occupancy_report,
+        "discharge": hospitalisation_reports.get_discharge_watch_report,
+        "actions": hospitalisation_reports.get_pending_hospitalisation_actions,
+    }
+    return methods[kind](filters or {})
+
+
+def _grouped_count_chart(title, rows, fieldname, color):
+    grouped = _group_count(rows, fieldname)
+    labels = sorted(grouped)
+    return _chart(title, "bar", labels, [grouped[label] for label in labels], color)
+
+
+def _daily_vs_activity_charge_chart(rows):
+    daily = 0
+    activity = 0
+    for row in rows:
+        total = flt(row.get("charge_sheet_total") or row.get("total_charges"))
+        if cstr(row.get("charge_category") or row.get("category")).lower() in {"daily stay", "daily"}:
+            daily += total
+        else:
+            activity += total
+    if not daily and not activity:
+        daily = sum(flt(row.get("daily_charge_amount") or 0) for row in rows)
+        activity = sum(flt(row.get("charge_sheet_total") or row.get("total_charges")) for row in rows) - daily
+    return _chart(_("Daily Charges vs Activity Charges"), "bar", [_("Daily Stay"), _("Activity / Other")], [daily, max(activity, 0)], "#10b981")
+
+
+def _occupancy_by_type_chart(rows):
+    grouped = {}
+    for row in rows:
+        key = cstr(row.get("location_type") or _("Unspecified"))
+        grouped[key] = grouped.get(key, 0) + int(row.get("active_occupancy") or 0)
+    labels = sorted(grouped)
+    return _chart(_("Care Location Occupancy by Type"), "bar", labels, [grouped[label] for label in labels], "#8b5cf6")

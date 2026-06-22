@@ -389,6 +389,7 @@ function open_hospitalisation_vitals_dialog(frm) {
 					clinical_notes: format_vitals_activity_notes(values),
 				});
 				dialog.hide();
+				save_and_reload_hospitalisation_activity(frm, "Vitals added");
 				return;
 			}
 			frappe.call({
@@ -409,7 +410,7 @@ function open_hospitalisation_vitals_dialog(frm) {
 						linked_document: record,
 					});
 					dialog.hide();
-					frappe.show_alert({ message: __("Vitals added"), indicator: "green" });
+					save_and_reload_hospitalisation_activity(frm, "Vitals added");
 				},
 			});
 		},
@@ -448,7 +449,6 @@ function open_hospitalisation_vaccination_dialog(frm) {
 						return;
 					}
 					add_vaccination_activity_with_billing(frm, dialog, values, record.name);
-					frappe.show_alert({ message: __("Vaccination added"), indicator: "green" });
 				},
 			});
 		},
@@ -503,7 +503,7 @@ function open_hospitalisation_lab_order_dialog(frm) {
 							}
 							add_lab_activities_with_billing(frm, values, selectedTests, order.name);
 							dialog.hide();
-							frappe.show_alert({ message: __("Lab order added"), indicator: "green" });
+							save_and_reload_hospitalisation_activity(frm, "Lab order added");
 						},
 					});
 				},
@@ -583,6 +583,16 @@ function add_activity_row_from_dialog(frm, dialog, values) {
 	}
 	append_activity_row(frm, values);
 	dialog.hide();
+	save_and_reload_hospitalisation_activity(frm, `${values.activity_type || "Activity"} added`);
+}
+
+
+function save_and_reload_hospitalisation_activity(frm, message) {
+    return frm.save().then(() => frm.reload_doc()).then(() => {
+        if (message) {
+            frappe.show_alert({ message: __(message), indicator: "green" });
+        }
+    });
 }
 
 function append_activity_row(frm, values) {
@@ -655,6 +665,7 @@ function add_vaccination_activity_with_billing(frm, dialog, values, linkedDocume
 		if (!values.billable || !item) {
 			append_activity_row(frm, activityValues);
 			dialog.hide();
+			save_and_reload_hospitalisation_activity(frm, "Vaccination added");
 			return;
 		}
 		resolve_billing_rate(item, values.rate).then((billing) => {
@@ -671,6 +682,7 @@ function add_vaccination_activity_with_billing(frm, dialog, values, linkedDocume
 				rate: billing.rate,
 			});
 			dialog.hide();
+			save_and_reload_hospitalisation_activity(frm, "Vaccination added");
 		});
 	});
 }
@@ -886,6 +898,7 @@ function add_medication_rows(frm, dialog, rows) {
 		}
 	});
 	dialog.hide();
+	save_and_reload_hospitalisation_activity(frm, "Medication added");
 }
 
 function add_billable_activity_with_rate(frm, dialog, values) {
@@ -900,6 +913,7 @@ function add_billable_activity_with_rate(frm, dialog, values) {
 	const activity = append_activity_row(frm, values);
 	append_charge_item_for_activity(frm, activity, values);
 	dialog.hide();
+	save_and_reload_hospitalisation_activity(frm, `${values.activity_type || "Activity"} added`);
 }
 
 function append_charge_item_for_activity(frm, activity, values) {

@@ -1,0 +1,39 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Veterinary",
+ "name": "veterinary-hospitalisation-dashboard",
+ "owner": "Administrator",
+ "page_name": "veterinary-hospitalisation-dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "VetEdge Administrator"
+  },
+  {
+   "role": "VetEdge Doctor"
+  },
+  {
+   "role": "Veterinary Nurse"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "VetEdge Front Desk"
+  },
+  {
+   "role": "Accounts/Cashier"
+  },
+  {
+   "role": "Accounts Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Hospitalisation Dashboard"
+}

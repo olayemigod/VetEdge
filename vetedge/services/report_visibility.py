@@ -158,6 +158,22 @@ REPORT_ROLE_MAP = {
 	},
 }
 
+for _hospitalisation_report in (
+    "Active Hospitalisations",
+    "Hospitalisation Charge Summary",
+    "Care Location Occupancy",
+    "Hospitalisation Discharge Watch",
+    "Pending Hospitalisation Actions",
+):
+    REPORT_ROLE_MAP[_hospitalisation_report] = {
+        *ADMIN_REPORTING_ROLES,
+        *BRANCH_MANAGER_REPORTING_ROLES,
+        *DOCTOR_REPORTING_ROLES,
+        *NURSE_REPORTING_ROLES,
+        *FRONT_DESK_REPORTING_ROLES,
+        *FINANCE_REPORTING_ROLES,
+    }
+
 DASHBOARD_ROLE_MAP = {
 	"executive": {*ADMIN_REPORTING_ROLES},
 	"clinical": {

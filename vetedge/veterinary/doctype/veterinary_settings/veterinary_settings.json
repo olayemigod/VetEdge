@@ -39,6 +39,11 @@
   "hospitalisation_section",
   "enable_veterinary_hospitalisation",
   "hospitalisation_payment_gate",
+  "hospitalisation_requires_consultation",
+  "allow_direct_hospitalisation_admission",
+  "hospitalisation_initial_billing_source",
+  "hospitalisation_admission_fee_item",
+  "hospitalisation_admission_fee_uom",
   "hospitalisation_daily_charge_settings",
   "vitals_section",
   "enable_vitals",
@@ -970,6 +975,42 @@
    "fieldname": "enable_advanced_reports",
    "fieldtype": "Check",
    "label": "Enable Advanced Reports"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_requires_consultation",
+   "fieldtype": "Check",
+   "label": "Require Consultation Before Hospitalisation"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "allow_direct_hospitalisation_admission",
+   "fieldtype": "Check",
+   "label": "Allow Direct Hospitalisation Admission"
+  },
+  {
+   "default": "Linked Consultation Billing Session",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_initial_billing_source",
+   "fieldtype": "Select",
+   "label": "Hospitalisation Initial Billing Source",
+   "options": "Linked Consultation Billing Session\nAdmission Fee Item\nDay 1 Daily Charge\nManual Initial Charge\nNone"
+  },
+  {
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
+   "fieldname": "hospitalisation_admission_fee_item",
+   "fieldtype": "Link",
+   "label": "Hospitalisation Admission Fee Item",
+   "options": "Item"
+  },
+  {
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
+   "fieldname": "hospitalisation_admission_fee_uom",
+   "fieldtype": "Link",
+   "label": "Hospitalisation Admission Fee UOM",
+   "options": "UOM"
   }
  ],
  "issingle": 1,

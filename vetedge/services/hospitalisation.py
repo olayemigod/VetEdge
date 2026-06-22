@@ -4,6 +4,7 @@ from datetime import timedelta
 import uuid
 
 import frappe
+from frappe import _dict
 from frappe.utils import cint, flt, formatdate, get_datetime, getdate, now, nowdate
 
 from vetedge.services.billing import get_invoice_payment_status
@@ -26,6 +27,12 @@ VALID_HOSPITALISATION_INVOICE_STATUSES = {"Not Invoiced", "Draft", "Unpaid", "Pa
 CARE_LOCATION_DOCTYPE = "Veterinary Care Location"
 CARE_LOCATION_LOG_DOCTYPE = "Veterinary Care Location Occupancy Log"
 ACTIVE_CARE_LOCATION_STATUSES = {"Available", "Occupied"}
+HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION = "Linked Consultation Billing Session"
+HOSPITALISATION_INITIAL_SOURCE_ADMISSION_FEE = "Admission Fee Item"
+HOSPITALISATION_INITIAL_SOURCE_DAY_ONE = "Day 1 Daily Charge"
+HOSPITALISATION_INITIAL_SOURCE_MANUAL = "Manual Initial Charge"
+HOSPITALISATION_INITIAL_SOURCE_NONE = "None"
+
 
 
 
@@ -61,10 +68,133 @@ def get_hospitalisation_payment_gate() -> str:
 	return gate
 
 
+def get_hospitalisation_admission_settings() -> _dict:
+	settings = frappe.get_single(SETTINGS_DOCTYPE) if frappe.db.exists("DocType", SETTINGS_DOCTYPE) else _dict()
+	meta = frappe.get_meta(SETTINGS_DOCTYPE) if frappe.db.exists("DocType", SETTINGS_DOCTYPE) else None
+
+	def value(fieldname, default=None):
+		if meta and not meta.has_field(fieldname):
+			return default
+		return settings.get(fieldname) if settings.get(fieldname) not in (None, "") else default
+
+	return _dict(
+		requires_consultation=cint(value("hospitalisation_requires_consultation", 0)),
+		allow_direct_admission=cint(value("allow_direct_hospitalisation_admission", 1)),
+		initial_billing_source=value("hospitalisation_initial_billing_source", HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION),
+		admission_fee_item=value("hospitalisation_admission_fee_item"),
+		admission_fee_uom=value("hospitalisation_admission_fee_uom"),
+	)
+
+
+def blocked_admission_response(doc, message: str, *, open_billing_modal: bool = False, invoice: str | None = None) -> dict:
+	return {
+		"allowed": False,
+		"blocked": True,
+		"can_proceed": False,
+		"status": "Blocked",
+		"message": message,
+		"reload_required": True,
+		"open_billing_modal": open_billing_modal,
+		"open_invoice_name": invoice,
+		"invoice": invoice,
+		"hospitalisation": doc.name,
+	}
+
+
+def get_admission_fee_source_key(doc, item: str) -> str:
+	return f"admission-fee::{doc.name}::{item}"
+
+
+def find_charge_item_by_source(doc, source_key: str):
+	return next((row for row in doc.get("charge_items") or [] if row.get("billing_status") != "Cancelled" and (row.get("source_key") == source_key or row.get("source_hash") == source_key or row.get("source_activity") == source_key)), None)
+
+
+def has_real_hospitalisation_charge_or_invoice(doc) -> bool:
+	if doc.get("sales_invoice") and frappe.db.exists("Sales Invoice", doc.get("sales_invoice")):
+		return True
+	for row in doc.get("charge_items") or []:
+		if row.get("billing_status") != "Cancelled" and row.get("item") and flt(row.get("amount")) > 0:
+			return True
+	return False
+
+
+def ensure_hospitalisation_admission_fee_charge(doc, settings) -> dict:
+	item = settings.get("admission_fee_item")
+	if not item:
+		return blocked_admission_response(doc, "Configure a Hospitalisation Admission Fee Item before admission.")
+	source_key = get_admission_fee_source_key(doc, item)
+	row = find_charge_item_by_source(doc, source_key)
+	if row and row.get("billing_status") == "Invoiced":
+		return {"created_or_resolved": True}
+	uom = settings.get("admission_fee_uom") or get_item_uom(item)
+	pricing = resolve_hospitalisation_charge_pricing(doc, item, uom)
+	rate = flt(pricing.get("rate"))
+	if rate <= 0:
+		return blocked_admission_response(doc, "Rate is required for the configured Hospitalisation Admission Fee Item before admission.")
+	values = {
+		"source_activity": source_key,
+		"source_key": source_key,
+		"source_hash": source_key,
+		"activity_type": "Admission Fee",
+		"charge_category": "Manual",
+		"item": item,
+		"item_name": get_item_name(item),
+		"description": "Hospitalisation Admission Fee",
+		"qty": 1,
+		"uom": uom,
+		"rate": rate,
+		"amount": rate,
+		"pricing_source": pricing.get("pricing_source"),
+		"billing_status": "Pending Invoice",
+		"notes": "Initial hospitalisation admission billing source",
+	}
+	if row:
+		if row.get("billing_status") != "Invoiced":
+			for fieldname, value in values.items():
+				setattr(row, fieldname, value)
+	else:
+		append_charge_item(doc, values)
+	doc.save()
+	return {"created_or_resolved": True}
+
+
+def ensure_hospitalisation_day_one_charge(doc) -> dict:
+	charge_date = getdate(doc.get("admission_datetime") or nowdate())
+	result = generate_hospitalisation_daily_charges(doc.name, from_date=charge_date, to_date=charge_date, care_level=doc.get("care_level") or "Standard")
+	if result.get("created") or result.get("updated") or result.get("skipped_existing"):
+		if result.get("missing_price"):
+			return blocked_admission_response(doc, "Rate is required for the Day 1 Daily Charge before admission.")
+		return {"created_or_resolved": True, "daily_charge": result}
+	return blocked_admission_response(doc, result.get("message") or "Daily charge item is not configured for this care level.")
+
+
+def resolve_hospitalisation_initial_billing_source(doc, gate: str) -> dict:
+	settings = get_hospitalisation_admission_settings()
+	if settings.requires_consultation and not doc.get("linked_consultation") and not settings.allow_direct_admission:
+		return blocked_admission_response(doc, "Hospitalisation should be created from a Consultation. Link a Consultation or enable Direct Hospitalisation Admission.")
+	source = settings.initial_billing_source or HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION
+	if source == HOSPITALISATION_INITIAL_SOURCE_NONE:
+		if gate != NO_PAYMENT_GATE:
+			return blocked_admission_response(doc, "Hospitalisation Initial Billing Source cannot be None when Full or Partial payment gate is enabled.")
+		return {"created_or_resolved": False}
+	if source == HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION:
+		return {"created_or_resolved": bool(doc.get("linked_consultation"))}
+	if source == HOSPITALISATION_INITIAL_SOURCE_ADMISSION_FEE:
+		return ensure_hospitalisation_admission_fee_charge(doc, settings)
+	if source == HOSPITALISATION_INITIAL_SOURCE_DAY_ONE:
+		return ensure_hospitalisation_day_one_charge(doc)
+	if source == HOSPITALISATION_INITIAL_SOURCE_MANUAL:
+		if not has_real_hospitalisation_charge_or_invoice(doc):
+			return blocked_admission_response(doc, "Add a Manual Initial Charge before admission.")
+		return {"created_or_resolved": True}
+	return {"created_or_resolved": False}
+
+
 def validate_hospitalisation(doc) -> None:
 	if doc.is_new():
 		assert_hospitalisation_enabled()
 	sync_hospitalisation_title(doc)
+	validate_locked_hospitalisation_charge_items(doc)
 	normalize_hospitalisation_activities(doc)
 	normalize_hospitalisation_charge_items(doc)
 
@@ -93,6 +223,8 @@ def normalize_hospitalisation_activities(doc) -> None:
 
 def normalize_hospitalisation_charge_items(doc) -> None:
 	for row in doc.get("charge_items") or []:
+		if row.get("billing_status") == "Invoiced" and row.get("sales_invoice") and is_sales_invoice_submitted_or_paid(row.get("sales_invoice")):
+			continue
 		qty = flt(row.get("qty")) or 1
 		rate = flt(row.get("rate"))
 		if row.get("item") and rate <= 0 and row.get("billing_status") != "Invoiced":
@@ -106,6 +238,32 @@ def normalize_hospitalisation_charge_items(doc) -> None:
 		row.amount = qty * rate
 		if not row.get("billing_status"):
 			row.billing_status = "Pending Invoice"
+
+
+def is_sales_invoice_submitted_or_paid(invoice_name: str | None) -> bool:
+	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+		return False
+	invoice = frappe.db.get_value("Sales Invoice", invoice_name, ["docstatus", "status", "outstanding_amount"], as_dict=True) or {}
+	return cint(invoice.get("docstatus")) == 1 or invoice.get("status") == "Paid" or flt(invoice.get("outstanding_amount")) <= 0 and cint(invoice.get("docstatus")) == 1
+
+
+def validate_locked_hospitalisation_charge_items(doc) -> None:
+	if not getattr(doc, "get_doc_before_save", None):
+		return
+	old = doc.get_doc_before_save()
+	if not old:
+		return
+	old_rows = {row.name: row for row in old.get("charge_items") or [] if row.get("name")}
+	financial_fields = ("item", "qty", "uom", "rate", "amount")
+	for row in doc.get("charge_items") or []:
+		old_row = old_rows.get(row.get("name"))
+		if not old_row:
+			continue
+		locked = old_row.get("billing_status") == "Invoiced" and old_row.get("sales_invoice") and is_sales_invoice_submitted_or_paid(old_row.get("sales_invoice"))
+		if not locked:
+			continue
+		if any(row.get(fieldname) != old_row.get(fieldname) for fieldname in financial_fields):
+			frappe.throw("This charge is already invoiced. Create an adjustment charge instead.", frappe.ValidationError)
 
 
 def generate_hospitalisation_activity_reference() -> str:
@@ -1327,7 +1485,7 @@ def build_hospitalisation_discharge_readiness(doc, discharge_summary: str | None
 			recommended_actions.append("Open Billing & Payment")
 
 	recommended_actions = list(dict.fromkeys(recommended_actions))
-	can_discharge = bool(discharge_summary or doc.get("discharge_summary")) and not pending_billable and not pending_charges and bool(gate.get("can_proceed"))
+	can_discharge = bool(discharge_summary or doc.get("discharge_summary")) and not pending_billable and not pending_charges and not pending_stock and bool(gate.get("can_proceed"))
 	return {
 		"hospitalisation": doc.name,
 		"status": doc.get("status"),
@@ -1434,6 +1592,10 @@ def admit_hospitalisation(hospitalisation_name: str) -> dict:
 	from vetedge.services.billing_core import get_billing_session_summary, get_payment_gate_status, sync_source_to_billing_session
 
 	source_doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, hospitalisation_name)
+	gate_mode = get_hospitalisation_payment_gate()
+	initial_result = resolve_hospitalisation_initial_billing_source(source_doc, gate_mode)
+	if initial_result.get("blocked"):
+		return initial_result
 	billing_result = sync_source_to_billing_session(HOSPITALISATION_DOCTYPE, source_doc.name)
 	session_name = billing_result.get("session")
 	session = frappe.get_doc("Veterinary Billing Session", session_name) if session_name else None
@@ -1492,6 +1654,8 @@ def discharge_hospitalisation(hospitalisation_name: str, discharge_summary: str 
 		frappe.throw("Discharge summary is required before discharge.", frappe.ValidationError)
 
 	readiness = build_hospitalisation_discharge_readiness(doc, discharge_summary=summary)
+	if readiness.get("pending_stock_activities"):
+		frappe.throw("Stock usage must be posted before discharge. Use Stock → Post Stock Usage.", frappe.ValidationError)
 	if not readiness.get("can_discharge") and not cint(force):
 		doc.discharge_billing_status = readiness.get("discharge_billing_status")
 		doc.discharge_message = " ".join(readiness.get("messages") or [])[:1000]
