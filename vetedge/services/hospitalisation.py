@@ -78,8 +78,8 @@ def get_hospitalisation_admission_settings() -> _dict:
 		return settings.get(fieldname) if settings.get(fieldname) not in (None, "") else default
 
 	return _dict(
-		requires_consultation=cint(value("hospitalisation_requires_consultation", 0)),
-		allow_direct_admission=cint(value("allow_direct_hospitalisation_admission", 1)),
+		requires_consultation=cint(value("hospitalisation_requires_consultation", 1)),
+		allow_direct_admission=cint(value("allow_direct_hospitalisation_admission", 0)),
 		initial_billing_source=value("hospitalisation_initial_billing_source", HOSPITALISATION_INITIAL_SOURCE_LINKED_CONSULTATION),
 		admission_fee_item=value("hospitalisation_admission_fee_item"),
 		admission_fee_uom=value("hospitalisation_admission_fee_uom"),

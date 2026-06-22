@@ -24,10 +24,23 @@ def meta(*fields):
 	return SimpleNamespace(has_field=lambda fieldname: fieldname in fields)
 
 
-def settings(enabled=1, gate="Partial Payment Gate"):
+def settings(
+	enabled=1,
+	gate="Partial Payment Gate",
+	requires_consultation=1,
+	allow_direct_admission=0,
+	initial_billing_source="Linked Consultation Billing Session",
+	admission_fee_item=None,
+	admission_fee_uom=None,
+):
 	return frappe._dict(
 		enable_veterinary_hospitalisation=enabled,
 		hospitalisation_payment_gate=gate,
+		hospitalisation_requires_consultation=requires_consultation,
+		allow_direct_hospitalisation_admission=allow_direct_admission,
+		hospitalisation_initial_billing_source=initial_billing_source,
+		hospitalisation_admission_fee_item=admission_fee_item,
+		hospitalisation_admission_fee_uom=admission_fee_uom,
 	)
 
 
@@ -59,6 +72,22 @@ class TestHospitalisationActions(TestCase):
 			self.assertRaises(frappe.ValidationError, hospitalisation.admit_hospitalisation, "VHOS-001")
 
 		self.assertEqual(frappe_stub.throw.call_args.args[0], hospitalisation.DISABLED_MESSAGE)
+
+
+	def test_admit_blocks_direct_hospitalisation_when_consultation_required(self):
+		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", status="Draft", linked_consultation=None)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: hosp)
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+		):
+			result = hospitalisation.admit_hospitalisation("VHOS-001")
+
+		self.assertTrue(result["blocked"])
+		self.assertTrue(result["reload_required"])
+		self.assertIn("Hospitalisation should be created from a Consultation", result["message"])
+		hosp.save.assert_not_called()
 
 	def test_hospitalisation_patient_context_returns_owner_and_details(self):
 		patient = doc(
@@ -280,7 +309,10 @@ class TestHospitalisationActions(TestCase):
 				return session
 			return hosp
 
-		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		frappe_stub = make_frappe_stub(
+			get_doc=get_doc,
+			settings_doc=settings(requires_consultation=0, allow_direct_admission=1),
+		)
 		with billing_core_admit_context(
 			frappe_stub,
 			session,
@@ -309,7 +341,10 @@ class TestHospitalisationActions(TestCase):
 				return session
 			return hosp
 
-		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		frappe_stub = make_frappe_stub(
+			get_doc=get_doc,
+			settings_doc=settings(requires_consultation=0, allow_direct_admission=1),
+		)
 		with billing_core_admit_context(
 			frappe_stub,
 			session,
@@ -347,7 +382,10 @@ class TestHospitalisationActions(TestCase):
 			stale_hosp.invoice_status = "Draft"
 			return {"session": "VBS-001", "invoice": "SINV-PAID", "created": False}
 
-		frappe_stub = make_frappe_stub(get_doc=get_doc)
+		frappe_stub = make_frappe_stub(
+			get_doc=get_doc,
+			settings_doc=settings(requires_consultation=0, allow_direct_admission=1),
+		)
 		with (
 			patch.object(hospitalisation, "frappe", frappe_stub),
 			patch.object(hospitalisation, "require_internal_user"),
@@ -378,7 +416,10 @@ class TestHospitalisationActions(TestCase):
 				return session
 			return hosp
 
-		frappe_stub = make_frappe_stub(get_doc=get_doc, settings_doc=settings(gate="No Payment Gate"))
+		frappe_stub = make_frappe_stub(
+			get_doc=get_doc,
+			settings_doc=settings(gate="No Payment Gate", requires_consultation=0, allow_direct_admission=1),
+		)
 		with billing_core_admit_context(
 			frappe_stub,
 			session,
@@ -555,6 +596,11 @@ def make_frappe_stub(get_doc=None, get_all=None, settings_doc=None, item_exists=
 		get_meta=lambda doctype: meta(
 			"enable_veterinary_hospitalisation",
 			"hospitalisation_payment_gate",
+			"hospitalisation_requires_consultation",
+			"allow_direct_hospitalisation_admission",
+			"hospitalisation_initial_billing_source",
+			"hospitalisation_admission_fee_item",
+			"hospitalisation_admission_fee_uom",
 			"branch",
 		),
 		get_single=lambda doctype: settings_doc,
