@@ -19,7 +19,6 @@ frappe.ui.form.on("Veterinary Settings", {
 	refresh(frm) {
 		set_registration_billing_read_only(frm);
 		set_consultation_billing_read_only(frm);
-		set_coreedge_platform_visibility(frm);
 	},
 
 	enable_registration_billing(frm) {
@@ -30,24 +29,6 @@ frappe.ui.form.on("Veterinary Settings", {
 		set_consultation_billing_read_only(frm);
 	},
 });
-
-function set_coreedge_platform_visibility(frm) {
-	const is_available = frappe.boot && frappe.boot.is_coreedge_available;
-	frm.toggle_display("coreedge_platform_section", !!is_available);
-	frm.toggle_display("deployment_mode", !!is_available);
-	frm.toggle_display("enable_coreedge_platform", !!is_available);
-	frm.toggle_display("coreedge_product_app", !!is_available);
-	frm.toggle_display("fail_closed_when_coreedge_missing", !!is_available);
-
-	if (is_available) {
-		const is_platform_admin = frappe.user.has_role("System Manager") || frappe.user.has_role("CoreEdge Platform Admin");
-		const read_only = !is_platform_admin;
-		frm.set_df_property("deployment_mode", "read_only", read_only);
-		frm.set_df_property("enable_coreedge_platform", "read_only", read_only);
-		frm.set_df_property("coreedge_product_app", "read_only", read_only);
-		frm.set_df_property("fail_closed_when_coreedge_missing", "read_only", read_only);
-	}
-}
 
 function set_registration_billing_read_only(frm) {
 	const read_only = !frm.doc.enable_registration_billing;

@@ -10,30 +10,66 @@ def is_coreedge_available() -> bool:
 	except Exception:
 		return False
 
+def _parse_config_bool(val) -> bool:
+	if val is None:
+		return False
+	if isinstance(val, bool):
+		return val
+	if isinstance(val, int):
+		return val != 0
+	val_str = str(val).strip().lower()
+	if val_str in ("1", "true", "yes", "on"):
+		return True
+	return False
+
+def get_edge_platform_mode() -> str:
+	try:
+		mode = frappe.conf.get("edge_platform_mode")
+		if mode is not None:
+			mode = str(mode).strip()
+		if not mode:
+			return "standalone"
+		
+		supported_modes = {"standalone", "shared_hosted", "white_label"}
+		if mode not in supported_modes:
+			try:
+				frappe.logger().error(
+					f"Invalid edge_platform_mode '{mode}' configured in site_config. "
+					"Failing safe to required mode behavior."
+				)
+			except Exception:
+				pass
+		return mode
+	except Exception:
+		return "standalone"
+
 def is_coreedge_enabled() -> bool:
 	try:
-		deployment_mode = frappe.db.get_single_value("Veterinary Settings", "deployment_mode")
-		if deployment_mode == "Hosted Platform":
+		required = _parse_config_bool(frappe.conf.get("coreedge_required"))
+		if required:
 			return True
-		return bool(frappe.db.get_single_value("Veterinary Settings", "enable_coreedge_platform"))
+		
+		mode = get_edge_platform_mode()
+		if mode in ("shared_hosted", "white_label"):
+			return True
+		elif mode == "standalone":
+			return False
+		else:
+			return True
 	except Exception:
 		return False
 
 def should_fail_closed_when_coreedge_missing() -> bool:
-	try:
-		deployment_mode = frappe.db.get_single_value("Veterinary Settings", "deployment_mode")
-		if deployment_mode == "Hosted Platform":
-			return True
-		return bool(frappe.db.get_single_value("Veterinary Settings", "fail_closed_when_coreedge_missing"))
-	except Exception:
-		return False
+	return is_coreedge_enabled()
 
 def should_show_coreedge_controls() -> bool:
 	return is_coreedge_available() and is_coreedge_enabled()
 
 def get_vetedge_product_app() -> str:
 	try:
-		val = frappe.db.get_single_value("Veterinary Settings", "coreedge_product_app")
+		val = frappe.conf.get("edge_platform_product")
+		if val is not None:
+			val = str(val).strip()
 		return val or "VetEdge"
 	except Exception:
 		return "VetEdge"

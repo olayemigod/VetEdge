@@ -9,44 +9,6 @@ from vetedge.services.registration_billing import validate_registration_settings
 
 class VeterinarySettings(Document):
 	def validate(self) -> None:
-		# Check platform settings protection
-		db_doc = None
-		try:
-			db_doc = frappe.get_doc("Veterinary Settings")
-		except Exception:
-			pass
-
-		old_mode = db_doc.get("deployment_mode") if db_doc else None
-		new_mode = self.get("deployment_mode")
-		
-		is_platform_admin = (
-			frappe.session.user == "Administrator" or
-			"System Manager" in frappe.get_roles() or
-			"CoreEdge Platform Admin" in frappe.get_roles()
-		)
-		
-		protected_fields = [
-			"deployment_mode",
-			"enable_coreedge_platform",
-			"fail_closed_when_coreedge_missing",
-			"coreedge_product_app"
-		]
-		
-		if old_mode == "Hosted Platform" or new_mode == "Hosted Platform":
-			if not is_platform_admin:
-				if old_mode == "Hosted Platform":
-					for field in protected_fields:
-						if db_doc and self.get(field) != db_doc.get(field):
-							frappe.throw(
-								frappe._("Only a Platform Administrator can modify CoreEdge Platform settings in Hosted Platform mode."),
-								exc=frappe.PermissionError
-							)
-				if new_mode == "Hosted Platform" and old_mode != "Hosted Platform":
-					frappe.throw(
-						frappe._("Only a Platform Administrator can enable Hosted Platform mode."),
-						exc=frappe.PermissionError
-					)
-
 		if not self.get("enable_vetedge"):
 			clear_fields(
 				self,
