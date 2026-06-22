@@ -8,6 +8,8 @@ from unittest import TestCase
 
 APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
 WORKSPACE_SIDEBAR = APP_ROOT / "workspace_sidebar/vetedge.json"
+HOSPITALISATION_DASHBOARD_PAGE = APP_ROOT / "veterinary/page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.json"
+HOSPITALISATION_DASHBOARD_JS = APP_ROOT / "veterinary/page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.js"
 
 
 def _load_sidebar() -> dict:
@@ -67,6 +69,27 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertEqual(link["link_type"], "DocType")
 		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
 		self.assertIn("Veterinary Nurse", link.get("display_depends_on", ""))
+
+	def test_hospitalisation_dashboard_is_real_desk_page_with_sidebar_link(self):
+		page = json.loads(HOSPITALISATION_DASHBOARD_PAGE.read_text())
+		js = HOSPITALISATION_DASHBOARD_JS.read_text()
+		link = _links_by_label(_load_sidebar()["items"])["Veterinary Hospitalisation Dashboard"]
+
+		self.assertEqual(page["doctype"], "Page")
+		self.assertEqual(page["name"], "veterinary-hospitalisation-dashboard")
+		self.assertEqual(page["page_name"], "veterinary-hospitalisation-dashboard")
+		self.assertEqual(page["module"], "Veterinary")
+		self.assertEqual(page["standard"], "Yes")
+		self.assertEqual(link["link_to"], page["page_name"])
+		self.assertEqual(link["link_type"], "Page")
+		self.assertIn('frappe.pages["veterinary-hospitalisation-dashboard"]', js)
+		self.assertIn('key: "hospitalisation"', js)
+		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
+		self.assertIn("Accounts Manager", link.get("display_depends_on", ""))
+
+		roles = {row["role"] for row in page.get("roles", [])}
+		for role in ("System Manager", "VetEdge Administrator", "VetEdge Doctor", "Veterinary Nurse", "Branch Manager", "Accounts/Cashier", "Accounts Manager"):
+			self.assertIn(role, roles)
 
 	def test_veterinary_notification_item_is_admin_monitoring_link(self):
 		items = _load_sidebar()["items"]
