@@ -42,7 +42,7 @@ def get_branding() -> dict:
 
 	if ce_available and ce_enabled:
 		try:
-			from coreedge.services.branding import get_product_branding
+			get_product_branding = frappe.get_attr("coreedge.services.branding.get_product_branding")
 			site = getattr(frappe.local, "site", None)
 			ce_branding = get_product_branding(product_app="vetedge", tenant_site=site)
 			
@@ -122,8 +122,7 @@ def replace_brand_tokens(text: str) -> str:
 	if not isinstance(text, str):
 		return text
 
-	branding = get_branding()
-	brand_name = branding.get("brand_name") or "VetEdge"
+	brand_name = get_brand_name() or "VetEdge"
 
 	text = text.replace("VetEdge", brand_name)
 	text = text.replace("VETEDGE", brand_name.upper())

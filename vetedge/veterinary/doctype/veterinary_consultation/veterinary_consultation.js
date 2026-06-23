@@ -297,7 +297,7 @@ function show_medical_history_dialog(frm) {
 	}
 
 	const dialog = new frappe.ui.Dialog({
-		title: __("VetEdge Medical History"),
+		title: __("Medical History"),
 		size: "extra-large",
 		fields: [
 			{
