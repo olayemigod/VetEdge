@@ -1574,10 +1574,23 @@ def send_due_vaccination_notifications() -> list[dict]:
 	if not settings["enabled"]:
 		return []
 
+	results = []
+
+	# Daily: generate the persistent in-app notifications (Veterinary Notification Items)
+	try:
+		from vetedge.services.vaccination_notifications import run_vaccination_notification_checks
+		res_dict = run_vaccination_notification_checks()
+		for val in res_dict.values():
+			if isinstance(val, list):
+				results.extend(val)
+	except Exception:
+		if getattr(frappe, "log_error", None):
+			frappe.log_error("Failed to run vaccination notification checks (new)")
+
+	# Preserve the original active notifications behavior (emails/SMS)
 	records = query_due_vaccination_notifications(
 		due_soon_days=int(settings.get("vaccination_due_reminder_days") or 7)
 	)
-	results = []
 	for row in records:
 		event_key = "vaccination_overdue" if row["due_state"] == "Overdue" else "vaccination_due_soon"
 		if already_notified_recently(event_key, "Veterinary Vaccination Record", row["name"]):
