@@ -33,6 +33,8 @@ class TestWorkspaceSidebar(TestCase):
 		items = _load_sidebar()["items"]
 		for item in items:
 			label = item.get("label") or ""
+			if label in ("Veterinary Records", "Veterinary Masters"):
+				continue
 			self.assertFalse(label.startswith("Veterinary"), label)
 
 	def test_missed_appointments_is_in_appointment_cluster(self):
@@ -53,7 +55,7 @@ class TestWorkspaceSidebar(TestCase):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
 		hospitalisation_index = labels.index("Hospitalisation")
-		records_index = labels.index("VetEdge Records")
+		records_index = labels.index("Veterinary Records")
 
 		for label in (
 			"Hospitalisations",
@@ -98,8 +100,8 @@ class TestWorkspaceSidebar(TestCase):
 		labels = [item.get("label") for item in items]
 		item_index = labels.index("Notification Items")
 
-		self.assertGreater(item_index, labels.index("VetEdge Notification Event Registry"))
-		self.assertLess(item_index, labels.index("VetEdge Notification Log"))
+		self.assertGreater(item_index, labels.index("Notification Event Registry"))
+		self.assertLess(item_index, labels.index("Notification Log"))
 
 		link = _links_by_label(items)["Notification Items"]
 		self.assertEqual(link["link_to"], "Veterinary Notification Item")
@@ -131,7 +133,7 @@ class TestWorkspaceSidebar(TestCase):
 		]
 
 		self.assertEqual(len(patient_indexes), 1)
-		self.assertGreater(patient_indexes[0], labels.index("VetEdge Records"))
+		self.assertGreater(patient_indexes[0], labels.index("Veterinary Records"))
 		self.assertEqual(items[patient_indexes[0]]["icon"], "users-round")
 
 	def test_notification_item_label_uses_vetedge_navigation_language(self):
@@ -146,7 +148,7 @@ class TestWorkspaceSidebar(TestCase):
 			if item.get("type") == "Section Break"
 		}
 
-		for label in ("Dashboards", "Hospitalisation", "VetEdge Records", "VetEdge Masters", "Reports"):
+		for label in ("Dashboards", "Hospitalisation", "Veterinary Records", "Veterinary Masters", "Reports"):
 			self.assertEqual(sections[label]["collapsible"], 1)
 			self.assertEqual(sections[label]["keep_closed"], 1)
 			self.assertEqual(sections[label]["show_arrow"], 0)
@@ -183,3 +185,41 @@ class TestWorkspaceSidebar(TestCase):
 		link = _links_by_label(items)["Planned Treatment"]
 		self.assertEqual(link["link_to"], "Planned Treatment")
 		self.assertEqual(link["link_type"], "Report")
+
+	def test_refined_sidebar_labels(self):
+		sidebar = _load_sidebar()
+		items = sidebar.get("items", [])
+		links = _links_by_label(items)
+		labels = [item.get("label") for item in items if item.get("label")]
+
+		# 1. Executive dashboard label is "Executive Dashboard"
+		self.assertIn("Executive Dashboard", links)
+		self.assertNotIn("VetEdge Executive Dashboard", links)
+		self.assertEqual(links["Executive Dashboard"]["link_to"], "vetedge-executive-dashboard")
+
+		# 2. Records section label is "Veterinary Records"
+		self.assertIn("Veterinary Records", labels)
+		self.assertNotIn("VetEdge Records", labels)
+
+		# 3. Masters section label is "Veterinary Masters"
+		self.assertIn("Veterinary Masters", labels)
+		self.assertNotIn("VetEdge Masters", labels)
+
+		# 4. Role Bundle label is "Role Bundle"
+		self.assertIn("Role Bundle", links)
+		self.assertNotIn("VetEdge Role Bundle", links)
+		self.assertEqual(links["Role Bundle"]["link_to"], "VetEdge Role Bundle")
+
+		# 5. Setup link labels do not start with "VetEdge " or "Veterinary "
+		setup_index = labels.index("Setup")
+		for item in items[setup_index + 1:]:
+			if item.get("type") == "Link" and item.get("label"):
+				label = item.get("label")
+				self.assertFalse(label.startswith("VetEdge "), f"Label '{label}' under Setup starts with VetEdge")
+				self.assertFalse(label.startswith("Veterinary "), f"Label '{label}' under Setup starts with Veterinary")
+
+		# 6. "link_to" targets remain unchanged and valid
+		self.assertEqual(links["Settings"]["link_to"], "Veterinary Settings")
+		self.assertEqual(links["Notification Event Registry"]["link_to"], "VetEdge Notification Event Registry")
+		self.assertEqual(links["Notification Log"]["link_to"], "VetEdge Notification Log")
+		self.assertEqual(links["Notification Preference"]["link_to"], "VetEdge Notification Preference")

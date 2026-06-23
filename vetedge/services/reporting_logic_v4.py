@@ -28,7 +28,7 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
     today_filters.to_date = today
 
     titles = {
-        "executive": _("VetEdge Executive Dashboard"),
+        "executive": _("Executive Dashboard"),
         "clinical": _("Clinical Dashboard"),
         "financial": _("Financial Dashboard"),
         "practitioner_performance": _("Practitioner Performance Dashboard"),

@@ -211,7 +211,7 @@ EXPECTED_REPORT_FILTER_FIELDS = {
 }
 
 EXPECTED_WORKSPACE_RULE_SNIPPETS = {
-	"VetEdge Executive Dashboard": ["VetEdge Administrator", "System Manager"],
+	"Executive Dashboard": ["VetEdge Administrator", "System Manager"],
 	"Financial Dashboard": ["Accounts/Cashier", "Accounts Manager", "Branch Manager"],
 	"Inventory / Dispensary Dashboard": ["Dispensary User", "Branch Manager"],
 	"Practitioner Performance Dashboard": ["VetEdge Doctor", "Branch Manager"],
@@ -234,7 +234,7 @@ EXPECTED_WORKSPACE_RULE_SNIPPETS = {
 	"Cost Center": ["Accounts/Cashier", "Accounts Manager", "Sales Manager"],
 	"Item": ["VetEdge Doctor", "Veterinary Nurse", "Dispensary User"],
 	"Branch": ["VetEdge Administrator", "Branch Manager"],
-	"VetEdge License Profile": ["System Manager"],
+	"License Profile": ["System Manager"],
 }
 
 REPORT_JS_WITH_DEFAULTS = {
