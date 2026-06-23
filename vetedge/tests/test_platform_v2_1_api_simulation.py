@@ -42,56 +42,91 @@ class TestPlatformV21ApiSimulation(unittest.TestCase):
 		frappe.conf.update(self.orig_conf)
 		self.teardown_prerequisites_patches()
 
+	def _mock_get_doc(self, *args, **kwargs):
+		doc_data = {}
+		if args and isinstance(args[0], dict):
+			doc_data = args[0]
+		elif args and len(args) > 1 and isinstance(args[1], dict):
+			doc_data = args[1]
+
+		mock_doc = MagicMock()
+		mock_doc.name = doc_data.get("name") or "DUMMY-NAME"
+		mock_doc.status = doc_data.get("status") or "Draft"
+		mock_doc.docstatus = doc_data.get("docstatus") or 0
+		mock_doc.service_branch = doc_data.get("service_branch") or "Main Branch"
+		mock_doc.branch = doc_data.get("branch") or "Main Branch"
+		mock_doc.default_branch = doc_data.get("default_branch") or "Main Branch"
+		mock_doc.patient = doc_data.get("patient") or "P-001"
+		mock_doc.animal = doc_data.get("animal") or "P-001"
+		mock_doc.primary_owner = doc_data.get("primary_owner") or "O-001"
+		mock_doc.customer = doc_data.get("customer") or "O-001"
+		mock_doc.company = doc_data.get("company") or "Company 1"
+		mock_doc.consultation = doc_data.get("consultation") or "VCON-001"
+		mock_doc.linked_consultation = doc_data.get("linked_consultation") or "VCON-001"
+		mock_doc.vaccine = doc_data.get("vaccine") or "V-001"
+		mock_doc.administered_on = doc_data.get("administered_on") or "2026-06-23 09:00:00"
+		mock_doc.next_due_date = doc_data.get("next_due_date") or "2026-07-23"
+		mock_doc.doctype = doc_data.get("doctype") or (args[0] if args and isinstance(args[0], str) else "DUMMY-DOCTYPE")
+		mock_doc.outstanding_amount = 100.0
+		mock_doc.time_zone = doc_data.get("time_zone") or "UTC"
+		mock_doc.enable_scheduler = doc_data.get("enable_scheduler") or 1
+
+		mock_doc.get.side_effect = lambda key, default=None: doc_data.get(key, getattr(mock_doc, key, default))
+		mock_doc.save.return_value = mock_doc
+		mock_doc.insert.return_value = mock_doc
+		mock_doc.submit.return_value = mock_doc
+		return mock_doc
+
 	def setup_prerequisites_patches(self):
 		# Create persistent patches that bypass basic logic so we only test gates
 		self.patches = [
 			patch("vetedge.services.appointment_flow.require_internal_user"),
 			patch("vetedge.services.appointment_flow.ensure_appointments_enabled"),
 			patch("vetedge.services.appointment_flow.can_access_consultation"),
-			patch("vetedge.services.appointment_flow.frappe.get_doc"),
+			patch("vetedge.services.appointment_flow.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.appointment_flow.normalize_consultation_links"),
 			patch("vetedge.services.appointment_flow.validate_start_consultation_from_appointment"),
 			patch("vetedge.services.appointment_flow.assert_consultation_can_proceed"),
 
 			patch("vetedge.services.consultation_flow.require_internal_user"),
 			patch("vetedge.services.consultation_flow.ensure_consultations_enabled"),
-			patch("vetedge.services.consultation_flow.frappe.get_doc"),
+			patch("vetedge.services.consultation_flow.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
 
 			patch("vetedge.services.billing_modal.require_internal_user"),
 			patch("vetedge.services.billing_modal.get_billing_source_config"),
-			patch("vetedge.services.billing_modal.frappe.get_doc"),
+			patch("vetedge.services.billing_modal.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.billing_modal.assert_can_act_on_source"),
 			patch("vetedge.services.billing_modal.assert_can_read_source"),
 
 			patch("vetedge.services.lab.require_internal_user"),
 			patch("vetedge.services.lab.can_access_consultation"),
-			patch("vetedge.services.lab.frappe.get_doc"),
+			patch("vetedge.services.lab.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.lab.can_request_lab_tests"),
 			patch("vetedge.services.lab.can_access_lab_order"),
 
 			patch("vetedge.services.vaccination.require_internal_user"),
 			patch("vetedge.services.vaccination.ensure_vaccination_enabled"),
-			patch("vetedge.services.vaccination.frappe.get_doc"),
+			patch("vetedge.services.vaccination.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.vaccination.can_access_consultation"),
 			patch("vetedge.services.vaccination.require_vaccination_branch_access"),
 			patch("vetedge.services.vaccination.can_administer_vaccine"),
 
 			patch("vetedge.services.hospitalisation.require_internal_user"),
 			patch("vetedge.services.hospitalisation.assert_hospitalisation_enabled"),
-			patch("vetedge.services.hospitalisation.frappe.get_doc"),
+			patch("vetedge.services.hospitalisation.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.hospitalisation.normalize_discharge_details"),
 			patch("vetedge.services.hospitalisation.build_hospitalisation_discharge_readiness"),
 
 			patch("vetedge.services.grooming.require_internal_user"),
 			patch("vetedge.services.grooming.ensure_grooming_enabled"),
-			patch("vetedge.services.grooming.frappe.get_doc"),
+			patch("vetedge.services.grooming.frappe.get_doc", new=self._mock_get_doc),
 			patch("vetedge.services.grooming.can_create_grooming_session"),
 			patch("vetedge.services.grooming.can_manage_grooming_billing"),
 
 			patch("vetedge.services.boarding.require_internal_user"),
 			patch("vetedge.services.boarding.ensure_boarding_enabled"),
-			patch("vetedge.services.boarding.frappe.get_doc"),
+			patch("vetedge.services.boarding.frappe.get_doc", new=self._mock_get_doc),
 		]
 		for p in self.patches:
 			p.start()

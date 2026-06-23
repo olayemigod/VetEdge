@@ -117,9 +117,9 @@ class TestNavigationPermissionMatrix(TestCase):
 		self.assertIn("Branch Manager", display_rules["Financial Dashboard"])
 		self.assertIn("Accounts/Cashier", display_rules["Financial Dashboard"])
 		self.assertNotIn("VetEdge Front Desk", display_rules["Financial Dashboard"])
-		self.assertIn("Lab Technician", display_rules["Veterinary Lab Order"])
-		self.assertIn("Branch Manager", display_rules["Veterinary Lab Order"])
-		self.assertIn("Lab Technician", display_rules["Veterinary Lab Test"])
+		self.assertIn("Lab Technician", display_rules["Lab Orders"])
+		self.assertIn("Branch Manager", display_rules["Lab Orders"])
+		self.assertIn("Lab Technician", display_rules["Lab Tests"])
 		self.assertIn("Branch Manager", display_rules["Branch User Assignment"])
 		self.assertIn("Branch Manager", display_rules["Branch Practitioner Assignment"])
 		for alias in (

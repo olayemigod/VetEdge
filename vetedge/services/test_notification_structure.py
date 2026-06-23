@@ -164,8 +164,8 @@ class TestNotificationStructure(TestCase):
 
 		links = collect_links(workspace_json.get("items"))
 		for label in (
-			"Veterinary Settings",
-			"Veterinary Notification Item",
+			"VetEdge Settings",
+			"Notification Items",
 			"VetEdge Notification Event Registry",
 			"VetEdge Notification Log",
 			"VetEdge Notification Preference",
