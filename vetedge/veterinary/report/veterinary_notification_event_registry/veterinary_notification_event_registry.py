@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from vetedge.services.notification_events import serialize_notification_events
 
 

@@ -1,4 +1,5 @@
-frappe.ui.form.on("VetEdge Role Bundle", {
+# -*- coding: utf-8 -*-
+frappe.ui.form.on("Veterinary Role Bundle", {
 	refresh(frm) {
 		if (frm.is_new()) {
 			return;

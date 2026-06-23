@@ -44,7 +44,7 @@
   {"fieldname": "payload_preview", "fieldtype": "Long Text", "label": "Payload Preview", "permlevel": 1, "read_only": 1}
  ],
  "module": "Veterinary",
- "name": "VetEdge Notification Log",
+ "name": "Veterinary Notification Log",
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},

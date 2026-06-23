@@ -1050,13 +1050,13 @@ def resolve_recipient_channels(
 
 
 def get_notification_preference(recipient: dict, event_key: str) -> dict | None:
-	if not frappe.db.exists("DocType", "VetEdge Notification Preference"):
+	if not frappe.db.exists("DocType", "Veterinary Notification Preference"):
 		return None
 	preference_key = recipient.get("preference_key") or recipient.get("identifier") or recipient.get("address")
 	if not preference_key:
 		return None
 	rows = frappe.get_all(
-		"VetEdge Notification Preference",
+		"Veterinary Notification Preference",
 		filters={"recipient": preference_key, "event_key": event_key, "is_active": 1},
 		fields=["email_enabled", "sms_enabled", "whatsapp_enabled"],
 		limit=1,
@@ -1459,12 +1459,12 @@ def log_notification_attempt(
 	attempt: dict,
 ) -> None:
 	try:
-		if not frappe.db.exists("DocType", "VetEdge Notification Log"):
+		if not frappe.db.exists("DocType", "Veterinary Notification Log"):
 			return
 		event_definition = get_notification_event_definition(event_key)
 		doc = frappe.get_doc(
 			{
-				"doctype": "VetEdge Notification Log",
+				"doctype": "Veterinary Notification Log",
 				"event_key": event_key,
 				"channel": attempt.get("channel") or "Email",
 				"recipient": attempt.get("recipient"),
@@ -1689,7 +1689,7 @@ def already_notified_recently(
 	reference_name: str,
 	preference_key: str | None = None,
 ) -> bool:
-	if not frappe.db.exists("DocType", "VetEdge Notification Log"):
+	if not frappe.db.exists("DocType", "Veterinary Notification Log"):
 		return False
 	filters = {
 		"event_key": event_key,
@@ -1700,7 +1700,7 @@ def already_notified_recently(
 	}
 	if preference_key:
 		filters["recipient"] = preference_key
-	return bool(frappe.db.count("VetEdge Notification Log", filters=filters))
+	return bool(frappe.db.count("Veterinary Notification Log", filters=filters))
 
 
 def cint_or_default(value, default: int) -> int:

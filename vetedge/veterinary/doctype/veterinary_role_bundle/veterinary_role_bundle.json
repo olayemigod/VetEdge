@@ -19,10 +19,10 @@
   {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "label": "Is Active"},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
   {"fieldname": "roles_section", "fieldtype": "Section Break", "label": "Roles"},
-  {"fieldname": "roles", "fieldtype": "Table", "label": "Roles", "options": "VetEdge Role Bundle Role", "reqd": 1}
+  {"fieldname": "roles", "fieldtype": "Table", "label": "Roles", "options": "Veterinary Role Bundle Role", "reqd": 1}
  ],
  "module": "Veterinary",
- "name": "VetEdge Role Bundle",
+ "name": "Veterinary Role Bundle",
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},

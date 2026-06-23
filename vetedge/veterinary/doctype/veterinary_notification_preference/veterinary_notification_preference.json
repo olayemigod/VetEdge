@@ -28,7 +28,7 @@
   {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "label": "Is Active"}
  ],
  "module": "Veterinary",
- "name": "VetEdge Notification Preference",
+ "name": "Veterinary Notification Preference",
  "owner": "Administrator",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},

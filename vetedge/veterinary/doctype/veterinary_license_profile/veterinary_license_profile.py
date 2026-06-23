@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ from frappe.model.document import Document
 from frappe.utils import cint, getdate
 
 
-class VetEdgeLicenseProfile(Document):
+class VeterinaryLicenseProfile(Document):
 	def validate(self) -> None:
 		self.plan_name = (self.plan_name or "").strip()
 		self.validate_dates()

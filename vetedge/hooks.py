@@ -149,8 +149,8 @@ permission_query_conditions = {
 	"Pet Grooming Session": "vetedge.services.permissions.get_pet_grooming_session_query",
 	"Veterinary Guest Booking Request": "vetedge.services.permissions.get_veterinary_guest_booking_request_query",
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
-	"VetEdge Notification Log": "vetedge.services.permissions.get_notification_admin_only_query",
-	"VetEdge Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query",
+	"Veterinary Notification Log": "vetedge.services.permissions.get_notification_admin_only_query",
+	"Veterinary Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query",
 	"Veterinary Notification Item": "vetedge.services.permissions.get_veterinary_notification_item_query",
 }
 
@@ -161,8 +161,8 @@ has_permission = {
 	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
 	"Pet Grooming Appointment": "vetedge.services.permissions.has_pet_grooming_appointment_permission",
 	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
-	"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
-	"VetEdge Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
+	"Veterinary Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
+	"Veterinary Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
 	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
 	"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission",
 }

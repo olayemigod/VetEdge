@@ -87,12 +87,12 @@ STARTER_BUNDLE_PRIMARY_ROLES = {
 
 
 def ensure_starter_role_bundles() -> None:
-	if not frappe.db.exists("DocType", "VetEdge Role Bundle"):
+	if not frappe.db.exists("DocType", "Veterinary Role Bundle"):
 		return
 
 	for bundle_name, roles in STARTER_ROLE_BUNDLES.items():
-		if frappe.db.exists("VetEdge Role Bundle", bundle_name):
-			bundle = frappe.get_doc("VetEdge Role Bundle", bundle_name)
+		if frappe.db.exists("Veterinary Role Bundle", bundle_name):
+			bundle = frappe.get_doc("Veterinary Role Bundle", bundle_name)
 			existing_roles = {row.role for row in bundle.get("roles") or []}
 			changed = False
 			for role in roles:
@@ -105,7 +105,7 @@ def ensure_starter_role_bundles() -> None:
 
 		bundle = frappe.get_doc(
 			{
-				"doctype": "VetEdge Role Bundle",
+				"doctype": "Veterinary Role Bundle",
 				"bundle_name": bundle_name,
 				"is_active": 1,
 				"roles": [{"role": role} for role in roles],
@@ -162,7 +162,7 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 	if not frappe.db.exists("User", target_user):
 		frappe.throw("Target user must be a valid User.", frappe.ValidationError)
 
-	bundle = frappe.get_doc("VetEdge Role Bundle", bundle_name)
+	bundle = frappe.get_doc("Veterinary Role Bundle", bundle_name)
 	if cint(getattr(bundle, "is_active", 1)) != 1:
 		frappe.throw("Only active role bundles can be applied.", frappe.ValidationError)
 
