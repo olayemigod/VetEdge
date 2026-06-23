@@ -330,67 +330,6 @@ class TestReportingStructure(unittest.TestCase):
         self.assertIn("consultation_type", captured["fields"])
         self.assertEqual(rows[0]["consultation_type"], "House Call")
 
-    def test_hospitalisation_dashboard_returns_cards_and_charts(self):
-        report_rows = {
-            "active": [
-                {"name": "VHOS-001", "care_level": "ICU", "status": "Under Care"},
-                {"name": "VHOS-002", "care_level": "Standard", "status": "Admitted"},
-            ],
-            "charges": [
-                {
-                    "hospitalisation": "VHOS-001",
-                    "charge_sheet_pending": 1500,
-                    "billing_session_outstanding": 2500,
-                    "missing_price_count": 1,
-                    "charge_sheet_total": 3000,
-                    "charge_category": "Daily Stay",
-                },
-                {
-                    "hospitalisation": "VHOS-002",
-                    "charge_sheet_pending": 500,
-                    "billing_session_outstanding": 0,
-                    "missing_price_count": 0,
-                    "charge_sheet_total": 500,
-                    "charge_category": "Medication",
-                },
-            ],
-            "occupancy": [
-                {"care_location": "ICU Cage 1", "location_type": "ICU", "active_occupancy": 1},
-            ],
-            "discharge": [
-                {"hospitalisation": "VHOS-001", "days_admitted": 4},
-            ],
-            "actions": [
-                {"action_type": "Pending Stock Posting"},
-                {"action_type": "Missing Price Charges"},
-            ],
-        }
-
-        def hospitalisation_rows(kind, filters):
-            return [], report_rows[kind]
-
-        frappe_stub = SimpleNamespace(_dict=frappe._dict, format_value=lambda value, options: value)
-
-        with (
-            patch.object(reporting_logic_v4, "frappe", frappe_stub),
-            patch.object(reporting_logic_v4, "nowdate", return_value="2026-06-22"),
-            patch.object(reporting_logic_v4, "validate_dashboard_access"),
-            patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
-            patch.object(reporting_logic_v4, "_hospitalisation_rows", side_effect=hospitalisation_rows),
-        ):
-            payload = reporting_logic_v4.get_dashboard_payload("hospitalisation", {})
-
-        self.assertEqual(payload["title"], "Hospitalisation Dashboard")
-        self.assertEqual(len(payload["kpis"]), 8)
-        self.assertEqual(len(payload["charts"]), 5)
-        labels = {kpi["label"] for kpi in payload["kpis"]}
-        self.assertIn("Active Hospitalisations", labels)
-        self.assertIn("Pending Charges", labels)
-        self.assertIn("Billing Session Outstanding", labels)
-        chart_titles = {chart["title"] for chart in payload["charts"]}
-        self.assertIn("Hospitalisations by Care Level", chart_titles)
-        self.assertIn("Pending Actions by Type", chart_titles)
-
     def test_executive_dashboard_includes_consultation_type_breakdown(self):
         consultation_rows = [
             {"consultation_date": "2026-06-15", "service_branch": "Main", "consultation_type": "General Consultation"},

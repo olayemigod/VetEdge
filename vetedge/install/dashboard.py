@@ -27,7 +27,6 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
 	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
-	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 	("veterinary", "page", "kennel_availability_board", "kennel_availability_board.json"),
 	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),

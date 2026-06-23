@@ -8,8 +8,6 @@ from unittest import TestCase
 
 APP_ROOT = Path("/home/olayemigod/frappe-bench/apps/vetedge/vetedge")
 WORKSPACE_SIDEBAR = APP_ROOT / "workspace_sidebar/vetedge.json"
-HOSPITALISATION_DASHBOARD_PAGE = APP_ROOT / "veterinary/page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.json"
-HOSPITALISATION_DASHBOARD_JS = APP_ROOT / "veterinary/page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.js"
 
 
 def _load_sidebar() -> dict:
@@ -58,7 +56,6 @@ class TestWorkspaceSidebar(TestCase):
 		records_index = labels.index("VetEdge Records")
 
 		for label in (
-			"Hospitalisation Dashboard",
 			"Hospitalisations",
 			"Care Locations",
 			"Active Hospitalisations",
@@ -76,27 +73,25 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
 		self.assertIn("Veterinary Nurse", link.get("display_depends_on", ""))
 
-	def test_hospitalisation_dashboard_is_real_desk_page_with_sidebar_link(self):
-		page = json.loads(HOSPITALISATION_DASHBOARD_PAGE.read_text())
-		js = HOSPITALISATION_DASHBOARD_JS.read_text()
-		link = _links_by_label(_load_sidebar()["items"])["Hospitalisation Dashboard"]
+	def test_hospitalisation_dashboard_page_is_not_exposed(self):
+		items = _load_sidebar()["items"]
+		links = _links_by_label(items)
+		self.assertNotIn("Hospitalisation Dashboard", links)
+		for item in items:
+			self.assertFalse(item.get("link_to") == "veterinary-hospitalisation-dashboard", item)
 
-		self.assertEqual(page["doctype"], "Page")
-		self.assertEqual(page["name"], "veterinary-hospitalisation-dashboard")
-		self.assertEqual(page["page_name"], "veterinary-hospitalisation-dashboard")
-		self.assertEqual(page["module"], "Veterinary")
-		self.assertEqual(page["title"], "VetEdge Hospitalisation Dashboard")
-		self.assertEqual(page["standard"], "Yes")
-		self.assertEqual(link["link_to"], page["page_name"])
-		self.assertEqual(link["link_type"], "Page")
-		self.assertIn('frappe.pages["veterinary-hospitalisation-dashboard"]', js)
-		self.assertIn('key: "hospitalisation"', js)
-		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
-		self.assertIn("Accounts Manager", link.get("display_depends_on", ""))
-
-		roles = {row["role"] for row in page.get("roles", [])}
-		for role in ("System Manager", "VetEdge Administrator", "VetEdge Doctor", "Veterinary Nurse", "Branch Manager", "Accounts/Cashier", "Accounts Manager"):
-			self.assertIn(role, roles)
+	def test_hospitalisation_operational_reports_remain_linked(self):
+		links = _links_by_label(_load_sidebar()["items"])
+		for label in (
+			"Active Hospitalisations",
+			"Hospitalisation Charge Summary",
+			"Care Location Occupancy",
+			"Hospitalisation Discharge Watch",
+			"Pending Hospitalisation Actions",
+		):
+			self.assertIn(label, links)
+			self.assertEqual(links[label]["link_type"], "Report")
+			self.assertEqual(links[label]["link_to"], label)
 
 	def test_notification_items_is_admin_monitoring_link(self):
 		items = _load_sidebar()["items"]

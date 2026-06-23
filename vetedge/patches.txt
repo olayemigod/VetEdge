@@ -12,3 +12,4 @@ vetedge.patches.add_branch_vetedge_price_list
 vetedge.patches.repair_literal_billing_session_name
 vetedge.patches.fix_invalid_hospitalisation_invoice_status
 vetedge.patches.remove_coreedge_settings_fields
+vetedge.patches.remove_hospitalisation_dashboard
