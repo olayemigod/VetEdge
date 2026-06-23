@@ -12,7 +12,7 @@
  "idx": 0,
  "indicator_color": "blue",
  "is_hidden": 0,
- "label": "Veterinary Hospitalisation Dashboard",
+ "label": "VetEdge Hospitalisation Dashboard",
  "links": [
   {
    "type": "Card Break",
@@ -147,6 +147,6 @@
    "is_query_report": 1
   }
  ],
- "title": "Veterinary Hospitalisation Dashboard",
+ "title": "VetEdge Hospitalisation Dashboard",
  "type": "Workspace"
 }

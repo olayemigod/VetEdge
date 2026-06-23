@@ -77,9 +77,9 @@
 		badge.id = BADGE_ID;
 		badge.type = "button";
 		badge.className = "veterinary-unread-bell-badge hidden";
-		badge.title = __("Veterinary notifications");
-		badge.setAttribute("aria-label", __("Veterinary unread notifications"));
-		badge.innerHTML = `<span class="veterinary-unread-bell-badge-label">${__("Veterinary")}</span><span class="veterinary-unread-bell-badge-count">0</span>`;
+		badge.title = __("VetEdge notifications");
+		badge.setAttribute("aria-label", __("VetEdge unread notifications"));
+		badge.innerHTML = `<span class="veterinary-unread-bell-badge-label">${__("VetEdge")}</span><span class="veterinary-unread-bell-badge-count">0</span>`;
 		badge.addEventListener("click", function (event) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -184,11 +184,11 @@
 		drawer.className = "veterinary-unread-badge-drawer hidden";
 		drawer.innerHTML = `
 			<div class="veterinary-unread-badge-drawer-header">
-				<div class="veterinary-unread-badge-drawer-title">${__("Veterinary notifications")}</div>
+				<div class="veterinary-unread-badge-drawer-title">${__("VetEdge notifications")}</div>
 				<button type="button" class="veterinary-unread-badge-drawer-action" data-drawer-action="mark-all-read">${__("Mark all read")}</button>
 			</div>
 			<div class="veterinary-unread-badge-drawer-body">
-				<div class="veterinary-unread-badge-drawer-empty">${__("Loading Veterinary notifications...")}</div>
+				<div class="veterinary-unread-badge-drawer-empty">${__("Loading VetEdge notifications...")}</div>
 			</div>
 		`;
 		document.body.appendChild(drawer);
@@ -246,14 +246,14 @@
 	}
 
 	function loadDrawer() {
-		setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("Loading Veterinary notifications...")}</div>`);
+		setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("Loading VetEdge notifications...")}</div>`);
 		call(FEED_METHOD, { limit: 30 })
 			.then((message) => {
 				renderDrawer(message.items || []);
 				refreshCount();
 			})
 			.catch(() => {
-				setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("Veterinary notifications could not be loaded.")}</div>`);
+				setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("VetEdge notifications could not be loaded.")}</div>`);
 			});
 	}
 
@@ -272,7 +272,7 @@
 	function renderDrawer(items) {
 		const rows = activeItems(items);
 		if (!rows.length) {
-			setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("No active Veterinary notifications.")}</div>`);
+			setDrawerHtml(`<div class="veterinary-unread-badge-drawer-empty">${__("No active VetEdge notifications.")}</div>`);
 			return;
 		}
 		setDrawerHtml(rows.map(renderItem).join(""));
@@ -280,7 +280,7 @@
 
 	function renderItem(item) {
 		const status = item.status || "Unread";
-		const title = item.title || __("Veterinary notification");
+		const title = item.title || __("VetEdge notification");
 		const actions = [
 			item.action_url || item.reference_doctype || item.reference_name ? "open" : "",
 			status === "Unread" ? "read" : "",

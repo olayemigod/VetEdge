@@ -103,7 +103,7 @@
 
 		const item = $(`
 			<li id="${ROOT_ID}" class="nav-item veterinary-notification-nav-item">
-				<button class="nav-link veterinary-notification-button" type="button" title="${__("Veterinary Notifications")}" aria-label="${__("Veterinary Notifications")}">
+				<button class="nav-link veterinary-notification-button" type="button" title="${__("VetEdge Notifications")}" aria-label="${__("VetEdge Notifications")}">
 					<span class="veterinary-notification-bell" aria-hidden="true">
 						<svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
 							<path d="M18 16v-5a6 6 0 0 0-5-5.92V4a1 1 0 1 0-2 0v1.08A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Zm-6 6a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Z"></path>
@@ -180,7 +180,7 @@
 		return `
 			<div class="veterinary-notification-item ${status === "Unread" ? "is-unread" : ""}" data-name="${escapeHtml(item.name)}" data-status="${escapeHtml(status)}">
 				<div class="veterinary-notification-item-main">
-					<div class="veterinary-notification-title">${escapeHtml(item.title || __("Veterinary Notification"))}</div>
+					<div class="veterinary-notification-title">${escapeHtml(item.title || __("VetEdge Notification"))}</div>
 					${item.message ? `<div class="veterinary-notification-message">${escapeHtml(item.message)}</div>` : ""}
 					<div class="veterinary-notification-meta">
 						${item.category ? `<span class="veterinary-notification-chip">${escapeHtml(item.category)}</span>` : ""}
@@ -205,17 +205,17 @@
 	}
 
 	function renderDrawerLoading() {
-		drawerBody().html(`<div class="veterinary-notification-empty">${__("Loading Veterinary notifications...")}</div>`);
+		drawerBody().html(`<div class="veterinary-notification-empty">${__("Loading VetEdge notifications...")}</div>`);
 	}
 
 	function renderDrawerError() {
-		drawerBody().html(`<div class="veterinary-notification-empty">${__("Veterinary notifications could not be loaded.")}</div>`);
+		drawerBody().html(`<div class="veterinary-notification-empty">${__("VetEdge notifications could not be loaded.")}</div>`);
 	}
 
 	function renderDrawer(items) {
 		const body = drawerBody();
 		if (!items || !items.length) {
-			body.html(`<div class="veterinary-notification-empty">${__("No active Veterinary notifications.")}</div>`);
+			body.html(`<div class="veterinary-notification-empty">${__("No active VetEdge notifications.")}</div>`);
 			return;
 		}
 		body.html(`<div class="veterinary-notification-list">${items.map(renderItem).join("")}</div>`);
@@ -239,7 +239,7 @@
 			return state.dialog;
 		}
 		state.dialog = new frappe.ui.Dialog({
-			title: __("Veterinary Notifications"),
+			title: __("VetEdge Notifications"),
 			size: "large",
 			fields: [
 				{
@@ -254,7 +254,7 @@
 						updateBadge(message.unread_count);
 						return fetchDrawerFeed();
 					})
-					.catch(() => frappe.show_alert({ message: __("Could not mark Veterinary notifications read."), indicator: "red" }));
+					.catch(() => frappe.show_alert({ message: __("Could not mark VetEdge notifications read."), indicator: "red" }));
 			},
 		});
 		state.dialog.$wrapper.addClass("veterinary-notification-dialog");
@@ -295,7 +295,7 @@
 				return fetchDrawerFeed();
 			})
 			.catch(() => {
-				frappe.show_alert({ message: __("Could not update Veterinary notification."), indicator: "red" });
+				frappe.show_alert({ message: __("Could not update VetEdge notification."), indicator: "red" });
 				button.prop("disabled", false);
 			});
 	}

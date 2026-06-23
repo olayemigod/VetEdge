@@ -33,7 +33,7 @@
  "idx": 0,
  "indicator_color": "green",
  "is_hidden": 0,
- "label": "Veterinary Financial Dashboard",
+ "label": "VetEdge Financial Dashboard",
  "links": [
   {
    "hidden": 0,
@@ -150,6 +150,6 @@
  ],
  "sequence_id": 1.0,
  "shortcuts": [],
- "title": "Veterinary Financial Dashboard",
+ "title": "VetEdge Financial Dashboard",
  "type": "Workspace"
 }

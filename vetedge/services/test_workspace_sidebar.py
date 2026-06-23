@@ -31,15 +31,21 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertEqual(sidebar["name"], "VetEdge")
 		self.assertIsInstance(sidebar.get("items"), list)
 
-	def test_veterinary_missed_appointment_is_in_appointment_cluster(self):
+	def test_sidebar_labels_do_not_expose_veterinary_as_navigation_surface(self):
+		items = _load_sidebar()["items"]
+		for item in items:
+			label = item.get("label") or ""
+			self.assertFalse(label.startswith("Veterinary"), label)
+
+	def test_missed_appointments_is_in_appointment_cluster(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
-		missed_index = labels.index("Veterinary Missed Appointment")
+		missed_index = labels.index("Missed Appointments")
 
-		self.assertGreater(missed_index, labels.index("Veterinary Appointment"))
-		self.assertLess(missed_index, labels.index("Veterinary Guest Booking Request"))
+		self.assertGreater(missed_index, labels.index("Appointments"))
+		self.assertLess(missed_index, labels.index("Guest Booking Requests"))
 
-		link = _links_by_label(items)["Veterinary Missed Appointment"]
+		link = _links_by_label(items)["Missed Appointments"]
 		self.assertEqual(link["link_to"], "Veterinary Missed Appointment")
 		self.assertEqual(link["link_type"], "DocType")
 		self.assertIn("VetEdge Front Desk", link.get("display_depends_on", ""))
@@ -49,12 +55,12 @@ class TestWorkspaceSidebar(TestCase):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
 		hospitalisation_index = labels.index("Hospitalisation")
-		records_index = labels.index("Veterinary Records")
+		records_index = labels.index("VetEdge Records")
 
 		for label in (
-			"Veterinary Hospitalisation Dashboard",
-			"Veterinary Hospitalisation",
-			"Veterinary Care Location",
+			"Hospitalisation Dashboard",
+			"Hospitalisations",
+			"Care Locations",
 			"Active Hospitalisations",
 			"Hospitalisation Charge Summary",
 			"Care Location Occupancy",
@@ -64,7 +70,7 @@ class TestWorkspaceSidebar(TestCase):
 			self.assertGreater(labels.index(label), hospitalisation_index)
 			self.assertLess(labels.index(label), records_index)
 
-		link = _links_by_label(items)["Veterinary Hospitalisation"]
+		link = _links_by_label(items)["Hospitalisations"]
 		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
 		self.assertEqual(link["link_type"], "DocType")
 		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
@@ -73,12 +79,13 @@ class TestWorkspaceSidebar(TestCase):
 	def test_hospitalisation_dashboard_is_real_desk_page_with_sidebar_link(self):
 		page = json.loads(HOSPITALISATION_DASHBOARD_PAGE.read_text())
 		js = HOSPITALISATION_DASHBOARD_JS.read_text()
-		link = _links_by_label(_load_sidebar()["items"])["Veterinary Hospitalisation Dashboard"]
+		link = _links_by_label(_load_sidebar()["items"])["Hospitalisation Dashboard"]
 
 		self.assertEqual(page["doctype"], "Page")
 		self.assertEqual(page["name"], "veterinary-hospitalisation-dashboard")
 		self.assertEqual(page["page_name"], "veterinary-hospitalisation-dashboard")
 		self.assertEqual(page["module"], "Veterinary")
+		self.assertEqual(page["title"], "VetEdge Hospitalisation Dashboard")
 		self.assertEqual(page["standard"], "Yes")
 		self.assertEqual(link["link_to"], page["page_name"])
 		self.assertEqual(link["link_type"], "Page")
@@ -91,15 +98,15 @@ class TestWorkspaceSidebar(TestCase):
 		for role in ("System Manager", "VetEdge Administrator", "VetEdge Doctor", "Veterinary Nurse", "Branch Manager", "Accounts/Cashier", "Accounts Manager"):
 			self.assertIn(role, roles)
 
-	def test_veterinary_notification_item_is_admin_monitoring_link(self):
+	def test_notification_items_is_admin_monitoring_link(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
-		item_index = labels.index("Veterinary Notification Item")
+		item_index = labels.index("Notification Items")
 
 		self.assertGreater(item_index, labels.index("VetEdge Notification Event Registry"))
 		self.assertLess(item_index, labels.index("VetEdge Notification Log"))
 
-		link = _links_by_label(items)["Veterinary Notification Item"]
+		link = _links_by_label(items)["Notification Items"]
 		self.assertEqual(link["link_to"], "Veterinary Notification Item")
 		self.assertEqual(link["link_type"], "DocType")
 		self.assertIn("System Manager", link.get("display_depends_on", ""))
@@ -113,13 +120,13 @@ class TestWorkspaceSidebar(TestCase):
 		]
 		counts = Counter(links)
 		for key in (
-			("Veterinary Hospitalisation", "Veterinary Hospitalisation", "DocType"),
-			("Veterinary Missed Appointment", "Veterinary Missed Appointment", "DocType"),
-			("Veterinary Notification Item", "Veterinary Notification Item", "DocType"),
+			("Hospitalisations", "Veterinary Hospitalisation", "DocType"),
+			("Missed Appointments", "Veterinary Missed Appointment", "DocType"),
+			("Notification Items", "Veterinary Notification Item", "DocType"),
 		):
 			self.assertEqual(counts[key], 1)
 
-	def test_veterinary_patient_link_is_only_under_veterinary_records(self):
+	def test_patient_link_is_only_under_vetedge_records(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
 		patient_indexes = [
@@ -129,22 +136,22 @@ class TestWorkspaceSidebar(TestCase):
 		]
 
 		self.assertEqual(len(patient_indexes), 1)
-		self.assertGreater(patient_indexes[0], labels.index("Veterinary Records"))
+		self.assertGreater(patient_indexes[0], labels.index("VetEdge Records"))
 		self.assertEqual(items[patient_indexes[0]]["icon"], "users-round")
 
-	def test_new_notification_item_label_uses_veterinary(self):
+	def test_notification_item_label_uses_vetedge_navigation_language(self):
 		links = _links_by_label(_load_sidebar()["items"])
-		self.assertIn("Veterinary Notification Item", links)
-		self.assertNotIn("VetEdge Notification Item", links)
+		self.assertIn("Notification Items", links)
+		self.assertNotIn("Veterinary Notification Item", links)
 
-	def test_veterinary_sections_are_collapsed_by_default(self):
+	def test_vetedge_sections_are_collapsed_by_default(self):
 		sections = {
 			item["label"]: item
 			for item in _load_sidebar()["items"]
 			if item.get("type") == "Section Break"
 		}
 
-		for label in ("Dashboards", "Hospitalisation", "Veterinary Records", "Veterinary Masters", "Reports"):
+		for label in ("Dashboards", "Hospitalisation", "VetEdge Records", "VetEdge Masters", "Reports"):
 			self.assertEqual(sections[label]["collapsible"], 1)
 			self.assertEqual(sections[label]["keep_closed"], 1)
 			self.assertEqual(sections[label]["show_arrow"], 0)

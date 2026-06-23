@@ -1,7 +1,7 @@
 frappe.pages["veterinary-appointment-queue"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Veterinary Appointment Queue"),
+		title: __("VetEdge Appointment Queue"),
 		single_column: true,
 	});
 
