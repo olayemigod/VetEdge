@@ -639,6 +639,24 @@ def emit_notification_event(
 		context=merged_context,
 		explicit_recipients=recipients,
 	)
+	# Generate persistent in-app notifications for Clinical, Lab, and Pharmacy events
+	from vetedge.services.clinical_lab_pharmacy_notifications import (
+		handle_clinical_lab_pharmacy_notifications,
+		SUPPORTED_EVENTS,
+	)
+	if event_key in SUPPORTED_EVENTS:
+		try:
+			handle_clinical_lab_pharmacy_notifications(
+				event_key=event_key,
+				reference_doctype=reference_doctype,
+				reference_name=reference_name,
+				recipients=resolved_recipients,
+				context=merged_context,
+			)
+		except Exception:
+			if getattr(frappe, "log_error", None):
+				frappe.log_error("Failed to generate clinical/lab/pharmacy in-app notifications")
+
 	if not resolved_recipients:
 		log_skipped_event(
 			event_key,
