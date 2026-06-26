@@ -9,6 +9,51 @@ from frappe.modules.import_file import import_file_by_path
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
 
+OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
+	"CoreEdge Settings",
+	"CoreEdge Product Activation",
+	"CoreEdge Tenant",
+	"CoreEdge Access Decision Log",
+	"CoreEdge Branch Session",
+	"CoreEdge Context Switch Log",
+}
+
+
+def _installed_apps() -> set[str]:
+	try:
+		return set(frappe.get_installed_apps() or [])
+	except Exception:
+		return set()
+
+
+def _doctype_exists(doctype: str) -> bool:
+	if not doctype:
+		return False
+	try:
+		return bool(frappe.db.exists("DocType", doctype))
+	except Exception:
+		return False
+
+
+def _can_link_doctype(doctype: str) -> bool:
+	return _doctype_exists(doctype)
+
+
+def _coreedge_available() -> bool:
+	return "coreedge" in _installed_apps()
+
+
+def _should_keep_sidebar_item(item) -> bool:
+	link_to = item.get("link_to") if isinstance(item, dict) else getattr(item, "link_to", None)
+	if not link_to:
+		return True
+
+	if link_to in OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS or str(link_to).startswith("CoreEdge "):
+		if not (_coreedge_available() and _doctype_exists(link_to)):
+			return False
+
+	return True
+
 
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
@@ -55,12 +100,28 @@ def ensure_vetedge_workspace_sidebar() -> None:
 
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 
+	if "items" in standard_doc:
+		standard_doc["items"] = [item for item in standard_doc["items"] if _should_keep_sidebar_item(item)]
+
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
 		sidebar.update(_prepare_standard_sidebar_update_payload(standard_doc))
+		raw_items = sidebar.get("items") if hasattr(sidebar, "get") else getattr(sidebar, "items", None)
+		kept_items = [item for item in raw_items or [] if _should_keep_sidebar_item(item)]
+		if hasattr(sidebar, "set"):
+			sidebar.set("items", kept_items)
+		else:
+			sidebar.items = kept_items
 		sidebar.save(ignore_permissions=True)
 	else:
-		frappe.get_doc(standard_doc).insert(ignore_permissions=True)
+		sidebar = frappe.get_doc(standard_doc)
+		raw_items = sidebar.get("items") if hasattr(sidebar, "get") else getattr(sidebar, "items", None)
+		kept_items = [item for item in raw_items or [] if _should_keep_sidebar_item(item)]
+		if hasattr(sidebar, "set"):
+			sidebar.set("items", kept_items)
+		else:
+			sidebar.items = kept_items
+		sidebar.insert(ignore_permissions=True)
 
 	if hasattr(frappe, "cache"):
 		frappe.cache.delete_key("bootinfo")
