@@ -239,11 +239,62 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	bootinfo.is_coreedge_available = is_coreedge_available()
 	bootinfo.should_show_coreedge_controls = should_show_coreedge_controls()
 	
+	try:
+		from vetedge.services.branding import get_branding
+		branding = get_branding()
+	except Exception:
+		branding = {}
+
+	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
+	sidebar_items = bootinfo.get("workspace_sidebar_item")
+	if sidebar_items:
+		source_sidebar = sidebar_items.get("veterinary") or sidebar_items.get("vetedge")
+		if source_sidebar:
+			source_sidebar["label"] = branding.get("module_label") or "Veterinary"
+			sidebar_items["veterinary"] = source_sidebar
+			sidebar_items["vetedge"] = source_sidebar
+
+	# Always override the desktop icon label in bootinfo to be VetEdge (or the branded app_title)
+	desktop_icons = bootinfo.get("desktop_icons")
+	if desktop_icons:
+		for icon in desktop_icons:
+			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
+				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				icon["link_to"] = "VetEdge"
+
+	# Always override the app_data app_title and logo for app screen
+	if bootinfo.get("app_data"):
+		for app in bootinfo.app_data:
+			if app.get("app_name") == "vetedge":
+				app["app_title"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				if branding.get("logo"):
+					app["app_logo_url"] = branding.get("logo")
+
+	# Apply white-label overrides if enabled
+	if branding.get("enabled"):
+		# Set app title in bootinfo for the tab title suffix
+		bootinfo.app_title = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+		
+		# Override app logo url dynamically
+		if branding.get("logo"):
+			bootinfo.app_logo_url = branding.get("logo")
+			if bootinfo.get("navbar_settings"):
+				bootinfo.navbar_settings.app_logo = branding.get("logo")
+			
+			# Patch frappe.boot's get_app_logo reference to return the branded logo url
+			try:
+				import frappe.boot as boot
+				boot.get_app_logo = lambda: branding.get("logo")
+			except Exception:
+				pass
+
 	if not bootinfo.should_show_coreedge_controls:
-		sidebar_items = bootinfo.get("workspace_sidebar_item")
 		if sidebar_items and "vetedge" in sidebar_items:
 			items = sidebar_items["vetedge"].get("items") or []
 			sidebar_items["vetedge"]["items"] = get_visible_vetedge_sidebar_items(items)
+		if sidebar_items and "veterinary" in sidebar_items:
+			items = sidebar_items["veterinary"].get("items") or []
+			sidebar_items["veterinary"]["items"] = get_visible_vetedge_sidebar_items(items)
 		
 		workspaces_data = bootinfo.get("workspaces")
 		if workspaces_data and "pages" in workspaces_data:

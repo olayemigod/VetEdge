@@ -464,6 +464,57 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(summary["customer"], "CUST-001")
 		self.assertTrue(summary["can_open_full_form"])
 
+	def test_partial_payment_updates_consultation_and_child_rows(self):
+		consultation_doc = frappe._dict(
+			name="VCON-001",
+			status="Awaiting Payment",
+			payment_status="Unpaid",
+			linked_invoice="SINV-001",
+			consultation_invoices=[
+				frappe._dict(sales_invoice="SINV-001", invoice_status="Unpaid")
+			],
+			consultation_billing_sources=[
+				frappe._dict(sales_invoice="SINV-001", invoice_status="Unpaid", source_type="Treatment", source_name="PT-1")
+			]
+		)
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			status="Partially Paid",
+			outstanding_amount=250,
+			grand_total=1000,
+			customer="CUST-001",
+			posting_date="2026-04-20",
+			due_date="2026-04-20",
+			currency="NGN"
+		)
+		set_values = []
+		saved_docs = []
+		consultation_doc.save = lambda *args, **kwargs: saved_docs.append(consultation_doc)
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+			patch("vetedge.services.billing.emit_notification_event") as emit,
+		):
+			from vetedge.services.billing import sync_consultation_invoice_reference_from_invoice
+			sync_consultation_invoice_reference_from_invoice("VCON-001", invoice)
+
+		# The parent consultation should have "Partly Paid"
+		self.assertEqual(consultation_doc.payment_status, "Partly Paid")
+		self.assertNotEqual(consultation_doc.payment_status, "Partially Paid")
+
+		# The child rows should have "Partly Paid"
+		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Partly Paid")
+		self.assertEqual(consultation_doc.consultation_billing_sources[0].invoice_status, "Partly Paid")
+
 
 def make_consultation(linked_invoice=None, status="In Progress"):
 	return frappe._dict(
@@ -549,6 +600,7 @@ def make_frappe_stub(set_values=None, get_doc=None, get_value=None):
 		db=SimpleNamespace(
 			get_value=get_value,
 			set_value=lambda *args, **kwargs: set_values.append(args),
+			exists=lambda *args, **kwargs: True,
 		),
 		get_doc=get_doc,
 		get_all=lambda *args, **kwargs: [],

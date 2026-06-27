@@ -98,7 +98,16 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 
+	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
+	if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		frappe.rename_doc("Workspace Sidebar", "Veterinary", "VetEdge", force=True)
+
+	# Clean up duplicate if both exist
+	if frappe.db.exists("Workspace Sidebar", "Veterinary") and frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		frappe.delete_doc("Workspace Sidebar", "Veterinary", force=True)
+
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
+	standard_doc["title"] = "Veterinary"
 
 	if "items" in standard_doc:
 		standard_doc["items"] = [item for item in standard_doc["items"] if _should_keep_sidebar_item(item)]
@@ -113,6 +122,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 		else:
 			sidebar.items = kept_items
 		sidebar.save(ignore_permissions=True)
+		sidebar.db_set("title", "Veterinary")
 	else:
 		sidebar = frappe.get_doc(standard_doc)
 		raw_items = sidebar.get("items") if hasattr(sidebar, "get") else getattr(sidebar, "items", None)
@@ -122,6 +132,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 		else:
 			sidebar.items = kept_items
 		sidebar.insert(ignore_permissions=True)
+		sidebar.db_set("title", "Veterinary")
 
 	if hasattr(frappe, "cache"):
 		frappe.cache.delete_key("bootinfo")
@@ -131,8 +142,22 @@ def ensure_vetedge_desktop_icon() -> None:
 	if not frappe.db.exists("DocType", "Desktop Icon"):
 		return
 
+	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
+	if frappe.db.exists("Desktop Icon", "Veterinary") and not frappe.db.exists("Desktop Icon", "VetEdge"):
+		frappe.rename_doc("Desktop Icon", "Veterinary", "VetEdge", force=True)
+
+	# Clean up duplicate if both exist
+	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
+		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
+
+	from vetedge.services.branding import get_branding
+	branding = get_branding()
+	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+
 	if not frappe.db.exists("Desktop Icon", "VetEdge"):
-		frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json")).insert(ignore_permissions=True)
+		icon = frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json"))
+		icon.insert(ignore_permissions=True)
+		icon.db_set("label", default_label)
 	else:
 		frappe.db.set_value(
 			"Desktop Icon",
@@ -145,6 +170,7 @@ def ensure_vetedge_desktop_icon() -> None:
 				"link_to": "VetEdge",
 				"link": "",
 				"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
+				"label": default_label,
 				"standard": 1,
 			},
 			update_modified=False,
@@ -157,3 +183,4 @@ def _load_standard_doc(*file_parts: str) -> dict:
 	file_path = frappe.get_app_path("vetedge", *file_parts)
 	with open(file_path, encoding="utf-8") as handle:
 		return json.load(handle)
+

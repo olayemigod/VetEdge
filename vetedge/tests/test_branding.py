@@ -12,7 +12,8 @@ from vetedge.services.branding import (
 	get_module_label,
 	get_app_title,
 	hide_source_product_name,
-	replace_brand_tokens
+	replace_brand_tokens,
+	get_distribution_profile
 )
 
 class TestVetEdgeBranding(unittest.TestCase):
@@ -37,12 +38,20 @@ class TestVetEdgeBranding(unittest.TestCase):
 			if key in frappe.conf:
 				del frappe.conf[key]
 
+		self.orig_web_settings = None
+		if frappe.db.exists("DocType", "Website Settings"):
+			self.orig_web_settings = frappe.db.get_value("Website Settings", "Website Settings", ["app_name", "footer_powered"], as_dict=True)
+
 	def tearDown(self) -> None:
 		frappe.conf.clear()
 		frappe.conf.update(self.orig_conf)
+		if self.orig_web_settings and frappe.db.exists("DocType", "Website Settings"):
+			frappe.db.set_value("Website Settings", "Website Settings", "app_name", self.orig_web_settings.app_name)
+			frappe.db.set_value("Website Settings", "Website Settings", "footer_powered", self.orig_web_settings.footer_powered)
+			frappe.db.commit()
 
 	def test_branding_fallback_to_defaults(self) -> None:
-		# Falls back to defaults when no branding config exists
+		# Falls back to safe defaults when no other configurations exist
 		res = get_branding()
 		self.assertEqual(res["enabled"], 0)
 		self.assertEqual(res["brand_name"], "VetEdge")
@@ -56,6 +65,21 @@ class TestVetEdgeBranding(unittest.TestCase):
 		self.assertEqual(get_module_label(), "Veterinary")
 		self.assertEqual(get_app_title(), "VetEdge")
 		self.assertFalse(hide_source_product_name())
+
+	def test_distribution_resolver(self) -> None:
+		# Test profile resolution defaults to vetedge upstream
+		profile = get_distribution_profile()
+		self.assertEqual(profile["app_title"], "VetEdge")
+		self.assertEqual(profile["brand_name"], "VetEdge")
+
+		# Test site_config override works
+		frappe.conf.edge_distribution = "veterinary"
+		profile = get_distribution_profile()
+		self.assertEqual(profile["app_title"], "Veterinary")
+		self.assertEqual(profile["brand_name"], "Veterinary")
+
+		# Cleanup site config override
+		frappe.conf.edge_distribution = None
 
 	def test_branding_site_config_fallback(self) -> None:
 		# Falls back to site_config when CoreEdge is missing/disabled
@@ -153,3 +177,101 @@ class TestVetEdgeBranding(unittest.TestCase):
 			# Test non-string input
 			self.assertEqual(replace_brand_tokens(123), 123)
 			self.assertIsNone(replace_brand_tokens(None))
+
+	def test_patch_normalizes_stale_values_when_branding_inactive(self) -> None:
+		# Branding is inactive. Website settings with stale "Veterinary" should be normalized back to VetEdge.
+		frappe.db.set_value("Website Settings", "Website Settings", "app_name", "Veterinary")
+		frappe.db.set_value("Website Settings", "Website Settings", "footer_powered", "Veterinary")
+		frappe.db.commit()
+
+		from vetedge.patches.normalize_website_settings_branding import execute as patch_execute
+		patch_execute()
+
+		app_name, footer = frappe.db.get_value("Website Settings", "Website Settings", ["app_name", "footer_powered"])
+		self.assertEqual(app_name, "VetEdge")
+		self.assertEqual(footer, "VetEdge")
+
+	def test_patch_preserves_branding_when_active(self) -> None:
+		# Active site_config branding. Patch should not touch website settings.
+		frappe.conf.vetedge_white_label_enabled = 1
+		frappe.conf.vetedge_brand_name = "Tenant Brand Name"
+
+		frappe.db.set_value("Website Settings", "Website Settings", "app_name", "Tenant Brand Name")
+		frappe.db.set_value("Website Settings", "Website Settings", "footer_powered", "Tenant Brand Name")
+		frappe.db.commit()
+
+		from vetedge.patches.normalize_website_settings_branding import execute as patch_execute
+		patch_execute()
+
+		app_name, footer = frappe.db.get_value("Website Settings", "Website Settings", ["app_name", "footer_powered"])
+		self.assertEqual(app_name, "Tenant Brand Name")
+		self.assertEqual(footer, "Tenant Brand Name")
+
+	def test_coreedge_draft_profile_ignored(self) -> None:
+		# CoreEdge profile exists but has enabled=False (Draft)
+		mock_ce_payload = {
+			"enabled": False,
+			"brand_name": "Draft Brand",
+			"source": "coreedge"
+		}
+		with patch("vetedge.coreedge_adapter.is_coreedge_available", return_value=True), \
+			patch("vetedge.coreedge_adapter.is_coreedge_enabled", return_value=True), \
+			patch("coreedge.services.branding.get_product_branding", return_value=mock_ce_payload):
+			
+			res = get_branding()
+			# Falls back to default since ce is draft and site_config is empty
+			self.assertEqual(res["enabled"], 0)
+			self.assertEqual(res["brand_name"], "VetEdge")
+
+	def test_coreedge_profile_ignored_when_disabled(self) -> None:
+		# Profile is active, but CoreEdge app/feature is disabled on site
+		mock_ce_payload = {
+			"enabled": True,
+			"brand_name": "Active Brand",
+			"source": "coreedge"
+		}
+		with patch("vetedge.coreedge_adapter.is_coreedge_available", return_value=True), \
+			patch("vetedge.coreedge_adapter.is_coreedge_enabled", return_value=False), \
+			patch("coreedge.services.branding.get_product_branding", return_value=mock_ce_payload):
+			
+			res = get_branding()
+			self.assertEqual(res["enabled"], 0)
+			self.assertEqual(res["brand_name"], "VetEdge")
+
+	def test_branding_never_breaks_workspace_sidebar_identity(self) -> None:
+		# Verify that dynamic branding applies to labels but never renames the workspace key
+		from vetedge.coreedge_adapter import filter_bootinfo_for_coreedge_platform
+		
+		# Inactive branding:
+		bootinfo = frappe._dict({
+			"workspace_sidebar_item": {
+				"vetedge": {
+					"label": "Old Label",
+					"items": []
+				}
+			}
+		})
+		filter_bootinfo_for_coreedge_platform(bootinfo)
+		self.assertIn("vetedge", bootinfo.workspace_sidebar_item)
+		self.assertIn("veterinary", bootinfo.workspace_sidebar_item)
+		self.assertEqual(bootinfo.workspace_sidebar_item["vetedge"]["label"], "Veterinary")
+		self.assertEqual(bootinfo.workspace_sidebar_item["veterinary"]["label"], "Veterinary")
+
+		# Active site_config branding:
+		frappe.conf.vetedge_white_label_enabled = 1
+		frappe.conf.vetedge_brand_name = "Tenant App"
+		frappe.conf.vetedge_module_label = "Tenant Vet Center"
+
+		bootinfo = frappe._dict({
+			"workspace_sidebar_item": {
+				"vetedge": {
+					"label": "Old Label",
+					"items": []
+				}
+			}
+		})
+		filter_bootinfo_for_coreedge_platform(bootinfo)
+		self.assertIn("vetedge", bootinfo.workspace_sidebar_item)
+		self.assertIn("veterinary", bootinfo.workspace_sidebar_item)
+		self.assertEqual(bootinfo.workspace_sidebar_item["vetedge"]["label"], "Tenant Vet Center")
+		self.assertEqual(bootinfo.workspace_sidebar_item["veterinary"]["label"], "Tenant Vet Center")

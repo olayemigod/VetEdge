@@ -22,11 +22,14 @@ SPEC.loader.exec_module(dashboard)
 class TestDashboardInstall(TestCase):
 	def test_ensure_vetedge_workspace_sidebar_inserts_when_missing(self):
 		insert = Mock()
-		doc = SimpleNamespace(insert=insert)
+		db_set = Mock()
+		doc = SimpleNamespace(insert=insert, db_set=db_set)
 		exists = Mock(side_effect=lambda doctype, name: doctype == "DocType" and name == "Workspace Sidebar")
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists),
 			get_doc=Mock(return_value=doc),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
@@ -36,17 +39,21 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		frappe_stub.get_doc.assert_called_once_with({"doctype": "Workspace Sidebar", "name": "VetEdge"})
+		frappe_stub.get_doc.assert_called_once_with({"doctype": "Workspace Sidebar", "name": "VetEdge", "title": "Veterinary"})
 		insert.assert_called_once_with(ignore_permissions=True)
+		db_set.assert_called_once_with("title", "Veterinary")
 
 	def test_ensure_vetedge_desktop_icon_inserts_when_missing(self):
 		insert = Mock()
-		doc = SimpleNamespace(insert=insert)
+		db_set = Mock()
+		doc = SimpleNamespace(insert=insert, db_set=db_set)
 		exists = Mock(side_effect=lambda doctype, name: (doctype, name) == ("DocType", "Desktop Icon"))
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists, set_value=Mock()),
 			get_doc=Mock(return_value=doc),
 			cache=SimpleNamespace(delete_key=Mock()),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
@@ -58,6 +65,7 @@ class TestDashboardInstall(TestCase):
 
 		frappe_stub.get_doc.assert_called_once_with({"doctype": "Desktop Icon", "name": "VetEdge"})
 		insert.assert_called_once_with(ignore_permissions=True)
+		db_set.assert_called_once_with("label", "VetEdge")
 		frappe_stub.db.set_value.assert_not_called()
 
 	def test_ensure_vetedge_desktop_icon_updates_existing_icon(self):
@@ -69,6 +77,8 @@ class TestDashboardInstall(TestCase):
 			db=SimpleNamespace(exists=exists, set_value=Mock()),
 			get_doc=Mock(),
 			cache=SimpleNamespace(delete_key=Mock()),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub):
@@ -79,12 +89,14 @@ class TestDashboardInstall(TestCase):
 
 
 	def test_ensure_vetedge_workspace_sidebar_updates_existing_sidebar(self):
-		sidebar = SimpleNamespace(update=Mock(), save=Mock())
+		sidebar = SimpleNamespace(update=Mock(), save=Mock(), db_set=Mock())
 		exists = Mock(side_effect=lambda doctype, name: (doctype, name) in {("DocType", "Workspace Sidebar"), ("Workspace Sidebar", "VetEdge")})
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists),
 			get_doc=Mock(return_value=sidebar),
 			cache=SimpleNamespace(delete_key=Mock()),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
@@ -97,6 +109,7 @@ class TestDashboardInstall(TestCase):
 		frappe_stub.get_doc.assert_called_once_with("Workspace Sidebar", "VetEdge")
 		sidebar.update.assert_called_once()
 		sidebar.save.assert_called_once_with(ignore_permissions=True)
+		sidebar.db_set.assert_called_once_with("title", "Veterinary")
 
 	def test_workspace_sidebar_prunes_coreedge_links_when_coreedge_missing(self):
 		# Simulate CoreEdge missing (not installed and doctypes do not exist)
@@ -127,6 +140,8 @@ class TestDashboardInstall(TestCase):
 				pass
 			def insert(self, **kwargs):
 				pass
+			def db_set(self, key, value):
+				pass
 
 		sidebar = MockSidebar()
 
@@ -135,6 +150,8 @@ class TestDashboardInstall(TestCase):
 			get_installed_apps=installed_apps,
 			get_doc=Mock(return_value=sidebar),
 			cache=SimpleNamespace(delete_key=Mock()),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
@@ -177,6 +194,8 @@ class TestDashboardInstall(TestCase):
 				pass
 			def insert(self, **kwargs):
 				pass
+			def db_set(self, key, value):
+				pass
 
 		sidebar = MockSidebar()
 
@@ -185,6 +204,8 @@ class TestDashboardInstall(TestCase):
 			get_installed_apps=installed_apps,
 			get_doc=Mock(return_value=sidebar),
 			cache=SimpleNamespace(delete_key=Mock()),
+			rename_doc=Mock(),
+			delete_doc=Mock(),
 		)
 
 		with patch.object(dashboard, "frappe", frappe_stub), patch.object(

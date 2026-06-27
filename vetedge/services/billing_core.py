@@ -2022,7 +2022,7 @@ def update_source_billing_compatibility_fields(source_doctype: str, source_name:
 	elif source_doctype == "Veterinary Hospitalisation":
 		values["invoice_status"] = get_select_safe_invoice_status(source_doctype, "invoice_status", summary.get("payment_status"))
 	elif source_doctype in {"Veterinary Consultation"}:
-		values["payment_status"] = summary.get("payment_status")
+		values["payment_status"] = get_select_safe_invoice_status(source_doctype, "payment_status", summary.get("payment_status"))
 	frappe.db.set_value(source_doctype, source_name, values, update_modified=False)
 
 	if source_doctype == "Pet Grooming Session":
@@ -2039,21 +2039,40 @@ def update_all_session_source_compatibility_fields(summary: dict | None = None) 
 
 
 def get_select_safe_invoice_status(doctype: str, fieldname: str, status: str | None) -> str:
-	status_map = {
-		"Draft Invoice Pending": "Draft",
-		"Pending Invoice": "Not Invoiced",
-		"Partially Paid": "Partly Paid",
-	}
-	status = status_map.get(status or "Not Invoiced", status or "Not Invoiced")
+	if not status or status in {"Not Invoiced", "Pending Invoice", "None"}:
+		canonical = "Not Billed"
+	elif status in {"Partially Paid", "Partly Paid"}:
+		canonical = "Partly Paid"
+	elif status in {"Draft Invoice Pending", "Draft"}:
+		canonical = "Draft"
+	else:
+		canonical = status
+
 	try:
 		field = frappe.get_meta(doctype).get_field(fieldname)
 		if field and field.fieldtype == "Select":
-			options = {option.strip() for option in (field.options or "").split("\n") if option.strip()}
-			if options and status not in options:
-				return "Not Invoiced" if "Not Invoiced" in options else next(iter(options))
+			options = [option.strip() for option in (field.options or "").split("\n") if option.strip()]
+			if options:
+				if canonical in options:
+					return canonical
+				if canonical == "Not Billed":
+					for opt in ("Not Billed", "Pending Invoice", "Not Invoiced", "Draft"):
+						if opt in options:
+							return opt
+				elif canonical == "Partly Paid":
+					for opt in ("Partly Paid", "Partially Paid"):
+						if opt in options:
+							return opt
+				elif canonical == "Draft":
+					for opt in ("Draft", "Draft Invoice Pending", "Pending Invoice", "Not Billed"):
+						if opt in options:
+							return opt
+				if status in options:
+					return status
+				return options[0]
 	except Exception:
 		pass
-	return status
+	return canonical
 
 
 def get_registration_compatibility_status(summary: dict) -> str:

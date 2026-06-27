@@ -184,3 +184,49 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 			self.assertTrue(should_fail_closed_when_coreedge_missing())
 			with self.assertRaises(frappe.PermissionError):
 				require_vetedge_access()
+
+	def test_filter_bootinfo_branding_overrides(self):
+		# Setup bootinfo
+		bootinfo = frappe._dict({
+			"workspace_sidebar_item": {
+				"vetedge": {
+					"label": "VetEdge",
+					"items": []
+				}
+			},
+			"app_data": [
+				{
+					"app_name": "vetedge",
+					"app_title": "VetEdge",
+					"app_logo_url": "/old-logo.png"
+				}
+			],
+			"navbar_settings": frappe._dict({
+				"app_logo": "/old-logo.png"
+			})
+		})
+
+		mock_branding = {
+			"enabled": 1,
+			"brand_name": "Branded Clinic",
+			"app_title": "Branded Desk App",
+			"module_label": "Branded Veterinary",
+			"logo": "/branded-logo.png"
+		}
+
+		with patch("vetedge.services.branding.get_branding", return_value=mock_branding):
+			filter_bootinfo_for_coreedge_platform(bootinfo)
+
+		# 1. Sidebar label overridden
+		self.assertEqual(bootinfo.workspace_sidebar_item["vetedge"]["label"], "Branded Veterinary")
+
+		# 2. Top-level bootinfo app_title and logo overridden
+		self.assertEqual(bootinfo.app_title, "Branded Desk App")
+		self.assertEqual(bootinfo.app_logo_url, "/branded-logo.png")
+
+		# 3. Navbar settings logo overridden
+		self.assertEqual(bootinfo.navbar_settings.app_logo, "/branded-logo.png")
+
+		# 4. App data title and logo overridden
+		self.assertEqual(bootinfo.app_data[0]["app_title"], "Branded Desk App")
+		self.assertEqual(bootinfo.app_data[0]["app_logo_url"], "/branded-logo.png")

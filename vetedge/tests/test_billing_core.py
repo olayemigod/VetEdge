@@ -1502,6 +1502,73 @@ class multi_invoice_billing_context:
 			"is_fully_paid": outstanding <= 0,
 		}
 
+	def test_get_select_safe_invoice_status_normalization(self):
+		# "Partially Paid" -> "Partly Paid" for Veterinary Consultation
+		res1 = billing_core.get_select_safe_invoice_status("Veterinary Consultation", "payment_status", "Partially Paid")
+		self.assertEqual(res1, "Partly Paid")
+
+		# "Pending Invoice" -> "Not Billed" for Veterinary Consultation
+		res2 = billing_core.get_select_safe_invoice_status("Veterinary Consultation", "payment_status", "Pending Invoice")
+		self.assertEqual(res2, "Not Billed")
+
+		# "Not Invoiced" -> "Not Billed" for Veterinary Consultation
+		res3 = billing_core.get_select_safe_invoice_status("Veterinary Consultation", "payment_status", "Not Invoiced")
+		self.assertEqual(res3, "Not Billed")
+
+		# None -> "Not Billed" for Veterinary Consultation
+		res4 = billing_core.get_select_safe_invoice_status("Veterinary Consultation", "payment_status", None)
+		self.assertEqual(res4, "Not Billed")
+
+		# Partly Paid stays Partly Paid
+		res5 = billing_core.get_select_safe_invoice_status("Veterinary Consultation", "payment_status", "Partly Paid")
+		self.assertEqual(res5, "Partly Paid")
+
+	def test_partially_paid_billing_session_syncs_consultation_correctly(self):
+		# Setup a consultation with child rows (treatment, billing sources)
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			payment_status="Unpaid",
+			linked_invoice="SINV-SUB",
+			planned_treatments=[
+				frappe._dict(name="ROW-1", item="TREAT-ITEM", qty=1, uom="Nos", rate=100, description="Treatment A"),
+			],
+			consultation_invoices=[],
+			consultation_billing_sources=[],
+		)
+
+		session = make_session(
+			current_draft_invoice=None,
+			latest_invoice="SINV-SUB",
+			payment_status="Partially Paid",
+			charges=[
+				frappe._dict({**charge_payload("treatment-row-1", "TREAT-ITEM", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+			],
+		)
+		invoice = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=50, grand_total=100)
+
+		source_links = [
+			frappe._dict({"doctype": "Veterinary Consultation", "name": "VCON-001", "field": "linked_invoice", "value": "SINV-SUB", "payment_status": "Unpaid"}),
+			frappe._dict({"doctype": "Consultation Invoice Reference", "name": "CIR-001", "field": "sales_invoice", "value": "SINV-SUB", "parent": "VCON-001", "parenttype": "Veterinary Consultation", "parentfield": "consultation_invoices", "invoice_status": "Unpaid"}),
+			frappe._dict({"doctype": "Consultation Billing Source", "name": "CBS-001", "field": "sales_invoice", "value": "SINV-SUB", "parent": "VCON-001", "parenttype": "Veterinary Consultation", "parentfield": "consultation_billing_sources", "invoice_status": "Unpaid", "source_type": "Treatment", "source_name": "ROW-1", "item_code": "TREAT-ITEM"}),
+		]
+
+		with billing_core_context(session, invoice, paid_amount=50, source_links=source_links):
+			summary = billing_core.get_billing_session_summary(session)
+			self.assertEqual(summary.get("payment_status"), "Partially Paid")
+			billing_core.update_source_billing_compatibility_fields("Veterinary Consultation", "VCON-001", summary)
+
+		# The source links must be updated, and "Partially Paid" must be mapped to "Partly Paid"
+		self.assertEqual(source_links[0].payment_status, "Partly Paid")
+		self.assertNotEqual(source_links[0].payment_status, "Partially Paid")
+
+		# Ensure child row invoice reference is also mapped safely
+		self.assertEqual(source_links[1].invoice_status, "Partly Paid")
+		self.assertNotEqual(source_links[1].invoice_status, "Partially Paid")
+
 	def __exit__(self, exc_type, exc, tb):
 		for patcher in reversed(self.patches):
 			patcher.stop()
