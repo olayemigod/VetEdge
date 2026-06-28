@@ -3,7 +3,6 @@ from __future__ import annotations
 import frappe
 
 
-REMOVED_PAGE = "veterinary-hospitalisation-dashboard"
 REMOVED_WORKSPACES = ("Veterinary Hospitalisation Dashboard", "VetEdge Hospitalisation Dashboard")
 
 
@@ -11,7 +10,6 @@ def execute():
 	_remove_sidebar_shortcut()
 	for workspace in REMOVED_WORKSPACES:
 		frappe.delete_doc_if_exists("Workspace", workspace, force=1)
-	frappe.delete_doc_if_exists("Page", REMOVED_PAGE, force=1)
 	_clear_dashboard_cache()
 
 
@@ -25,7 +23,10 @@ def _remove_sidebar_shortcut():
 	items = [
 		item
 		for item in sidebar.get("items")
-		if not (item.get("link_type") == "Page" and item.get("link_to") == REMOVED_PAGE)
+		if not (
+			item.get("link_type") == "Workspace"
+			and item.get("link_to") in REMOVED_WORKSPACES
+		)
 	]
 	if len(items) == len(sidebar.get("items")):
 		return

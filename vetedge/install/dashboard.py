@@ -73,9 +73,15 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
 	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 	("veterinary", "page", "kennel_availability_board", "kennel_availability_board.json"),
 	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),
+)
+
+SIDEBAR_PAGE_FILES = (
+	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 )
 
 
@@ -107,6 +113,8 @@ def cleanup_legacy_workspace_sidebars() -> None:
 def ensure_vetedge_workspace_sidebar() -> None:
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
+
+	_import_standard_files(SIDEBAR_PAGE_FILES)
 
 	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
 	if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):
@@ -188,3 +196,12 @@ def _load_standard_doc(*file_parts: str) -> dict:
 	file_path = frappe.get_app_path("vetedge", *file_parts)
 	with open(file_path, encoding="utf-8") as handle:
 		return json.load(handle)
+
+
+def _import_standard_files(file_parts_collection) -> None:
+	if not hasattr(frappe, "get_app_path"):
+		return
+	for file_parts in file_parts_collection:
+		file_path = frappe.get_app_path("vetedge", *file_parts)
+		if os.path.exists(file_path):
+			import_file_by_path(file_path, force=True, ignore_version=True)
