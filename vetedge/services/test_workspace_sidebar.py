@@ -59,6 +59,7 @@ class TestWorkspaceSidebar(TestCase):
 		grooming_index = labels.index("Pet Grooming")
 
 		for label in (
+			"Hospitalisation Dashboard",
 			"Hospitalisations",
 			"Care Locations",
 			"Active Hospitalisations",
@@ -76,12 +77,15 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertIn("VetEdge Doctor", link.get("display_depends_on", ""))
 		self.assertIn("Veterinary Nurse", link.get("display_depends_on", ""))
 
-	def test_hospitalisation_dashboard_page_is_not_exposed(self):
+	def test_hospitalisation_dashboard_page_is_under_hospitalisation_section(self):
 		items = _load_sidebar()["items"]
+		labels = [item.get("label") for item in items]
 		links = _links_by_label(items)
-		self.assertNotIn("Hospitalisation Dashboard", links)
-		for item in items:
-			self.assertFalse(item.get("link_to") == "veterinary-hospitalisation-dashboard", item)
+		self.assertIn("Hospitalisation Dashboard", links)
+		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Hospitalisation"))
+		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Pet Grooming"))
+		self.assertEqual(links["Hospitalisation Dashboard"]["link_to"], "veterinary-hospitalisation-dashboard")
+		self.assertEqual(links["Hospitalisation Dashboard"]["link_type"], "Page")
 
 	def test_hospitalisation_operational_reports_remain_linked(self):
 		links = _links_by_label(_load_sidebar()["items"])
@@ -119,6 +123,7 @@ class TestWorkspaceSidebar(TestCase):
 		counts = Counter(links)
 		for key in (
 			("Hospitalisations", "Veterinary Hospitalisation", "DocType"),
+			("Hospitalisation Dashboard", "veterinary-hospitalisation-dashboard", "Page"),
 			("Missed Appointments", "Veterinary Missed Appointment", "DocType"),
 			("Notification Items", "Veterinary Notification Item", "DocType"),
 			("Stock Expiry Status", "Stock Expiry Status", "Report"),

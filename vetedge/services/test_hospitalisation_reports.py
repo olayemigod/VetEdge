@@ -29,6 +29,7 @@ def make_hospitalisation(
 		doctype=reports.HOSPITALISATION_DOCTYPE,
 		name=name,
 		patient=f"VP-{name[-1]}",
+		patient_name=f"Patient {name[-1]}",
 		customer=f"CUST-{name[-1]}",
 		service_branch="Main",
 		admission_datetime=admission_datetime,
@@ -53,6 +54,7 @@ class ReportFrappeStub:
 		self.hospitalisations = {}
 		self.locations = {}
 		self.logs = []
+		self.patient_names = {}
 		self.db = SimpleNamespace(exists=self.exists, get_value=self.get_value, set_value=Mock())
 		self._dict = frappe._dict
 		self.parse_json = frappe.parse_json
@@ -67,6 +69,8 @@ class ReportFrappeStub:
 	def get_value(self, doctype, name, fieldname=None, **kwargs):
 		if doctype == reports.HOSPITALISATION_DOCTYPE:
 			return self.hospitalisations[name].get(fieldname)
+		if doctype == "Veterinary Patient":
+			return self.patient_names.get(name)
 		return None
 
 	def get_doc(self, doctype, name=None):
@@ -124,6 +128,7 @@ def make_stub():
 		row(name="LOG-1", hospitalisation="VHOS-001", patient="VP-1", care_location="Ward A", assigned_on="2026-06-18 09:00:00", status="Active"),
 		row(name="LOG-2", hospitalisation="VHOS-002", patient="VP-2", care_location="Ward A", assigned_on="2026-06-19 09:00:00", status="Active"),
 	]
+	stub.patient_names = {"VP-1": "Patient 1", "VP-2": "Patient 2", "VP-3": "Patient 3", "VP-4": "Patient 4"}
 	return stub
 
 
@@ -145,6 +150,8 @@ class TestHospitalisationReports(TestCase):
 		self.assertIn("VHOS-002", names)
 		self.assertNotIn("VHOS-003", names)
 		self.assertNotIn("VHOS-004", names)
+		self.assertIn("Patient 1", {row["patient"] for row in data})
+		self.assertNotIn("VP-1", {row["patient"] for row in data})
 
 	def test_status_filter_can_return_discharged_records(self):
 		stub = make_stub()
@@ -200,6 +207,7 @@ class TestHospitalisationReports(TestCase):
 		self.assertEqual(data[0]["capacity"], 3)
 		self.assertEqual(data[0]["active_occupancy"], 2)
 		self.assertEqual(data[0]["available_slots"], 1)
+		self.assertEqual(data[0]["current_patients"], "Patient 1, Patient 2")
 		self.assertEqual(data[0]["usage_indicator"], "Occupied")
 
 	def test_discharge_watch_includes_long_stay_and_care_location_warning(self):

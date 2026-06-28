@@ -453,6 +453,97 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(captured["consultation_type"], "House Call")
         self.assertEqual(captured["consultation_status"], "Completed")
 
+    def test_financial_dashboard_payload_returns_safely_without_finance_data(self):
+        frappe_stub = SimpleNamespace(_dict=frappe._dict, format_value=lambda value, options: value)
+
+        with (
+            patch.object(reporting_logic_v4, "frappe", frappe_stub),
+            patch.object(reporting_logic_v4, "nowdate", return_value="2026-06-15"),
+            patch.object(reporting_logic_v4, "validate_dashboard_access"),
+            patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
+            patch.object(reporting_logic_v4, "_rows", return_value=[]),
+        ):
+            payload = reporting_logic_v4.get_dashboard_payload("financial", {})
+
+        self.assertEqual(payload["dashboard_key"], "financial")
+        self.assertEqual(
+            [kpi["label"] for kpi in payload["kpis"]],
+            [
+                "Total Revenue",
+                "Paid Revenue",
+                "Outstanding Revenue",
+                "Draft / Pending Invoices",
+                "Payments Received",
+            ],
+        )
+        self.assertIn("Revenue by Service Area", [chart["title"] for chart in payload["charts"]])
+
+    def test_hospitalisation_dashboard_payload_returns_safely_without_active_stays(self):
+        frappe_stub = SimpleNamespace(_dict=frappe._dict, format_value=lambda value, options: value)
+
+        with (
+            patch.object(reporting_logic_v4, "frappe", frappe_stub),
+            patch.object(reporting_logic_v4, "nowdate", return_value="2026-06-15"),
+            patch.object(reporting_logic_v4, "validate_dashboard_access"),
+            patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
+            patch("vetedge.services.hospitalisation_reports.get_active_hospitalisations", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_hospitalisation_charge_report", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_care_location_occupancy_report", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_discharge_watch_report", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_pending_hospitalisation_actions", return_value=([], [])),
+        ):
+            payload = reporting_logic_v4.get_dashboard_payload("hospitalisation", {})
+
+        self.assertEqual(payload["dashboard_key"], "hospitalisation")
+        self.assertEqual(payload["title"], "Hospitalisation Dashboard")
+        self.assertEqual(payload["kpis"][0], {"label": "Active Hospitalisations", "value": 0})
+        charts = {chart["title"]: chart for chart in payload["charts"]}
+        self.assertEqual(charts["Pending Hospitalisation Actions"]["empty_state"], "No pending hospitalisation actions.")
+        self.assertEqual(charts["Pending Hospitalisation Actions"]["rows"], [])
+        self.assertEqual(charts["Care Location Occupancy"]["empty_state"], "No care location occupancy data available.")
+        self.assertEqual(charts["Care Location Occupancy"]["rows"], [])
+
+    def test_hospitalisation_dashboard_payload_includes_occupancy_chart_and_table_rows(self):
+        frappe_stub = SimpleNamespace(_dict=frappe._dict, format_value=lambda value, options: value)
+        occupancy_rows = [
+            {
+                "care_location": "Ward A",
+                "status": "Occupied",
+                "active_occupancy": 2,
+                "capacity": 4,
+                "available_slots": 2,
+            }
+        ]
+
+        with (
+            patch.object(reporting_logic_v4, "frappe", frappe_stub),
+            patch.object(reporting_logic_v4, "nowdate", return_value="2026-06-15"),
+            patch.object(reporting_logic_v4, "validate_dashboard_access"),
+            patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
+            patch("vetedge.services.hospitalisation_reports.get_active_hospitalisations", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_hospitalisation_charge_report", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_care_location_occupancy_report", return_value=([], occupancy_rows)),
+            patch("vetedge.services.hospitalisation_reports.get_discharge_watch_report", return_value=([], [])),
+            patch("vetedge.services.hospitalisation_reports.get_pending_hospitalisation_actions", return_value=([], [])),
+        ):
+            payload = reporting_logic_v4.get_dashboard_payload("hospitalisation", {})
+
+        occupancy_kpi = next(kpi for kpi in payload["kpis"] if kpi["label"] == "Care Location Occupancy")
+        occupancy_chart = next(chart for chart in payload["charts"] if chart["title"] == "Care Location Occupancy")
+        self.assertEqual(occupancy_kpi["value"], "2 / 4 (50.0%)")
+        self.assertEqual(occupancy_chart["data"]["labels"], ["Ward A"])
+        self.assertEqual(occupancy_chart["data"]["datasets"][0]["values"], [2])
+        self.assertEqual(occupancy_chart["rows"][0]["care_location"], "Ward A")
+        self.assertEqual(occupancy_chart["rows"][0]["available_slots"], 2)
+
+    def test_hospitalisation_dashboard_payload_empty_pending_actions_has_safe_empty_state(self):
+        chart = reporting_logic_v4._chart("Pending Hospitalisation Actions", "bar", [], [], "#f59e0b")
+        chart.update({"empty_state": "No pending hospitalisation actions.", "rows": []})
+
+        self.assertEqual(chart["data"]["labels"], [])
+        self.assertEqual(chart["rows"], [])
+        self.assertEqual(chart["empty_state"], "No pending hospitalisation actions.")
+
 
 if __name__ == "__main__":
     unittest.main()

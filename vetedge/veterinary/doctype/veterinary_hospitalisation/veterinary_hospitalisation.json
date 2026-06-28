@@ -10,6 +10,7 @@
   "hospitalisation_title",
   "admission_section",
   "patient",
+  "patient_name",
   "customer",
   "status",
   "admission_datetime",
@@ -76,12 +77,21 @@
    "fieldname": "patient",
    "fieldtype": "Link",
    "in_global_search": 1,
-   "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Patient",
+   "label": "Patient ID",
    "options": "Veterinary Patient",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fetch_from": "patient.patient_name",
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Patient",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "customer",
@@ -427,7 +437,7 @@
   }
  ],
  "quick_entry": 1,
- "search_fields": "patient,customer,service_branch,linked_consultation,attending_veterinarian,status,sales_invoice",
+ "search_fields": "patient_name,patient,customer,service_branch,linked_consultation,attending_veterinarian,status,sales_invoice",
  "show_title_field_in_link": 1,
  "sort_field": "admission_datetime",
  "sort_order": "DESC",

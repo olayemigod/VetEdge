@@ -102,6 +102,18 @@ class TestVeterinaryHospitalisationStructure(TestCase):
 			},
 		)
 
+	def test_hospitalisation_patient_list_display_uses_patient_name(self):
+		hospitalisation = load_json(HOSPITALISATION_JSON)
+		fields = fields_by_name(hospitalisation)
+
+		self.assertIn("patient_name", hospitalisation["field_order"])
+		self.assertEqual(fields["patient"]["label"], "Patient ID")
+		self.assertFalse(fields["patient"].get("in_list_view"))
+		self.assertEqual(fields["patient_name"]["label"], "Patient")
+		self.assertEqual(fields["patient_name"]["fetch_from"], "patient.patient_name")
+		self.assertTrue(fields["patient_name"].get("in_list_view"))
+		self.assertTrue(fields["patient_name"].get("read_only"))
+
 	def test_sales_invoice_is_optional_until_admission_action(self):
 		fields = fields_by_name(load_json(HOSPITALISATION_JSON))
 

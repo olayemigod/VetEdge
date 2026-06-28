@@ -36,6 +36,7 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         "inventory_dispensary": _("Inventory / Dispensary Dashboard"),
         "lab": _("Lab Dashboard"),
         "vaccination": _("Vaccination Dashboard"),
+        "hospitalisation": _("Hospitalisation Dashboard"),
         "boarding": _("Boarding Dashboard"),
         "grooming": _("Grooming Dashboard"),
     }
@@ -75,14 +76,20 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
     if key == "financial":
         revenue_rows = _rows("Revenue Summary", month_filters)
         unpaid_rows = _rows("Unpaid Invoice Report", filters)
+        total_revenue = sum(flt(row.get("grand_total")) for row in revenue_rows)
+        paid_revenue = sum(flt(row.get("paid_amount")) for row in revenue_rows)
+        outstanding_revenue = sum(flt(row.get("outstanding_amount")) for row in revenue_rows)
         payload["kpis"] = [
-            _kpi(_("Revenue This Month"), _currency(sum(flt(row.get("grand_total")) for row in revenue_rows))),
-            _kpi(_("Outstanding Amount"), _currency(sum(flt(row.get("outstanding_amount")) for row in revenue_rows))),
-            _kpi(_("Paid Amount This Month"), _currency(sum(flt(row.get("paid_amount")) for row in revenue_rows))),
+            _kpi(_("Total Revenue"), _currency(total_revenue)),
+            _kpi(_("Paid Revenue"), _currency(paid_revenue)),
+            _kpi(_("Outstanding Revenue"), _currency(outstanding_revenue)),
+            _kpi(_("Draft / Pending Invoices"), len(unpaid_rows)),
+            _kpi(_("Payments Received"), _currency(paid_revenue)),
         ]
         payload["charts"] = [
             _daily_revenue_chart(revenue_rows),
             _branch_revenue_chart(revenue_rows),
+            _service_area_revenue_chart(revenue_rows),
             _unpaid_status_chart(unpaid_rows),
         ]
         return payload
@@ -158,6 +165,9 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         payload["charts"] = [_vaccination_due_chart(vaccination_rows)]
         return payload
 
+    if key == "hospitalisation":
+        return _hospitalisation_dashboard_payload(payload, filters, today)
+
     if key == "boarding":
         boarding_rows = _rows("Boarding Report", month_filters)
         active_rows = [row for row in boarding_rows if cstr(row.get("status")) == "Checked In"]
@@ -197,10 +207,112 @@ def _dashboard_report_links(key):
         "inventory_dispensary": ["Dispensary Activity Report", "Stock Usage Summary"],
         "lab": ["Lab Order Report"],
         "vaccination": ["Vaccination Report"],
+        "hospitalisation": [
+            "Active Hospitalisations",
+            "Hospitalisation Charge Summary",
+            "Care Location Occupancy",
+            "Hospitalisation Discharge Watch",
+            "Pending Hospitalisation Actions",
+        ],
         "boarding": ["Boarding Report", "Kennel Availability Report"],
         "grooming": ["Grooming Report"],
     }
     return [{"label": label, "report": label} for label in links.get(key, [])]
+
+
+def _hospitalisation_dashboard_payload(payload, filters, today):
+    from vetedge.services.hospitalisation_reports import (
+        get_active_hospitalisations,
+        get_care_location_occupancy_report,
+        get_discharge_watch_report,
+        get_hospitalisation_charge_report,
+        get_pending_hospitalisation_actions,
+    )
+
+    active_columns, active_rows = get_active_hospitalisations(filters)
+    charge_columns, charge_rows = get_hospitalisation_charge_report(filters)
+    occupancy_columns, occupancy_rows = get_care_location_occupancy_report(filters)
+    discharge_columns, discharge_rows = get_discharge_watch_report(filters)
+    action_columns, action_rows = get_pending_hospitalisation_actions(filters)
+
+    pending_stock = sum(1 for row in action_rows if cstr(row.get("action_type")) == "Pending Stock Posting")
+    pending_charges = sum(flt(row.get("charge_sheet_pending") or row.get("pending_charges")) for row in charge_rows)
+    outstanding = sum(flt(row.get("billing_session_outstanding") or row.get("outstanding_amount")) for row in charge_rows)
+    admissions_today = sum(
+        1
+        for row in active_rows
+        if row.get("admission_datetime") and cstr(getdate(row.get("admission_datetime"))) == cstr(today)
+    )
+
+    occupied = sum(flt(row.get("active_occupancy")) for row in occupancy_rows)
+    capacity = sum(flt(row.get("capacity")) for row in occupancy_rows)
+    occupancy_display = "0 / 0"
+    if capacity:
+        occupancy_display = f"{int(occupied)} / {int(capacity)} ({round((occupied / capacity) * 100, 1)}%)"
+
+    action_counts = _group_count(action_rows, "action_type")
+    occupancy_labels = [cstr(row.get("care_location")) for row in occupancy_rows if row.get("care_location")]
+    occupancy_values = [flt(row.get("active_occupancy")) for row in occupancy_rows if row.get("care_location")]
+
+    payload["kpis"] = [
+        _kpi(_("Active Hospitalisations"), len(active_rows)),
+        _kpi(_("Admissions Today"), admissions_today),
+        _kpi(_("Discharge Watch"), len(discharge_rows)),
+        _kpi(_("Pending Actions"), len(action_rows)),
+        _kpi(_("Pending Stock Posting"), pending_stock),
+        _kpi(_("Pending Charges"), _currency(pending_charges)),
+        _kpi(_("Outstanding Hospitalisation Billing"), _currency(outstanding)),
+        _kpi(_("Care Location Occupancy"), occupancy_display),
+    ]
+    action_chart = _chart(
+            _("Pending Hospitalisation Actions"),
+            "bar",
+            sorted(action_counts),
+            [action_counts[label] for label in sorted(action_counts)],
+            "#f59e0b",
+    )
+    action_chart.update(
+        {
+            "empty_state": _("No pending hospitalisation actions."),
+            "columns": [
+                {"label": _("Action Type"), "fieldname": "action_type"},
+                {"label": _("Priority"), "fieldname": "priority"},
+                {"label": _("Patient"), "fieldname": "patient"},
+                {"label": _("Suggested Action"), "fieldname": "suggested_action"},
+            ],
+            "rows": _dashboard_table_rows(
+                action_rows,
+                ["action_type", "priority", "patient", "suggested_action"],
+            ),
+        }
+    )
+
+    occupancy_chart = _chart(_("Care Location Occupancy"), "bar", occupancy_labels, occupancy_values, "#0ea5e9")
+    occupancy_chart.update(
+        {
+            "empty_state": _("No care location occupancy data available."),
+            "columns": [
+                {"label": _("Care Location"), "fieldname": "care_location"},
+                {"label": _("Status"), "fieldname": "status"},
+                {"label": _("Occupied"), "fieldname": "active_occupancy"},
+                {"label": _("Capacity"), "fieldname": "capacity"},
+                {"label": _("Available"), "fieldname": "available_slots"},
+            ],
+            "rows": _dashboard_table_rows(
+                occupancy_rows,
+                ["care_location", "status", "active_occupancy", "capacity", "available_slots"],
+            ),
+        }
+    )
+    payload["charts"] = [action_chart, occupancy_chart]
+    return payload
+
+
+def _dashboard_table_rows(rows, fields):
+    table_rows = []
+    for row in rows:
+        table_rows.append({fieldname: row.get(fieldname) for fieldname in fields})
+    return table_rows
 
 
 def _group_sum(rows, key_field, value_field):
@@ -255,6 +367,12 @@ def _branch_revenue_chart(rows):
     grouped = _group_sum(rows, "branch", "grand_total")
     labels = sorted(grouped)
     return _chart(_("Revenue by Branch"), "bar", labels, [grouped[label] for label in labels], "#10b981")
+
+
+def _service_area_revenue_chart(rows):
+    grouped = _group_sum(rows, "service_category", "grand_total")
+    labels = sorted(grouped)
+    return _chart(_("Revenue by Service Area"), "bar", labels, [grouped[label] for label in labels], "#6366f1")
 
 
 def _consultation_by_branch_chart(rows):

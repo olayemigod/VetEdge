@@ -10,6 +10,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 HOOKS_PATH = APP_ROOT / "hooks.py"
 DESKTOP_ICON_PATH = APP_ROOT / "desktop_icon" / "vetedge.json"
 WORKSPACE_SIDEBAR_PATH = APP_ROOT / "workspace_sidebar" / "vetedge.json"
+VETERINARY_ROOT = APP_ROOT / "veterinary"
 
 
 def _hooks_assignment(name: str) -> list[str]:
@@ -135,3 +136,56 @@ class TestNavigationAssets(TestCase):
 			self.assertIn(asset, asset_paths)
 			relative = asset.removeprefix("/assets/vetedge/")
 			self.assertTrue((APP_ROOT / "public" / relative).exists(), asset)
+
+	def test_dashboard_page_routes_and_shell_assets_exist(self):
+		expected_pages = {
+			"veterinary_financial_dashboard": ("veterinary-financial-dashboard", "financial"),
+			"veterinary_hospitalisation_dashboard": ("veterinary-hospitalisation-dashboard", "hospitalisation"),
+		}
+
+		for folder, (page_name, dashboard_key) in expected_pages.items():
+			with self.subTest(page=page_name):
+				page_root = VETERINARY_ROOT / "page" / folder
+				page_json = json.loads((page_root / f"{folder}.json").read_text())
+				page_js = (page_root / f"{folder}.js").read_text()
+				self.assertEqual(page_json["name"], page_name)
+				self.assertEqual(page_json["page_name"], page_name)
+				self.assertEqual(page_json["module"], "Veterinary")
+				self.assertIn("/assets/vetedge/js/dashboard_shell.js", page_js)
+				self.assertIn(f'key: "{dashboard_key}"', page_js)
+
+	def test_dashboard_sidebar_placements(self):
+		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]
+		labels = [item.get("label") for item in items]
+		links = {
+			item.get("label"): item
+			for item in items
+			if item.get("type") == "Link"
+		}
+
+		self.assertGreater(labels.index("Financial Dashboard"), labels.index("Dashboards"))
+		self.assertLess(labels.index("Financial Dashboard"), labels.index("Veterinary Records"))
+		self.assertEqual(links["Financial Dashboard"]["link_to"], "veterinary-financial-dashboard")
+		self.assertEqual(links["Financial Dashboard"]["link_type"], "Page")
+
+		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Hospitalisation"))
+		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Pet Grooming"))
+		self.assertEqual(links["Hospitalisation Dashboard"]["link_to"], "veterinary-hospitalisation-dashboard")
+		self.assertEqual(links["Hospitalisation Dashboard"]["link_type"], "Page")
+
+	def test_no_duplicate_dashboard_top_level_sections(self):
+		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]
+		top_level = [item.get("label") for item in items if not item.get("child")]
+		self.assertEqual(top_level.count("Veterinary Financial Dashboard"), 0)
+		self.assertEqual(top_level.count("Hospitalisation Dashboard"), 0)
+		self.assertEqual(top_level.count("Veterinary Hospitalisation Dashboard"), 0)
+
+	def test_dashboard_shell_renders_chart_table_fallbacks(self):
+		source = (APP_ROOT / "public" / "js" / "dashboard_shell.js").read_text()
+
+		self.assertIn("renderChartTable", source)
+		self.assertIn("chart.empty_state", source)
+		self.assertIn("chart.rows", source)
+		self.assertIn("chart.columns", source)
+		self.assertIn("!frappe.Chart", source)
+		self.assertIn("VetEdge dashboard chart failed to render", source)

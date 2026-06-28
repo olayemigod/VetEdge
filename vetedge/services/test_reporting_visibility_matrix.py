@@ -30,6 +30,17 @@ EXPECTED_PAGE_ROLES = {
 		"Sales Manager",
 		"Branch Manager",
 	},
+	"page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.json": {
+		"System Manager",
+		"VetEdge Administrator",
+		"VetEdge Front Desk",
+		"VetEdge Doctor",
+		"Veterinary Nurse",
+		"Branch Manager",
+		"Accounts/Cashier",
+		"Accounts Manager",
+		"Sales Manager",
+	},
 	"page/vetedge_inventory_dispensary_dashboard/vetedge_inventory_dispensary_dashboard.json": {
 		"System Manager",
 		"VetEdge Administrator",
@@ -220,6 +231,7 @@ EXPECTED_REPORT_FILTER_FIELDS = {
 EXPECTED_WORKSPACE_RULE_SNIPPETS = {
 	"Executive Dashboard": ["VetEdge Administrator", "System Manager"],
 	"Financial Dashboard": ["Accounts/Cashier", "Accounts Manager", "Branch Manager"],
+	"Hospitalisation Dashboard": ["VetEdge Doctor", "Veterinary Nurse", "Branch Manager"],
 	"Inventory / Dispensary Dashboard": ["Dispensary User", "Branch Manager"],
 	"Practitioner Performance Dashboard": ["VetEdge Doctor", "Branch Manager"],
 	"Revenue Summary": ["Accounts/Cashier", "Accounts Manager"],
