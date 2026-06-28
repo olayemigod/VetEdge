@@ -8,6 +8,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
+VETEDGE_DESK_ROUTE = "/desk/vetedge-executive-dashboard"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -85,6 +86,7 @@ def ensure_financial_dashboard() -> None:
 			import_file_by_path(file_path, force=True, ignore_version=True)
 
 	ensure_vetedge_workspace_sidebar()
+	cleanup_legacy_workspace_sidebars()
 	cleanup_legacy_financial_workspace()
 	ensure_vetedge_desktop_icon()
 
@@ -92,6 +94,14 @@ def ensure_financial_dashboard() -> None:
 def cleanup_legacy_financial_workspace() -> None:
 	if frappe.db.exists("Workspace", "Veterinary Financial Dashboard"):
 		frappe.delete_doc_if_exists("Workspace", "Veterinary Financial Dashboard", force=1)
+
+
+def cleanup_legacy_workspace_sidebars() -> None:
+	if not frappe.db.exists("DocType", "Workspace Sidebar"):
+		return
+	for sidebar in ("Veterinary Hospitalisation Dashboard", "Veterinary Financial Dashboard"):
+		if frappe.db.exists("Workspace Sidebar", sidebar):
+			frappe.delete_doc("Workspace Sidebar", sidebar, force=True)
 
 
 def ensure_vetedge_workspace_sidebar() -> None:
@@ -109,24 +119,19 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 	standard_doc["title"] = "Veterinary"
 
-	if "items" in standard_doc:
-		standard_doc["items"] = [item for item in standard_doc["items"] if _should_keep_sidebar_item(item)]
+	standard_items = standard_doc.get("items") or []
+	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
+		sidebar.set("items", [])
 		sidebar.update(_prepare_standard_sidebar_update_payload(standard_doc))
-		raw_items = sidebar.get("items") if hasattr(sidebar, "get") else getattr(sidebar, "items", None)
-		kept_items = [item for item in raw_items or [] if _should_keep_sidebar_item(item)]
-		if hasattr(sidebar, "set"):
-			sidebar.set("items", kept_items)
-		else:
-			sidebar.items = kept_items
+		sidebar.set("items", kept_items)
 		sidebar.save(ignore_permissions=True)
 		sidebar.db_set("title", "Veterinary")
 	else:
+		standard_doc["items"] = kept_items
 		sidebar = frappe.get_doc(standard_doc)
-		raw_items = sidebar.get("items") if hasattr(sidebar, "get") else getattr(sidebar, "items", None)
-		kept_items = [item for item in raw_items or [] if _should_keep_sidebar_item(item)]
 		if hasattr(sidebar, "set"):
 			sidebar.set("items", kept_items)
 		else:
@@ -166,9 +171,9 @@ def ensure_vetedge_desktop_icon() -> None:
 				"app": "vetedge",
 				"hidden": 0,
 				"icon_type": "Link",
-				"link_type": "Workspace Sidebar",
+				"link_type": "External",
 				"link_to": "VetEdge",
-				"link": "",
+				"link": VETEDGE_DESK_ROUTE,
 				"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
 				"label": default_label,
 				"standard": 1,
@@ -183,4 +188,3 @@ def _load_standard_doc(*file_parts: str) -> dict:
 	file_path = frappe.get_app_path("vetedge", *file_parts)
 	with open(file_path, encoding="utf-8") as handle:
 		return json.load(handle)
-

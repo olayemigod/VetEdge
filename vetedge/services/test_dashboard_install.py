@@ -8,7 +8,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 if "frappe" not in sys.modules:
-	sys.modules["frappe"] = SimpleNamespace()
+	sys.modules["frappe"] = SimpleNamespace(_=lambda value: value)
 	sys.modules["frappe.modules"] = SimpleNamespace()
 	sys.modules["frappe.modules.import_file"] = SimpleNamespace(import_file_by_path=lambda *args, **kwargs: None)
 
@@ -39,7 +39,7 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		frappe_stub.get_doc.assert_called_once_with({"doctype": "Workspace Sidebar", "name": "VetEdge", "title": "Veterinary"})
+		frappe_stub.get_doc.assert_called_once_with({"doctype": "Workspace Sidebar", "name": "VetEdge", "title": "Veterinary", "items": []})
 		insert.assert_called_once_with(ignore_permissions=True)
 		db_set.assert_called_once_with("title", "Veterinary")
 
@@ -86,10 +86,14 @@ class TestDashboardInstall(TestCase):
 
 		frappe_stub.get_doc.assert_not_called()
 		frappe_stub.db.set_value.assert_called_once()
+		update_values = frappe_stub.db.set_value.call_args.args[2]
+		self.assertEqual(update_values["link_type"], "External")
+		self.assertEqual(update_values["link"], "/desk/vetedge-executive-dashboard")
+		self.assertEqual(update_values["link_to"], "VetEdge")
 
 
 	def test_ensure_vetedge_workspace_sidebar_updates_existing_sidebar(self):
-		sidebar = SimpleNamespace(update=Mock(), save=Mock(), db_set=Mock())
+		sidebar = SimpleNamespace(update=Mock(), save=Mock(), db_set=Mock(), set=Mock())
 		exists = Mock(side_effect=lambda doctype, name: (doctype, name) in {("DocType", "Workspace Sidebar"), ("Workspace Sidebar", "VetEdge")})
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists),
@@ -221,3 +225,31 @@ class TestDashboardInstall(TestCase):
 
 		# CoreEdge links must NOT be pruned because CoreEdge is installed and doctype exists
 		self.assertEqual(len(sidebar.items), 2)
+
+	def test_cleanup_legacy_workspace_sidebars_removes_stale_dashboard_sidebars(self):
+		deleted = []
+		exists = Mock(
+			side_effect=lambda doctype, name=None: (
+				doctype == "DocType"
+				and name == "Workspace Sidebar"
+			)
+			or (
+				doctype == "Workspace Sidebar"
+				and name in ("Veterinary Hospitalisation Dashboard", "Veterinary Financial Dashboard")
+			)
+		)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists),
+			delete_doc=lambda doctype, name, force=False: deleted.append((doctype, name, force)),
+		)
+
+		with patch.object(dashboard, "frappe", frappe_stub):
+			dashboard.cleanup_legacy_workspace_sidebars()
+
+		self.assertEqual(
+			deleted,
+			[
+				("Workspace Sidebar", "Veterinary Hospitalisation Dashboard", True),
+				("Workspace Sidebar", "Veterinary Financial Dashboard", True),
+			],
+		)

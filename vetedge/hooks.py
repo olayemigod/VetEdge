@@ -5,7 +5,7 @@ app_description = "VetEdge is a veterinary operations system built as a custom F
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
-app_home = "/desk/veterinary-financial-dashboard"
+app_home = "/desk/vetedge-executive-dashboard"
 
 # Apps
 # ------------------
@@ -32,9 +32,11 @@ portal_menu_items = [
 
 # include js, css files in header of desk.html
 app_include_css = [
+	"/assets/vetedge/css/dashboard_shell.css",
 	"/assets/vetedge/css/veterinary_unread_badge.css",
 ]
 app_include_js = [
+	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/billing_modal.js",
 	"/assets/vetedge/js/report_pdf_patch.js",

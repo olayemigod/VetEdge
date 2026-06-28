@@ -1,0 +1,12 @@
+.vetedge-dashboard-root {
+	padding: 16px 0;
+}
+
+.vetedge-dashboard-root .vetedge-dashboard-report {
+	margin-bottom: 4px;
+}
+
+.vetedge-dashboard-root .vetedge-dashboard-kpis,
+.vetedge-dashboard-root .vetedge-dashboard-charts {
+	min-height: 24px;
+}

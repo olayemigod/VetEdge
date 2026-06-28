@@ -74,6 +74,9 @@ def get_vetedge_product_app() -> str:
 	except Exception:
 		return "VetEdge"
 
+def get_vetedge_desk_route() -> str:
+	return "/desk/vetedge-executive-dashboard"
+
 def _get_local_fallback_context(user: str | None = None) -> dict:
 	resolved_user = user or frappe.session.user
 	default_company = None
@@ -235,6 +238,68 @@ def get_visible_vetedge_settings_items(items: list[dict]) -> list[dict]:
 			filtered.append(item)
 	return filtered
 
+def _get_allowed_workspace_names(bootinfo) -> list[str]:
+	try:
+		pages = (bootinfo.get("workspaces") or {}).get("pages") or []
+	except Exception:
+		return []
+	return [page.get("name") for page in pages if page.get("name")]
+
+def _build_sidebar_item_for_boot(item) -> dict:
+	boot_item = {
+		"label": item.label,
+		"link_to": item.link_to,
+		"link_type": item.link_type,
+		"type": item.type,
+		"icon": item.icon,
+		"child": item.child,
+		"collapsible": item.collapsible,
+		"indent": item.indent,
+		"keep_closed": item.keep_closed,
+		"url": item.url,
+		"show_arrow": item.show_arrow,
+		"filters": item.filters,
+		"route_options": item.route_options,
+		"tab": item.navigate_to_tab,
+	}
+	if (
+		item.link_type == "Report"
+		and item.link_to
+		and frappe.db.exists("Report", item.link_to)
+		and not frappe.db.get_value("Report", item.link_to, "disabled")
+	):
+		report_type, ref_doctype = frappe.db.get_value(
+			"Report", item.link_to, ["report_type", "ref_doctype"]
+		)
+		boot_item["report"] = {"report_type": report_type, "ref_doctype": ref_doctype}
+	return boot_item
+
+def get_canonical_vetedge_sidebar_for_boot(bootinfo) -> dict | None:
+	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		return None
+
+	sidebar_doc = frappe.get_doc("Workspace Sidebar", "VetEdge")
+	allowed_workspaces = _get_allowed_workspace_names(bootinfo)
+	items = []
+	for item in sidebar_doc.items:
+		if (
+			item.type == "Section Break"
+			or sidebar_doc.is_item_allowed(item.link_to, item.link_type, allowed_workspaces)
+		):
+			items.append(_build_sidebar_item_for_boot(item))
+
+	if not any(item["type"] != "Section Break" for item in items):
+		return None
+
+	return {
+		"label": "Veterinary",
+		"items": items,
+		"header_icon": sidebar_doc.header_icon,
+		"module_onboarding": sidebar_doc.module_onboarding,
+		"module": sidebar_doc.module,
+		"app": sidebar_doc.app,
+	}
+
 def filter_bootinfo_for_coreedge_platform(bootinfo):
 	bootinfo.is_coreedge_available = is_coreedge_available()
 	bootinfo.should_show_coreedge_controls = should_show_coreedge_controls()
@@ -248,7 +313,7 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
 	sidebar_items = bootinfo.get("workspace_sidebar_item")
 	if sidebar_items:
-		source_sidebar = sidebar_items.get("veterinary") or sidebar_items.get("vetedge")
+		source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
 		if source_sidebar:
 			source_sidebar["label"] = branding.get("module_label") or "Veterinary"
 			sidebar_items["veterinary"] = source_sidebar
@@ -260,6 +325,8 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 		for icon in desktop_icons:
 			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
 				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				icon["link_type"] = "External"
+				icon["link"] = get_vetedge_desk_route()
 				icon["link_to"] = "VetEdge"
 
 	# Always override the app_data app_title and logo for app screen
@@ -267,6 +334,7 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 		for app in bootinfo.app_data:
 			if app.get("app_name") == "vetedge":
 				app["app_title"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				app["route"] = get_vetedge_desk_route()
 				if branding.get("logo"):
 					app["app_logo_url"] = branding.get("logo")
 

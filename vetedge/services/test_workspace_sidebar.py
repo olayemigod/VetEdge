@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import frappe
 from collections import Counter
 from pathlib import Path
 from unittest import TestCase
@@ -55,7 +56,7 @@ class TestWorkspaceSidebar(TestCase):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
 		hospitalisation_index = labels.index("Hospitalisation")
-		records_index = labels.index("Veterinary Records")
+		grooming_index = labels.index("Pet Grooming")
 
 		for label in (
 			"Hospitalisations",
@@ -67,7 +68,7 @@ class TestWorkspaceSidebar(TestCase):
 			"Pending Hospitalisation Actions",
 		):
 			self.assertGreater(labels.index(label), hospitalisation_index)
-			self.assertLess(labels.index(label), records_index)
+			self.assertLess(labels.index(label), grooming_index)
 
 		link = _links_by_label(items)["Hospitalisations"]
 		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
@@ -100,8 +101,8 @@ class TestWorkspaceSidebar(TestCase):
 		labels = [item.get("label") for item in items]
 		item_index = labels.index("Notification Items")
 
-		self.assertGreater(item_index, labels.index("Notification Event Registry"))
-		self.assertLess(item_index, labels.index("Notification Log"))
+		self.assertGreater(item_index, labels.index("Veterinary Records"))
+		self.assertLess(item_index, labels.index("Hospitalisation"))
 
 		link = _links_by_label(items)["Notification Items"]
 		self.assertEqual(link["link_to"], "Veterinary Notification Item")
@@ -148,10 +149,26 @@ class TestWorkspaceSidebar(TestCase):
 			if item.get("type") == "Section Break"
 		}
 
-		for label in ("Dashboards", "Hospitalisation", "Veterinary Records", "Veterinary Masters", "Reports"):
+		for label in ("Dashboards", "Veterinary Records", "Hospitalisation", "Pet Grooming", "Pet Boarding", "Veterinary Masters", "Reports", "Billing", "Setup"):
 			self.assertEqual(sections[label]["collapsible"], 1)
 			self.assertEqual(sections[label]["keep_closed"], 1)
 			self.assertEqual(sections[label]["show_arrow"], 0)
+
+	def test_sidebar_sections_order(self):
+		items = _load_sidebar()["items"]
+		sections = [item.get("label") for item in items if item.get("type") == "Section Break"]
+		expected_sections = [
+			"Dashboards",
+			"Veterinary Records",
+			"Hospitalisation",
+			"Pet Grooming",
+			"Pet Boarding",
+			"Veterinary Masters",
+			"Reports",
+			"Billing",
+			"Setup"
+		]
+		self.assertEqual(sections, expected_sections)
 
 	def test_collapsed_sidebar_sections_use_native_collapse_control(self):
 		sections = [
@@ -223,3 +240,137 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertEqual(links["Notification Event Registry"]["link_to"], "Veterinary Notification Event Registry")
 		self.assertEqual(links["Notification Log"]["link_to"], "Veterinary Notification Log")
 		self.assertEqual(links["Notification Preference"]["link_to"], "Veterinary Notification Preference")
+
+	def test_runtime_desktop_icon_label_and_route(self):
+		from vetedge.install.dashboard import ensure_vetedge_desktop_icon
+		ensure_vetedge_desktop_icon()
+
+		self.assertTrue(frappe.db.exists("Desktop Icon", "VetEdge"))
+		doc = frappe.get_doc("Desktop Icon", "VetEdge")
+
+		from vetedge.services.branding import get_branding
+		branding = get_branding()
+		expected_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+
+		# Desktop icon/app launcher label remains VetEdge
+		self.assertEqual(doc.label, expected_label)
+		# Desktop icon route points to the intended Veterinary operational landing route
+		self.assertEqual(doc.link_type, "External")
+		self.assertEqual(doc.link, "/desk/vetedge-executive-dashboard")
+		self.assertNotEqual(doc.link, "/desk/veterinary-patient")
+
+	def test_no_active_vetedge_or_veterinary_desktop_icon_points_to_patient_list(self):
+		icons = frappe.get_all(
+			"Desktop Icon",
+			fields=["name", "label", "app", "hidden", "link", "link_to", "link_type"],
+			limit=1000,
+		)
+		matching_icons = [
+			icon
+			for icon in icons
+			if "vetedge" in " ".join(str(icon.get(field) or "") for field in ("name", "label", "app")).lower()
+			or "veterinary" in " ".join(str(icon.get(field) or "") for field in ("name", "label", "app")).lower()
+		]
+
+		self.assertGreater(len(matching_icons), 0)
+		for icon in matching_icons:
+			if icon.hidden:
+				continue
+			self.assertNotEqual(icon.link, "/desk/veterinary-patient", icon)
+			self.assertNotEqual(icon.link_to, "Veterinary Patient", icon)
+			if icon.label == "VetEdge":
+				self.assertEqual(icon.link, "/desk/vetedge-executive-dashboard")
+
+	def test_canonical_sidebar_sync_updates_live_record(self):
+		from vetedge.install.dashboard import ensure_vetedge_workspace_sidebar
+		
+		# Set an intentionally outdated/scrambled items structure in database doc
+		if frappe.db.exists("Workspace Sidebar", "VetEdge"):
+			doc = frappe.get_doc("Workspace Sidebar", "VetEdge")
+			doc.set("items", [])
+			doc.append("items", {
+				"type": "Link",
+				"label": "Stale Link",
+				"link_type": "DocType",
+				"link_to": "User"
+			})
+			doc.save(ignore_permissions=True)
+			frappe.db.commit()
+
+		# Run the sync function
+		ensure_vetedge_workspace_sidebar()
+
+		# Assert it actually overwrote the stale link and synced from json fixture!
+		doc = frappe.get_doc("Workspace Sidebar", "VetEdge")
+		labels = [i.label for i in doc.items]
+		self.assertNotIn("Stale Link", labels)
+		self.assertIn("Patients", labels)
+
+		# Test required section order exactly:
+		# Executive Dashboard, Dashboards, Veterinary Records, Hospitalisation, Pet Grooming, Pet Boarding, Veterinary Masters, Reports, Billing, Setup
+		top_level = [i.label for i in doc.items if not i.child]
+		sections = [i.label for i in doc.items if i.type == "Section Break"]
+		expected_top_level = [
+			"Executive Dashboard",
+			"Dashboards",
+			"Veterinary Records",
+			"Hospitalisation",
+			"Pet Grooming",
+			"Pet Boarding",
+			"Veterinary Masters",
+			"Reports",
+			"Billing",
+			"Setup",
+		]
+		expected_sections = [
+			"Dashboards",
+			"Veterinary Records",
+			"Hospitalisation",
+			"Pet Grooming",
+			"Pet Boarding",
+			"Veterinary Masters",
+			"Reports",
+			"Billing",
+			"Setup"
+		]
+		# Ensure no extra Platform Settings top-level section appears unless explicitly configured (it is hidden/removed in standard non-coreedge boot/sync)
+		self.assertNotIn("Platform Settings", sections)
+		self.assertEqual(top_level, expected_top_level)
+		self.assertEqual(sections, expected_sections)
+
+	def test_bootinfo_sidebar_keys_use_canonical_vetedge_sidebar(self):
+		import frappe.boot
+		from vetedge.coreedge_adapter import filter_bootinfo_for_coreedge_platform
+
+		bootinfo = frappe.boot.get_bootinfo()
+		filter_bootinfo_for_coreedge_platform(bootinfo)
+
+		expected_top_level = [
+			"Executive Dashboard",
+			"Dashboards",
+			"Veterinary Records",
+			"Hospitalisation",
+			"Pet Grooming",
+			"Pet Boarding",
+			"Veterinary Masters",
+			"Reports",
+			"Billing",
+			"Setup",
+		]
+
+		for key in ("vetedge", "veterinary"):
+			sidebar = bootinfo.workspace_sidebar_item[key]
+			items = sidebar.get("items") or []
+			first_link = next(item for item in items if item.get("type") == "Link")
+			top_level = [item.get("label") for item in items if not item.get("child")]
+			patient_items = [item for item in items if item.get("link_to") == "Veterinary Patient"]
+
+			self.assertEqual(sidebar.get("label"), "Veterinary")
+			self.assertEqual(first_link["label"], "Executive Dashboard")
+			self.assertEqual(first_link["link_to"], "vetedge-executive-dashboard")
+			self.assertEqual(top_level, expected_top_level)
+			self.assertEqual(len(patient_items), 1)
+			self.assertGreater(
+				[item.get("label") for item in items].index(patient_items[0]["label"]),
+				[item.get("label") for item in items].index("Veterinary Records"),
+			)
