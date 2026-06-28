@@ -127,6 +127,11 @@ REPORT_ROLE_MAP = {
 		*BRANCH_MANAGER_REPORTING_ROLES,
 		*DISPENSARY_REPORTING_ROLES,
 	},
+	"Stock Expiry Status": {
+		*ADMIN_REPORTING_ROLES,
+		*BRANCH_MANAGER_REPORTING_ROLES,
+		*DISPENSARY_REPORTING_ROLES,
+	},
 	"Lab Order Report": {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
@@ -249,6 +254,7 @@ BRANCH_FILTERED_REPORTS = {
 	"Unpaid Invoice Report",
 	"Dispensary Activity Report",
 	"Stock Usage Summary",
+	"Stock Expiry Status",
 	"Lab Order Report",
 	"Vaccination Report",
 	"Boarding Report",

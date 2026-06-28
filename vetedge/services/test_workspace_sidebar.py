@@ -121,6 +121,7 @@ class TestWorkspaceSidebar(TestCase):
 			("Hospitalisations", "Veterinary Hospitalisation", "DocType"),
 			("Missed Appointments", "Veterinary Missed Appointment", "DocType"),
 			("Notification Items", "Veterinary Notification Item", "DocType"),
+			("Stock Expiry Status", "Stock Expiry Status", "Report"),
 		):
 			self.assertEqual(counts[key], 1)
 
@@ -217,6 +218,22 @@ class TestWorkspaceSidebar(TestCase):
 		link = _links_by_label(items)["Planned Treatment"]
 		self.assertEqual(link["link_to"], "Planned Treatment")
 		self.assertEqual(link["link_type"], "Report")
+
+	def test_stock_expiry_status_report_is_in_collapsed_reports_section(self):
+		items = _load_sidebar()["items"]
+		labels = [item.get("label") for item in items]
+		report_index = labels.index("Reports")
+		stock_usage_index = labels.index("Stock Usage Summary")
+		expiry_index = labels.index("Stock Expiry Status")
+		billing_index = labels.index("Billing")
+
+		self.assertGreater(expiry_index, report_index)
+		self.assertGreater(expiry_index, stock_usage_index)
+		self.assertLess(expiry_index, billing_index)
+		link = _links_by_label(items)["Stock Expiry Status"]
+		self.assertEqual(link["link_to"], "Stock Expiry Status")
+		self.assertEqual(link["link_type"], "Report")
+		self.assertIn("Dispensary User", link.get("display_depends_on", ""))
 
 	def test_refined_sidebar_labels(self):
 		sidebar = _load_sidebar()

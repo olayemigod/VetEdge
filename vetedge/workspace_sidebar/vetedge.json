@@ -851,6 +851,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('Dispensary User') || frappe.user.has_role('Branch Manager')",
+   "icon": "calendar-clock",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock Expiry Status",
+   "link_to": "Stock Expiry Status",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Lab Technician') || frappe.user.has_role('Branch Manager')",
    "icon": "file-text",
    "indent": 0,

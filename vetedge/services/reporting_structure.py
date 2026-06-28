@@ -34,6 +34,7 @@ REPORT_KEYS = {
     "Unpaid Invoice Report": "unpaid_invoice_report",
     "Dispensary Activity Report": "dispensary_activity_report",
     "Stock Usage Summary": "stock_usage_summary",
+    "Stock Expiry Status": "stock_expiry_status",
     "Lab Order Report": "lab_order_report",
     "Vaccination Report": "vaccination_report",
     "Boarding Report": "boarding_report",
@@ -85,6 +86,7 @@ def execute_structured_report(report_name: str, filters=None):
         "Unpaid Invoice Report": _unpaid_invoice_report,
         "Dispensary Activity Report": _dispensary_activity_report,
         "Stock Usage Summary": _stock_usage_summary,
+        "Stock Expiry Status": _stock_expiry_status,
         "Lab Order Report": _lab_order_report,
         "Vaccination Report": _vaccination_report,
         "Boarding Report": _boarding_report,
@@ -227,10 +229,15 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         payload["charts"] = [_revenue_by_practitioner_chart(month_filters)]
     elif key == "inventory_dispensary":
         activity_rows = _build_dispensary_activity_rows(month_filters)
+        from vetedge.services.stock_expiry_monitor import get_stock_expiry_rows
+
+        expiry_rows = get_stock_expiry_rows(filters)
         payload["kpis"] = [
             _kpi(_("Dispense Events"), len(activity_rows)),
             _kpi(_("Items Issued"), flt(sum(flt(row.get("qty")) for row in activity_rows), 2)),
             _kpi(_("Warehouses Touched"), len({row.get("warehouse") for row in activity_rows if row.get("warehouse")})),
+            _kpi(_("Expired Stock"), sum(1 for row in expiry_rows if row.get("expiry_status") == "Expired")),
+            _kpi(_("Expiring Soon"), sum(1 for row in expiry_rows if row.get("expiry_status") == "Expiring Soon")),
         ]
 
     return payload
@@ -624,6 +631,12 @@ def _stock_usage_summary(filters):
         _col("number_of_dispense_events", "Int"),
     ]
     return columns, list(grouped.values()), None, None, []
+
+
+def _stock_expiry_status(filters):
+    from vetedge.services.stock_expiry_monitor import execute_report
+
+    return execute_report(filters)
 
 
 def _lab_order_report(filters):
@@ -1866,7 +1879,7 @@ def _dashboard_report_links(key):
         "financial": ["Revenue Summary", "Unpaid Invoice Report"],
         "practitioner_performance": ["Practitioner Performance Report", "Consultation Register"],
         "branch_performance": ["Branch Performance Report", "Revenue Summary"],
-        "inventory_dispensary": ["Dispensary Activity Report", "Stock Usage Summary"],
+        "inventory_dispensary": ["Dispensary Activity Report", "Stock Usage Summary", "Stock Expiry Status"],
         "lab": ["Lab Order Report"],
         "vaccination": ["Vaccination Report"],
         "boarding": ["Boarding Report", "Kennel Availability Report"],
