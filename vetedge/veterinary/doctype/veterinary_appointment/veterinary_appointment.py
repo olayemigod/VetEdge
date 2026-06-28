@@ -77,15 +77,70 @@ class VeterinaryAppointment(Document):
 								except Exception:
 									pass
 
+							from frappe.utils import get_datetime, get_date_str, get_time_str
+							
+							clinic_name = (
+								frappe.db.get_value("Website Settings", "Website Settings", "app_name")
+								or (frappe.db.get_value("Company", self.company, "company_name") if getattr(self, "company", None) else None)
+								or "our clinic"
+							)
+							
+							owner_name = (
+								frappe.db.get_value("Customer", self.primary_owner, "customer_name")
+								or self.primary_owner
+								or "Customer"
+							)
+							
+							patient_name = "your pet"
+							if getattr(self, "patient", None):
+								patient_name = (
+									frappe.db.get_value("Veterinary Patient", self.patient, "patient_name")
+									or self.patient
+									or "your pet"
+								)
+								
+							dt_val = get_datetime(self.appointment_datetime) if self.appointment_datetime else None
+							app_date = get_date_str(dt_val) if dt_val else ""
+							app_time = dt_val.strftime("%H:%M") if dt_val else ""
+							app_datetime = str(self.appointment_datetime) if self.appointment_datetime else ""
+							
+							clinic_phone = ""
+							if getattr(self, "branch", None):
+								try:
+									clinic_phone = frappe.db.get_value("Branch", self.branch, "phone") or ""
+								except Exception:
+									pass
+
+							sms_context = {
+								"clinic_name": clinic_name,
+								"branch_name": getattr(self, "branch", "") or "",
+								"owner_name": owner_name,
+								"patient_name": patient_name,
+								"appointment_date": app_date,
+								"appointment_time": app_time,
+								"appointment_datetime": app_datetime,
+								"clinic_phone": clinic_phone
+							}
+
+							STATUS_EVENT_MAP = {
+								"Owner Requested": "appointment_owner_requested",
+								"Scheduled": "appointment_scheduled",
+								"Confirmed": "appointment_confirmed",
+								"Rescheduled": "appointment_rescheduled",
+								"Cancelled": "appointment_cancelled",
+								"Completed": "appointment_completed",
+								"No Show": "appointment_no_show",
+							}
+							event_key = STATUS_EVENT_MAP[self.status]
+
 							from vetedge.services.coreedge_sms import send_sms_safe
-							msg = f"Your appointment {self.name} is now {self.status}."
 							send_sms_safe(
 								to=phone,
-								message=msg,
+								product_app="VetEdge",
+								event=event_key,
+								context=sms_context,
 								reference_doctype="Veterinary Appointment",
 								reference_name=self.name,
-								event="appointment_status_change",
-								product_app="VetEdge",
 								priority="Normal",
 								route_type="Normal",
 								tenant=tenant,
