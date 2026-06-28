@@ -65,6 +65,14 @@
   "enforce_strict_expiry_control",
   "batch_selection_policy",
   "block_manual_expired_batch_override",
+  "stock_expiry_monitor_section",
+  "enable_stock_expiry_monitor",
+  "expiry_reminder_days",
+  "enable_internal_expiry_notifications",
+  "column_break_stock_expiry_monitor",
+  "enable_email_expiry_notifications",
+  "enable_whatsapp_expiry_notifications",
+  "enable_sms_expiry_notifications",
   "boarding_section",
   "enable_boarding",
   "default_boarding_billing_item",
@@ -126,6 +134,14 @@
   "appointment_reminder_hours_before",
   "vaccination_due_reminder_days",
   "payment_reminder_days",
+  "enable_appointment_sms_notifications",
+  "appointment_sms_on_owner_requested",
+  "appointment_sms_on_scheduled",
+  "appointment_sms_on_confirmed",
+  "appointment_sms_on_rescheduled",
+  "appointment_sms_on_cancelled",
+  "appointment_sms_on_completed",
+  "appointment_sms_on_no_show",
   "admin_controls_tab",
   "demo_data_section",
   "enable_demo_tools",
@@ -492,6 +508,63 @@
    "fieldname": "block_manual_expired_batch_override",
    "fieldtype": "Check",
    "label": "Block Manual Expired Batch Override"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "stock_expiry_monitor_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Expiry Monitor"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "Enable stock expiry monitor cards, report visibility, and optional notification generation for expiring batch-managed stock.",
+   "fieldname": "enable_stock_expiry_monitor",
+   "fieldtype": "Check",
+   "label": "Enable Stock Expiry Monitor"
+  },
+  {
+   "default": "30,60,90",
+   "depends_on": "eval:doc.enable_stock_expiry_monitor",
+   "description": "Comma-separated reminder day buckets used to classify stock expiring soon, for example 30,60,90.",
+   "fieldname": "expiry_reminder_days",
+   "fieldtype": "Data",
+   "label": "Expiry Reminder Days"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_stock_expiry_monitor",
+   "fieldname": "enable_internal_expiry_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Internal Expiry Notifications"
+  },
+  {
+   "fieldname": "column_break_stock_expiry_monitor",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_stock_expiry_monitor",
+   "description": "Reserved for provider-agnostic notification delivery. Missing CoreEdge/provider integrations are logged safely.",
+   "fieldname": "enable_email_expiry_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Email Expiry Notifications"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_stock_expiry_monitor",
+   "description": "Reserved for provider-agnostic notification delivery. Missing CoreEdge/provider integrations are logged safely.",
+   "fieldname": "enable_whatsapp_expiry_notifications",
+   "fieldtype": "Check",
+   "label": "Enable WhatsApp Expiry Notifications"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_stock_expiry_monitor",
+   "description": "Reserved for provider-agnostic notification delivery. Missing CoreEdge/provider integrations are logged safely.",
+   "fieldname": "enable_sms_expiry_notifications",
+   "fieldtype": "Check",
+   "label": "Enable SMS Expiry Notifications"
   },
   {
    "fieldname": "boarding_section",
@@ -932,6 +1005,70 @@
    "fieldname": "payment_reminder_days",
    "fieldtype": "Int",
    "label": "Payment Reminder Days",
+   "permlevel": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "enable_appointment_sms_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Appointment SMS Notifications",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_owner_requested",
+   "fieldtype": "Check",
+   "label": "Send SMS on Owner Requested",
+   "permlevel": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_scheduled",
+   "fieldtype": "Check",
+   "label": "Send SMS on Scheduled",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_confirmed",
+   "fieldtype": "Check",
+   "label": "Send SMS on Confirmed",
+   "permlevel": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_rescheduled",
+   "fieldtype": "Check",
+   "label": "Send SMS on Rescheduled",
+   "permlevel": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_cancelled",
+   "fieldtype": "Check",
+   "label": "Send SMS on Cancelled",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_completed",
+   "fieldtype": "Check",
+   "label": "Send SMS on Completed",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.enable_appointment_sms_notifications",
+   "fieldname": "appointment_sms_on_no_show",
+   "fieldtype": "Check",
+   "label": "Send SMS on No Show",
    "permlevel": 1
   },
   {
