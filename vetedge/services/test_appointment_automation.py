@@ -42,7 +42,7 @@ def _install_stub_modules() -> None:
 
 	if "frappe" not in sys.modules:
 		frappe = ModuleType("frappe")
-		frappe._ = lambda value: value
+		frappe._ = lambda value, *args, **kwargs: value
 		frappe.ValidationError = Exception
 		frappe.PermissionError = Exception
 		frappe.throw = Mock(side_effect=Exception("blocked"))

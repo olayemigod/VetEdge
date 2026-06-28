@@ -297,7 +297,7 @@ scheduler_events = {
 # Testing
 # -------
 
-# before_tests = "vetedge.install.before_tests"
+before_tests = "vetedge.install.before_tests"
 
 # Extend DocType Class
 # ------------------------------

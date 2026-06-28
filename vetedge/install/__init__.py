@@ -23,6 +23,10 @@ def after_migrate() -> None:
 	setup_foundation()
 
 
+def before_tests() -> None:
+	ensure_erpnext_test_price_lists_are_idempotent()
+
+
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
 	ensure_starter_role_bundles()
@@ -62,6 +66,38 @@ def ensure_vetedge_roles() -> None:
 				"desk_access": desk_access,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_erpnext_test_price_lists_are_idempotent() -> None:
+	"""Align existing standard Price Lists with ERPNext's test bootstrap filters.
+
+	ERPNext test dependencies import doctype tests that run BootStrapTestData.
+	That bootstrap checks Standard Buying/Selling with a filter that includes
+	currency and flags before inserting, while Price List name is still the
+	primary key. Existing local test sites commonly have these rows in the site
+	currency, so the filter misses them and the insert fails with a duplicate key.
+	"""
+	if not getattr(frappe, "in_test", False) or not frappe.db.exists("DocType", "Price List"):
+		return
+
+	for price_list_name, buying, selling in (
+		("Standard Buying", 1, 0),
+		("Standard Selling", 0, 1),
+	):
+		if not frappe.db.exists("Price List", price_list_name):
+			continue
+
+		frappe.db.set_value(
+			"Price List",
+			price_list_name,
+			{
+				"enabled": 1,
+				"buying": buying,
+				"selling": selling,
+				"currency": "INR",
+			},
+			update_modified=False,
+		)
 
 
 def ensure_veterinary_settings() -> None:

@@ -8,7 +8,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 if "frappe" not in sys.modules:
-	sys.modules["frappe"] = SimpleNamespace(_=lambda value: value)
+	sys.modules["frappe"] = SimpleNamespace(_=lambda value, *args, **kwargs: value)
 	sys.modules["frappe.modules"] = SimpleNamespace()
 	sys.modules["frappe.modules.import_file"] = SimpleNamespace(import_file_by_path=lambda *args, **kwargs: None)
 

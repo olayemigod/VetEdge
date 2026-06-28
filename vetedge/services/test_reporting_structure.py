@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import frappe
 
-frappe._ = lambda value: value
+frappe._ = lambda value, *args, **kwargs: value
 
 from vetedge.services import reporting_structure
 from vetedge.services import reporting_logic_v4

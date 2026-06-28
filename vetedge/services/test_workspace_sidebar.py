@@ -156,7 +156,20 @@ class TestWorkspaceSidebar(TestCase):
 
 	def test_sidebar_sections_order(self):
 		items = _load_sidebar()["items"]
+		top_level = [item.get("label") for item in items if not item.get("child")]
 		sections = [item.get("label") for item in items if item.get("type") == "Section Break"]
+		expected_top_level = [
+			"Executive Dashboard",
+			"Dashboards",
+			"Veterinary Records",
+			"Hospitalisation",
+			"Pet Grooming",
+			"Pet Boarding",
+			"Veterinary Masters",
+			"Reports",
+			"Billing",
+			"Setup",
+		]
 		expected_sections = [
 			"Dashboards",
 			"Veterinary Records",
@@ -168,7 +181,9 @@ class TestWorkspaceSidebar(TestCase):
 			"Billing",
 			"Setup"
 		]
+		self.assertEqual(top_level, expected_top_level)
 		self.assertEqual(sections, expected_sections)
+		self.assertNotIn("Platform Settings", top_level)
 
 	def test_collapsed_sidebar_sections_use_native_collapse_control(self):
 		sections = [
