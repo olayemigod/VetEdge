@@ -47,6 +47,39 @@
 		`;
 	}
 
+	function renderChartTable(chart) {
+		const rows = chart.rows || [];
+		const columns = chart.columns || [];
+		if (!rows.length) {
+			return `<div class="text-muted small">${escapeHtml(chart.empty_state || "No data available.")}</div>`;
+		}
+		if (!columns.length) {
+			return `<div class="text-muted small">${escapeHtml(chart.empty_state || "No table columns configured.")}</div>`;
+		}
+		return `
+			<div class="table-responsive vetedge-dashboard-chart-table">
+				<table class="table table-sm table-bordered mb-0">
+					<thead>
+						<tr>
+							${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}
+						</tr>
+					</thead>
+					<tbody>
+						${rows
+							.map(
+								(row) => `
+									<tr>
+										${columns.map((column) => `<td>${escapeHtml(row[column.fieldname])}</td>`).join("")}
+									</tr>
+								`
+							)
+							.join("")}
+					</tbody>
+				</table>
+			</div>
+		`;
+	}
+
 	function renderCharts(wrapper, charts) {
 		const chartArea = wrapper.find(".vetedge-dashboard-charts");
 		chartArea.empty();
@@ -65,7 +98,16 @@
 					</div>
 				</div>
 			`);
-			if (chart.data && chart.data.labels && chart.data.labels.length) {
+			const chartTarget = wrapper.find(`#${chartId}`);
+			if (!(chart.data && chart.data.labels && chart.data.labels.length)) {
+				chartTarget.html(renderChartTable(chart));
+				return;
+			}
+			if (!frappe.Chart) {
+				chartTarget.html(renderChartTable(chart));
+				return;
+			}
+			try {
 				new frappe.Chart(`#${chartId}`, {
 					title: chart.title || "",
 					data: chart.data,
@@ -74,8 +116,9 @@
 					barOptions: chart.barOptions || { stacked: 0 },
 					height: 260,
 				});
-			} else {
-				wrapper.find(`#${chartId}`).html('<div class="text-muted small">No data to chart.</div>');
+			} catch (error) {
+				console.warn("VetEdge dashboard chart failed to render", error);
+				chartTarget.html(renderChartTable(chart));
 			}
 		});
 	}
