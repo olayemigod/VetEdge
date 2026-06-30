@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from vetedge.services.portal_access import require_internal_user
 
@@ -81,6 +81,8 @@ def validate_treatment_item_profile(doc) -> None:
 	validate_optional_link("Veterinary Treatment Type", doc.treatment_type, "Treatment Type")
 	if cint(doc.shelf_life_in_days) < 0:
 		frappe.throw("Shelf Life in Days cannot be negative.", frappe.ValidationError)
+	if doc.get("default_price") not in (None, "") and flt(doc.get("default_price")) < 0:
+		frappe.throw("Default Price cannot be negative.", frappe.ValidationError)
 	if cint(doc.shelf_life_in_days) > 0:
 		sync_item_shelf_life(doc.item, cint(doc.shelf_life_in_days))
 

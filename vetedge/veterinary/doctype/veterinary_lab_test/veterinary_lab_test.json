@@ -12,7 +12,9 @@
   "is_active",
   "description",
   "sample_type",
+  "pricing_section",
   "linked_item",
+  "price_list",
   "default_rate"
  ],
  "fields": [
@@ -21,8 +23,10 @@
   {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
   {"fieldname": "sample_type", "fieldtype": "Select", "in_list_view": 1, "label": "Sample Type", "options": "\nBlood\nSerum\nPlasma\nUrine\nFeces\nSwab\nTissue\nOther"},
+  {"collapsible": 1, "fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Pricing"},
   {"fieldname": "linked_item", "fieldtype": "Link", "label": "Linked Billing Item", "options": "Item"},
-  {"fieldname": "default_rate", "fieldtype": "Currency", "label": "Default Rate"}
+  {"fieldname": "price_list", "fieldtype": "Link", "label": "Price List", "options": "Price List"},
+  {"fieldname": "default_rate", "fieldtype": "Currency", "label": "Default Price"}
  ],
  "module": "Veterinary",
  "name": "Veterinary Lab Test",

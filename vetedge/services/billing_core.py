@@ -1359,7 +1359,21 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 	if settings.enable_treatment_billing:
 		for row in doc.get("planned_treatments") or []:
 			if row.get("item"):
-				payloads.append(build_source_charge(doc, "Treatment", row.get("name") or f"{row.item}:{row.get('idx') or 0}", row.item, row.get("qty"), row.get("uom"), row.get("rate"), cost_center, row.get("description")))
+				master_price_list = frappe.db.get_value("Veterinary Treatment Item", {"item": row.item, "disabled": 0}, "price_list")
+				payloads.append(
+					build_source_charge(
+						doc,
+						"Treatment",
+						row.get("name") or f"{row.item}:{row.get('idx') or 0}",
+						row.item,
+						row.get("qty"),
+						row.get("uom"),
+						row.get("rate"),
+						cost_center,
+						row.get("description"),
+						master_price_list=master_price_list,
+					)
+				)
 	payloads.extend(get_lab_order_charge_payloads_for_consultation(doc.name, cost_center))
 	payloads.extend(get_vaccination_charge_payloads_for_consultation(doc.name, cost_center))
 	return payloads
@@ -1463,8 +1477,21 @@ def build_lab_payloads(order, cost_center: str) -> list[dict]:
 	for row in order.get("lab_tests") or []:
 		if not row.get("billing_item"):
 			continue
-		rate = frappe.db.get_value("Veterinary Lab Test", row.lab_test_template, "default_rate")
-		payloads.append(build_source_charge(order, "Lab", row.get("name") or row.lab_test_template, row.billing_item, 1, None, rate, cost_center, row.get("lab_test_name") or row.lab_test_template))
+		lab_test = frappe.db.get_value("Veterinary Lab Test", row.lab_test_template, ["default_rate", "price_list"], as_dict=True) or {}
+		payloads.append(
+			build_source_charge(
+				order,
+				"Lab",
+				row.get("name") or row.lab_test_template,
+				row.billing_item,
+				1,
+				None,
+				None,
+				cost_center,
+				row.get("lab_test_name") or row.lab_test_template,
+				master_price_list=lab_test.get("price_list"),
+			)
+		)
 	return payloads
 
 
@@ -1484,11 +1511,12 @@ def get_hospitalisation_charge_payloads(hospitalisation_name: str, session=None)
 
 def get_vaccination_charge_payloads(vaccination_name: str, session=None) -> list[dict]:
 	doc = frappe.get_doc("Veterinary Vaccination Record", vaccination_name)
-	item_code = frappe.db.get_value("Veterinary Vaccine", doc.get("vaccine"), "default_item") if doc.get("vaccine") else None
+	vaccine = frappe.db.get_value("Veterinary Vaccine", doc.get("vaccine"), ["default_item", "price_list"], as_dict=True) if doc.get("vaccine") else None
+	item_code = vaccine.get("default_item") if vaccine else None
 	if not item_code:
 		return []
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
-	return [build_source_charge(doc, "Vaccination", doc.name, item_code, 1, None, None, cost_center)]
+	return [build_source_charge(doc, "Vaccination", doc.name, item_code, 1, None, None, cost_center, master_price_list=vaccine.get("price_list"))]
 
 
 def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cost_center: str) -> list[dict]:
@@ -1496,10 +1524,11 @@ def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cos
 		return []
 	payloads = []
 	for row in frappe.get_all("Veterinary Vaccination Record", filters={"linked_consultation": consultation_name, "status": ["!=", "Cancelled"]}, fields=["name", "vaccine"]):
-		item_code = frappe.db.get_value("Veterinary Vaccine", row.vaccine, "default_item")
+		vaccine = frappe.db.get_value("Veterinary Vaccine", row.vaccine, ["default_item", "price_list"], as_dict=True) or {}
+		item_code = vaccine.get("default_item")
 		if item_code:
 			doc = frappe._dict(doctype="Veterinary Vaccination Record", name=row.name, service_branch=None)
-			payloads.append(build_source_charge(doc, "Vaccination", row.name, item_code, 1, None, None, cost_center))
+			payloads.append(build_source_charge(doc, "Vaccination", row.name, item_code, 1, None, None, cost_center, master_price_list=vaccine.get("price_list")))
 	return payloads
 
 
@@ -1604,7 +1633,20 @@ def get_boarding_charge_detail_key(doc) -> str:
 	return ":".join(str(part) for part in parts if part) or doc.name
 
 
-def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, source_detail_name=None, notes=None):
+def build_source_charge(
+	doc,
+	source_type,
+	source_detail,
+	item_code,
+	qty,
+	uom,
+	rate,
+	cost_center,
+	description=None,
+	source_detail_name=None,
+	notes=None,
+	master_price_list=None,
+):
 	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom", "standard_rate"], as_dict=True) or {}
 	qty = flt(qty) or 1
 	company = get_source_charge_company(doc)
@@ -1622,6 +1664,7 @@ def build_source_charge(doc, source_type, source_detail, item_code, qty, uom, ra
 				branch=branch,
 				posting_date=posting_date,
 				uom=resolved_uom,
+				master_price_list=master_price_list,
 			)
 		)
 	if rate <= 0:
@@ -1674,17 +1717,23 @@ def _get_branch_price_list(branch):
 
 
 def _get_default_selling_price_list(company=None):
+	price_lists = _get_default_selling_price_lists(company=company)
+	return price_lists[0] if price_lists else None
+
+
+def _get_default_selling_price_lists(company=None):
+	price_lists = []
 	if frappe.db.exists("DocType", "Veterinary Settings") and _doctype_has_field("Veterinary Settings", "default_selling_price_list"):
 		price_list = frappe.db.get_single_value("Veterinary Settings", "default_selling_price_list")
 		if price_list:
-			return price_list
+			price_lists.append(price_list)
 	if frappe.db.exists("DocType", "Selling Settings") and _doctype_has_field("Selling Settings", "selling_price_list"):
 		price_list = frappe.db.get_single_value("Selling Settings", "selling_price_list")
 		if price_list:
-			return price_list
+			price_lists.append(price_list)
 	if frappe.db.exists("Price List", "Standard Selling"):
-		return "Standard Selling"
-	return None
+		price_lists.append("Standard Selling")
+	return list(dict.fromkeys(price_lists))
 
 
 def _resolve_selling_price_list(company=None, customer=None, branch=None, source_doc=None, explicit_price_list=None):
@@ -1697,11 +1746,39 @@ def _resolve_selling_price_list(company=None, customer=None, branch=None, source
 	return _get_default_selling_price_list(company=company)
 
 
-def _get_item_selling_rate(item_code, company=None, customer=None, branch=None, price_list=None, posting_date=None, uom=None):
+def _get_item_selling_rate(item_code, company=None, customer=None, branch=None, price_list=None, posting_date=None, uom=None, master_price_list=None):
 	if not item_code:
 		return 0
 	posting_date = posting_date or _safe_nowdate()
-	price_list = _resolve_selling_price_list(company=company, customer=customer, branch=branch, explicit_price_list=price_list)
+	for candidate_price_list in _get_selling_price_list_candidates(
+		company=company,
+		customer=customer,
+		branch=branch,
+		explicit_price_list=price_list,
+		master_price_list=master_price_list,
+	):
+		rate = _get_item_price_rate(item_code, candidate_price_list, posting_date=posting_date, uom=uom)
+		if rate > 0:
+			return rate
+	item = frappe.db.get_value("Item", item_code, "standard_rate")
+	return flt(item)
+
+
+def _get_selling_price_list_candidates(company=None, customer=None, branch=None, explicit_price_list=None, master_price_list=None):
+	candidates = []
+	if explicit_price_list:
+		candidates.append(explicit_price_list)
+	else:
+		branch_price_list = _get_branch_price_list(branch)
+		if branch_price_list:
+			candidates.append(branch_price_list)
+		if master_price_list:
+			candidates.append(master_price_list)
+		candidates.extend(_get_default_selling_price_lists(company=company))
+	return list(dict.fromkeys([price_list for price_list in candidates if price_list]))
+
+
+def _get_item_price_rate(item_code, price_list, posting_date=None, uom=None):
 	if price_list and frappe.db.exists("DocType", "Item Price"):
 		filters = {"item_code": item_code, "price_list": price_list}
 		if _doctype_has_field("Item Price", "selling"):
@@ -1727,8 +1804,7 @@ def _get_item_selling_rate(item_code, company=None, customer=None, branch=None, 
 				valid_rows = exact
 		if valid_rows:
 			return flt(valid_rows[0].get("price_list_rate"))
-	item = frappe.db.get_value("Item", item_code, "standard_rate")
-	return flt(item)
+	return 0
 
 
 def _doctype_has_field(doctype, fieldname):

@@ -67,6 +67,8 @@ def validate_vaccine(doc) -> None:
 		frappe.throw("Default Validity Days cannot be negative.", frappe.ValidationError)
 	if cint(doc.get("default_next_due_days")) < 0:
 		frappe.throw("Default Next Due Days cannot be negative.", frappe.ValidationError)
+	if doc.get("default_price") not in (None, "") and flt(doc.get("default_price")) < 0:
+		frappe.throw("Default Price cannot be negative.", frappe.ValidationError)
 	if doc.default_item:
 		validate_sales_item(doc.default_item, "Vaccine Default Item", allow_stock=True)
 

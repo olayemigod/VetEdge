@@ -8,6 +8,9 @@
  "field_order": [
   "item",
   "item_name",
+  "pricing_section",
+  "price_list",
+  "default_price",
   "service_type",
   "treatment_type",
   "shelf_life_in_days",
@@ -17,6 +20,9 @@
  "fields": [
   {"fieldname": "item", "fieldtype": "Link", "in_list_view": 1, "label": "ERPNext Item", "options": "Item", "reqd": 1, "unique": 1},
   {"fetch_from": "item.item_name", "fieldname": "item_name", "fieldtype": "Data", "in_list_view": 1, "label": "Item Name", "read_only": 1},
+  {"collapsible": 1, "fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Pricing"},
+  {"fieldname": "price_list", "fieldtype": "Link", "label": "Price List", "options": "Price List"},
+  {"fieldname": "default_price", "fieldtype": "Currency", "label": "Default Price"},
   {"fieldname": "service_type", "fieldtype": "Link", "in_list_view": 1, "label": "Default Service Type", "options": "Veterinary Service Type"},
   {"fieldname": "treatment_type", "fieldtype": "Link", "in_list_view": 1, "label": "Default Treatment Type", "options": "Veterinary Treatment Type"},
   {"fieldname": "shelf_life_in_days", "fieldtype": "Int", "label": "Shelf Life in Days"},
