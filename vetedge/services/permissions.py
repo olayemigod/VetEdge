@@ -1037,6 +1037,8 @@ def has_document_permission(doc, doctype: str, branch_field: str, permission_typ
 		if not isinstance(doc, str)
 		else frappe.db.get_value(doctype, name, branch_field)
 	)
+	if not branch:
+		return True
 	return branch in branches
 
 

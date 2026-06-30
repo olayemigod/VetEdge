@@ -397,7 +397,6 @@ function history_consultation_section(rows) {
 								${row.service_branch ? ` | ${escape_consultation_history_html(row.service_branch)}` : ""}
 								${row.status ? ` | ${escape_consultation_history_html(row.status)}` : ""}
 							</div>
-							${history_rich_block(__("Assessment"), row.assessment_notes)}
 							${history_treatment_plan_block(row)}
 							${row.follow_up_date ? `<div><strong>${__("Follow-up")}</strong>: ${escape_consultation_history_html(row.follow_up_date)}</div>` : ""}
 						</div>`
@@ -412,22 +411,6 @@ function history_treatment_plan_block(row) {
 	const summary = sanitize_consultation_history_rich_text(row.treatment_plan_summary);
 	if (summary) {
 		parts.push(`<div class="mb-2">${summary}</div>`);
-	}
-	const treatments = Array.isArray(row.treatment_plan) ? row.treatment_plan : [];
-	if (treatments.length) {
-		parts.push(`
-			<ul class="mb-0 pl-3">
-				${treatments
-					.map((treatment) => {
-						const item = escape_consultation_history_html(treatment.item || treatment.service_type || treatment.treatment_type || __("Treatment"));
-						const qty = treatment.qty ? ` ${escape_consultation_history_html(treatment.qty)}` : "";
-						const uom = treatment.uom ? ` ${escape_consultation_history_html(treatment.uom)}` : "";
-						const notes = treatment.notes ? `<div class="text-muted small">${escape_consultation_history_html(treatment.notes)}</div>` : "";
-						return `<li><div>${item}${qty}${uom}</div>${notes}</li>`;
-					})
-					.join("")}
-			</ul>
-		`);
 	}
 	return `
 		<div class="mb-2">

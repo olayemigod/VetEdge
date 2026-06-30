@@ -69,7 +69,7 @@
   {"fieldname": "assessment_notes", "fieldtype": "Text Editor", "label": "Assessment Notes"},
   {"fieldname": "treatment_section", "fieldtype": "Section Break", "label": "Treatment Plan"},
   {"fieldname": "planned_treatments", "fieldtype": "Table", "label": "Planned Treatments", "options": "Planned Treatment Item"},
-  {"fieldname": "treatment_plan_summary", "fieldtype": "Text Editor", "label": "Treatment Plan Summary"},
+  {"fieldname": "treatment_plan_summary", "fieldtype": "Text Editor", "label": "Treatment Plan"},
   {"fieldname": "follow_up_date", "fieldtype": "Date", "label": "Follow Up Date"},
   {"collapsible": 1, "fieldname": "dispensary_section", "fieldtype": "Section Break", "label": "Dispensary Fulfillment"},
   {"default": "Not Required", "fieldname": "dispensary_status", "fieldtype": "Select", "label": "Dispensary Status", "no_copy": 1, "options": "Not Required\nPending Dispensary\nDispensary Confirmed", "read_only": 1},

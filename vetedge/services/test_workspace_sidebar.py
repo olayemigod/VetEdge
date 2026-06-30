@@ -130,6 +130,21 @@ class TestWorkspaceSidebar(TestCase):
 		):
 			self.assertEqual(counts[key], 1)
 
+	def test_consultation_type_is_only_under_veterinary_masters(self):
+		items = _load_sidebar()["items"]
+		labels = [item.get("label") for item in items]
+		matches = [
+			(index, item)
+			for index, item in enumerate(items)
+			if item.get("link_to") == "Consultation Type"
+		]
+
+		self.assertEqual(len(matches), 1)
+		index, link = matches[0]
+		self.assertEqual(link["label"], "Consultation Types")
+		self.assertGreater(index, labels.index("Veterinary Masters"))
+		self.assertLess(index, labels.index("Reports"))
+
 	def test_patient_link_is_only_under_vetedge_records(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]

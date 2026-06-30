@@ -27,6 +27,25 @@ NOTIFICATION_ITEM_STATUS_TIMESTAMPS = {
 	"Archived": "archived_on",
 }
 
+OWNER_FACING_NOTIFICATION_TITLES = {
+	"missed_appointment": "Missed Appointment",
+	"vaccination_due": "Vaccination Due",
+	"vaccination_overdue": "Vaccination Overdue",
+	"vaccination_reminder_sent": "Vaccination Reminder Sent",
+	"vaccination_reminder_failed": "Vaccination Reminder Failed",
+	"lab_result_entered": "Lab Result Ready",
+	"lab_result_ready_for_review": "Lab Result Ready",
+	"lab_order_created": "Lab Order Created",
+	"lab_sample_collected": "Lab Sample Collected",
+	"consultation_awaiting_payment": "Consultation Awaiting Payment",
+	"consultation_sent_to_dispensary": "Consultation Sent to Dispensary",
+	"consultation_ready_for_treatment": "Consultation Ready for Treatment",
+	"appointment_due_soon": "Appointment Due Soon",
+	"appointment_checked_in": "Appointment Checked In",
+	"appointment_waiting_too_long": "Appointment Waiting Too Long",
+	"appointment_completed": "Appointment Completed",
+}
+
 OWNER_EVENTS = {
 	"appointment_created",
 	"appointment_booked",
@@ -257,6 +276,9 @@ def create_notification_item(
 	if not frappe.db.exists("DocType", NOTIFICATION_ITEM_DOCTYPE):
 		frappe.throw("Veterinary Notification Item is not installed.", frappe.ValidationError)
 
+	title_context = build_notification_title_context(payload, reference_doctype, reference_name)
+	notification_title = get_owner_facing_notification_title(event_key, title_context) or notification_title
+
 	idempotency_key = idempotency_key or build_notification_item_idempotency_key(
 		event_key=event_key,
 		recipient_user=recipient_user,
@@ -302,6 +324,149 @@ def create_notification_item(
 		"name": doc.name,
 		"idempotency_key": idempotency_key,
 	}
+
+
+def build_notification_title_context(
+	payload: dict | None,
+	reference_doctype: str | None = None,
+	reference_name: str | None = None,
+) -> dict:
+	context = dict(payload or {})
+	context.setdefault("doctype", reference_doctype)
+	context.setdefault("reference_doctype", reference_doctype)
+	context.setdefault("name", reference_name)
+	context.setdefault("reference_name", reference_name)
+	try:
+		return enrich_notification_context(context, reference_doctype, reference_name)
+	except Exception:
+		return context
+
+
+def get_owner_facing_notification_title(event_type: str | None, doc) -> str | None:
+	base_title = OWNER_FACING_NOTIFICATION_TITLES.get(event_type or "") or humanize_notification_event(event_type)
+	display_title = get_veterinary_user_facing_title(doc)
+	if base_title and display_title:
+		return f"{base_title} - {display_title}"
+	return base_title or display_title
+
+
+def get_veterinary_user_facing_title(doc) -> str | None:
+	if not doc:
+		return None
+	for resolver in (
+		get_patient_display_name,
+		get_owner_display_name,
+		get_service_display_name,
+		get_document_display_title,
+		get_document_name_fallback,
+	):
+		value = resolver(doc)
+		if value:
+			return value
+	return None
+
+
+def get_patient_display_name(doc) -> str | None:
+	value = get_doc_value(doc, "patient_name")
+	if value:
+		return value
+	patient = get_doc_value(doc, "patient") or get_doc_value(doc, "animal")
+	if patient:
+		return get_link_display_name("Veterinary Patient", patient, ("patient_name", "patient_title", "title")) or patient
+	return None
+
+
+def get_owner_display_name(doc) -> str | None:
+	value = get_doc_value(doc, "owner_name") or get_doc_value(doc, "customer_name")
+	if value:
+		return value
+	owner = get_doc_value(doc, "primary_owner") or get_doc_value(doc, "customer") or get_doc_value(doc, "owner")
+	if owner and owner != get_doc_value(doc, "document_owner"):
+		return get_link_display_name("Customer", owner, ("customer_name", "customer_group")) or owner
+	return None
+
+
+def get_service_display_name(doc) -> str | None:
+	for fieldname, doctype, title_fields in (
+		("service_name", None, ()),
+		("test_name", None, ()),
+		("vaccine_name", None, ()),
+		("item_name", None, ()),
+		("grooming_service", "Pet Grooming Service", ("service_name", "grooming_service")),
+		("vaccine", "Veterinary Vaccine", ("vaccine_name", "vaccine")),
+		("lab_test", "Veterinary Lab Test", ("test_name", "lab_test")),
+		("item", "Item", ("item_name",)),
+		("service_type", "Veterinary Service Type", ("service_type",)),
+		("treatment_type", "Veterinary Treatment Type", ("treatment_type",)),
+	):
+		value = get_doc_value(doc, fieldname)
+		if not value:
+			continue
+		if not doctype:
+			return value
+		return get_link_display_name(doctype, value, title_fields) or value
+	return None
+
+
+def get_document_display_title(doc) -> str | None:
+	for fieldname in ("document_title", "consultation_title", "title", "subject"):
+		value = get_doc_value(doc, fieldname)
+		if value:
+			return value
+	doctype = get_doc_value(doc, "doctype") or get_doc_value(doc, "reference_doctype")
+	name = get_doc_value(doc, "name") or get_doc_value(doc, "reference_name")
+	if doctype and name:
+		title = get_link_display_name(doctype, name, ())
+		if title and title != name:
+			return title
+	return None
+
+
+def get_document_name_fallback(doc) -> str | None:
+	return get_doc_value(doc, "name") or get_doc_value(doc, "reference_name")
+
+
+def get_doc_value(doc, fieldname: str):
+	if isinstance(doc, dict):
+		return doc.get(fieldname)
+	getter = getattr(doc, "get", None)
+	if getter:
+		return getter(fieldname)
+	return getattr(doc, fieldname, None)
+
+
+def get_link_display_name(doctype: str, name: str | None, title_fields: tuple[str, ...]) -> str | None:
+	if not doctype or not name:
+		return None
+	fields = tuple(dict.fromkeys((*title_fields, "title", "name")))
+	try:
+		values = frappe.db.get_value(doctype, name, list(fields), as_dict=True)
+	except Exception:
+		values = None
+	if isinstance(values, dict):
+		for fieldname in fields:
+			value = values.get(fieldname)
+			if value:
+				return value
+	elif values:
+		return values
+	try:
+		meta = frappe.get_meta(doctype)
+		title_field = getattr(meta, "title_field", None)
+		if title_field:
+			return frappe.db.get_value(doctype, name, title_field)
+	except Exception:
+		return None
+	return None
+
+
+def humanize_notification_event(event_type: str | None) -> str | None:
+	if not event_type:
+		return None
+	words = [word for word in cstr(event_type).replace("-", "_").split("_") if word]
+	if words and words[0].lower() == "veterinary":
+		words = words[1:]
+	return " ".join(word.capitalize() for word in words) or None
 
 
 def ensure_frappe_notification_log(notification_item_name: str, notification_item=None) -> str | None:

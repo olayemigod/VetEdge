@@ -15,7 +15,7 @@ from vetedge.services.medical_history import (
 
 
 class TestMedicalHistory(TestCase):
-	def test_medical_history_page_sanitizes_assessment_and_places_treatment_plan_after_it(self):
+	def test_medical_history_page_shows_simple_treatment_plan_without_assessment_or_items(self):
 		page_js = (
 			Path(__file__).resolve().parents[1]
 			/ "veterinary"
@@ -25,10 +25,36 @@ class TestMedicalHistory(TestCase):
 		).read_text()
 
 		self.assertIn("sanitize_rich_text", page_js)
-		self.assertLess(
-			page_js.index('[__("Assessment"), "assessment_notes", format_rich_text]'),
-			page_js.index('[__("Treatment Plan"), "treatment_plan", format_treatment_plan]'),
-		)
+		self.assertIn('[__("Treatment Plan"), "treatment_plan_summary", format_rich_text]', page_js)
+		self.assertNotIn('[__("Assessment"), "assessment_notes", format_rich_text]', page_js)
+		self.assertNotIn('[__("Treatment Plan"), "treatment_plan", format_treatment_plan]', page_js)
+
+	def test_consultation_medical_history_dialog_hides_assessment_and_treatment_rows(self):
+		dialog_js = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_consultation"
+			/ "veterinary_consultation.js"
+		).read_text()
+
+		self.assertNotIn('history_rich_block(__("Assessment"), row.assessment_notes)', dialog_js)
+		self.assertNotIn("Array.isArray(row.treatment_plan)", dialog_js)
+		self.assertIn("row.treatment_plan_summary", dialog_js)
+
+	def test_consultation_metadata_exposes_simple_treatment_plan_field(self):
+		doctype_json = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_consultation"
+			/ "veterinary_consultation.json"
+		).read_text()
+
+		self.assertIn('"fieldname": "treatment_plan_summary"', doctype_json)
+		self.assertIn('"label": "Treatment Plan"', doctype_json)
+		self.assertIn('"fieldname": "assessment_notes"', doctype_json)
+		self.assertIn('"fieldname": "planned_treatments"', doctype_json)
 
 	def test_medical_history_does_not_mutate_consultation_treatment_rows(self):
 		service_code = Path(__file__).resolve().parents[0].joinpath("medical_history.py").read_text()
@@ -106,7 +132,7 @@ class TestMedicalHistory(TestCase):
 		self.assertEqual(view["labs"], [])
 		self.assertEqual(view["vaccinations"], [])
 
-	def test_consultation_history_preserves_rich_text_assessment_and_treatment_plan_rows(self):
+	def test_consultation_history_preserves_legacy_assessment_and_treatment_plan_rows_in_payload(self):
 		frappe_stub = make_frappe_stub(get_list=get_list_for_history, get_all=get_all_for_history)
 
 		with (

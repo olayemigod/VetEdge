@@ -166,7 +166,6 @@ has_permission = {
 	"Veterinary Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
 	"Veterinary Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
 	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
-	"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission",
 }
 
 # Document Events
