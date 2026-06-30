@@ -47,6 +47,20 @@ EXPECTED_ROLE_SETS = {
 	},
 }
 
+DOCTOR_WRITABLE_MASTER_DOCTYPES = (
+	"consultation_type/consultation_type.json",
+	"veterinary_species/veterinary_species.json",
+	"veterinary_breed/veterinary_breed.json",
+	"veterinary_symptom/veterinary_symptom.json",
+	"veterinary_diagnosis/veterinary_diagnosis.json",
+	"veterinary_diagnosis_category/veterinary_diagnosis_category.json",
+	"veterinary_service_type/veterinary_service_type.json",
+	"veterinary_treatment_type/veterinary_treatment_type.json",
+	"veterinary_treatment_item/veterinary_treatment_item.json",
+	"veterinary_lab_test/veterinary_lab_test.json",
+	"veterinary_vaccine/veterinary_vaccine.json",
+)
+
 
 class TestPermissionMatrix(TestCase):
 	def test_protected_clinical_doctypes_do_not_use_generic_desk_user(self):
@@ -62,3 +76,23 @@ class TestPermissionMatrix(TestCase):
 				data = json.loads((ROOT / relative_path).read_text())
 				roles = {row["role"] for row in data.get("permissions", [])}
 				self.assertEqual(roles, expected_roles)
+
+	def test_doctor_can_create_and_edit_required_veterinary_masters(self):
+		for relative_path in DOCTOR_WRITABLE_MASTER_DOCTYPES:
+			with self.subTest(doctype=relative_path):
+				data = json.loads((ROOT / relative_path).read_text())
+				doctor_perm = next(row for row in data.get("permissions", []) if row["role"] == "VetEdge Doctor")
+				self.assertEqual(doctor_perm.get("read"), 1)
+				self.assertEqual(doctor_perm.get("create"), 1)
+				self.assertEqual(doctor_perm.get("write"), 1)
+
+	def test_billing_session_uses_vetedge_roles_only(self):
+		data = json.loads((ROOT / "veterinary_billing_session/veterinary_billing_session.json").read_text())
+		roles = {row["role"] for row in data.get("permissions", [])}
+		self.assertIn("VetEdge Doctor", roles)
+		self.assertIn("VetEdge Administrator", roles)
+		self.assertNotIn("VetEdge Manager", roles)
+		self.assertNotIn("Reception", roles)
+		self.assertNotIn("Cashier", roles)
+		self.assertNotIn("Veterinarian", roles)
+		self.assertNotIn("Vet Nurse", roles)

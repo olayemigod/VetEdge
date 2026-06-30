@@ -28,6 +28,7 @@ from vetedge.services.permissions import (
 	get_veterinary_patient_query,
 	has_veterinary_consultation_permission,
 	has_veterinary_lab_order_permission,
+	has_veterinary_missed_appointment_permission,
 	has_veterinary_vaccination_record_permission,
 	has_sales_invoice_permission,
 	can_initiate_payment,
@@ -179,6 +180,27 @@ class TestPermissions(TestCase):
 					consultation,
 					user="doctor@example.com",
 					permission_type="create",
+				)
+			)
+
+	def test_blank_branch_missed_appointment_read_matches_query_condition(self):
+		missed = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			branch=None,
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
+			patch("vetedge.services.permissions._document_exists", return_value=True),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					missed,
+					user="doctor@example.com",
+					permission_type="read",
 				)
 			)
 

@@ -149,7 +149,18 @@ class TestNotificationStructure(TestCase):
 		self.assertIn('"Veterinary Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
 		self.assertIn('"Veterinary Notification Log": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
 		self.assertIn('"Veterinary Notification Preference": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
-		self.assertIn('"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertNotIn('"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+
+	def test_veterinary_settings_grants_doctor_read_without_admin_write(self):
+		settings_json = json.loads((APP_ROOT / "veterinary/doctype/veterinary_settings/veterinary_settings.json").read_text())
+		doctor_perms = [
+			row
+			for row in settings_json.get("permissions", [])
+			if row.get("role") == "VetEdge Doctor" and row.get("permlevel", 0) == 0
+		]
+		self.assertEqual(len(doctor_perms), 1)
+		self.assertEqual(doctor_perms[0].get("read"), 1)
+		self.assertNotEqual(doctor_perms[0].get("write"), 1)
 
 	def test_notification_workspace_links_are_admin_only(self):
 		workspace_json = json.loads((APP_ROOT / "workspace_sidebar/vetedge.json").read_text())
