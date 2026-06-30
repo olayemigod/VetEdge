@@ -523,8 +523,8 @@ def update_consultation_payment_status_from_payment_entry(doc, method: str | Non
 
 
 def update_single_consultation_payment_status(consultation, invoice) -> None:
-	from vetedge.services.billing_core import get_select_safe_invoice_status
-	new_payment_status = get_select_safe_invoice_status("Veterinary Consultation", "payment_status", get_invoice_payment_status(invoice))
+	from vetedge.services.billing_core import get_consultation_payment_status
+	new_payment_status = get_consultation_payment_status(get_consultation_payment_source_status(invoice))
 	values = {"payment_status": new_payment_status}
 	consultation_doc = None
 
@@ -601,6 +601,12 @@ def get_invoice_payment_status(invoice) -> str:
 	if flt(invoice.outstanding_amount) < flt(invoice.grand_total):
 		return PARTLY_PAID_STATUS
 	return UNPAID_STATUS
+
+
+def get_consultation_payment_source_status(invoice) -> str:
+	if cint(getattr(invoice, "docstatus", 0)) == 0:
+		return getattr(invoice, "status", None) or "Draft"
+	return get_invoice_payment_status(invoice)
 
 
 def create_new_consultation_invoice(consultation_doc, items: list[dict], cost_center: str):
@@ -765,10 +771,10 @@ def build_consultation_invoice_reference_rows(doc, invoice) -> list[dict]:
 
 
 def build_consultation_invoice_reference(invoice) -> dict:
-	from vetedge.services.billing_core import get_select_safe_invoice_status
+	from vetedge.services.billing_core import get_consultation_payment_status
 	return {
 		"sales_invoice": invoice.name,
-		"invoice_status": get_select_safe_invoice_status("Consultation Invoice Reference", "invoice_status", invoice.status),
+		"invoice_status": get_consultation_payment_status(invoice.status),
 		"invoice_docstatus": invoice.docstatus,
 		"posting_date": invoice.posting_date,
 		"currency": invoice.currency,
@@ -778,7 +784,7 @@ def build_consultation_invoice_reference(invoice) -> dict:
 
 
 def build_consultation_billing_source_rows(doc, invoice, billed_sources: list[dict]) -> list[dict]:
-	from vetedge.services.billing_core import get_select_safe_invoice_status
+	from vetedge.services.billing_core import get_consultation_payment_status
 	rows = []
 	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
 		if row.sales_invoice == invoice.name:
@@ -799,7 +805,7 @@ def build_consultation_billing_source_rows(doc, invoice, billed_sources: list[di
 				**source,
 				"sales_invoice": invoice.name,
 				"invoice_docstatus": invoice.docstatus,
-				"invoice_status": get_select_safe_invoice_status("Consultation Billing Source", "invoice_status", invoice.status),
+				"invoice_status": get_consultation_payment_status(invoice.status),
 			}
 		)
 	return rows
@@ -850,8 +856,8 @@ def sync_consultation_invoice_reference_from_invoice(consultation_name: str, inv
 		update_consultation_billing_source_statuses(consultation_doc, invoice),
 	)
 	if consultation_doc.get("linked_invoice") == invoice.name:
-		from vetedge.services.billing_core import get_select_safe_invoice_status
-		consultation_doc.payment_status = get_select_safe_invoice_status("Veterinary Consultation", "payment_status", get_invoice_payment_status(invoice))
+		from vetedge.services.billing_core import get_consultation_payment_status
+		consultation_doc.payment_status = get_consultation_payment_status(get_consultation_payment_source_status(invoice))
 	if getattr(consultation_doc, "save", None):
 		consultation_doc.save(ignore_permissions=True, ignore_version=True)
 
@@ -869,7 +875,7 @@ def get_latest_consultation_doc(doc):
 
 
 def update_consultation_billing_source_statuses(doc, invoice) -> list[dict]:
-	from vetedge.services.billing_core import get_select_safe_invoice_status
+	from vetedge.services.billing_core import get_consultation_payment_status
 	rows = []
 	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
 		rows.append(
@@ -878,7 +884,7 @@ def update_consultation_billing_source_statuses(doc, invoice) -> list[dict]:
 				"source_name": row.source_name,
 				"sales_invoice": row.sales_invoice,
 				"invoice_docstatus": invoice.docstatus if row.sales_invoice == invoice.name else row.invoice_docstatus,
-				"invoice_status": get_select_safe_invoice_status("Consultation Billing Source", "invoice_status", invoice.status) if row.sales_invoice == invoice.name else row.invoice_status,
+				"invoice_status": get_consultation_payment_status(invoice.status) if row.sales_invoice == invoice.name else row.invoice_status,
 				"item_code": row.item_code,
 			}
 		)

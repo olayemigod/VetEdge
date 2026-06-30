@@ -294,6 +294,9 @@ def sync_lab_order_review_metadata(doc) -> None:
 
 
 def handle_lab_order_after_insert(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_lab_order_to_consultation_plan
+
+	sync_lab_order_to_consultation_plan(doc)
 	emit_notification_event(
 		"lab_order_created",
 		doc.doctype,
@@ -310,6 +313,9 @@ def handle_lab_order_after_insert(doc) -> None:
 
 
 def handle_lab_order_on_update(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_lab_order_to_consultation_plan
+
+	sync_lab_order_to_consultation_plan(doc)
 	previous = doc.get_doc_before_save()
 	if not previous or previous.status == doc.status:
 		return

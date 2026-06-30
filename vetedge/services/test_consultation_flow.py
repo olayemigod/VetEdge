@@ -10,6 +10,7 @@ import frappe
 
 from vetedge.seed.master_data import CONSULTATION_TYPES
 from vetedge.services.consultation_flow import (
+	apply_linked_appointment_context,
 	claim_linked_appointment_for_consultation,
 	get_consultation_appointment_summary,
 	get_next_daily_consultation_number,
@@ -268,6 +269,29 @@ class TestConsultationFlow(TestCase):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.consultation_type, "General Consultation")
+
+	def test_linked_appointment_does_not_overwrite_selected_consultation_type(self):
+		doc = frappe._dict(
+			linked_appointment="VAPT-001",
+			service_branch=None,
+			consulting_practitioner=None,
+			consultation_type="House Call",
+			presenting_complaint=None,
+		)
+		appointment = frappe._dict(
+			branch="Branch B",
+			practitioner="doctor@example.com",
+			consultation_type="General Consultation",
+			appointment_type="Consultation",
+			notes="Owner requested a house call.",
+		)
+
+		with patch("vetedge.services.consultation_flow.get_linked_appointment_data", return_value=appointment):
+			apply_linked_appointment_context(doc)
+
+		self.assertEqual(doc.consultation_type, "House Call")
+		self.assertEqual(doc.service_branch, "Branch B")
+		self.assertEqual(doc.consulting_practitioner, "doctor@example.com")
 
 	def test_linked_appointment_house_call_maps_to_seeded_consultation_type(self):
 		doc = frappe._dict(

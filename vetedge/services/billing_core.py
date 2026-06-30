@@ -54,6 +54,7 @@ SAFE_SOURCE_INVOICE_CHILD_LINK_FIELDS = {
 	"Boarding Invoice Reference": {"field": "sales_invoice", "action": "delete"},
 	"Veterinary Hospitalisation Charge Item": {"field": "sales_invoice", "action": "clear", "extra_values": {"sales_invoice_item": None}},
 }
+CONSULTATION_PAYMENT_STATUSES = {"Not Billed", "Unpaid", "Partly Paid", "Paid", "Cancelled"}
 
 
 def is_billing_sessions_enabled() -> bool:
@@ -1254,7 +1255,7 @@ def get_session_payment_status_from_ledger(
 	if has_pending_uninvoiced_charges:
 		return "Pending Invoice"
 	if submitted_invoice_count and flt(outstanding_amount) > 0 and flt(total_paid) > 0:
-		return "Partially Paid"
+		return "Partly Paid"
 	if submitted_invoice_count and flt(outstanding_amount) > 0:
 		return "Unpaid"
 	if submitted_invoice_count and flt(outstanding_amount) <= 0:
@@ -1357,14 +1358,22 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 	if registration_payload:
 		payloads.append(registration_payload)
 	if settings.enable_treatment_billing:
+		planned_lab_sources = set()
+		planned_vaccination_sources = set()
 		for row in doc.get("planned_treatments") or []:
 			if row.get("item"):
+				source_type = row.get("source_type") or "Treatment"
+				source_document = row.get("source_document")
+				if source_type == "Lab Order" and source_document:
+					planned_lab_sources.add(source_document)
+				elif source_type == "Vaccination" and source_document:
+					planned_vaccination_sources.add(source_document)
 				master_price_list = frappe.db.get_value("Veterinary Treatment Item", {"item": row.item, "disabled": 0}, "price_list")
 				payloads.append(
 					build_source_charge(
 						doc,
-						"Treatment",
-						row.get("name") or f"{row.item}:{row.get('idx') or 0}",
+						source_type,
+						row.get("source_detail_name") or row.get("name") or f"{row.item}:{row.get('idx') or 0}",
 						row.item,
 						row.get("qty"),
 						row.get("uom"),
@@ -1374,8 +1383,19 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 						master_price_list=master_price_list,
 					)
 				)
-	payloads.extend(get_lab_order_charge_payloads_for_consultation(doc.name, cost_center))
-	payloads.extend(get_vaccination_charge_payloads_for_consultation(doc.name, cost_center))
+	else:
+		planned_lab_sources = set()
+		planned_vaccination_sources = set()
+	payloads.extend(
+		payload
+		for payload in get_lab_order_charge_payloads_for_consultation(doc.name, cost_center)
+		if payload.get("source_name") not in planned_lab_sources
+	)
+	payloads.extend(
+		payload
+		for payload in get_vaccination_charge_payloads_for_consultation(doc.name, cost_center)
+		if payload.get("source_name") not in planned_vaccination_sources
+	)
 	return payloads
 
 
@@ -2098,7 +2118,7 @@ def update_source_billing_compatibility_fields(source_doctype: str, source_name:
 	elif source_doctype == "Veterinary Hospitalisation":
 		values["invoice_status"] = get_select_safe_invoice_status(source_doctype, "invoice_status", summary.get("payment_status"))
 	elif source_doctype in {"Veterinary Consultation"}:
-		values["payment_status"] = get_select_safe_invoice_status(source_doctype, "payment_status", summary.get("payment_status"))
+		values["payment_status"] = get_consultation_payment_status(summary.get("payment_status"))
 	frappe.db.set_value(source_doctype, source_name, values, update_modified=False)
 
 	if source_doctype == "Pet Grooming Session":
@@ -2149,6 +2169,16 @@ def get_select_safe_invoice_status(doctype: str, fieldname: str, status: str | N
 	except Exception:
 		pass
 	return canonical
+
+
+def get_consultation_payment_status(status: str | None) -> str:
+	if not status or status in {"Not Invoiced", "Pending Invoice", "Draft Invoice Pending", "Draft", "None"}:
+		return "Not Billed"
+	if status in {"Partially Paid", "Partly Paid"}:
+		return "Partly Paid"
+	if status in CONSULTATION_PAYMENT_STATUSES:
+		return status
+	return get_select_safe_invoice_status("Veterinary Consultation", "payment_status", status)
 
 
 def get_registration_compatibility_status(summary: dict) -> str:

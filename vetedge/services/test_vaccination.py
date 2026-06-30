@@ -317,6 +317,7 @@ class VaccinationWorkflowTests(TestCase):
 			script.index("await frm.save();"),
 			script.index('method: "vetedge.services.vaccination.create_vaccination_from_consultation"'),
 		)
+		self.assertIn("create_invoice: 0", script)
 		self.assertIn("frm.reload_doc();", script)
 
 	def test_payment_required_blocks_administer_for_non_manager(self):

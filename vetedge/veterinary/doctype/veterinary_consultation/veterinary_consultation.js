@@ -1343,6 +1343,7 @@ function show_vitals_entry_dialog(frm) {
 				args: {
 					consultation: frm.doc.name,
 					values,
+					create_invoice: 0,
 				},
 				freeze: true,
 				freeze_message: __("Saving vitals..."),
