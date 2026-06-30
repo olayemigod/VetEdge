@@ -8,6 +8,8 @@
   "general_tab",
   "general_section",
   "enable_vetedge",
+  "enforce_cost_center_on_billing",
+  "default_selling_price_list",
   "registration_billing_section",
   "enable_registration_billing",
   "default_registration_item",
@@ -15,20 +17,17 @@
   "column_break_registration",
   "auto_create_invoice_on_registration",
   "require_payment_before_first_consultation",
-  "enforce_cost_center_on_billing",
-  "billing_core_section",
-  "enable_billing_sessions",
-  "default_payment_gate_mode",
-  "column_break_billing_core",
-  "allow_partial_payment_to_proceed",
-  "require_invoice_before_service",
-  "default_selling_price_list",
-  "sync_related_billable_sources_to_session",
   "branch_registration_rules_section",
   "branch_registration_rules",
   "clinical_tab",
   "consultation_section",
   "enable_consultations",
+  "vitals_section",
+  "enable_vitals",
+  "require_vitals_before_completion",
+  "vaccination_section",
+  "enable_vaccination",
+  "vaccination_requires_payment_before_administration",
   "consultation_billing_section",
   "enable_consultation_billing",
   "consultation_item",
@@ -36,29 +35,21 @@
   "allow_doctor_collect_payment",
   "consultation_requires_payment_before_treatment",
   "consultation_payment_gate",
-  "hospitalisation_section",
-  "enable_veterinary_hospitalisation",
-  "hospitalisation_payment_gate",
-  "hospitalisation_requires_consultation",
-  "allow_direct_hospitalisation_admission",
-  "hospitalisation_initial_billing_source",
-  "hospitalisation_admission_fee_item",
-  "hospitalisation_admission_fee_uom",
-  "hospitalisation_daily_charge_settings",
-  "vitals_section",
-  "enable_vitals",
-  "require_vitals_before_completion",
-  "vaccination_section",
-  "enable_vaccination",
-  "vaccination_requires_payment_before_administration",
   "operations_tab",
   "appointments_section",
   "enable_appointments",
-  "pet_services_section",
-  "enable_grooming",
-  "enable_grooming_billing",
-  "require_grooming_appointment",
-  "allow_grooming_without_consultation",
+  "appointment_reminder_hours",
+  "appointment_reminder_hours_before",
+  "billing_core_section",
+  "enable_billing_sessions",
+  "default_payment_gate_mode",
+  "require_invoice_before_service",
+  "sync_related_billable_sources_to_session",
+  "column_break_billing_core",
+  "allow_partial_payment_to_proceed",
+  "enable_portal_payments",
+  "payment_backend_mode",
+  "portal_payment_provider_mode",
   "treatment_inventory_section",
   "enable_treatment_billing",
   "enable_dispensary_flow",
@@ -73,6 +64,20 @@
   "enable_email_expiry_notifications",
   "enable_whatsapp_expiry_notifications",
   "enable_sms_expiry_notifications",
+  "hospitalisation_section",
+  "enable_veterinary_hospitalisation",
+  "hospitalisation_requires_consultation",
+  "allow_direct_hospitalisation_admission",
+  "hospitalisation_payment_gate",
+  "hospitalisation_initial_billing_source",
+  "hospitalisation_admission_fee_item",
+  "hospitalisation_admission_fee_uom",
+  "hospitalisation_daily_charge_settings",
+  "pet_services_section",
+  "enable_grooming",
+  "enable_grooming_billing",
+  "require_grooming_appointment",
+  "allow_grooming_without_consultation",
   "boarding_section",
   "enable_boarding",
   "default_boarding_billing_item",
@@ -84,11 +89,8 @@
   "enable_guest_booking",
   "allow_owner_cancel_appointment",
   "allow_owner_reschedule_appointment",
-  "column_break_portal",
-  "enable_portal_payments",
-  "payment_backend_mode",
-  "portal_payment_provider_mode",
   "portal_show_consultation_summary_only",
+  "column_break_portal",
   "portal_branding_tab",
   "portal_branding_section",
   "portal_brand_name",
@@ -124,16 +126,14 @@
   "notify_on_guest_appointment_request",
   "notify_on_invoice_created",
   "notify_on_payment_received",
+  "vaccination_due_reminder_days",
+  "payment_reminder_days",
   "column_break_notifications",
   "notify_on_reschedule",
   "notify_on_cancellation",
   "notify_on_accounts_action_required",
   "notify_on_lab_updates",
   "notification_channels",
-  "appointment_reminder_hours",
-  "appointment_reminder_hours_before",
-  "vaccination_due_reminder_days",
-  "payment_reminder_days",
   "enable_appointment_sms_notifications",
   "appointment_sms_on_owner_requested",
   "appointment_sms_on_scheduled",
@@ -143,23 +143,24 @@
   "appointment_sms_on_completed",
   "appointment_sms_on_no_show",
   "admin_controls_tab",
-  "demo_data_section",
-  "enable_demo_tools",
+  "advanced_reports_section",
+  "enable_advanced_reports",
   "security_branch_section",
   "patient_branch_restriction_enabled",
-  "advanced_reports_section",
-  "enable_advanced_reports"
+  "demo_data_section",
+  "enable_demo_tools"
  ],
  "fields": [
   {
    "fieldname": "general_tab",
    "fieldtype": "Tab Break",
-   "label": "General"
+   "label": "Setup"
   },
   {
    "fieldname": "general_section",
    "fieldtype": "Section Break",
-   "label": "VetEdge Foundation"
+   "label": "Clinic & Defaults",
+   "description": "Basic clinic defaults and common operating values used across VetEdge."
   },
   {
    "default": "0",
@@ -169,9 +170,25 @@
    "label": "Enable VetEdge"
   },
   {
+   "default": "1",
+   "description": "Require branch-to-cost-center mapping before VetEdge creates billing documents. Set the Cost Center on each Branch using the standard Cost Center field where available, or VetEdge Cost Center where installed.",
+   "fieldname": "enforce_cost_center_on_billing",
+   "fieldtype": "Check",
+   "label": "Enforce Cost Center on Billing"
+  },
+  {
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "description": "Fallback selling price list used by VetEdge Billing Core when the branch has no VetEdge Price List.",
+   "fieldname": "default_selling_price_list",
+   "fieldtype": "Link",
+   "label": "Default Selling Price List",
+   "options": "Price List"
+  },
+  {
    "fieldname": "registration_billing_section",
    "fieldtype": "Section Break",
-   "label": "Registration Billing"
+   "label": "Registration Billing Defaults",
+   "description": "Controls the optional patient registration invoice flow."
   },
   {
    "default": "0",
@@ -215,70 +232,12 @@
    "label": "Require Payment Before First Consultation"
   },
   {
-   "default": "1",
-   "description": "Require branch-to-cost-center mapping before VetEdge creates billing documents. Set the Cost Center on each Branch using the standard Cost Center field where available, or VetEdge Cost Center where installed.",
-   "fieldname": "enforce_cost_center_on_billing",
-   "fieldtype": "Check",
-   "label": "Enforce Cost Center on Billing"
-  },
-  {
-   "fieldname": "billing_core_section",
-   "fieldtype": "Section Break",
-   "label": "Billing Core"
-  },
-  {
-   "default": "1",
-   "description": "Use shared Billing Sessions to group charges from consultations, labs, hospitalisation, vaccination, and other VetEdge services.",
-   "fieldname": "enable_billing_sessions",
-   "fieldtype": "Check",
-   "label": "Enable Billing Sessions"
-  },
-  {
-   "default": "Full Payment Gate",
-   "depends_on": "eval:doc.enable_billing_sessions",
-   "fieldname": "default_payment_gate_mode",
-   "fieldtype": "Select",
-   "label": "Default Payment Gate Mode",
-   "options": "No Payment Gate\nPartial Payment Gate\nFull Payment Gate"
-  },
-  {
-   "fieldname": "column_break_billing_core",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "1",
-   "depends_on": "eval:doc.enable_billing_sessions",
-   "fieldname": "allow_partial_payment_to_proceed",
-   "fieldtype": "Check",
-   "label": "Allow Partial Payment to Proceed"
-  },
-  {
-   "default": "1",
-   "depends_on": "eval:doc.enable_billing_sessions",
-   "fieldname": "require_invoice_before_service",
-   "fieldtype": "Check",
-   "label": "Require Invoice Before Service"
-  },
-  {
-   "depends_on": "eval:doc.enable_billing_sessions",
-   "description": "Fallback selling price list used by VetEdge Billing Core when the branch has no VetEdge Price List.",
-   "fieldname": "default_selling_price_list",
-   "fieldtype": "Link",
-   "label": "Default Selling Price List",
-   "options": "Price List"
-  },
-  {
-   "default": "1",
-   "fieldname": "sync_related_billable_sources_to_session",
-   "fieldtype": "Check",
-   "label": "Sync Related Billable Sources to Session"
-  },
-  {
    "collapsible": 1,
    "depends_on": "eval:doc.enable_registration_billing",
    "fieldname": "branch_registration_rules_section",
    "fieldtype": "Section Break",
-   "label": "Branch Registration Rules"
+   "label": "Branch Registration Rules",
+   "description": "Optional branch-specific registration billing overrides."
   },
   {
    "depends_on": "eval:doc.enable_registration_billing",
@@ -295,7 +254,8 @@
   {
    "fieldname": "consultation_section",
    "fieldtype": "Section Break",
-   "label": "Consultation Feature Control"
+   "label": "Consultation & Clinical Workflow",
+   "description": "Consultation behavior, clinical safeguards, vitals, and vaccination workflow toggles."
   },
   {
    "default": "0",
@@ -305,9 +265,49 @@
    "label": "Enable Consultations"
   },
   {
+   "fieldname": "vitals_section",
+   "fieldtype": "Section Break",
+   "label": "Vitals"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_vitals",
+   "fieldtype": "Check",
+   "label": "Enable Vitals"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_vitals",
+   "description": "When enabled, a consultation cannot be completed until at least one Veterinary Vital Signs record is linked to it.",
+   "fieldname": "require_vitals_before_completion",
+   "fieldtype": "Check",
+   "label": "Require Vitals Before Completion"
+  },
+  {
+   "fieldname": "vaccination_section",
+   "fieldtype": "Section Break",
+   "label": "Vaccination"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_vaccination",
+   "fieldtype": "Check",
+   "label": "Enable Vaccination"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_vaccination",
+   "fieldname": "vaccination_requires_payment_before_administration",
+   "fieldtype": "Check",
+   "label": "Require Payment Before Vaccination Administration"
+  },
+  {
    "fieldname": "consultation_billing_section",
    "fieldtype": "Section Break",
-   "label": "Consultation Billing"
+   "label": "Consultation Billing Controls",
+   "description": "Consultation billing item and payment gate behavior."
   },
   {
    "default": "0",
@@ -351,115 +351,15 @@
    "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
   },
   {
-   "fieldname": "hospitalisation_section",
-   "fieldtype": "Section Break",
-   "label": "Hospitalisation Feature Control"
-  },
-  {
-   "default": "1",
-   "description": "Enables the Veterinary Hospitalisation workflow in VetEdge. This setting can later be controlled by CoreEdge entitlement/subscription rules.",
-   "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_veterinary_hospitalisation",
-   "fieldtype": "Check",
-   "label": "Enable Veterinary Hospitalisation"
-  },
-  {
-   "default": "Partial Payment Gate",
-   "description": "Controls whether hospitalisation care requires full payment, partial payment, or only invoice generation before proceeding.",
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
-   "fieldname": "hospitalisation_payment_gate",
-   "fieldtype": "Select",
-   "label": "Hospitalisation Payment Gate",
-   "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
-  },
-  {
-   "fieldname": "hospitalisation_daily_charge_settings",
-   "fieldtype": "Table",
-   "label": "Hospitalisation Daily Charge Settings",
-   "options": "Veterinary Hospitalisation Daily Charge Setting",
-   "depends_on": "enable_veterinary_hospitalisation"
-  },
-  {
-   "fieldname": "vitals_section",
-   "fieldtype": "Section Break",
-   "label": "Vitals Feature Control"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_vitals",
-   "fieldtype": "Check",
-   "label": "Enable Vitals"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_vitals",
-   "description": "When enabled, a consultation cannot be completed until at least one Veterinary Vital Signs record is linked to it.",
-   "fieldname": "require_vitals_before_completion",
-   "fieldtype": "Check",
-   "label": "Require Vitals Before Completion"
-  },
-  {
-   "fieldname": "vaccination_section",
-   "fieldtype": "Section Break",
-   "label": "Vaccination Feature Control"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_vaccination",
-   "fieldtype": "Check",
-   "label": "Enable Vaccination"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_vaccination",
-   "fieldname": "vaccination_requires_payment_before_administration",
-   "fieldtype": "Check",
-   "label": "Require Payment Before Vaccination Administration"
-  },
-  {
    "fieldname": "operations_tab",
    "fieldtype": "Tab Break",
-   "label": "Operations"
+   "label": "Operations & Billing"
   },
   {
    "fieldname": "appointments_section",
    "fieldtype": "Section Break",
-   "label": "Appointments Feature Control"
-  },
-  {
-   "fieldname": "pet_services_section",
-   "fieldtype": "Section Break",
-   "label": "Pet Services Feature Control"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_grooming",
-   "fieldtype": "Check",
-   "label": "Enable Grooming"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
-   "fieldname": "enable_grooming_billing",
-   "fieldtype": "Check",
-   "label": "Enable Grooming Billing"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
-   "fieldname": "require_grooming_appointment",
-   "fieldtype": "Check",
-   "label": "Require Grooming Appointment"
-  },
-  {
-   "default": "1",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
-   "fieldname": "allow_grooming_without_consultation",
-   "fieldtype": "Check",
-   "label": "Allow Grooming Without Consultation"
+   "label": "Appointments & Queue",
+   "description": "Appointment lifecycle, reminder windows, and queue-related automation."
   },
   {
    "default": "0",
@@ -469,9 +369,97 @@
    "label": "Enable Appointments"
   },
   {
+   "default": "24",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
+   "fieldname": "appointment_reminder_hours",
+   "fieldtype": "Int",
+   "label": "Appointment Reminder Hours",
+   "permlevel": 1
+  },
+  {
+   "default": "24",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
+   "fieldname": "appointment_reminder_hours_before",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Appointment Reminder Hours Before",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "billing_core_section",
+   "fieldtype": "Section Break",
+   "label": "Billing & Payment",
+   "description": "Invoice, payment gate, billing session, and portal payment behavior."
+  },
+  {
+   "default": "1",
+   "description": "Use shared Billing Sessions to group charges from consultations, labs, hospitalisation, vaccination, and other VetEdge services.",
+   "fieldname": "enable_billing_sessions",
+   "fieldtype": "Check",
+   "label": "Enable Billing Sessions"
+  },
+  {
+   "default": "Full Payment Gate",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "default_payment_gate_mode",
+   "fieldtype": "Select",
+   "label": "Default Payment Gate Mode",
+   "options": "No Payment Gate\nPartial Payment Gate\nFull Payment Gate"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "require_invoice_before_service",
+   "fieldtype": "Check",
+   "label": "Require Invoice Before Service"
+  },
+  {
+   "default": "1",
+   "fieldname": "sync_related_billable_sources_to_session",
+   "fieldtype": "Check",
+   "label": "Sync Related Billable Sources to Session"
+  },
+  {
+   "fieldname": "column_break_billing_core",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_billing_sessions",
+   "fieldname": "allow_partial_payment_to_proceed",
+   "fieldtype": "Check",
+   "label": "Allow Partial Payment to Proceed"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal",
+   "fieldname": "enable_portal_payments",
+   "fieldtype": "Check",
+   "label": "Enable Portal Payments"
+  },
+  {
+   "default": "stub",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal && doc.enable_portal_payments",
+   "description": "Select the provider-agnostic payment backend VetEdge should route to. ERPNext remains the accounting source of truth.",
+   "fieldname": "payment_backend_mode",
+   "fieldtype": "Select",
+   "label": "Payment Backend Mode",
+   "options": "stub\nerpnext_native\nprocessedge_core"
+  },
+  {
+   "default": "Stub",
+   "description": "Legacy compatibility fallback for older portal payment configurations. New setups should use Payment Backend Mode.",
+   "fieldname": "portal_payment_provider_mode",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Portal Payment Provider Mode",
+   "options": "Stub\nERPNext Payment Request\nProcessEdge Core Payment"
+  },
+  {
    "fieldname": "treatment_inventory_section",
    "fieldtype": "Section Break",
-   "label": "Treatment and Inventory Feature Control"
+   "label": "Pharmacy, Dispensary & Stock",
+   "description": "Medication fulfilment, billing handoff, stock availability, and expiry controls."
   },
   {
    "default": "0",
@@ -513,7 +501,8 @@
    "collapsible": 1,
    "fieldname": "stock_expiry_monitor_section",
    "fieldtype": "Section Break",
-   "label": "Stock Expiry Monitor"
+   "label": "Stock Expiry Alerts",
+   "description": "Reminder buckets and internal/provider notification toggles for expiring stock."
   },
   {
    "default": "0",
@@ -567,9 +556,112 @@
    "label": "Enable SMS Expiry Notifications"
   },
   {
+   "fieldname": "hospitalisation_section",
+   "fieldtype": "Section Break",
+   "label": "Hospitalisation",
+   "description": "Hospitalisation admission, payment gate, and daily charge defaults.",
+   "collapsible": 1
+  },
+  {
+   "default": "1",
+   "description": "Enables the Veterinary Hospitalisation workflow in VetEdge. This setting can later be controlled by CoreEdge entitlement/subscription rules.",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_veterinary_hospitalisation",
+   "fieldtype": "Check",
+   "label": "Enable Veterinary Hospitalisation"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_requires_consultation",
+   "fieldtype": "Check",
+   "label": "Require Consultation Before Hospitalisation"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "allow_direct_hospitalisation_admission",
+   "fieldtype": "Check",
+   "label": "Allow Direct Hospitalisation Admission"
+  },
+  {
+   "default": "Partial Payment Gate",
+   "description": "Controls whether hospitalisation care requires full payment, partial payment, or only invoice generation before proceeding.",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_payment_gate",
+   "fieldtype": "Select",
+   "label": "Hospitalisation Payment Gate",
+   "options": "Full Payment Required\nPartial Payment Gate\nNo Payment Gate"
+  },
+  {
+   "default": "Linked Consultation Billing Session",
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
+   "fieldname": "hospitalisation_initial_billing_source",
+   "fieldtype": "Select",
+   "label": "Hospitalisation Initial Billing Source",
+   "options": "Linked Consultation Billing Session\nAdmission Fee Item\nDay 1 Daily Charge\nManual Initial Charge\nNone"
+  },
+  {
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
+   "fieldname": "hospitalisation_admission_fee_item",
+   "fieldtype": "Link",
+   "label": "Hospitalisation Admission Fee Item",
+   "options": "Item"
+  },
+  {
+   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
+   "fieldname": "hospitalisation_admission_fee_uom",
+   "fieldtype": "Link",
+   "label": "Hospitalisation Admission Fee UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "hospitalisation_daily_charge_settings",
+   "fieldtype": "Table",
+   "label": "Hospitalisation Daily Charge Settings",
+   "options": "Veterinary Hospitalisation Daily Charge Setting",
+   "depends_on": "enable_veterinary_hospitalisation"
+  },
+  {
+   "fieldname": "pet_services_section",
+   "fieldtype": "Section Break",
+   "label": "Grooming & Boarding",
+   "description": "Non-clinical service controls for grooming and boarding operations.",
+   "collapsible": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "fieldname": "enable_grooming",
+   "fieldtype": "Check",
+   "label": "Enable Grooming"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
+   "fieldname": "enable_grooming_billing",
+   "fieldtype": "Check",
+   "label": "Enable Grooming Billing"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
+   "fieldname": "require_grooming_appointment",
+   "fieldtype": "Check",
+   "label": "Require Grooming Appointment"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_grooming",
+   "fieldname": "allow_grooming_without_consultation",
+   "fieldtype": "Check",
+   "label": "Allow Grooming Without Consultation"
+  },
+  {
    "fieldname": "boarding_section",
    "fieldtype": "Section Break",
-   "label": "Boarding Feature Control"
+   "label": "Boarding Billing Defaults",
+   "description": "Boarding billing item, daily rate, and check-in gate settings."
   },
   {
    "default": "0",
@@ -603,12 +695,13 @@
   {
    "fieldname": "client_experience_tab",
    "fieldtype": "Tab Break",
-   "label": "Client Experience"
+   "label": "Owner Portal"
   },
   {
    "fieldname": "portal_section",
    "fieldtype": "Section Break",
-   "label": "Portal Feature Control"
+   "label": "Owner Portal & Guest Booking",
+   "description": "Owner portal access, guest booking, and owner self-service behavior."
   },
   {
    "default": "0",
@@ -639,41 +732,16 @@
    "label": "Allow Owner Reschedule Appointment"
   },
   {
-   "fieldname": "column_break_portal",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal",
-   "fieldname": "enable_portal_payments",
-   "fieldtype": "Check",
-   "label": "Enable Portal Payments"
-  },
-  {
-   "default": "stub",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal && doc.enable_portal_payments",
-   "description": "Select the provider-agnostic payment backend VetEdge should route to. ERPNext remains the accounting source of truth.",
-   "fieldname": "payment_backend_mode",
-   "fieldtype": "Select",
-   "label": "Payment Backend Mode",
-   "options": "stub\nerpnext_native\nprocessedge_core"
-  },
-  {
-   "default": "Stub",
-   "description": "Legacy compatibility fallback for older portal payment configurations. New setups should use Payment Backend Mode.",
-   "fieldname": "portal_payment_provider_mode",
-   "fieldtype": "Select",
-   "hidden": 1,
-   "label": "Portal Payment Provider Mode",
-   "options": "Stub\nERPNext Payment Request\nProcessEdge Core Payment"
-  },
-  {
    "default": "1",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal",
    "description": "Portal shows safe consultation summaries only; internal clinical notes stay in Desk.",
    "fieldname": "portal_show_consultation_summary_only",
    "fieldtype": "Check",
    "label": "Portal Shows Consultation Summary Only"
+  },
+  {
+   "fieldname": "column_break_portal",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "portal_branding_tab",
@@ -684,7 +752,9 @@
    "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal",
    "fieldname": "portal_branding_section",
    "fieldtype": "Section Break",
-   "label": "Owner Portal Branding"
+   "label": "Portal Branding",
+   "description": "White-label owner portal branding and visual defaults.",
+   "collapsible": 1
   },
   {
    "depends_on": "eval:doc.enable_vetedge && doc.enable_owner_portal",
@@ -783,14 +853,16 @@
   {
    "fieldname": "notifications_tab",
    "fieldtype": "Tab Break",
-   "label": "Notifications",
+   "label": "Communication",
    "permlevel": 1
   },
   {
    "fieldname": "notifications_section",
    "fieldtype": "Section Break",
-   "label": "Notifications Feature Control",
-   "permlevel": 1
+   "label": "Notifications & Communication",
+   "permlevel": 1,
+   "description": "Internal notifications and external communication reminders.",
+   "collapsible": 1
   },
   {
    "default": "0",
@@ -928,6 +1000,22 @@
    "permlevel": 1
   },
   {
+   "default": "7",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "vaccination_due_reminder_days",
+   "fieldtype": "Int",
+   "label": "Vaccination Due Reminder Days",
+   "permlevel": 1
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "fieldname": "payment_reminder_days",
+   "fieldtype": "Int",
+   "label": "Payment Reminder Days",
+   "permlevel": 1
+  },
+  {
    "fieldname": "column_break_notifications",
    "fieldtype": "Column Break",
    "permlevel": 1
@@ -972,39 +1060,6 @@
    "hidden": 1,
    "label": "Notification Channel",
    "options": "\nEmail\nSMS\nWhatsApp",
-   "permlevel": 1
-  },
-  {
-   "default": "24",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
-   "fieldname": "appointment_reminder_hours",
-   "fieldtype": "Int",
-   "label": "Appointment Reminder Hours",
-   "permlevel": 1
-  },
-  {
-   "default": "24",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_appointment_reminder",
-   "fieldname": "appointment_reminder_hours_before",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Appointment Reminder Hours Before",
-   "permlevel": 1
-  },
-  {
-   "default": "7",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
-   "fieldname": "vaccination_due_reminder_days",
-   "fieldtype": "Int",
-   "label": "Vaccination Due Reminder Days",
-   "permlevel": 1
-  },
-  {
-   "default": "3",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
-   "fieldname": "payment_reminder_days",
-   "fieldtype": "Int",
-   "label": "Payment Reminder Days",
    "permlevel": 1
   },
   {
@@ -1074,24 +1129,28 @@
   {
    "fieldname": "admin_controls_tab",
    "fieldtype": "Tab Break",
-   "label": "Admin & Controls"
+   "label": "Advanced"
   },
   {
-   "fieldname": "demo_data_section",
+   "fieldname": "advanced_reports_section",
    "fieldtype": "Section Break",
-   "label": "Demo Data Feature Control"
+   "label": "Reports & Dashboards",
+   "description": "Dashboard/report visibility and advanced reporting controls.",
+   "collapsible": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_demo_tools",
+   "fieldname": "enable_advanced_reports",
    "fieldtype": "Check",
-   "label": "Enable Demo Tools"
+   "label": "Enable Advanced Reports"
   },
   {
    "fieldname": "security_branch_section",
    "fieldtype": "Section Break",
-   "label": "Security and Branch Controls"
+   "label": "Advanced / System",
+   "description": "Rarely changed access, compatibility, and system-level controls.",
+   "collapsible": 1
   },
   {
    "default": "0",
@@ -1102,52 +1161,18 @@
    "label": "Restrict Patient Access by Branch"
   },
   {
-   "fieldname": "advanced_reports_section",
+   "fieldname": "demo_data_section",
    "fieldtype": "Section Break",
-   "label": "Reports Feature Control"
+   "label": "Demo & Diagnostics",
+   "description": "Developer/demo controls for non-production setup and diagnostics.",
+   "collapsible": 1
   },
   {
    "default": "0",
    "depends_on": "eval:doc.enable_vetedge",
-   "fieldname": "enable_advanced_reports",
+   "fieldname": "enable_demo_tools",
    "fieldtype": "Check",
-   "label": "Enable Advanced Reports"
-  },
-  {
-   "default": "1",
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
-   "fieldname": "hospitalisation_requires_consultation",
-   "fieldtype": "Check",
-   "label": "Require Consultation Before Hospitalisation"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
-   "fieldname": "allow_direct_hospitalisation_admission",
-   "fieldtype": "Check",
-   "label": "Allow Direct Hospitalisation Admission"
-  },
-  {
-   "default": "Linked Consultation Billing Session",
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation",
-   "fieldname": "hospitalisation_initial_billing_source",
-   "fieldtype": "Select",
-   "label": "Hospitalisation Initial Billing Source",
-   "options": "Linked Consultation Billing Session\nAdmission Fee Item\nDay 1 Daily Charge\nManual Initial Charge\nNone"
-  },
-  {
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
-   "fieldname": "hospitalisation_admission_fee_item",
-   "fieldtype": "Link",
-   "label": "Hospitalisation Admission Fee Item",
-   "options": "Item"
-  },
-  {
-   "depends_on": "eval:doc.enable_veterinary_hospitalisation && doc.hospitalisation_initial_billing_source == \"Admission Fee Item\"",
-   "fieldname": "hospitalisation_admission_fee_uom",
-   "fieldtype": "Link",
-   "label": "Hospitalisation Admission Fee UOM",
-   "options": "UOM"
+   "label": "Enable Demo Tools"
   }
  ],
  "issingle": 1,
