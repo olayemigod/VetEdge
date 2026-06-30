@@ -65,6 +65,38 @@ def get_treatment_item_defaults_for_consultation(item_code: str) -> dict:
 	} if defaults else {}
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_treatment_item_link_options(doctype, txt, searchfield, start, page_len, filters):
+	"""Return ERPNext Items curated through active Veterinary Treatment Item masters."""
+	require_internal_user()
+	if not frappe.db.exists("DocType", TREATMENT_ITEM_DOCTYPE):
+		return []
+
+	search = f"%{txt or ''}%"
+	return frappe.db.sql(
+		"""
+		SELECT item.name, COALESCE(item.item_name, item.name)
+		FROM `tabVeterinary Treatment Item` treatment
+		INNER JOIN `tabItem` item ON item.name = treatment.item
+		WHERE IFNULL(treatment.disabled, 0) = 0
+			AND IFNULL(item.disabled, 0) = 0
+			AND (
+				item.name LIKE %(search)s
+				OR item.item_name LIKE %(search)s
+				OR treatment.name LIKE %(search)s
+			)
+		ORDER BY item.item_name ASC, item.name ASC
+		LIMIT %(page_len)s OFFSET %(start)s
+		""",
+		{
+			"search": search,
+			"page_len": cint(page_len) or 20,
+			"start": cint(start),
+		},
+	)
+
+
 def validate_treatment_item_profile(doc) -> None:
 	item = frappe.db.get_value(
 		"Item",

@@ -30,9 +30,7 @@ frappe.ui.form.on("Veterinary Consultation", {
 		}));
 
 		frm.set_query("item", "planned_treatments", () => ({
-			filters: {
-				disabled: 0,
-			},
+			query: "vetedge.services.treatment_items.get_treatment_item_link_options",
 		}));
 	},
 
