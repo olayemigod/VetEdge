@@ -1,0 +1,123 @@
+{
+  "unknown_threshold": 250,
+  "protected_clinical_domain_names": [
+    "Veterinary Appointment",
+    "Veterinary Consultation",
+    "Veterinary Financial Dashboard",
+    "Veterinary Hospitalisation",
+    "Veterinary Hospitalisation Dashboard",
+    "Veterinary Notification Item",
+    "Veterinary Patient",
+    "Veterinary Records",
+    "Veterinary Settings",
+    "Veterinary Vital Signs",
+    "Stock Expiry Status"
+  ],
+  "allowed_generic_veterinary_labels": [
+    "Veterinary",
+    "Veterinary Masters",
+    "Veterinary Records",
+    "Veterinary Financial Dashboard",
+    "Veterinary Hospitalisation Dashboard"
+  ],
+  "expected_retained_report_names": [
+    "Active Hospitalisations",
+    "Care Location Occupancy",
+    "Hospitalisation Charge Summary",
+    "Pending Hospitalisation Actions",
+    "Stock Expiry Status"
+  ],
+  "expected_retained_doctype_names": [
+    "Veterinary Appointment",
+    "Veterinary Consultation",
+    "Veterinary Hospitalisation",
+    "Veterinary Notification Item",
+    "Veterinary Patient",
+    "Veterinary Settings",
+    "Veterinary Vital Signs"
+  ],
+  "expected_sidebar_labels": [
+    "Executive Dashboard",
+    "Dashboards",
+    "Veterinary Records",
+    "Hospitalisation",
+    "Pet Grooming",
+    "Pet Boarding",
+    "Veterinary Masters",
+    "Reports",
+    "Billing",
+    "Setup"
+  ],
+  "expected_dashboard_labels": [
+    "Executive Dashboard",
+    "Financial Dashboard",
+    "Hospitalisation Dashboard"
+  ],
+  "classifications": [
+    {
+      "layer": "manual_review",
+      "category": "product_architecture_documentation",
+      "description": "Product and architecture documentation can retain VetEdge as source-project context but needs human review before clone publication.",
+      "path_patterns": ["^AGENTS\\.md$", "^README\\.md$", "^docs/"],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    },
+    {
+      "layer": "manual_review",
+      "category": "developer_tooling_path_reference",
+      "description": "Developer tooling paths reference the source app layout and should be reviewed before clone CI/tooling is generated.",
+      "path_patterns": ["^\\.pre-commit-config\\.yaml$", "^\\.github/", "^scripts/"],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    },
+    {
+      "layer": "manual_review",
+      "category": "clone_audit_tool_self_reference",
+      "description": "Clone audit tooling intentionally mentions VetEdge/Veterinary and must be reviewed separately from runtime app code.",
+      "path_patterns": ["^tools/create_veterinary_clone\\.py$", "^tools/veterinary_clone_audit_registry\\.json$", "^tests/test_create_veterinary_clone\\.py$"],
+      "pattern": "vetedge|VetEdge|VETEDGE|Veterinary"
+    },
+    {
+      "layer": "manual_review",
+      "category": "test_expectation_reference",
+      "description": "Test expectations may intentionally assert VetEdge behavior in the source app and need clone-specific review.",
+      "path_patterns": ["(^|/)test_[^/]+\\.py$"],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    },
+    {
+      "layer": "manual_review",
+      "category": "package_metadata_reference",
+      "description": "Package metadata, README snippets, and app docs need an explicit publication decision for the downstream app.",
+      "path_patterns": ["^pyproject\\.toml$", "^license\\.txt$"],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    },
+    {
+      "layer": "manual_review",
+      "category": "module_path_reference",
+      "description": "Module path strings are source-layout references and should be transformed only by controlled path rules.",
+      "path_patterns": ["^vetedge/modules\\.txt$", "^vetedge/config/"],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    },
+    {
+      "layer": "safe_transform",
+      "category": "app_source_identifier_reference",
+      "description": "Non-dangerous app source identifiers remain eligible for controlled token-aware transformation; dangerous hook, fixture, patch, route, DocType, and report rules take precedence.",
+      "path_patterns": [
+        "^vetedge/desktop_icon/",
+        "^vetedge/hooks\\.py$",
+        "^vetedge/install/",
+        "^vetedge/public/",
+        "^vetedge/seed/",
+        "^vetedge/services/",
+        "^vetedge/setup/",
+        "^vetedge/templates/",
+        "^vetedge/veterinary/doctype/",
+        "^vetedge/veterinary/number_card/",
+        "^vetedge/veterinary/page/",
+        "^vetedge/veterinary/report/",
+        "^vetedge/veterinary/workspace/",
+        "^vetedge/workspace_sidebar/",
+        "^vetedge/www/"
+      ],
+      "pattern": "vetedge|VetEdge|VETEDGE"
+    }
+  ]
+}
