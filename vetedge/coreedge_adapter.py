@@ -4,6 +4,23 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+VETEDGE_PRODUCT_FAMILY = "veterinary_practice"
+VETEDGE_DISTRIBUTION = "vetedge"
+VETEDGE_DISPLAY_LABEL = "VetEdge"
+
+VETEDGE_FEATURE_KEYS = {
+	"stock_expiry",
+	"financial_dashboard",
+	"hospitalisation_dashboard",
+	"appointment",
+	"consultation",
+	"billing",
+	"lab",
+	"vaccination",
+	"grooming",
+	"boarding",
+}
+
 def is_coreedge_available() -> bool:
 	try:
 		return "coreedge" in frappe.get_installed_apps()
@@ -74,6 +91,39 @@ def get_vetedge_product_app() -> str:
 	except Exception:
 		return "VetEdge"
 
+def get_product_family() -> str:
+	return VETEDGE_PRODUCT_FAMILY
+
+def get_distribution() -> str:
+	return VETEDGE_DISTRIBUTION
+
+def normalize_feature_key(feature_key: str | None) -> str | None:
+	if not feature_key:
+		return None
+	return str(feature_key).strip().lower().replace(" ", "_").replace("-", "_")
+
+def resolve_product_identity(
+	product_app: str | None = None,
+	tenant: str | None = None,
+	feature_key: str | None = None,
+) -> dict:
+	app = product_app or get_vetedge_product_app()
+	normalized_feature = normalize_feature_key(feature_key)
+	return {
+		"product_app": app,
+		"active_product_app": app,
+		"legacy_product_key": str(app).strip().lower().replace(" ", "_").replace("-", "_") if app else None,
+		"product_family": get_product_family(),
+		"distribution": get_distribution(),
+		"display_label": VETEDGE_DISPLAY_LABEL,
+		"tenant": tenant,
+		"feature_key": normalized_feature,
+		"known_feature_key": normalized_feature in VETEDGE_FEATURE_KEYS if normalized_feature else False,
+	}
+
+def get_supported_feature_keys() -> set[str]:
+	return set(VETEDGE_FEATURE_KEYS)
+
 def get_vetedge_desk_route() -> str:
 	return "/desk/vetedge-executive-dashboard"
 
@@ -92,11 +142,15 @@ def _get_local_fallback_context(user: str | None = None) -> dict:
 			pass
 	
 	product_app = get_vetedge_product_app()
+	identity = resolve_product_identity(product_app=product_app)
 	return {
 		"user": resolved_user,
 		"tenant": None,
 		"product_app": product_app,
 		"active_product_app": product_app,
+		"product_family": identity["product_family"],
+		"distribution": identity["distribution"],
+		"distribution_context": identity,
 		"branch": None,
 		"active_branch": None,
 		"company": default_company,
@@ -113,7 +167,15 @@ def get_current_vetedge_context(user: str | None = None) -> dict:
 		return _get_local_fallback_context(user)
 	try:
 		from coreedge.adapters.context import get_current_context
-		return get_current_context(user=user)
+		context = get_current_context(user=user)
+		identity = resolve_product_identity(
+			product_app=context.get("product_app") or context.get("active_product_app") or get_vetedge_product_app(),
+			tenant=context.get("tenant"),
+		)
+		context.setdefault("product_family", identity["product_family"])
+		context.setdefault("distribution", identity["distribution"])
+		context.setdefault("distribution_context", identity)
+		return context
 	except (ImportError, ModuleNotFoundError):
 		return _get_local_fallback_context(user)
 
@@ -130,9 +192,18 @@ def has_vetedge_access(product_app: str | None = None, tenant: str | None = None
 	try:
 		from coreedge.adapters.access import has_product_access
 		try:
-			return has_product_access(product_code=app, tenant=tenant, user=user)
+			return has_product_access(
+				product_code=app,
+				tenant=tenant,
+				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
+			)
 		except TypeError:
-			return has_product_access(product_app=app, tenant=tenant, user=user)
+			try:
+				return has_product_access(product_code=app, tenant=tenant, user=user)
+			except TypeError:
+				return has_product_access(product_app=app, tenant=tenant, user=user)
 	except (ImportError, ModuleNotFoundError):
 		return True
 
@@ -169,6 +240,8 @@ def require_vetedge_access(
 				product_code=app,
 				tenant=tenant,
 				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
 				source_app=action,
 				source_doctype=reference_doctype,
 				source_docname=reference_name
@@ -198,19 +271,112 @@ def require_vetedge_access(
 
 def get_vetedge_access_context(product_app: str | None = None, tenant: str | None = None, user: str | None = None) -> dict:
 	if not should_show_coreedge_controls():
-		return {"allowed": True, "enforcement_action": "Allow", "primary_reason_code": "PLATFORM_DISABLED"}
+		return {
+			"allowed": True,
+			"enforcement_action": "Allow",
+			"primary_reason_code": "PLATFORM_DISABLED",
+			"distribution_context": resolve_product_identity(product_app=product_app, tenant=tenant),
+		}
 	app = product_app or get_vetedge_product_app()
 	try:
 		from coreedge.adapters.access import get_access_context
 		try:
-			return get_access_context(product_code=app, tenant=tenant, user=user)
+			context = get_access_context(
+				product_code=app,
+				tenant=tenant,
+				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
+			)
 		except TypeError:
 			try:
-				return get_access_context(product_app=app, tenant=tenant, user=user)
+				context = get_access_context(product_app=app, tenant=tenant, user=user)
 			except TypeError:
-				return get_access_context(user=user)
+				context = get_access_context(user=user)
+		if isinstance(context, dict):
+			context.setdefault("distribution_context", resolve_product_identity(product_app=app, tenant=tenant))
+		return context
 	except (ImportError, ModuleNotFoundError):
-		return {"allowed": True, "enforcement_action": "Allow", "primary_reason_code": "PLATFORM_MISSING"}
+		return {
+			"allowed": True,
+			"enforcement_action": "Allow",
+			"primary_reason_code": "PLATFORM_MISSING",
+			"distribution_context": resolve_product_identity(product_app=app, tenant=tenant),
+		}
+
+def check_vetedge_feature_access(
+	feature_key: str,
+	product_app: str | None = None,
+	tenant: str | None = None,
+	user: str | None = None,
+) -> dict:
+	normalized_feature = normalize_feature_key(feature_key)
+	identity = resolve_product_identity(product_app=product_app, tenant=tenant, feature_key=normalized_feature)
+	if not is_coreedge_enabled():
+		return {
+			"allowed": True,
+			"access_result": "Allowed",
+			"primary_reason_code": "PLATFORM_DISABLED",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+		}
+	if not is_coreedge_available():
+		if should_fail_closed_when_coreedge_missing():
+			return {
+				"allowed": False,
+				"access_result": "Denied",
+				"primary_reason_code": "PLATFORM_MISSING",
+				"feature_key": normalized_feature,
+				"product_family": identity["product_family"],
+				"distribution": identity["distribution"],
+				"distribution_context": identity,
+			}
+		return {
+			"allowed": True,
+			"access_result": "Allowed",
+			"primary_reason_code": "PLATFORM_MISSING_FAIL_OPEN",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+		}
+	try:
+		from coreedge.coreedge.runtime import check_feature_access
+		try:
+			result = check_feature_access(
+				user=user,
+				tenant=tenant,
+				product_app=identity["product_app"],
+				product_family=identity["product_family"],
+				distribution=identity["distribution"],
+				feature_key=normalized_feature,
+			)
+		except TypeError:
+			result = check_feature_access(
+				user=user,
+				tenant=tenant,
+				product_app=identity["product_app"],
+				feature_key=normalized_feature,
+			)
+		if isinstance(result, dict):
+			result.setdefault("feature_key", normalized_feature)
+			result.setdefault("product_family", identity["product_family"])
+			result.setdefault("distribution", identity["distribution"])
+			result.setdefault("distribution_context", identity)
+		return result
+	except (ImportError, ModuleNotFoundError):
+		context = get_vetedge_access_context(product_app=identity["product_app"], tenant=tenant, user=user)
+		return {
+			"allowed": bool(context.get("allowed", True)),
+			"access_result": "Allowed" if context.get("allowed", True) else "Denied",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+			"context": context,
+		}
 
 def get_visible_vetedge_sidebar_items(items: list[dict]) -> list[dict]:
 	if should_show_coreedge_controls():
