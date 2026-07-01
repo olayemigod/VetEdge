@@ -307,11 +307,15 @@ class TestWorkspaceSidebar(TestCase):
 		# Desktop icon/app launcher label remains VetEdge
 		self.assertEqual(doc.label, expected_label)
 		# Desktop icon route points to the intended Veterinary operational landing route
-		self.assertEqual(doc.link_type, "External")
-		self.assertEqual(doc.link, "/desk/vetedge-executive-dashboard")
+		self.assertEqual(doc.link_type, "Workspace Sidebar")
+		self.assertEqual(doc.link_to, "VetEdge")
+		self.assertNotEqual(doc.link, "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(doc.link, "/desk/veterinary-patient")
 
 	def test_no_active_vetedge_or_veterinary_desktop_icon_points_to_patient_list(self):
+		from vetedge.install.dashboard import ensure_vetedge_desktop_icon
+		ensure_vetedge_desktop_icon()
+
 		icons = frappe.get_all(
 			"Desktop Icon",
 			fields=["name", "label", "app", "hidden", "link", "link_to", "link_type"],
@@ -331,7 +335,9 @@ class TestWorkspaceSidebar(TestCase):
 			self.assertNotEqual(icon.link, "/desk/veterinary-patient", icon)
 			self.assertNotEqual(icon.link_to, "Veterinary Patient", icon)
 			if icon.label == "VetEdge":
-				self.assertEqual(icon.link, "/desk/vetedge-executive-dashboard")
+				self.assertEqual(icon.link_type, "Workspace Sidebar")
+				self.assertEqual(icon.link_to, "VetEdge")
+				self.assertNotEqual(icon.link, "/desk/vetedge-executive-dashboard")
 
 	def test_canonical_sidebar_sync_updates_live_record(self):
 		from vetedge.install.dashboard import ensure_vetedge_workspace_sidebar

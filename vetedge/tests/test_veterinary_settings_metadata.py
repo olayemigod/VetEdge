@@ -40,7 +40,10 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "Pharmacy, Dispensary & Stock",
             "Hospitalisation",
             "Grooming & Boarding",
-            "Notifications & Communication",
+            "General Notification Settings",
+            "Email Notification Settings",
+            "SMS Notification Settings",
+            "WhatsApp Notification Settings",
             "Reports & Dashboards",
             "Advanced / System",
         }
@@ -56,6 +59,9 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "hospitalisation_section",
             "pet_services_section",
             "notifications_section",
+            "email_notification_settings_section",
+            "sms_notification_settings_section",
+            "whatsapp_notification_settings_section",
             "advanced_reports_section",
             "security_branch_section",
         ]
@@ -106,9 +112,18 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
 
     def test_larger_sections_are_collapsible(self):
         collapsible_sections = {
+            "registration_billing_section",
+            "vitals_section",
+            "vaccination_section",
+            "appointments_section",
+            "billing_core_section",
+            "treatment_inventory_section",
             "hospitalisation_section",
             "pet_services_section",
             "notifications_section",
+            "email_notification_settings_section",
+            "sms_notification_settings_section",
+            "whatsapp_notification_settings_section",
             "advanced_reports_section",
             "security_branch_section",
         }
@@ -120,11 +135,18 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
         open_sections = {
             "general_section",
             "consultation_section",
-            "billing_core_section",
         }
 
         for fieldname in open_sections:
             self.assertNotEqual(self.fields[fieldname].get("collapsible"), 1)
+
+    def test_notification_backend_mode_remains_documented(self):
+        field = self.fields["notification_backend_mode"]
+
+        self.assertEqual(field.get("label"), "Notification Backend Mode")
+        self.assertIn("local", field.get("options", ""))
+        self.assertIn("processedge_core", field.get("options", ""))
+        self.assertIn("provider-agnostic backend", field.get("description", "").lower())
 
 
 if __name__ == "__main__":

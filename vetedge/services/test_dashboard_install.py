@@ -87,8 +87,8 @@ class TestDashboardInstall(TestCase):
 		frappe_stub.get_doc.assert_not_called()
 		frappe_stub.db.set_value.assert_called_once()
 		update_values = frappe_stub.db.set_value.call_args.args[2]
-		self.assertEqual(update_values["link_type"], "External")
-		self.assertEqual(update_values["link"], "/desk/vetedge-executive-dashboard")
+		self.assertEqual(update_values["link_type"], "Workspace Sidebar")
+		self.assertEqual(update_values["link"], "")
 		self.assertEqual(update_values["link_to"], "VetEdge")
 
 

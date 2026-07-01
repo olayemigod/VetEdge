@@ -5,7 +5,7 @@ app_description = "VetEdge is a veterinary operations system built as a custom F
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
-app_home = "/desk/vetedge-executive-dashboard"
+app_home = "/app/vetedge"
 
 # Apps
 # ------------------

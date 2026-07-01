@@ -8,7 +8,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
-VETEDGE_DESK_ROUTE = "/desk/vetedge-executive-dashboard"
+VETEDGE_DESK_ROUTE = "/app/vetedge"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -179,9 +179,9 @@ def ensure_vetedge_desktop_icon() -> None:
 				"app": "vetedge",
 				"hidden": 0,
 				"icon_type": "Link",
-				"link_type": "External",
+				"link_type": "Workspace Sidebar",
 				"link_to": "VetEdge",
-				"link": VETEDGE_DESK_ROUTE,
+				"link": "",
 				"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
 				"label": default_label,
 				"standard": 1,

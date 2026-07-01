@@ -125,7 +125,7 @@ def get_supported_feature_keys() -> set[str]:
 	return set(VETEDGE_FEATURE_KEYS)
 
 def get_vetedge_desk_route() -> str:
-	return "/desk/vetedge-executive-dashboard"
+	return "/app/vetedge"
 
 def _get_local_fallback_context(user: str | None = None) -> dict:
 	resolved_user = user or frappe.session.user
@@ -491,8 +491,8 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 		for icon in desktop_icons:
 			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
 				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
-				icon["link_type"] = "External"
-				icon["link"] = get_vetedge_desk_route()
+				icon["link_type"] = "Workspace Sidebar"
+				icon["link"] = ""
 				icon["link_to"] = "VetEdge"
 
 	# Always override the app_data app_title and logo for app screen
