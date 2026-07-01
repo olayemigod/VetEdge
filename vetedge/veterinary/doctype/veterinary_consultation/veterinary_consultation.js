@@ -684,7 +684,10 @@ function add_hospitalisation_actions(frm) {
 
 function add_billing_actions(frm) {
 	if (!["Completed", "Cancelled"].includes(frm.doc.status)) {
-		frm.add_custom_button(__("Billing / Payment"), () => {
+		frm.add_custom_button(__("Billing / Payment"), async () => {
+			if (frm.is_dirty()) {
+				await frm.save();
+			}
 			if (window.vetedgeBillingModal?.open) {
 				window.vetedgeBillingModal.open(frm);
 				return;

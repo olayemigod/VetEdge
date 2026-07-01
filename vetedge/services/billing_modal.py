@@ -405,14 +405,26 @@ def is_billing_sessions_enabled() -> bool:
 		return False
 
 
-def get_billing_session_summary_for_source(source_doctype: str, source_name: str) -> dict | None:
+def get_billing_session_summary_for_source(
+	source_doctype: str,
+	source_name: str,
+	sync_source_charges: bool = False,
+) -> dict | None:
 	try:
 		from vetedge.services.billing_core import get_billing_session_summary, resolve_billing_session
 	except Exception:
 		return None
 	if not is_billing_sessions_enabled():
 		return None
-	session = resolve_billing_session(source_doctype, source_name)
+	if sync_source_charges and source_doctype == "Veterinary Consultation":
+		try:
+			from vetedge.services.billing_core import sync_source_charge_payloads_to_billing_session
+
+			session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
+		except Exception:
+			raise
+	else:
+		session = resolve_billing_session(source_doctype, source_name)
 	if not session:
 		return None
 	return get_billing_session_summary(session)
@@ -516,7 +528,11 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	assert_can_read_source(doc)
 	invoice_name = get_linked_invoice_name(doc, config)
 	invoice_summary = get_invoice_summary(invoice_name)
-	session_summary = get_billing_session_summary_for_source(source_doctype, source_name)
+	session_summary = get_billing_session_summary_for_source(
+		source_doctype,
+		source_name,
+		sync_source_charges=source_doctype == "Veterinary Consultation",
+	)
 	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
 	actions = get_available_actions(config, invoice_summary, session_summary)
 	totals = get_billing_modal_totals(session_summary, invoice_summary)
@@ -588,7 +604,20 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 			if is_billing_sessions_enabled():
 				result = sync_source_to_billing_session(source_doctype, source_name)
-				return {"created": True, "result": result, "state": get_billing_modal_state(source_doctype, source_name)}
+				state = get_billing_modal_state(source_doctype, source_name)
+				open_invoice_name = (
+					result.get("open_invoice_name")
+					or result.get("invoice")
+					or state.get("open_invoice_name")
+					or (state.get("invoice") or {}).get("name")
+				)
+				return {
+					"created": True,
+					"invoice": result.get("invoice") or open_invoice_name,
+					"open_invoice_name": open_invoice_name,
+					"result": result,
+					"state": state,
+				}
 		except Exception:
 			raise
 
@@ -601,7 +630,20 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 	method = frappe.get_attr(config.create_invoice_method)
 	result = method(**{config.create_invoice_arg: source_name})
-	return {"created": True, "result": result, "state": get_billing_modal_state(source_doctype, source_name)}
+	state = get_billing_modal_state(source_doctype, source_name)
+	open_invoice_name = (
+		result.get("open_invoice_name")
+		or result.get("invoice")
+		or state.get("open_invoice_name")
+		or (state.get("invoice") or {}).get("name")
+	)
+	return {
+		"created": True,
+		"invoice": result.get("invoice") or open_invoice_name,
+		"open_invoice_name": open_invoice_name,
+		"result": result,
+		"state": state,
+	}
 
 
 @frappe.whitelist()
@@ -635,6 +677,13 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 		reference_doctype=source_doctype,
 		reference_name=source_name
 	)
+	if source_supports_billing_session(source_doctype) and is_billing_sessions_enabled():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		sync_result = sync_source_to_billing_session(source_doctype, source_name)
+		if sync_result.get("requires_confirmation"):
+			frappe.throw(sync_result.get("message") or "Confirm draft invoice cleanup before submitting.", frappe.ValidationError)
+		invoice = sync_result.get("invoice") or invoice
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)

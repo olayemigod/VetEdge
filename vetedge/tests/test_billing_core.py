@@ -89,6 +89,315 @@ class TestBillingCore(TestCase):
 		self.assertEqual(len(session.charges), 1)
 		self.assertEqual(session.charges[0].amount, 125)
 
+	def test_consultation_plan_payload_reuses_legacy_source_charge(self):
+		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
+		new_key = "consultation-plan::Lab Order::VLAB-001::LABROW-1"
+		legacy_charge = frappe._dict(
+			{
+				**charge_payload(legacy_key, "LAB-CBC", 4500),
+				"source_doctype": "Veterinary Lab Order",
+				"source_name": "VLAB-001",
+				"source_detail_name": "LABROW-1",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(current_draft_invoice="SINV-DRAFT", charges=[legacy_charge])
+
+		row = billing_core.add_or_update_session_charge(
+			session,
+			{
+				**charge_payload(new_key, "LAB-CBC", 6200),
+				"source_detail_name": "LABROW-1",
+				"legacy_charge_keys": [legacy_key],
+			},
+		)
+
+		self.assertIs(row, legacy_charge)
+		self.assertEqual(len(session.charges), 1)
+		self.assertEqual(row.charge_key, legacy_key)
+		self.assertEqual(row.rate, 6200)
+		self.assertEqual(row.amount, 6200)
+		self.assertEqual(row.billing_status, "Draft Invoiced")
+
+	def test_consultation_plan_payload_cancels_existing_duplicate_new_charge(self):
+		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
+		new_key = "consultation-plan::Lab Order::VLAB-001::LABROW-1"
+		legacy_charge = frappe._dict(
+			{
+				**charge_payload(legacy_key, "LAB-CBC", 4500),
+				"source_doctype": "Veterinary Lab Order",
+				"source_name": "VLAB-001",
+				"source_detail_name": "LABROW-1",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		duplicate_charge = frappe._dict(
+			{
+				**charge_payload(new_key, "LAB-CBC", 6200),
+				"source_detail_name": "LABROW-1",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[legacy_charge, duplicate_charge])
+		invoice = make_invoice(
+			"SINV-DRAFT",
+			docstatus=0,
+			items=[
+				frappe._dict({"description": f"CBC\nVetEdge billing charge: {legacy_key}", "qty": 1, "rate": 4500, "amount": 4500}),
+				frappe._dict({"description": f"CBC duplicate\nVetEdge billing charge: {new_key}", "qty": 1, "rate": 6200, "amount": 6200}),
+			],
+		)
+
+		row = billing_core.add_or_update_session_charge(
+			session,
+			{
+				**charge_payload(new_key, "LAB-CBC", 7000),
+				"source_detail_name": "LABROW-1",
+				"legacy_charge_keys": [legacy_key],
+			},
+		)
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertIs(row, legacy_charge)
+		self.assertEqual(duplicate_charge.billing_status, "Cancelled")
+		self.assertEqual(result["removed_count"], 1)
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertIn(legacy_key, invoice.get("items")[0].description)
+		self.assertEqual(invoice.get("items")[0].rate, 7000)
+
+	def test_consultation_sync_removes_deleted_legacy_lab_row_from_draft_invoice(self):
+		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
+		manual_key = "consultation-plan::manual::ROW-MANUAL"
+		legacy_charge = frappe._dict(
+			{
+				**charge_payload(legacy_key, "LAB-CBC", 4500),
+				"source_doctype": "Veterinary Lab Order",
+				"source_name": "VLAB-001",
+				"source_detail_name": "LABROW-1",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[legacy_charge])
+		invoice = make_invoice(
+			"SINV-DRAFT",
+			docstatus=0,
+			items=[frappe._dict({"description": f"CBC\nVetEdge billing charge: {legacy_key}", "qty": 1, "rate": 4500, "amount": 4500})],
+		)
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[charge_payload(manual_key, "Dog_Food", 5000)]),
+			patch.object(billing_core.frappe.db, "get_value", return_value="VCON-001"),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(legacy_charge.billing_status, "Cancelled")
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["removed_count"], 1)
+		self.assertEqual(result["added_count"], 1)
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertIn(manual_key, invoice.get("items")[0].description)
+
+	def test_consultation_sync_removes_deleted_manual_row_from_draft_invoice(self):
+		manual_key = "consultation-plan::manual::ROW-MANUAL"
+		manual_charge = frappe._dict(
+			{
+				**charge_payload(manual_key, "Dog_Food", 5000),
+				"source_doctype": "Veterinary Consultation",
+				"source_name": "VCON-001",
+				"source_detail_name": "ROW-MANUAL",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[manual_charge])
+		invoice = make_invoice(
+			"SINV-DRAFT",
+			docstatus=0,
+			items=[frappe._dict({"description": f"Dog food\nVetEdge billing charge: {manual_key}", "qty": 1, "rate": 5000, "amount": 5000})],
+		)
+
+		with patch.object(billing_core, "get_source_charge_payloads", return_value=[]):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(manual_charge.billing_status, "Cancelled")
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["removed_count"], 1)
+		self.assertTrue(result["requires_confirmation"])
+		self.assertEqual(invoice.get("items"), [])
+
+	def test_consultation_sync_removes_deleted_legacy_vaccination_row_from_draft_invoice(self):
+		legacy_key = "Veterinary Vaccination Record:VVAC-001:Vaccination:Rabies"
+		legacy_charge = frappe._dict(
+			{
+				**charge_payload(legacy_key, "VAC-RAB", 7500),
+				"source_doctype": "Veterinary Vaccination Record",
+				"source_name": "VVAC-001",
+				"source_detail_name": "Rabies",
+				"invoice": "SINV-DRAFT",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[legacy_charge])
+		invoice = make_invoice(
+			"SINV-DRAFT",
+			docstatus=0,
+			items=[frappe._dict({"description": f"Rabies\nVetEdge billing charge: {legacy_key}", "qty": 1, "rate": 7500, "amount": 7500})],
+		)
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[]),
+			patch.object(billing_core.frappe.db, "get_value", return_value="VCON-001"),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(legacy_charge.billing_status, "Cancelled")
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["removed_count"], 1)
+		self.assertTrue(result["requires_confirmation"])
+		self.assertEqual(invoice.get("items"), [])
+
+	def test_consultation_sync_protects_removed_submitted_legacy_lab_row(self):
+		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
+		legacy_charge = frappe._dict(
+			{
+				**charge_payload(legacy_key, "LAB-CBC", 4500),
+				"source_doctype": "Veterinary Lab Order",
+				"source_name": "VLAB-001",
+				"source_detail_name": "LABROW-1",
+				"invoice": "SINV-SUB",
+				"billing_status": "Submitted Invoiced",
+			}
+		)
+		session = make_session(latest_invoice="SINV-SUB", charges=[legacy_charge])
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[]),
+			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name == "SINV-SUB"),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=lambda doctype, name, fieldname=None, **kwargs: 1 if doctype == "Sales Invoice" else "VCON-001"),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(legacy_charge.billing_status, "Submitted Invoiced")
+		self.assertEqual(legacy_charge.invoice, "SINV-SUB")
+
+	def test_consultation_active_vaccination_row_is_restored_before_billing(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(name="ROW-MANUAL", item="Dog_Food", qty=1, rate=5000, source_type=""),
+			],
+		)
+		vaccination = frappe._dict(doctype="Veterinary Vaccination Record", name="VVAC-001", status="Draft", docstatus=0)
+		settings = SimpleNamespace(enabled=False, consultation_item=None, enable_treatment_billing=True)
+
+		def restore_vaccination(doc):
+			consultation.planned_treatments.append(
+				frappe._dict(
+					name="ROW-VAC",
+					item="VAC-RAB",
+					qty=1,
+					rate=7500,
+					source_type="Vaccination",
+					source_document=doc.name,
+					source_detail_name="Rabies",
+				)
+			)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core, "get_active_consultation_lab_orders", return_value=[]),
+			patch.object(billing_core, "get_active_consultation_vaccination_records", return_value=[vaccination]),
+			patch.object(billing_core, "sync_vaccination_doc_to_consultation_plan", side_effect=restore_vaccination),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core.frappe.db, "get_value", return_value=None),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([payload["item_code"] for payload in payloads], ["Dog_Food", "VAC-RAB"])
+		self.assertEqual(payloads[1]["charge_key"], "consultation-plan::Vaccination::VVAC-001::Rabies")
+
+	def test_consultation_with_plan_history_does_not_fallback_after_all_rows_removed(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[],
+		)
+		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
+		session = make_session(
+			charges=[
+				frappe._dict(
+					{
+						**charge_payload(legacy_key, "LAB-CBC", 4500),
+						"source_doctype": "Veterinary Lab Order",
+						"source_name": "VLAB-001",
+						"source_detail_name": "LABROW-1",
+					}
+				)
+			]
+		)
+		settings = SimpleNamespace(enabled=False, consultation_item=None, enable_treatment_billing=True)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core.frappe.db, "get_value", return_value="VCON-001"),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[charge_payload("legacy-lab", "LAB-CBC", 4500)]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001", session=session)
+
+		self.assertEqual(payloads, [])
+
+	def test_consultation_plan_rows_disable_legacy_lab_and_vaccination_fallback(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(name="ROW-MANUAL", item="Dog_Food", qty=1, rate=5000, source_type=""),
+			],
+		)
+		settings = SimpleNamespace(enabled=False, consultation_item=None, enable_treatment_billing=True)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[charge_payload("legacy-lab", "LAB-CBC", 4500)]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[charge_payload("legacy-vac", "VAC-RAB", 7500)]),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([payload["item_code"] for payload in payloads], ["Dog_Food"])
+		self.assertEqual(payloads[0]["charge_key"], "consultation-plan::manual::ROW-MANUAL")
+
 	def test_submitted_charge_is_not_mutated_by_charge_sync(self):
 		session = make_session(charges=[frappe._dict({**charge_payload(), "billing_status": "Submitted Invoiced", "amount": 100})])
 
@@ -108,6 +417,31 @@ class TestBillingCore(TestCase):
 		self.assertEqual(result["added_count"], 0)
 		self.assertEqual(result["updated_count"], 1)
 		self.assertEqual(len(invoice.get("items")), 1)
+
+	def test_invoice_sync_removes_retired_items_while_updating_pending_items(self):
+		removed_key = "consultation-plan::manual::REMOVED"
+		active_key = "consultation-plan::manual::ACTIVE"
+		removed_charge = frappe._dict({**charge_payload(removed_key, "Pet Bathing", 5100), "invoice": "SINV-DRAFT", "billing_status": "Cancelled"})
+		active_charge = frappe._dict({**charge_payload(active_key, "Dog_Food", 6900), "invoice": "SINV-DRAFT", "billing_status": "Draft Invoiced"})
+		session = make_session(current_draft_invoice="SINV-DRAFT", latest_invoice="SINV-DRAFT", charges=[removed_charge, active_charge])
+		invoice = make_invoice(
+			"SINV-DRAFT",
+			docstatus=0,
+			items=[
+				frappe._dict({"description": f"Pet Bathing\nVetEdge billing charge: {removed_key}", "qty": 1, "rate": 5100, "amount": 5100}),
+				frappe._dict({"description": f"Dog food\nVetEdge billing charge: {active_key}", "qty": 1, "rate": 100, "amount": 100}),
+			],
+		)
+
+		with billing_core_context(session, invoice):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["removed_count"], 1)
+		self.assertEqual(result["updated_count"], 1)
+		self.assertEqual(len(invoice.get("items")), 1)
+		self.assertIn(active_key, invoice.get("items")[0].description)
+		self.assertEqual(invoice.get("items")[0].rate, 6900)
+		invoice.save.assert_called_once()
 
 	def test_empty_draft_invoice_removal_requires_confirmation(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
@@ -326,7 +660,7 @@ class TestBillingCore(TestCase):
 				frappe._dict(name="ROW-2", item="TREAT-ITEM", qty=1, uom="Nos", rate=100, description="Treatment B"),
 			],
 		)
-		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=True)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=False)
 
 		with (
 			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
@@ -341,8 +675,251 @@ class TestBillingCore(TestCase):
 
 		charge_keys = [row["charge_key"] for row in payloads]
 		self.assertEqual(len(charge_keys), 2)
-		self.assertIn("Veterinary Consultation:VCON-001:Treatment:ROW-1", charge_keys)
-		self.assertIn("Veterinary Consultation:VCON-001:Treatment:ROW-2", charge_keys)
+		self.assertIn("consultation-plan::manual::ROW-1", charge_keys)
+		self.assertIn("consultation-plan::manual::ROW-2", charge_keys)
+
+	def test_consultation_manual_plan_rows_are_billed_without_treatment_setting_gate(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="ROW-MANUAL",
+					item="TREAT-ITEM",
+					qty=2,
+					rate=1500,
+					description="Manual treatment",
+					billing_status="",
+					payment_status="",
+					source_type="",
+				),
+			],
+		)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=False)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual(len(payloads), 1)
+		self.assertEqual(payloads[0]["charge_key"], "consultation-plan::manual::ROW-MANUAL")
+		self.assertEqual(payloads[0]["item_code"], "TREAT-ITEM")
+		self.assertEqual(payloads[0]["qty"], 2)
+		self.assertEqual(payloads[0]["rate"], 1500)
+
+	def test_consultation_manual_plan_rows_are_billed_when_consultation_fee_disabled(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="ROW-DOG-FOOD",
+					item="Dog_Food",
+					qty=1,
+					rate=5000,
+					billing_status="Pending",
+					payment_status="Not Billed",
+					source_type="",
+				),
+			],
+		)
+		settings = SimpleNamespace(enabled=False, consultation_item=None, enable_treatment_billing=True)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual(len(payloads), 1)
+		self.assertEqual(payloads[0]["charge_key"], "consultation-plan::manual::ROW-DOG-FOOD")
+		self.assertEqual(payloads[0]["item_code"], "Dog_Food")
+		self.assertEqual(payloads[0]["rate"], 5000)
+
+	def test_consultation_plan_row_collector_accepts_document_like_child_rows(self):
+		class DocumentLikeRow:
+			def __init__(self, **values):
+				self.values = values
+				self.name = values.get("name")
+				self.idx = values.get("idx")
+
+			def get(self, fieldname, default=None):
+				return self.values.get(fieldname, default)
+
+		consultation = frappe._dict(
+			planned_treatments=[
+				DocumentLikeRow(
+					name="ROW-DOC-LIKE",
+					idx=1,
+					item="Dog_Food",
+					qty=1,
+					rate=5000,
+					billing_status="Pending",
+					payment_status="Not Billed",
+					source_type="",
+				),
+			]
+		)
+
+		rows = billing_core.get_eligible_consultation_plan_rows(consultation)
+
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0].item, "Dog_Food")
+		self.assertEqual(rows[0].source_type, "Manual Treatment")
+		self.assertEqual(billing_core.get_consultation_plan_charge_key(rows[0]), "consultation-plan::manual::ROW-DOC-LIKE")
+
+	def test_consultation_manual_plan_row_alias_fields_are_billed(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="ROW-ALIAS",
+					item_code="ALIAS-ITEM",
+					quantity=3,
+					price=700,
+					item_name="Alias treatment",
+					source_type=None,
+				),
+			],
+		)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=False)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			price_list_context(item_standard_rate=0, item_prices={}),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual(len(payloads), 1)
+		self.assertEqual(payloads[0]["charge_key"], "consultation-plan::manual::ROW-ALIAS")
+		self.assertEqual(payloads[0]["item_code"], "ALIAS-ITEM")
+		self.assertEqual(payloads[0]["qty"], 3)
+		self.assertEqual(payloads[0]["rate"], 700)
+
+	def test_consultation_mixed_manual_vaccination_and_lab_plan_rows_are_billed(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="ROW-DOG-FOOD",
+					item="Dog_Food",
+					description="Dog food",
+					qty=1,
+					rate=5000,
+					amount=5000,
+					billing_status="Pending",
+					payment_status="Not Billed",
+					source_type="",
+					source_document=None,
+					source_detail_name=None,
+				),
+				frappe._dict(
+					name="ROW-DHLPP",
+					item="DHLPP",
+					description="DHLPP",
+					qty=1,
+					rate=7000,
+					source_type="Vaccination",
+					source_document="VVAC-001",
+					source_detail_name="DHLPP",
+				),
+				frappe._dict(
+					name="ROW-OSPD",
+					item="OSPD",
+					description="OSPD",
+					qty=1,
+					rate=3000,
+					source_type="Lab Order",
+					source_document="VLAB-001",
+					source_detail_name="OSPD",
+				),
+				frappe._dict(
+					name="ROW-TTTDR",
+					item="TTTDR",
+					description="TTTDR",
+					qty=1,
+					rate=4500,
+					source_type="Lab Order",
+					source_document="VLAB-001",
+					source_detail_name="TTTDR",
+				),
+			],
+		)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=False)
+		legacy_lab_payloads = [
+			{"source_doctype": "Veterinary Lab Order", "source_name": "VLAB-001", "source_detail_name": "OSPD", "item_code": "OSPD", "rate": 1},
+			{"source_doctype": "Veterinary Lab Order", "source_name": "VLAB-001", "source_detail_name": "TTTDR", "item_code": "TTTDR", "rate": 1},
+		]
+		legacy_vaccination_payloads = [
+			{"source_doctype": "Veterinary Vaccination Record", "source_name": "VVAC-001", "source_detail_name": "DHLPP", "item_code": "DHLPP", "rate": 1},
+		]
+
+		def fake_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, **kwargs):
+			return {
+				"source_doctype": doc.doctype,
+				"source_name": doc.name,
+				"source_detail_name": source_detail,
+				"charge_key": f"{doc.doctype}:{doc.name}:{source_type}:{source_detail}",
+				"item_code": item_code,
+				"qty": qty,
+				"rate": rate,
+				"description": description,
+			}
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core.frappe.db, "get_value", return_value=None),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=legacy_lab_payloads),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=legacy_vaccination_payloads),
+			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([payload["item_code"] for payload in payloads], ["Dog_Food", "DHLPP", "OSPD", "TTTDR"])
+		self.assertEqual(
+			[payload["charge_key"] for payload in payloads],
+			[
+				"consultation-plan::manual::ROW-DOG-FOOD",
+				"consultation-plan::Vaccination::VVAC-001::DHLPP",
+				"consultation-plan::Lab Order::VLAB-001::OSPD",
+				"consultation-plan::Lab Order::VLAB-001::TTTDR",
+			],
+		)
+		self.assertEqual([payload["rate"] for payload in payloads], [5000, 7000, 3000, 4500])
 
 	def test_consultation_lab_and_vaccination_plan_rows_use_edited_child_rates(self):
 		consultation = frappe._dict(
@@ -352,6 +929,14 @@ class TestBillingCore(TestCase):
 			primary_owner="CUST-001",
 			company="Company A",
 			planned_treatments=[
+				frappe._dict(
+					name="MANUAL-ROW-1",
+					item="TREAT-ITEM",
+					qty=2,
+					uom="Nos",
+					rate=1250,
+					description="Manual treatment",
+				),
 				frappe._dict(
 					name="PLAN-LAB-1",
 					item="LAB-CBC",
@@ -376,7 +961,7 @@ class TestBillingCore(TestCase):
 				),
 			],
 		)
-		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=True)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=False)
 
 		def fake_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, **kwargs):
 			return {
@@ -398,22 +983,90 @@ class TestBillingCore(TestCase):
 			patch.object(
 				billing_core,
 				"get_lab_order_charge_payloads_for_consultation",
-				return_value=[{"source_doctype": "Veterinary Lab Order", "source_name": "VLAB-001", "item_code": "LAB-CBC", "rate": 4500}],
+				return_value=[
+					{
+						"source_doctype": "Veterinary Lab Order",
+						"source_name": "VLAB-001",
+						"source_detail_name": "LABROW-1",
+						"item_code": "LAB-CBC",
+						"rate": 4500,
+					}
+				],
 			),
 			patch.object(
 				billing_core,
 				"get_vaccination_charge_payloads_for_consultation",
-				return_value=[{"source_doctype": "Veterinary Vaccination Record", "source_name": "VVAC-001", "item_code": "VAC-RAB", "rate": 7500}],
+				return_value=[
+					{
+						"source_doctype": "Veterinary Vaccination Record",
+						"source_name": "VVAC-001",
+						"source_detail_name": "Rabies",
+						"item_code": "VAC-RAB",
+						"rate": 7500,
+					}
+				],
 			),
 			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
 		):
 			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
 
-		self.assertEqual(len(payloads), 2)
-		self.assertEqual(payloads[0]["charge_key"], "Veterinary Consultation:VCON-001:Lab Order:LABROW-1")
+		self.assertEqual(len(payloads), 3)
+		self.assertEqual(payloads[0]["charge_key"], "consultation-plan::manual::MANUAL-ROW-1")
+		self.assertEqual(payloads[0]["rate"], 1250)
+		self.assertEqual(payloads[1]["charge_key"], "consultation-plan::Lab Order::VLAB-001::LABROW-1")
+		self.assertEqual(payloads[1]["rate"], 6200)
+		self.assertEqual(payloads[2]["charge_key"], "consultation-plan::Vaccination::VVAC-001::Rabies")
+		self.assertEqual(payloads[2]["rate"], 8100)
+
+	def test_consultation_plan_fallback_does_not_add_missing_source_rows_when_plan_exists(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="PLAN-LAB-1",
+					item="LAB-CBC",
+					qty=1,
+					rate=6200,
+					source_type="Lab Order",
+					source_document="VLAB-001",
+					source_detail_name="LABROW-1",
+				),
+			],
+		)
+		settings = SimpleNamespace(enabled=True, consultation_item=None, enable_treatment_billing=True)
+		legacy_payloads = [
+			{"source_doctype": "Veterinary Lab Order", "source_name": "VLAB-001", "source_detail_name": "LABROW-1", "item_code": "LAB-CBC", "rate": 4500},
+			{"source_doctype": "Veterinary Lab Order", "source_name": "VLAB-001", "source_detail_name": "LABROW-2", "item_code": "LAB-UA", "rate": 3000},
+		]
+
+		def fake_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, **kwargs):
+			return {
+				"source_doctype": doc.doctype,
+				"source_name": doc.name,
+				"source_detail_name": source_detail,
+				"charge_key": f"{doc.doctype}:{doc.name}:{source_type}:{source_detail}",
+				"item_code": item_code,
+				"rate": rate,
+			}
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core.frappe.db, "get_value", return_value=None),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=legacy_payloads),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([row["item_code"] for row in payloads], ["LAB-CBC"])
 		self.assertEqual(payloads[0]["rate"], 6200)
-		self.assertEqual(payloads[1]["charge_key"], "Veterinary Consultation:VCON-001:Vaccination:Rabies")
-		self.assertEqual(payloads[1]["rate"], 8100)
 
 	def test_consultation_parent_submitted_then_new_treatment_row_creates_pending_charge(self):
 		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"
@@ -483,6 +1136,63 @@ class TestBillingCore(TestCase):
 		self.assertEqual(len(second.get("items")), 1)
 		self.assertIn(new_treatment_key, second.get("items")[0].description)
 		self.assertNotIn(submitted_key, second.get("items")[0].description)
+
+	def test_create_next_invoice_after_submitted_consultation_contains_only_new_plan_rows(self):
+		submitted_manual = "consultation-plan::manual::ROW-MANUAL-OLD"
+		submitted_lab_legacy = "Veterinary Lab Order:VLAB-OLD:Lab:LAB-OLD"
+		submitted_vaccination = "consultation-plan::Vaccination::VVAC-OLD::Rabies"
+		new_manual = "consultation-plan::manual::ROW-MANUAL-NEW"
+		new_lab = "consultation-plan::Lab Order::VLAB-NEW::LAB-NEW"
+		new_vaccination = "consultation-plan::Vaccination::VVAC-NEW::DHLPP"
+		submitted_charges = [
+			frappe._dict({**charge_payload(submitted_manual, "Dog_Food", 100), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+			frappe._dict({**charge_payload(submitted_lab_legacy, "LAB-CBC", 200), "source_doctype": "Veterinary Lab Order", "source_name": "VLAB-OLD", "source_detail_name": "LAB-OLD", "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+			frappe._dict({**charge_payload(submitted_vaccination, "VAC-RAB", 300), "invoice": "SINV-SUB", "billing_status": "Submitted Invoiced"}),
+		]
+		new_payloads = [
+			charge_payload(new_manual, "Pet Bathing", 400),
+			charge_payload(new_lab, "LAB-UA", 500),
+			charge_payload(new_vaccination, "DHLPP", 600),
+		]
+		session = make_session(current_draft_invoice=None, latest_invoice="SINV-SUB", charges=submitted_charges)
+		source_payloads = [
+			charge_payload(submitted_manual, "Dog_Food", 125),
+			{**charge_payload("consultation-plan::Lab Order::VLAB-OLD::LAB-OLD", "LAB-CBC", 225), "legacy_charge_keys": [submitted_lab_legacy]},
+			charge_payload(submitted_vaccination, "VAC-RAB", 325),
+			*new_payloads,
+		]
+		submitted = make_invoice(
+			"SINV-SUB",
+			docstatus=1,
+			items=[
+				frappe._dict({"description": f"Old manual\nVetEdge billing charge: {submitted_manual}"}),
+				frappe._dict({"description": f"Old lab\nVetEdge billing charge: {submitted_lab_legacy}"}),
+				frappe._dict({"description": f"Old vaccination\nVetEdge billing charge: {submitted_vaccination}"}),
+			],
+			outstanding_amount=0,
+		)
+		second = make_invoice("SINV-NEW", docstatus=0, items=[])
+
+		with (
+			patch.object(billing_core, "get_source_charge_payloads", return_value=source_payloads),
+			patch.object(billing_core.frappe.db, "exists", side_effect=lambda doctype, name=None: doctype == "Sales Invoice" and name == "SINV-SUB"),
+			patch.object(billing_core.frappe.db, "get_value", return_value=1),
+		):
+			billing_core.sync_single_source_to_billing_session(session, "Veterinary Consultation", "VCON-001")
+		with billing_core_context(session, submitted, created_invoice=second, paid_amount=100):
+			result = billing_core.sync_session_charges_to_invoice(session)
+
+		self.assertEqual(result["invoice"], "SINV-NEW")
+		self.assertEqual(len(submitted.get("items")), 3)
+		submitted.save.assert_not_called()
+		self.assertEqual(len(second.get("items")), 3)
+		descriptions = "\n".join(row.description for row in second.get("items"))
+		self.assertIn(new_manual, descriptions)
+		self.assertIn(new_lab, descriptions)
+		self.assertIn(new_vaccination, descriptions)
+		self.assertNotIn(submitted_manual, descriptions)
+		self.assertNotIn(submitted_lab_legacy, descriptions)
+		self.assertNotIn(submitted_vaccination, descriptions)
 
 	def test_diagnose_unbilled_items_reports_submitted_draft_and_pending_keys(self):
 		submitted_key = "Veterinary Consultation:VCON-001:Consultation Fee:VCON-001"

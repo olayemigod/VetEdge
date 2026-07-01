@@ -284,8 +284,11 @@ def upsert_source_charge_payload(session, payload: dict):
 	if not charge_key:
 		frappe.throw("Billing Session charge_key is required.", frappe.ValidationError)
 
-	existing = get_existing_charge_by_key(session, charge_key)
-	values = normalize_charge_payload(charge, charge_key, session)
+	existing, redundant = resolve_existing_charge_for_payload(session, charge, charge_key)
+	for row in redundant:
+		if not is_charge_already_submitted(row) and row.get("billing_status") not in {"Cancelled", "Skipped"}:
+			row.billing_status = "Cancelled"
+	values = normalize_charge_payload(charge, existing.get("charge_key") if existing else charge_key, session)
 	if existing:
 		if is_charge_already_submitted(existing) or existing.get("billing_status") in {"Cancelled", "Skipped"}:
 			return existing
@@ -297,6 +300,31 @@ def upsert_source_charge_payload(session, payload: dict):
 	row = session.append("charges", values)
 	row.billing_status = row.get("billing_status") or "Pending"
 	return row
+
+
+def resolve_existing_charge_for_payload(session, charge, charge_key: str):
+	exact = get_existing_charge_by_key(session, charge_key)
+	legacy = [
+		get_existing_charge_by_key(session, key)
+		for key in charge.get("legacy_charge_keys") or []
+		if key and key != charge_key
+	]
+	legacy = [row for row in legacy if row]
+	if legacy:
+		preferred = get_preferred_existing_charge(legacy)
+		redundant = [row for row in [exact, *legacy] if row and row is not preferred]
+		return preferred, redundant
+	return exact, []
+
+
+def get_preferred_existing_charge(rows: list):
+	for row in rows:
+		if is_charge_already_submitted(row):
+			return row
+	for row in rows:
+		if row.get("invoice"):
+			return row
+	return rows[0]
 
 
 def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation_type: str | None = None):
@@ -334,7 +362,7 @@ def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation
 		session.save()
 		return {"session": session.name, "invoice": active_draft.name if active_draft else None, "created": False, "added_count": 0, "updated_count": 0, "removed_count": removed_count}
 
-	invoice, created = create_or_update_draft_invoice_for_session(session, pending)
+	invoice, created = create_or_update_draft_invoice_for_session(session, pending, active_draft=active_draft)
 	if not invoice:
 		refresh_billing_session_totals(session)
 		session.save()
@@ -363,10 +391,10 @@ def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation
 	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated, "removed_count": removed_count}
 
 
-def create_or_update_draft_invoice_for_session(session, pending_charges=None):
+def create_or_update_draft_invoice_for_session(session, pending_charges=None, active_draft=None):
 	session = ensure_session_doc(session)
 	reconcile_session_charge_statuses(session)
-	invoice = _get_active_draft_invoice(session)
+	invoice = active_draft or _get_active_draft_invoice(session)
 	pending_charges = list(pending_charges) if pending_charges is not None else _get_pending_charges_for_invoice(session, invoice)
 	if invoice:
 		apply_invoice_session_defaults(invoice, session)
@@ -689,6 +717,8 @@ def sync_single_source_to_billing_session(session, source_doctype: str, source_n
 	for payload in payloads:
 		add_or_update_session_charge(session, payload)
 	retire_missing_source_charges(session, source_doctype, source_name, payloads)
+	if source_doctype == "Veterinary Consultation":
+		retire_missing_consultation_plan_charges(session, source_name, payloads)
 	session.save()
 	return session
 
@@ -696,13 +726,33 @@ def sync_single_source_to_billing_session(session, source_doctype: str, source_n
 def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=None, trigger_source_name=None):
 	session = ensure_session_doc(session)
 	for source_doctype, source_name in find_related_billable_sources_for_session(session, trigger_source_doctype, trigger_source_name):
-		if source_doctype and source_name:
-			payloads = get_source_charge_payloads(source_doctype, source_name, session)
-			for payload in payloads:
-				add_or_update_session_charge(session, payload)
-			retire_missing_source_charges(session, source_doctype, source_name, payloads)
+		if not source_doctype or not source_name:
+			continue
+		if should_skip_related_source_for_consultation_plan(source_doctype, source_name):
+			continue
+		payloads = get_source_charge_payloads(source_doctype, source_name, session)
+		for payload in payloads:
+			add_or_update_session_charge(session, payload)
+		retire_missing_source_charges(session, source_doctype, source_name, payloads)
+		if source_doctype == "Veterinary Consultation":
+			retire_missing_consultation_plan_charges(session, source_name, payloads)
 	session.save()
 	return session
+
+
+def should_skip_related_source_for_consultation_plan(source_doctype: str, source_name: str) -> bool:
+	if source_doctype not in {"Veterinary Lab Order", "Veterinary Vaccination Record"}:
+		return False
+	consultation = get_source_linked_consultation(source_doctype, source_name)
+	return bool(consultation and consultation_has_eligible_plan_rows(consultation))
+
+
+def consultation_has_eligible_plan_rows(consultation_name: str) -> bool:
+	try:
+		doc = frappe.get_doc("Veterinary Consultation", consultation_name)
+	except Exception:
+		return False
+	return bool(get_eligible_consultation_plan_rows(doc))
 
 
 def retire_missing_source_charges(session, source_doctype: str, source_name: str, active_payloads: list[dict]) -> int:
@@ -719,6 +769,54 @@ def retire_missing_source_charges(session, source_doctype: str, source_name: str
 			row.billing_status = "Cancelled"
 			retired += 1
 	return retired
+
+
+def retire_missing_consultation_plan_charges(session, consultation_name: str, active_payloads: list[dict]) -> int:
+	active_keys = get_active_payload_charge_keys(active_payloads)
+	retired = 0
+	for row in session.get("charges") or []:
+		if row.get("charge_key") in active_keys:
+			continue
+		if is_charge_already_submitted(row) or row.get("billing_status") in {"Submitted Invoiced", "Paid"}:
+			continue
+		if not is_consultation_plan_session_charge(row, consultation_name):
+			continue
+		if row.get("billing_status") != "Cancelled":
+			row.billing_status = "Cancelled"
+			retired += 1
+	return retired
+
+
+def get_active_payload_charge_keys(active_payloads: list[dict]) -> set[str]:
+	keys = set()
+	for payload in active_payloads:
+		key = payload.get("charge_key") or build_charge_key(payload)
+		if key:
+			keys.add(key)
+		keys.update(key for key in payload.get("legacy_charge_keys") or [] if key)
+	return keys
+
+
+def is_consultation_plan_session_charge(row, consultation_name: str) -> bool:
+	charge_key = row.get("charge_key") or ""
+	if charge_key.startswith("consultation-plan::"):
+		return row.get("source_doctype") == "Veterinary Consultation" and row.get("source_name") == consultation_name
+	source_doctype = row.get("source_doctype")
+	if source_doctype == "Veterinary Lab Order":
+		return get_source_linked_consultation(source_doctype, row.get("source_name")) == consultation_name
+	if source_doctype == "Veterinary Vaccination Record":
+		return get_source_linked_consultation(source_doctype, row.get("source_name")) == consultation_name
+	return False
+
+
+def get_source_linked_consultation(source_doctype: str, source_name: str | None) -> str | None:
+	if not source_name:
+		return None
+	fieldname = "consultation" if source_doctype == "Veterinary Lab Order" else "linked_consultation"
+	try:
+		return frappe.db.get_value(source_doctype, source_name, fieldname)
+	except Exception:
+		return None
 
 
 def remove_retired_charge_items_from_draft_invoice(session, invoice) -> int:
@@ -1348,55 +1446,237 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 
 	doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	settings = get_consultation_billing_settings()
-	if not settings.enabled:
+	if not (settings.enabled or settings.enable_treatment_billing):
 		return []
+	if restore_active_source_linked_consultation_plan_rows(doc):
+		doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
 	payloads = []
-	if settings.consultation_item:
+	if settings.enabled and settings.consultation_item:
 		payloads.append(build_source_charge(doc, "Consultation Fee", doc.name, settings.consultation_item, 1, None, None, cost_center))
 	registration_payload = get_registration_charge_payload_for_consultation(doc, session)
 	if registration_payload:
 		payloads.append(registration_payload)
-	if settings.enable_treatment_billing:
-		planned_lab_sources = set()
-		planned_vaccination_sources = set()
-		for row in doc.get("planned_treatments") or []:
-			if row.get("item"):
-				source_type = row.get("source_type") or "Treatment"
-				source_document = row.get("source_document")
-				if source_type == "Lab Order" and source_document:
-					planned_lab_sources.add(source_document)
-				elif source_type == "Vaccination" and source_document:
-					planned_vaccination_sources.add(source_document)
-				master_price_list = frappe.db.get_value("Veterinary Treatment Item", {"item": row.item, "disabled": 0}, "price_list")
-				payloads.append(
-					build_source_charge(
-						doc,
-						source_type,
-						row.get("source_detail_name") or row.get("name") or f"{row.item}:{row.get('idx') or 0}",
-						row.item,
-						row.get("qty"),
-						row.get("uom"),
-						row.get("rate"),
-						cost_center,
-						row.get("description"),
-						master_price_list=master_price_list,
-					)
-				)
-	else:
-		planned_lab_sources = set()
-		planned_vaccination_sources = set()
+	planned_source_keys = set()
+	planned_rows = get_eligible_consultation_plan_rows(doc)
+	for row in planned_rows:
+		source_key = get_consultation_plan_source_key(row)
+		if source_key:
+			planned_source_keys.add(source_key)
+		master_price_list = frappe.db.get_value("Veterinary Treatment Item", {"item": row.item, "disabled": 0}, "price_list")
+		payload = build_source_charge(
+			doc,
+			row.source_type,
+			row.source_detail,
+			row.item,
+			row.qty,
+			row.uom,
+			row.rate,
+			cost_center,
+			row.description,
+			source_detail_name=row.source_detail,
+			master_price_list=master_price_list,
+		)
+		payload["charge_key"] = get_consultation_plan_charge_key(row)
+		payload["source_detail_name"] = row.source_detail
+		payload["legacy_charge_keys"] = get_consultation_plan_legacy_charge_keys(row)
+		payloads.append(payload)
+	if should_use_consultation_plan_as_source(doc, session, planned_rows):
+		return payloads
 	payloads.extend(
 		payload
 		for payload in get_lab_order_charge_payloads_for_consultation(doc.name, cost_center)
-		if payload.get("source_name") not in planned_lab_sources
+		if get_payload_source_key(payload) not in planned_source_keys
 	)
 	payloads.extend(
 		payload
 		for payload in get_vaccination_charge_payloads_for_consultation(doc.name, cost_center)
-		if payload.get("source_name") not in planned_vaccination_sources
+		if get_payload_source_key(payload) not in planned_source_keys
 	)
 	return payloads
+
+
+def restore_active_source_linked_consultation_plan_rows(doc) -> bool:
+	changed = False
+	if not doc or doc.doctype != "Veterinary Consultation":
+		return False
+	consultation_name = doc.name
+	for lab_order in get_active_consultation_lab_orders(consultation_name):
+		before = len(doc.get("planned_treatments") or [])
+		sync_lab_order_doc_to_consultation_plan(lab_order)
+		if len(frappe.get_doc("Veterinary Consultation", consultation_name).get("planned_treatments") or []) > before:
+			changed = True
+			doc = frappe.get_doc("Veterinary Consultation", consultation_name)
+	for vaccination in get_active_consultation_vaccination_records(consultation_name):
+		before = len(doc.get("planned_treatments") or [])
+		sync_vaccination_doc_to_consultation_plan(vaccination)
+		if len(frappe.get_doc("Veterinary Consultation", consultation_name).get("planned_treatments") or []) > before:
+			changed = True
+			doc = frappe.get_doc("Veterinary Consultation", consultation_name)
+	return changed
+
+
+def get_active_consultation_lab_orders(consultation_name: str) -> list:
+	if not consultation_name or not frappe.db.exists("DocType", "Veterinary Lab Order") or not doctype_has_field("Veterinary Lab Order", "consultation"):
+		return []
+	return [
+		doc
+		for doc in (frappe.get_doc("Veterinary Lab Order", row.name) for row in frappe.get_all("Veterinary Lab Order", filters={"consultation": consultation_name}, fields=["name"]))
+		if source_document_is_active(doc)
+	]
+
+
+def get_active_consultation_vaccination_records(consultation_name: str) -> list:
+	if not consultation_name or not frappe.db.exists("DocType", "Veterinary Vaccination Record") or not doctype_has_field("Veterinary Vaccination Record", "linked_consultation"):
+		return []
+	return [
+		doc
+		for doc in (frappe.get_doc("Veterinary Vaccination Record", row.name) for row in frappe.get_all("Veterinary Vaccination Record", filters={"linked_consultation": consultation_name}, fields=["name"]))
+		if source_document_is_active(doc)
+	]
+
+
+def source_document_is_active(doc) -> bool:
+	return cint(doc.get("docstatus")) != 2 and doc.get("status") != "Cancelled"
+
+
+def sync_lab_order_doc_to_consultation_plan(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_lab_order_to_consultation_plan
+
+	sync_lab_order_to_consultation_plan(doc)
+
+
+def sync_vaccination_doc_to_consultation_plan(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_vaccination_to_consultation_plan
+
+	sync_vaccination_to_consultation_plan(doc)
+
+
+def should_use_consultation_plan_as_source(doc, session=None, planned_rows=None) -> bool:
+	if planned_rows:
+		return True
+	if doc.get("planned_treatments"):
+		return True
+	if not session:
+		return False
+	session = ensure_session_doc(session)
+	return any(is_consultation_plan_session_charge(row, doc.name) for row in session.get("charges") or [])
+
+
+def get_eligible_consultation_plan_rows(doc) -> list[dict]:
+	rows = []
+	for row in doc.get("planned_treatments") or []:
+		item = get_first_row_value(row, ("item", "item_code", "treatment_item", "service_item"))
+		if not item:
+			continue
+		if row_is_explicitly_non_billable(row):
+			continue
+		raw_qty = get_first_row_value(row, ("qty", "quantity"))
+		qty = flt(raw_qty) if raw_qty not in (None, "") else 1
+		if qty <= 0:
+			continue
+		rate = get_first_row_value(row, ("rate", "default_rate", "price"))
+		if rate in (None, ""):
+			amount = get_first_row_value(row, ("amount",))
+			rate = flt(amount) / qty if amount not in (None, "") and qty else 0
+		source_type = normalize_consultation_plan_source_type(get_first_row_value(row, ("source_type",))) or "Manual Treatment"
+		source_detail = (
+			get_first_row_value(row, ("source_detail_name", "source_detail", "source_row", "reference_detail"))
+			or row.get("name")
+			or f"{item}:{row.get('idx') or 0}"
+		)
+		rows.append(
+			frappe._dict(
+				row=row,
+				source_type=source_type,
+				source_document=get_first_row_value(row, ("source_document", "source_name", "reference_name")),
+				source_detail_name=get_first_row_value(row, ("source_detail_name", "source_detail", "source_row", "reference_detail")),
+				source_detail=source_detail,
+				item=item,
+				qty=qty,
+				uom=get_first_row_value(row, ("uom", "stock_uom")),
+				rate=rate,
+				amount=get_first_row_value(row, ("amount",)),
+				description=get_first_row_value(row, ("description", "item_name", "notes")),
+				billing_status=get_first_row_value(row, ("billing_status",)) or "Pending",
+				payment_status=get_consultation_payment_status(get_first_row_value(row, ("payment_status",))),
+			)
+		)
+	return rows
+
+
+def get_first_row_value(row, fieldnames: tuple[str, ...]):
+	for fieldname in fieldnames:
+		value = row.get(fieldname)
+		if value not in (None, ""):
+			return value
+	return None
+
+
+def row_is_explicitly_non_billable(row) -> bool:
+	if row.get("billing_status") in {"Cancelled", "Skipped"}:
+		return True
+	if row.get("payment_status") == "Cancelled":
+		return True
+	for fieldname in ("is_billable", "billable"):
+		value = row.get(fieldname)
+		if value not in (None, "") and cint(value) == 0:
+			return True
+	return False
+
+
+def get_consultation_plan_source_key(row) -> tuple[str, str, str] | None:
+	source_type = normalize_consultation_plan_source_type(row.get("source_type"))
+	source_document = row.get("source_document")
+	source_detail = row.get("source_detail_name") or row.get("source_detail")
+	if source_type in {"Lab Order", "Vaccination"} and source_document and source_detail:
+		return source_type, source_document, source_detail
+	return None
+
+
+def get_consultation_plan_charge_key(row) -> str:
+	source_key = get_consultation_plan_source_key(row)
+	if source_key:
+		return "consultation-plan::{}::{}::{}".format(*source_key)
+	row_name = row.get("row", {}).get("name") or row.get("source_detail") or row.get("item")
+	return f"consultation-plan::manual::{row_name}"
+
+
+def get_consultation_plan_legacy_charge_keys(row) -> list[str]:
+	source_key = get_consultation_plan_source_key(row)
+	if not source_key:
+		return []
+	source_type, source_document, source_detail = source_key
+	if source_type == "Lab Order":
+		return [
+			f"Veterinary Lab Order:{source_document}:Lab:{source_detail}",
+			f"Veterinary Lab Order:{source_document}:Lab Order:{source_detail}",
+		]
+	if source_type == "Vaccination":
+		return [f"Veterinary Vaccination Record:{source_document}:Vaccination:{source_detail}"]
+	return []
+
+
+def get_payload_source_key(payload: dict) -> tuple[str, str, str] | None:
+	source_type = normalize_consultation_plan_source_type(payload.get("source_type"))
+	source_doctype = payload.get("source_doctype")
+	if not source_type and source_doctype == "Veterinary Lab Order":
+		source_type = "Lab Order"
+	elif not source_type and source_doctype == "Veterinary Vaccination Record":
+		source_type = "Vaccination"
+	source_document = payload.get("source_name")
+	source_detail = payload.get("source_detail_name")
+	if source_type in {"Lab Order", "Vaccination"} and source_document and source_detail:
+		return source_type, source_document, source_detail
+	return None
+
+
+def normalize_consultation_plan_source_type(source_type: str | None) -> str | None:
+	if not source_type:
+		return None
+	if source_type == "Lab":
+		return "Lab Order"
+	return source_type
 
 
 
@@ -1536,7 +1816,19 @@ def get_vaccination_charge_payloads(vaccination_name: str, session=None) -> list
 	if not item_code:
 		return []
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
-	return [build_source_charge(doc, "Vaccination", doc.name, item_code, 1, None, None, cost_center, master_price_list=vaccine.get("price_list"))]
+	return [
+		build_source_charge(
+			doc,
+			"Vaccination",
+			doc.get("vaccine") or doc.name,
+			item_code,
+			1,
+			None,
+			None,
+			cost_center,
+			master_price_list=vaccine.get("price_list"),
+		)
+	]
 
 
 def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cost_center: str) -> list[dict]:
@@ -1548,7 +1840,19 @@ def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cos
 		item_code = vaccine.get("default_item")
 		if item_code:
 			doc = frappe._dict(doctype="Veterinary Vaccination Record", name=row.name, service_branch=None)
-			payloads.append(build_source_charge(doc, "Vaccination", row.name, item_code, 1, None, None, cost_center, master_price_list=vaccine.get("price_list")))
+			payloads.append(
+				build_source_charge(
+					doc,
+					"Vaccination",
+					row.vaccine or row.name,
+					item_code,
+					1,
+					None,
+					None,
+					cost_center,
+					master_price_list=vaccine.get("price_list"),
+				)
+			)
 	return payloads
 
 
