@@ -30,7 +30,9 @@
   "vaccination_requires_payment_before_administration",
   "consultation_billing_section",
   "enable_consultation_billing",
+  "auto_add_default_consultation_billing_item",
   "consultation_item",
+  "allow_editing_consultation_billing_item",
   "column_break_consultation_billing",
   "allow_doctor_collect_payment",
   "consultation_requires_payment_before_treatment",
@@ -317,12 +319,28 @@
    "label": "Enable Consultation Billing"
   },
   {
+   "default": "1",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations && doc.enable_consultation_billing",
+   "description": "Automatically include the configured Consultation Item as a default consultation fee when billing a consultation.",
+   "fieldname": "auto_add_default_consultation_billing_item",
+   "fieldtype": "Check",
+   "label": "Auto Add Default Consultation Billing Item"
+  },
+  {
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations && doc.enable_consultation_billing && doc.auto_add_default_consultation_billing_item",
    "fieldname": "consultation_item",
    "fieldtype": "Link",
    "label": "Consultation Item",
    "options": "Item",
    "read_only_depends_on": "eval:!doc.enable_consultation_billing"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations && doc.enable_consultation_billing && doc.auto_add_default_consultation_billing_item",
+   "description": "Allow the default consultation billing item and rate to remain editable in consultation billing flows where that UI is available.",
+   "fieldname": "allow_editing_consultation_billing_item",
+   "fieldtype": "Check",
+   "label": "Allow Editing Consultation Billing Item"
   },
   {
    "fieldname": "column_break_consultation_billing",

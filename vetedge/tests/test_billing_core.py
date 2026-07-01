@@ -754,6 +754,104 @@ class TestBillingCore(TestCase):
 		self.assertEqual(payloads[0]["item_code"], "Dog_Food")
 		self.assertEqual(payloads[0]["rate"], 5000)
 
+	def test_consultation_default_item_is_added_when_auto_add_enabled(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[],
+		)
+		settings = SimpleNamespace(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			enable_treatment_billing=False,
+			auto_add_default_consultation_billing_item=True,
+		)
+
+		def fake_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, **kwargs):
+			return {"charge_key": f"{source_type}:{source_detail}", "item_code": item_code, "qty": qty, "rate": rate}
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([payload["item_code"] for payload in payloads], ["CONSULT-ITEM"])
+
+	def test_consultation_default_item_is_not_forced_when_auto_add_disabled(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[],
+		)
+		settings = SimpleNamespace(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			enable_treatment_billing=False,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual(payloads, [])
+
+	def test_explicit_consultation_plan_rows_bill_when_default_item_auto_add_disabled(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(name="ROW-MANUAL", item="Dog_Food", qty=1, rate=5000, source_type=""),
+				frappe._dict(name="ROW-VAC", item="DHLPP", qty=1, rate=7000, source_type="Vaccination", source_document="VVAC-001", source_detail_name="DHLPP"),
+				frappe._dict(name="ROW-LAB", item="OSPD", qty=1, rate=3000, source_type="Lab Order", source_document="VLAB-001", source_detail_name="OSPD"),
+			],
+		)
+		settings = SimpleNamespace(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			enable_treatment_billing=False,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		def fake_charge(doc, source_type, source_detail, item_code, qty, uom, rate, cost_center, description=None, **kwargs):
+			return {"charge_key": f"{source_type}:{source_detail}", "item_code": item_code, "qty": qty, "rate": rate}
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core.frappe.db, "get_value", return_value=None),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual([payload["item_code"] for payload in payloads], ["Dog_Food", "DHLPP", "OSPD"])
+		self.assertEqual([payload["rate"] for payload in payloads], [5000, 7000, 3000])
+
 	def test_consultation_plan_row_collector_accepts_document_like_child_rows(self):
 		class DocumentLikeRow:
 			def __init__(self, **values):

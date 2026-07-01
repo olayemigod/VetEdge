@@ -66,6 +66,8 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
 
     def test_key_settings_fields_remain_present(self):
         expected_fields = {
+            "auto_add_default_consultation_billing_item",
+            "allow_editing_consultation_billing_item",
             "consultation_payment_gate",
             "enable_veterinary_hospitalisation",
             "hospitalisation_payment_gate",
@@ -95,6 +97,8 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "payment_backend_mode": "stub",
             "notification_backend_mode": "local",
             "enable_appointment_sms_notifications": "1",
+            "auto_add_default_consultation_billing_item": "1",
+            "allow_editing_consultation_billing_item": "1",
         }
 
         for fieldname, expected_default in expected_defaults.items():

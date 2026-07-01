@@ -41,13 +41,16 @@ class ConsultationBillingSettings:
 	requires_payment_before_treatment: bool
 	enable_treatment_billing: bool
 	enforce_cost_center: bool
+	auto_add_default_consultation_billing_item: bool = True
+	allow_editing_consultation_billing_item: bool = True
 
 
 def validate_consultation_billing_settings(settings) -> None:
 	if not cint(settings.get("enable_consultation_billing")):
 		return
 
-	validate_sales_item(settings.get("consultation_item"), "Consultation Item", allow_stock=False)
+	if cint(settings.get("auto_add_default_consultation_billing_item", 1)):
+		validate_sales_item(settings.get("consultation_item"), "Consultation Item", allow_stock=False)
 
 
 def validate_sales_item(item_code: str | None, label: str, allow_stock: bool = True) -> None:
@@ -82,7 +85,27 @@ def get_consultation_billing_settings() -> ConsultationBillingSettings:
 		requires_payment_before_treatment=bool(get("consultation_requires_payment_before_treatment", 0)),
 		enable_treatment_billing=bool(settings.get("enable_vetedge") and get("enable_treatment_billing", 0)),
 		enforce_cost_center=bool(get("enforce_cost_center_on_billing", 1)),
+		auto_add_default_consultation_billing_item=bool(get("auto_add_default_consultation_billing_item", 1)),
+		allow_editing_consultation_billing_item=bool(get("allow_editing_consultation_billing_item", 1)),
 	)
+
+
+def is_consultation_billing_enabled() -> bool:
+	return bool(get_consultation_billing_settings().enabled)
+
+
+def should_auto_add_default_consultation_item(settings: ConsultationBillingSettings | None = None) -> bool:
+	settings = settings or get_consultation_billing_settings()
+	return bool(
+		getattr(settings, "enabled", False)
+		and getattr(settings, "auto_add_default_consultation_billing_item", True)
+		and getattr(settings, "consultation_item", None)
+	)
+
+
+def can_edit_default_consultation_billing_item(settings: ConsultationBillingSettings | None = None) -> bool:
+	settings = settings or get_consultation_billing_settings()
+	return bool(getattr(settings, "allow_editing_consultation_billing_item", True))
 
 
 @frappe.whitelist()
@@ -223,7 +246,7 @@ def validate_consultation_invoice_request(doc, settings: ConsultationBillingSett
 		frappe.throw("Consultation must have an owner/customer before billing.", frappe.ValidationError)
 	if not doc.service_branch:
 		frappe.throw("Consultation must have a service branch before billing.", frappe.ValidationError)
-	if not settings.consultation_item:
+	if getattr(settings, "auto_add_default_consultation_billing_item", True) and not settings.consultation_item:
 		frappe.throw("Consultation Item is required when consultation billing is enabled.", frappe.ValidationError)
 
 
@@ -241,7 +264,7 @@ def build_consultation_invoice_payload(
 	items: list[dict] = []
 	sources: list[dict] = []
 
-	if should_include_consultation_fee(consultation_doc, draft_invoice_name):
+	if should_auto_add_default_consultation_item(settings) and should_include_consultation_fee(consultation_doc, draft_invoice_name):
 		items.append(build_invoice_item(settings.consultation_item, 1, None, None, cost_center))
 		sources.append(
 			build_consultation_billing_source(
@@ -367,7 +390,7 @@ def consultation_requires_invoice_before_progress(doc, target_status: str | None
 	if get_consultation_invoice_names(doc):
 		return True
 
-	if settings.consultation_item or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])):
+	if should_auto_add_default_consultation_item(settings) or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])):
 		return True
 
 	for row in frappe.get_all(

@@ -1442,7 +1442,7 @@ def get_source_payment_gate_mode(source_doctype: str) -> str:
 
 
 def get_consultation_charge_payloads(consultation_name: str, session=None) -> list[dict]:
-	from vetedge.services.billing import get_consultation_billing_settings
+	from vetedge.services.billing import get_consultation_billing_settings, should_auto_add_default_consultation_item
 
 	doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	settings = get_consultation_billing_settings()
@@ -1452,7 +1452,7 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 		doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
 	payloads = []
-	if settings.enabled and settings.consultation_item:
+	if should_auto_add_default_consultation_item(settings):
 		payloads.append(build_source_charge(doc, "Consultation Fee", doc.name, settings.consultation_item, 1, None, None, cost_center))
 	registration_payload = get_registration_charge_payload_for_consultation(doc, session)
 	if registration_payload:

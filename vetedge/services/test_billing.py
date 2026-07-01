@@ -8,6 +8,7 @@ import frappe
 
 from vetedge.services.billing import (
 	ConsultationBillingSettings,
+	can_edit_default_consultation_billing_item,
 	consultation_requires_invoice_before_progress,
 	create_consultation_invoice,
 	get_invoice_access_summary,
@@ -45,6 +46,59 @@ class TestConsultationBilling(TestCase):
 				consultation,
 				settings,
 			)
+
+	def test_consultation_billing_enabled_does_not_require_item_when_auto_add_disabled(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item=None,
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=False,
+			enable_treatment_billing=True,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		validate_consultation_invoice_request(consultation, settings)
+
+	def test_consultation_billing_enabled_requires_item_when_auto_add_enabled(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item=None,
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=False,
+			enable_treatment_billing=True,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=True,
+		)
+
+		self.assertRaises(frappe.ValidationError, validate_consultation_invoice_request, consultation, settings)
+
+	def test_consultation_requires_invoice_respects_default_item_auto_add_setting(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=True,
+			enable_treatment_billing=False,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.frappe.get_all", return_value=[]),
+		):
+			self.assertFalse(consultation_requires_invoice_before_progress(consultation, "Ready for Treatment"))
+
+	def test_default_consultation_billing_item_edit_setting_is_exposed(self):
+		locked = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True, True, False)
+		editable = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True, True, True)
+
+		self.assertFalse(can_edit_default_consultation_billing_item(locked))
+		self.assertTrue(can_edit_default_consultation_billing_item(editable))
 
 	def test_create_consultation_invoice_includes_consultation_and_treatments(self):
 		consultation = make_consultation()
