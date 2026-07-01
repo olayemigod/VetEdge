@@ -18,6 +18,8 @@
   "requested_by",
   "linked_invoice",
   "sample_notes",
+  "lab_tests_section",
+  "lab_tests_workbench",
   "lab_tests",
   "doctor_reviewed_by",
   "doctor_reviewed_on"
@@ -35,6 +37,8 @@
   {"fieldname": "requested_by", "fieldtype": "Link", "label": "Requested By", "no_copy": 1, "options": "User", "read_only": 1},
   {"fieldname": "linked_invoice", "fieldtype": "Link", "label": "Linked Invoice", "no_copy": 1, "options": "Sales Invoice", "read_only": 1},
   {"fieldname": "sample_notes", "fieldtype": "Small Text", "label": "Sample Notes"},
+  {"fieldname": "lab_tests_section", "fieldtype": "Section Break", "label": "Lab Tests & Results"},
+  {"fieldname": "lab_tests_workbench", "fieldtype": "HTML", "label": "Lab Tests Workbench", "no_copy": 1},
   {"fieldname": "lab_tests", "fieldtype": "Table", "label": "Lab Tests", "options": "Veterinary Lab Order Item", "reqd": 1},
   {"fieldname": "doctor_reviewed_by", "fieldtype": "Link", "label": "Doctor Reviewed By", "no_copy": 1, "options": "User", "read_only": 1},
   {"fieldname": "doctor_reviewed_on", "fieldtype": "Datetime", "label": "Doctor Reviewed On", "no_copy": 1, "read_only": 1}

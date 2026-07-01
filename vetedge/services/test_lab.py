@@ -50,6 +50,25 @@ class TestLabWorkflow(TestCase):
 		self.assertEqual(fields["requires_result_review"]["fetch_from"], "lab_test_template.requires_result_review")
 		self.assertIn("uploaded_by", fields)
 		self.assertIn("uploaded_on", fields)
+		self.assertEqual(fields["rate"]["fieldtype"], "Currency")
+		self.assertEqual(fields["billing_status"]["in_list_view"], 1)
+		self.assertEqual(fields["result_status"]["in_list_view"], 1)
+		self.assertEqual(fields["result_summary"]["in_list_view"], 1)
+		self.assertEqual(fields["result_action"]["in_list_view"], 1)
+		self.assertNotIn("in_list_view", fields["result_value"])
+		self.assertNotIn("in_list_view", fields["abnormal_flag"])
+
+	def test_lab_order_places_lab_tests_in_full_width_section(self):
+		order_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_lab_order/veterinary_lab_order.json"
+		data = json.loads(order_path.read_text())
+		field_order = data["field_order"]
+		fields = {field["fieldname"]: field for field in data["fields"]}
+
+		self.assertLess(field_order.index("lab_tests_section"), field_order.index("lab_tests"))
+		self.assertLess(field_order.index("lab_tests_workbench"), field_order.index("lab_tests"))
+		self.assertEqual(fields["lab_tests_section"]["fieldtype"], "Section Break")
+		self.assertEqual(fields["lab_tests_workbench"]["fieldtype"], "HTML")
+		self.assertGreater(field_order.index("lab_tests_section"), field_order.index("column_break_context"))
 
 	def test_consultation_lab_order_action_uses_popup_not_route_after_create(self):
 		script_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_consultation/veterinary_consultation.js"
@@ -64,6 +83,10 @@ class TestLabWorkflow(TestCase):
 		script = script_path.read_text()
 
 		self.assertIn("apply_lab_test_result_metadata(frm, cdt, cdn)", script)
+		self.assertIn("show_add_lab_tests_dialog(frm)", script)
+		self.assertIn("render_lab_tests_workbench(frm)", script)
+		self.assertIn("show_post_result_dialog(frm, row", script)
+		self.assertIn("show_review_result_dialog(frm, row)", script)
 		self.assertIn("result_attachment", script)
 		self.assertIn("requires_document_upload", script)
 
@@ -539,6 +562,9 @@ class TestLabWorkflow(TestCase):
 		self.assertEqual(row.requires_document_upload, 1)
 		self.assertEqual(row.allows_doctor_result_entry, 0)
 		self.assertEqual(row.requires_result_review, 1)
+		self.assertEqual(row.rate, 5000)
+		self.assertEqual(row.billing_status, "Not Billed")
+		self.assertEqual(row.result_action, "Result Actions")
 
 	def test_validate_lab_order_accepts_value_driven_result(self):
 		row = lab_result_row(result_format="Value Driven", result_value="12.3", result_unit="mg/dL")
@@ -549,6 +575,7 @@ class TestLabWorkflow(TestCase):
 
 		self.assertEqual(row.result_status, "Entered")
 		self.assertEqual(row.status, "Result Entered")
+		self.assertEqual(row.result_summary, "12.3 mg/dL")
 
 	def test_validate_lab_order_accepts_text_narrative_result(self):
 		row = lab_result_row(result_format="Text / Narrative", result_text="No parasites seen")

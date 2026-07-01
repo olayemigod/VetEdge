@@ -37,9 +37,9 @@ LAB_ORDER_STATUSES = {
 }
 
 VALID_LAB_ORDER_STATUS_TRANSITIONS = {
-	"Draft": {"Requested", "Cancelled"},
-	"Requested": {"Sample Collected", "In Progress", "Cancelled"},
-	"Sample Collected": {"In Progress", "Cancelled"},
+	"Draft": {"Requested", "Result Entered", "Cancelled"},
+	"Requested": {"Sample Collected", "In Progress", "Result Entered", "Cancelled"},
+	"Sample Collected": {"In Progress", "Result Entered", "Cancelled"},
 	"In Progress": {"Result Entered", "Cancelled"},
 	"Result Entered": {"Reviewed", "Cancelled"},
 	"Reviewed": set(),
@@ -288,6 +288,14 @@ def validate_lab_order_items(doc) -> None:
 			row.sample_type = lab_test.sample_type
 		if not row.billing_item and lab_test.linked_item:
 			row.billing_item = lab_test.linked_item
+		if row.get("rate") in (None, "") and lab_test.get("default_rate") is not None:
+			row.rate = flt(lab_test.default_rate)
+		if not row.get("billing_status"):
+			row.billing_status = "Invoice Linked" if doc.get("linked_invoice") else "Not Billed"
+		elif doc.get("linked_invoice") and row.get("billing_status") == "Not Billed":
+			row.billing_status = "Invoice Linked"
+		if not row.get("result_action"):
+			row.result_action = "Result Actions"
 		if not row.get("result_format"):
 			row.result_format = lab_test.get("result_format") or "Value Driven"
 		if row.get("result_format") not in LAB_RESULT_FORMATS:
@@ -331,6 +339,7 @@ def validate_lab_order_items(doc) -> None:
 		if doc.status == "Reviewed" and row.status != "Cancelled":
 			row.status = "Reviewed"
 			row.result_status = "Reviewed"
+		row.result_summary = build_lab_result_summary(row)
 
 
 def validate_lab_order_status_requirements(doc) -> None:
@@ -359,6 +368,25 @@ def validate_lab_result_format_content(row) -> None:
 		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text", "result_attachment")
 	):
 		frappe.throw(f"Enter or upload a result for {row.lab_test_template}.", frappe.ValidationError)
+
+
+def build_lab_result_summary(row) -> str:
+	parts = []
+	if row.get("result_value") not in (None, ""):
+		value = str(row.get("result_value"))
+		if row.get("result_unit"):
+			value = f"{value} {row.get('result_unit')}"
+		parts.append(value)
+	if row.get("result_text"):
+		text = str(row.get("result_text")).strip()
+		if len(text) > 80:
+			text = f"{text[:77]}..."
+		parts.append(text)
+	if row.get("result_attachment"):
+		parts.append("Document uploaded")
+	if cint(row.get("abnormal_flag")):
+		parts.append("Abnormal")
+	return " | ".join(part for part in parts if part)
 
 
 def validate_lab_result_actor_permissions(row, user: str | None, doc) -> None:
