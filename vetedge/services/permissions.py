@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import frappe
 import frappe.permissions
+from frappe.utils import cint
 
 from vetedge.services.audit import log_operational_event
 
@@ -96,6 +97,16 @@ def get_user_roles(user: str | None = None) -> set[str]:
 
 def user_has_any_role(user: str | None, roles: set[str]) -> bool:
 	return bool(get_user_roles(user) & set(roles))
+
+
+def get_veterinary_settings_flag(fieldname: str, default: bool = False) -> bool:
+	try:
+		if not frappe.db.exists("DocType", "Veterinary Settings"):
+			return default
+		value = frappe.db.get_single_value("Veterinary Settings", fieldname)
+	except Exception:
+		return default
+	return bool(cint(value)) if value is not None else default
 
 
 def is_notification_admin(user: str | None = None) -> bool:
@@ -511,7 +522,13 @@ def can_enter_lab_results(user: str | None, context=None, raise_exception: bool 
 			user=user,
 		)
 
-	if user_has_any_role(user, LAB_RESULT_ENTRY_ROLES):
+	if user_has_any_role(user, {*_role_group(ROLE_LAB_TECHNICIAN), *ELEVATED_ROLES}):
+		return True
+
+	if user_has_any_role(user, _role_group(ROLE_VETEDGE_DOCTOR)) and get_veterinary_settings_flag(
+		"allow_doctor_lab_result_entry",
+		default=True,
+	):
 		return True
 
 	return _deny(

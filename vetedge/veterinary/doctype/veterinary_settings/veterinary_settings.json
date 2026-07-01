@@ -28,6 +28,11 @@
   "vaccination_section",
   "enable_vaccination",
   "vaccination_requires_payment_before_administration",
+  "lab_results_section",
+  "allow_doctor_lab_result_entry",
+  "allow_doctor_lab_result_upload",
+  "require_lab_result_review",
+  "allow_lab_result_edit_after_review",
   "consultation_billing_section",
   "enable_consultation_billing",
   "auto_add_default_consultation_billing_item",
@@ -310,6 +315,45 @@
    "fieldname": "vaccination_requires_payment_before_administration",
    "fieldtype": "Check",
    "label": "Require Payment Before Vaccination Administration"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "lab_results_section",
+   "fieldtype": "Section Break",
+   "label": "Lab Results",
+   "description": "Controls doctor result entry, upload, review, and reviewed-result edit safeguards."
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "Allow VetEdge Doctors to enter lab results when the Lab Test allows doctor result entry.",
+   "fieldname": "allow_doctor_lab_result_entry",
+   "fieldtype": "Check",
+   "label": "Allow Doctor Lab Result Entry"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "Allow VetEdge Doctors to upload lab result documents when upload workflow support is enabled.",
+   "fieldname": "allow_doctor_lab_result_upload",
+   "fieldtype": "Check",
+   "label": "Allow Doctor Lab Result Upload"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "Require doctor/admin review before lab results are treated as final.",
+   "fieldname": "require_lab_result_review",
+   "fieldtype": "Check",
+   "label": "Require Lab Result Review"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "Allow reviewed lab results to be edited. Keep disabled unless the clinic has a correction workflow.",
+   "fieldname": "allow_lab_result_edit_after_review",
+   "fieldtype": "Check",
+   "label": "Allow Lab Result Edit After Review"
   },
   {
    "fieldname": "consultation_billing_section",

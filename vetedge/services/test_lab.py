@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
@@ -17,6 +18,35 @@ from vetedge.services.lab import (
 
 
 class TestLabWorkflow(TestCase):
+	def test_lab_test_metadata_supports_result_formats_without_dropping_pricing(self):
+		lab_test_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_lab_test/veterinary_lab_test.json"
+		data = json.loads(lab_test_path.read_text())
+		fields = {field["fieldname"]: field for field in data["fields"]}
+
+		self.assertEqual(fields["result_format"]["options"], "Value Driven\nText / Narrative\nDocument Upload\nMixed")
+		self.assertEqual(fields["result_unit"]["fieldtype"], "Data")
+		self.assertEqual(fields["reference_range"]["fieldtype"], "Small Text")
+		self.assertEqual(fields["requires_document_upload"]["fieldtype"], "Check")
+		self.assertEqual(fields["allows_manual_result_entry"]["default"], "1")
+		self.assertEqual(fields["allows_doctor_result_entry"]["default"], "1")
+		self.assertEqual(fields["requires_result_review"]["default"], "1")
+		self.assertIn("linked_item", fields)
+		self.assertIn("price_list", fields)
+		self.assertIn("default_rate", fields)
+
+	def test_lab_order_item_metadata_supports_value_text_and_upload_results(self):
+		item_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_lab_order_item/veterinary_lab_order_item.json"
+		data = json.loads(item_path.read_text())
+		fields = {field["fieldname"]: field for field in data["fields"]}
+
+		self.assertEqual(fields["result_format"]["options"], "Value Driven\nText / Narrative\nDocument Upload\nMixed")
+		self.assertEqual(fields["result_unit"]["fetch_from"], "lab_test_template.result_unit")
+		self.assertEqual(fields["reference_range"]["fetch_from"], "lab_test_template.reference_range")
+		self.assertEqual(fields["abnormal_flag"]["fieldtype"], "Check")
+		self.assertEqual(fields["result_attachment"]["fieldtype"], "Attach")
+		self.assertIn("uploaded_by", fields)
+		self.assertIn("uploaded_on", fields)
+
 	def test_consultation_lab_order_action_uses_popup_not_route_after_create(self):
 		script_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_consultation/veterinary_consultation.js"
 		script = script_path.read_text()
@@ -438,6 +468,78 @@ class TestLabWorkflow(TestCase):
 		):
 			with self.assertRaises(frappe.ValidationError):
 				validate_lab_order(doc)
+
+	def test_validate_lab_order_treats_result_attachment_as_entered_result(self):
+		row = frappe._dict(
+			name="ROW-1",
+			lab_test_template="CBC",
+			result_attachment="/private/files/cbc.pdf",
+			status="In Progress",
+			result_status="Pending",
+			billing_item="LAB-CBC",
+			get=lambda key, default=None: row[key] if key in row else default,
+		)
+		doc = frappe._dict(
+			doctype="Veterinary Lab Order",
+			name="VLAB-020",
+			patient="VP-001",
+			primary_owner="CUST-001",
+			consultation="VCON-001",
+			service_branch="Main Branch",
+			status="Result Entered",
+			requested_by="doctor@example.com",
+			requested_on="2026-04-23 10:00:00",
+			lab_tests=[row],
+			get=lambda key, default=None: doc[key] if key in doc else default,
+		)
+		doc.get_doc_before_save = lambda: None
+
+		def get_value(doctype, name, fields=None, as_dict=False, **kwargs):
+			if doctype == "Veterinary Patient":
+				return frappe._dict(primary_owner="CUST-001", default_branch="Main Branch")
+			if doctype == "Veterinary Consultation":
+				return frappe._dict(patient="VP-001", primary_owner="CUST-001", service_branch="Main Branch")
+			if doctype == "Veterinary Lab Test":
+				return frappe._dict(
+					test_name="Complete Blood Count",
+					sample_type="Blood",
+					linked_item="LAB-CBC",
+					default_rate=5000,
+					is_active=1,
+					result_format="Document Upload",
+					result_unit="",
+					reference_range="",
+					requires_document_upload=1,
+					allows_manual_result_entry=1,
+					allows_doctor_result_entry=1,
+					requires_result_review=1,
+				)
+			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(get_value=get_value),
+			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
+			ValidationError=frappe.ValidationError,
+			PermissionError=frappe.PermissionError,
+		)
+
+		with (
+			patch("vetedge.services.lab.frappe", frappe_stub),
+			patch("vetedge.services.lab.get_current_user", return_value="doctor@example.com"),
+			patch("vetedge.services.lab.now_datetime", return_value="2026-04-23 11:00:00"),
+			patch("vetedge.services.billing.validate_sales_item"),
+			patch("vetedge.services.lab.can_access_consultation"),
+			patch("vetedge.services.lab.can_access_branch_data"),
+			patch("vetedge.services.lab.can_request_lab_tests"),
+			patch("vetedge.services.lab.can_enter_lab_results"),
+		):
+			validate_lab_order(doc)
+
+		self.assertEqual(row.result_format, "Document Upload")
+		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.entered_by, "doctor@example.com")
+		self.assertEqual(row.uploaded_by, "doctor@example.com")
+		self.assertEqual(row.uploaded_on, "2026-04-23 11:00:00")
 
 
 def make_lab_order(linked_invoice=None):

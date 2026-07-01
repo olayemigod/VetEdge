@@ -40,9 +40,20 @@ VALID_LAB_ORDER_STATUS_TRANSITIONS = {
 	"Cancelled": set(),
 }
 
-LAB_RESULT_FIELDS = ("result_value", "result_text", "remarks")
+LAB_RESULT_FIELDS = (
+	"result_format",
+	"result_value",
+	"result_unit",
+	"reference_range",
+	"abnormal_flag",
+	"result_text",
+	"result_attachment",
+	"remarks",
+)
+LAB_RESULT_CONTENT_FIELDS = ("result_value", "result_text", "remarks", "result_attachment")
 LAB_REVIEW_FINAL_STATUSES = {"Reviewed", "Cancelled"}
 LAB_RESULT_ENTRY_STATUSES = {"Sample Collected", "In Progress", "Result Entered"}
+LAB_RESULT_FORMATS = {"Value Driven", "Text / Narrative", "Document Upload", "Mixed"}
 
 
 def validate_lab_test(doc) -> None:
@@ -54,6 +65,12 @@ def validate_lab_test(doc) -> None:
 	doc.test_name = str(doc.test_name).strip()
 	if doc.test_code:
 		doc.test_code = str(doc.test_code).strip().upper()
+	if not doc.get("result_format"):
+		doc.result_format = "Value Driven"
+	if doc.result_format not in LAB_RESULT_FORMATS:
+		frappe.throw(f"Invalid lab result format: {doc.result_format}", frappe.ValidationError)
+	if doc.result_format == "Document Upload":
+		doc.requires_document_upload = 1
 
 	if doc.default_rate is not None and flt(doc.default_rate) < 0:
 		frappe.throw("Default Rate cannot be negative.", frappe.ValidationError)
@@ -228,7 +245,20 @@ def validate_lab_order_items(doc) -> None:
 		lab_test = frappe.db.get_value(
 			LAB_TEST_DOCTYPE,
 			row.lab_test_template,
-			["test_name", "sample_type", "linked_item", "default_rate", "is_active"],
+			[
+				"test_name",
+				"sample_type",
+				"linked_item",
+				"default_rate",
+				"is_active",
+				"result_format",
+				"result_unit",
+				"reference_range",
+				"requires_document_upload",
+				"allows_manual_result_entry",
+				"allows_doctor_result_entry",
+				"requires_result_review",
+			],
 			as_dict=True,
 		)
 		if not lab_test:
@@ -241,15 +271,26 @@ def validate_lab_order_items(doc) -> None:
 			row.sample_type = lab_test.sample_type
 		if not row.billing_item and lab_test.linked_item:
 			row.billing_item = lab_test.linked_item
+		if not row.get("result_format"):
+			row.result_format = lab_test.get("result_format") or "Value Driven"
+		if not row.get("result_unit") and lab_test.get("result_unit"):
+			row.result_unit = lab_test.result_unit
+		if not row.get("reference_range") and lab_test.get("reference_range"):
+			row.reference_range = lab_test.reference_range
 		if row.billing_item:
 			validate_sales_item(row.billing_item, "Lab Billing Item", allow_stock=False)
 
-		has_result = any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_FIELDS)
+		has_result = any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS)
 		if has_result:
 			if not row.entered_by:
 				row.entered_by = current_user
 			if not row.entered_on:
 				row.entered_on = now_datetime()
+			if row.get("result_attachment"):
+				if not row.get("uploaded_by"):
+					row.uploaded_by = current_user
+				if not row.get("uploaded_on"):
+					row.uploaded_on = now_datetime()
 			if row.result_status in (None, "", "Pending"):
 				row.result_status = "Entered"
 			if row.status not in {"Reviewed", "Cancelled"}:
@@ -274,7 +315,7 @@ def validate_lab_order_status_requirements(doc) -> None:
 	for row in doc.get("lab_tests") or []:
 		if row.status == "Cancelled":
 			continue
-		if not any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_FIELDS):
+		if not any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS):
 			frappe.throw(
 				f"Enter a result value or result text for {row.lab_test_template} before marking this lab order as {doc.status}.",
 				frappe.ValidationError,
@@ -437,7 +478,20 @@ def get_active_lab_tests_for_picker() -> list[dict]:
 	return frappe.get_all(
 		LAB_TEST_DOCTYPE,
 		filters={"is_active": 1},
-		fields=["name", "test_name", "sample_type", "linked_item", "default_rate"],
+		fields=[
+			"name",
+			"test_name",
+			"sample_type",
+			"linked_item",
+			"default_rate",
+			"result_format",
+			"result_unit",
+			"reference_range",
+			"requires_document_upload",
+			"allows_manual_result_entry",
+			"allows_doctor_result_entry",
+			"requires_result_review",
+		],
 		order_by="test_name asc",
 	)
 
@@ -493,6 +547,13 @@ def get_lab_order_popup_summary(lab_order: str) -> dict:
 				"billing_item": row.get("billing_item"),
 				"status": row.get("status"),
 				"result_status": row.get("result_status"),
+				"result_format": row.get("result_format"),
+				"result_value": row.get("result_value"),
+				"result_unit": row.get("result_unit"),
+				"reference_range": row.get("reference_range"),
+				"abnormal_flag": cint(row.get("abnormal_flag")),
+				"result_text": row.get("result_text"),
+				"result_attachment": row.get("result_attachment"),
 				"notes": row.get("notes"),
 			}
 			for row in order.get("lab_tests") or []
@@ -519,6 +580,13 @@ def create_lab_test_from_dialog(values: dict | str | None = None) -> dict:
 			"description": values.get("description"),
 			"sample_type": values.get("sample_type"),
 			"linked_item": values.get("linked_item"),
+			"result_format": values.get("result_format") or "Value Driven",
+			"result_unit": values.get("result_unit"),
+			"reference_range": values.get("reference_range"),
+			"requires_document_upload": values.get("requires_document_upload"),
+			"allows_manual_result_entry": values.get("allows_manual_result_entry", 1),
+			"allows_doctor_result_entry": values.get("allows_doctor_result_entry", 1),
+			"requires_result_review": values.get("requires_result_review", 1),
 			"default_rate": values.get("default_rate"),
 			"is_active": 1,
 		}
@@ -819,7 +887,7 @@ def _get_lab_order_items_summary(order_names: list[str]) -> dict[str, dict]:
 	rows = frappe.get_all(
 		LAB_ORDER_ITEM_DOCTYPE,
 		filters={"parent": ["in", order_names]},
-		fields=["parent", "lab_test_name", "lab_test_template", "result_value", "result_text"],
+		fields=["parent", "lab_test_name", "lab_test_template", "result_value", "result_text", "result_attachment"],
 		order_by="idx asc",
 	)
 	result: dict[str, dict] = {}
@@ -828,7 +896,7 @@ def _get_lab_order_items_summary(order_names: list[str]) -> dict[str, dict]:
 		test_name = row.lab_test_name or row.lab_test_template
 		if test_name:
 			entry["tests"].append(test_name)
-		result_value = row.result_text or row.result_value
+		result_value = row.result_text or row.result_value or ("Document uploaded" if row.result_attachment else None)
 		if result_value not in (None, ""):
 			entry.setdefault("result_rows", []).append(f"{test_name}: {result_value}")
 

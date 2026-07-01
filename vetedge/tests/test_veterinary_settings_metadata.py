@@ -40,6 +40,7 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "Pharmacy, Dispensary & Stock",
             "Hospitalisation",
             "Grooming & Boarding",
+            "Lab Results",
             "General Notification Settings",
             "Email Notification Settings",
             "SMS Notification Settings",
@@ -53,6 +54,7 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
         expected_order = [
             "general_section",
             "consultation_section",
+            "lab_results_section",
             "appointments_section",
             "billing_core_section",
             "treatment_inventory_section",
@@ -88,6 +90,10 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "enable_dispensary_flow",
             "enable_billing_sessions",
             "default_payment_gate_mode",
+            "allow_doctor_lab_result_entry",
+            "allow_doctor_lab_result_upload",
+            "require_lab_result_review",
+            "allow_lab_result_edit_after_review",
         }
 
         self.assertTrue(expected_fields.issubset(self.fields))
@@ -105,6 +111,10 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "enable_appointment_sms_notifications": "1",
             "auto_add_default_consultation_billing_item": "1",
             "allow_editing_consultation_billing_item": "1",
+            "allow_doctor_lab_result_entry": "1",
+            "allow_doctor_lab_result_upload": "0",
+            "require_lab_result_review": "1",
+            "allow_lab_result_edit_after_review": "0",
         }
 
         for fieldname, expected_default in expected_defaults.items():
@@ -115,6 +125,7 @@ class TestVeterinarySettingsMetadata(unittest.TestCase):
             "registration_billing_section",
             "vitals_section",
             "vaccination_section",
+            "lab_results_section",
             "appointments_section",
             "billing_core_section",
             "treatment_inventory_section",
