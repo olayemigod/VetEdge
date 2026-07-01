@@ -1798,6 +1798,7 @@ def build_lab_payloads(order, cost_center: str) -> list[dict]:
 		if not row.get("billing_item"):
 			continue
 		lab_test = frappe.db.get_value("Veterinary Lab Test", row.lab_test_template, ["default_rate", "price_list"], as_dict=True) or {}
+		rate = row.get("rate") if row.get("rate") not in (None, "") else lab_test.get("default_rate")
 		payloads.append(
 			build_source_charge(
 				order,
@@ -1806,7 +1807,7 @@ def build_lab_payloads(order, cost_center: str) -> list[dict]:
 				row.billing_item,
 				1,
 				None,
-				None,
+				rate,
 				cost_center,
 				row.get("lab_test_name") or row.lab_test_template,
 				master_price_list=lab_test.get("price_list"),

@@ -23,15 +23,13 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 		if not item:
 			continue
 		source_detail = row.get("name") or row.get("lab_test_template")
-		if _has_source_row(consultation, "Lab Order", doc.name, source_detail):
+		existing_row = _get_source_row(consultation, "Lab Order", doc.name, source_detail)
+		rate = _get_lab_order_row_rate(row)
+		if existing_row:
+			if _update_plan_row_from_lab_order(existing_row, row, item, rate):
+				changed = True
 			continue
 
-		lab_test = frappe.db.get_value(
-			LAB_TEST_DOCTYPE,
-			row.get("lab_test_template"),
-			["default_rate"],
-			as_dict=True,
-		) or {}
 		_add_plan_row(
 			consultation,
 			source_type="Lab Order",
@@ -41,7 +39,7 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 			item=item,
 			description=row.get("lab_test_name") or row.get("lab_test_template"),
 			qty=1,
-			rate=lab_test.get("default_rate"),
+			rate=rate,
 			notes=row.get("notes"),
 		)
 		changed = True
@@ -86,14 +84,58 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 
 
 def _has_source_row(consultation, source_type: str, source_document: str, source_detail_name: str | None) -> bool:
+	return _get_source_row(consultation, source_type, source_document, source_detail_name) is not None
+
+
+def _get_source_row(consultation, source_type: str, source_document: str, source_detail_name: str | None):
 	for row in consultation.get("planned_treatments") or []:
 		if (
 			row.get("source_type") == source_type
 			and row.get("source_document") == source_document
 			and (row.get("source_detail_name") or "") == (source_detail_name or "")
 		):
-			return True
-	return False
+			return row
+	return None
+
+
+def _get_lab_order_row_rate(row) -> float | None:
+	if row.get("rate") not in (None, ""):
+		return flt(row.get("rate"))
+	lab_test = frappe.db.get_value(
+		LAB_TEST_DOCTYPE,
+		row.get("lab_test_template"),
+		["default_rate"],
+		as_dict=True,
+	) or {}
+	return lab_test.get("default_rate")
+
+
+def _update_plan_row_from_lab_order(plan_row, lab_row, item: str, rate: float | None) -> bool:
+	if not _can_update_plan_row_from_source(plan_row):
+		return False
+	qty = flt(plan_row.get("qty")) or 1
+	new_values = {
+		"item": item,
+		"description": lab_row.get("lab_test_name") or lab_row.get("lab_test_template"),
+		"qty": qty,
+		"rate": flt(rate),
+		"amount": qty * flt(rate),
+		"notes": lab_row.get("notes"),
+	}
+	changed = False
+	for fieldname, value in new_values.items():
+		if plan_row.get(fieldname) != value:
+			plan_row[fieldname] = value
+			changed = True
+	return changed
+
+
+def _can_update_plan_row_from_source(row) -> bool:
+	if row.get("billing_status") in {"Submitted Invoiced", "Paid", "Cancelled", "Skipped"}:
+		return False
+	if row.get("payment_status") in {"Paid", "Partly Paid", "Cancelled"}:
+		return False
+	return True
 
 
 def _add_plan_row(

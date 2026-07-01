@@ -87,6 +87,10 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("render_lab_tests_workbench(frm)", script)
 		self.assertIn("show_post_result_dialog(frm, row", script)
 		self.assertIn("show_review_result_dialog(frm, row)", script)
+		self.assertIn("Post / Upload Result", script)
+		self.assertIn("Update Result", script)
+		self.assertNotIn('data-lab-result-action="upload"', script)
+		self.assertNotIn('"Upload Result"', script)
 		self.assertIn("result_attachment", script)
 		self.assertIn("requires_document_upload", script)
 
@@ -102,6 +106,7 @@ class TestLabWorkflow(TestCase):
 		self.assertTrue(result["created"])
 		self.assertEqual(set_values[0], ("Veterinary Lab Order", "VLAB-001", "linked_invoice", "SINV-001"))
 		created_invoice.insert.assert_called_once()
+		self.assertEqual(created_invoice["items"][0]["rate"], 4321)
 
 	def test_create_lab_order_invoice_updates_existing_draft_invoice_without_duplicate(self):
 		order = make_lab_order(linked_invoice="SINV-001")
@@ -693,7 +698,8 @@ def make_lab_order(linked_invoice=None):
 			frappe._dict(
 				lab_test_template="CBC",
 				billing_item="LAB-CBC",
-				get=lambda key, default=None: {"lab_test_template": "CBC", "billing_item": "LAB-CBC"}.get(key, default),
+				rate=4321,
+				get=lambda key, default=None: {"lab_test_template": "CBC", "billing_item": "LAB-CBC", "rate": 4321}.get(key, default),
 			)
 		],
 	)

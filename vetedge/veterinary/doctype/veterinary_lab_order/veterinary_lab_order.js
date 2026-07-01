@@ -350,7 +350,7 @@ function render_lab_tests_workbench(frm) {
 					</tr>
 				</thead>
 				<tbody>
-					${rows.map((row) => render_lab_order_item_workbench_row(row)).join("")}
+					${rows.map((row) => render_lab_order_item_workbench_row(frm, row)).join("")}
 				</tbody>
 			</table>
 		</div>
@@ -365,22 +365,31 @@ function render_lab_tests_workbench(frm) {
 		}
 		if (action === "view") {
 			show_view_result_dialog(row);
-		} else if (action === "upload") {
-			show_post_result_dialog(frm, row, { upload_only: true });
 		} else if (action === "review") {
 			show_review_result_dialog(frm, row);
 		} else {
 			show_post_result_dialog(frm, row);
 		}
 	});
+	wrapper.find("[data-lab-rate]").on("change", (event) => {
+		const rowName = event.currentTarget.dataset.rowName;
+		const row = (frm.doc.lab_tests || []).find((item) => item.name === rowName);
+		if (!row) {
+			return;
+		}
+		update_lab_order_item_rate(frm, row, event.currentTarget.value);
+	});
 }
 
-function render_lab_order_item_workbench_row(row) {
+function render_lab_order_item_workbench_row(frm, row) {
 	const rowName = escape_html(row.name || "");
 	const label = escape_html(row.lab_test_name || row.lab_test_template || "");
 	const template = escape_html(row.lab_test_template || "");
 	const resultFormat = escape_html(row.result_format || "Value Driven");
 	const rate = row.rate ?? "";
+	const rateCell = can_edit_lab_order_item_rate(frm, row)
+		? `<input class="form-control input-xs" type="number" step="0.01" min="0" data-lab-rate data-row-name="${rowName}" value="${escape_html(String(rate))}">`
+		: escape_html(String(rate));
 	const billingStatus = escape_html(row.billing_status || "Not Billed");
 	const resultStatus = escape_html(row.result_status || "Pending");
 	const summary = escape_html(get_lab_result_summary(row));
@@ -389,7 +398,7 @@ function render_lab_order_item_workbench_row(row) {
 		<tr>
 			<td>${label}<div class="text-muted small">${template}</div></td>
 			<td>${resultFormat}</td>
-			<td>${escape_html(String(rate))}</td>
+			<td>${rateCell}</td>
 			<td>${billingStatus}</td>
 			<td>${resultStatus}</td>
 			<td>${summary || `<span class="text-muted">${__("Pending")}</span>`}</td>
@@ -400,26 +409,26 @@ function render_lab_order_item_workbench_row(row) {
 
 function render_lab_result_action_buttons(rowName, row) {
 	const locked = ["Reviewed", "Cancelled"].includes(row.status) || ["Reviewed"].includes(row.result_status);
-	const canUpload = ["Document Upload", "Mixed"].includes(row.result_format || "Value Driven");
-	const buttons = [
-		`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="${locked ? "view" : "post"}" data-row-name="${rowName}">${locked ? __("View Result") : __("Post Result")}</button>`,
-	];
-	if (!locked && canUpload) {
-		buttons.push(`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="upload" data-row-name="${rowName}">${__("Upload Result")}</button>`);
+	const hasResult = has_lab_result_content(row);
+	const buttons = [];
+	if (!locked) {
+		buttons.push(
+			`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="post" data-row-name="${rowName}">${hasResult ? __("Update Result") : __("Post / Upload Result")}</button>`
+		);
 	}
-	if (has_lab_result_content(row)) {
+	if (hasResult) {
 		buttons.push(`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="view" data-row-name="${rowName}">${__("View Result")}</button>`);
 	}
-	if (!locked && has_lab_result_content(row)) {
+	if (!locked && hasResult && row.requires_result_review) {
 		buttons.push(`<button type="button" class="btn btn-xs btn-primary" data-lab-result-action="review" data-row-name="${rowName}">${__("Review Result")}</button>`);
 	}
 	return buttons.join(" ");
 }
 
-function show_post_result_dialog(frm, row, options = {}) {
+function show_post_result_dialog(frm, row) {
 	const resultFormat = row.result_format || "Value Driven";
 	const fields = [];
-	if (!options.upload_only && ["Value Driven", "Mixed"].includes(resultFormat)) {
+	if (["Value Driven", "Mixed"].includes(resultFormat)) {
 		fields.push(
 			{ fieldname: "result_value", fieldtype: "Data", label: __("Result Value"), default: row.result_value },
 			{ fieldname: "result_unit", fieldtype: "Data", label: __("Unit"), default: row.result_unit },
@@ -427,16 +436,16 @@ function show_post_result_dialog(frm, row, options = {}) {
 			{ fieldname: "abnormal_flag", fieldtype: "Check", label: __("Abnormal"), default: row.abnormal_flag ? 1 : 0 },
 		);
 	}
-	if (!options.upload_only && ["Text / Narrative", "Mixed"].includes(resultFormat)) {
+	if (["Text / Narrative", "Mixed"].includes(resultFormat)) {
 		fields.push({ fieldname: "result_text", fieldtype: "Text", label: __("Narrative Result"), default: row.result_text });
 	}
-	if (options.upload_only || ["Document Upload", "Mixed"].includes(resultFormat)) {
+	if (["Document Upload", "Mixed"].includes(resultFormat)) {
 		fields.push({ fieldname: "result_attachment", fieldtype: "Attach", label: __("Result Attachment"), default: row.result_attachment });
 	}
 	fields.push({ fieldname: "remarks", fieldtype: "Small Text", label: __("Result Note"), default: row.remarks });
 
 	const dialog = new frappe.ui.Dialog({
-		title: options.upload_only ? __("Upload Result") : __("Post Result"),
+		title: has_lab_result_content(row) ? __("Update Result") : __("Post / Upload Result"),
 		fields,
 		primary_action_label: __("Save Result"),
 		primary_action(values) {
@@ -445,6 +454,26 @@ function show_post_result_dialog(frm, row, options = {}) {
 		},
 	});
 	dialog.show();
+}
+
+function can_edit_lab_order_item_rate(frm, row) {
+	if (["Reviewed", "Cancelled"].includes(frm.doc.status) || ["Reviewed", "Cancelled"].includes(row.status)) {
+		return false;
+	}
+	if (["Submitted Invoiced", "Paid", "Cancelled"].includes(row.billing_status)) {
+		return false;
+	}
+	return !frm.is_new();
+}
+
+function update_lab_order_item_rate(frm, row, value) {
+	const childDoctype = row.doctype || "Veterinary Lab Order Item";
+	const rate = flt(value);
+	frappe.model.set_value(childDoctype, row.name, "rate", rate).then(() => {
+		frm.refresh_field("lab_tests");
+		render_lab_tests_workbench(frm);
+		frm.save_or_update();
+	});
 }
 
 function apply_lab_result_values(frm, row, values) {

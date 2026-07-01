@@ -99,6 +99,7 @@ def validate_lab_order(doc) -> None:
 	validate_lab_order_branch_access(doc)
 	validate_lab_order_request_permissions(doc, previous)
 	validate_lab_order_result_permissions(doc, previous)
+	validate_lab_order_rate_edits(doc, previous)
 	validate_lab_order_items(doc)
 	validate_lab_order_status_requirements(doc)
 	sync_lab_order_review_metadata(doc)
@@ -240,6 +241,23 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 			can_upload_lab_results(user, doc, raise_exception=True)
 
 
+def validate_lab_order_rate_edits(doc, previous=None) -> None:
+	if previous is None:
+		return
+	if not doc.get("linked_invoice"):
+		return
+	if not _lab_order_row_rate_changed(doc, previous):
+		return
+	if not frappe.db.exists("Sales Invoice", doc.linked_invoice):
+		return
+	invoice_status = frappe.db.get_value("Sales Invoice", doc.linked_invoice, ["docstatus", "status"], as_dict=True)
+	if invoice_status and cint(invoice_status.get("docstatus")) == 1:
+		frappe.throw(
+			"Lab order rates cannot be changed after the linked invoice is submitted.",
+			frappe.ValidationError,
+		)
+
+
 def validate_lab_order_items(doc) -> None:
 	from vetedge.services.billing import validate_sales_item
 
@@ -249,6 +267,7 @@ def validate_lab_order_items(doc) -> None:
 
 	seen_templates: set[str] = set()
 	current_user = get_current_user()
+	linked_invoice_billing_status = get_lab_order_linked_invoice_billing_status(doc)
 	for row in rows:
 		if not row.lab_test_template:
 			frappe.throw("Each lab order row must reference a Veterinary Lab Test.", frappe.ValidationError)
@@ -290,10 +309,12 @@ def validate_lab_order_items(doc) -> None:
 			row.billing_item = lab_test.linked_item
 		if row.get("rate") in (None, "") and lab_test.get("default_rate") is not None:
 			row.rate = flt(lab_test.default_rate)
-		if not row.get("billing_status"):
-			row.billing_status = "Invoice Linked" if doc.get("linked_invoice") else "Not Billed"
-		elif doc.get("linked_invoice") and row.get("billing_status") == "Not Billed":
-			row.billing_status = "Invoice Linked"
+		if row.get("rate") not in (None, "") and flt(row.get("rate")) < 0:
+			frappe.throw(f"Rate cannot be negative for {row.lab_test_template}.", frappe.ValidationError)
+		if linked_invoice_billing_status:
+			row.billing_status = linked_invoice_billing_status
+		elif not row.get("billing_status"):
+			row.billing_status = "Not Billed"
 		if not row.get("result_action"):
 			row.result_action = "Result Actions"
 		if not row.get("result_format"):
@@ -368,6 +389,21 @@ def validate_lab_result_format_content(row) -> None:
 		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text", "result_attachment")
 	):
 		frappe.throw(f"Enter or upload a result for {row.lab_test_template}.", frappe.ValidationError)
+
+
+def get_lab_order_linked_invoice_billing_status(doc) -> str | None:
+	if not doc.get("linked_invoice") or not frappe.db.exists("Sales Invoice", doc.linked_invoice):
+		return None
+	invoice = frappe.db.get_value("Sales Invoice", doc.linked_invoice, ["docstatus", "status", "outstanding_amount"], as_dict=True)
+	if not invoice:
+		return None
+	if cint(invoice.get("docstatus")) == 1:
+		if invoice.get("status") == "Paid" or flt(invoice.get("outstanding_amount")) <= 0:
+			return "Paid"
+		return "Submitted Invoiced"
+	if cint(invoice.get("docstatus")) == 0:
+		return "Draft Invoiced"
+	return "Cancelled"
 
 
 def build_lab_result_summary(row) -> str:
@@ -807,7 +843,8 @@ def build_lab_order_invoice_items(order, cost_center: str) -> list[dict]:
 		if not row.billing_item:
 			continue
 		default_rate = frappe.db.get_value(LAB_TEST_DOCTYPE, row.lab_test_template, "default_rate")
-		items.append(build_invoice_item(row.billing_item, 1, None, default_rate, cost_center))
+		rate = row.get("rate") if row.get("rate") not in (None, "") else default_rate
+		items.append(build_invoice_item(row.billing_item, 1, None, rate, cost_center))
 	return items
 
 
@@ -1022,8 +1059,23 @@ def _serialize_request_rows(doc) -> list[tuple]:
 			row.get("notes"),
 			row.get("sample_type"),
 			row.get("billing_item"),
+			flt(row.get("rate")) if row.get("rate") not in (None, "") else None,
 		)
 		for row in doc.get("lab_tests") or []
+	]
+
+
+def _lab_order_row_rate_changed(doc, previous) -> bool:
+	return _serialize_lab_order_rates(doc) != _serialize_lab_order_rates(previous)
+
+
+def _serialize_lab_order_rates(doc) -> list[tuple]:
+	return [
+		(
+			row.get("name") or f"idx-{idx}",
+			flt(row.get("rate")) if row.get("rate") not in (None, "") else None,
+		)
+		for idx, row in enumerate(doc.get("lab_tests") or [], start=1)
 	]
 
 
