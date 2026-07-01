@@ -2404,7 +2404,7 @@ class TestBillingCoreConsultationStatusNormalization(TestCase):
 		self.assertEqual(res5, "Partly Paid")
 
 		res6 = billing_core.get_consultation_payment_status("Draft Invoice Pending")
-		self.assertEqual(res6, "Not Billed")
+		self.assertEqual(res6, "Unpaid")
 
 	def test_session_payment_status_uses_partly_paid_label(self):
 		status = billing_core.get_session_payment_status_from_ledger(
@@ -2441,7 +2441,7 @@ class TestBillingCoreConsultationStatusNormalization(TestCase):
 		with billing_core_context(session, invoice, source_links=source_links):
 			billing_core.update_source_billing_compatibility_fields("Veterinary Consultation", "VCON-001", summary)
 
-		self.assertEqual(source_links[0].payment_status, "Not Billed")
+		self.assertEqual(source_links[0].payment_status, "Unpaid")
 		self.assertNotEqual(source_links[0].payment_status, "Draft Invoice Pending")
 
 	def test_partly_paid_billing_session_syncs_consultation_correctly(self):

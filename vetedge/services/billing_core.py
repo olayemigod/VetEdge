@@ -2476,8 +2476,10 @@ def get_select_safe_invoice_status(doctype: str, fieldname: str, status: str | N
 
 
 def get_consultation_payment_status(status: str | None) -> str:
-	if not status or status in {"Not Invoiced", "Pending Invoice", "Draft Invoice Pending", "Draft", "None"}:
+	if not status or status in {"Not Invoiced", "Pending Invoice", "None"}:
 		return "Not Billed"
+	if status in {"Draft Invoice Pending", "Draft"}:
+		return "Unpaid"
 	if status in {"Partially Paid", "Partly Paid"}:
 		return "Partly Paid"
 	if status in CONSULTATION_PAYMENT_STATUSES:

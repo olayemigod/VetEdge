@@ -569,7 +569,7 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Partly Paid")
 		self.assertEqual(consultation_doc.consultation_billing_sources[0].invoice_status, "Partly Paid")
 
-	def test_draft_invoice_sync_uses_not_billed_for_consultation_payment_rows(self):
+	def test_draft_invoice_sync_uses_unpaid_for_consultation_payment_rows(self):
 		consultation_doc = frappe._dict(
 			name="VCON-001",
 			status="Awaiting Payment",
@@ -604,8 +604,8 @@ class TestConsultationBilling(TestCase):
 			from vetedge.services.billing import sync_consultation_invoice_reference_from_invoice
 			sync_consultation_invoice_reference_from_invoice("VCON-001", invoice)
 
-		self.assertEqual(consultation_doc.payment_status, "Not Billed")
-		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Not Billed")
+		self.assertEqual(consultation_doc.payment_status, "Unpaid")
+		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Unpaid")
 		self.assertNotEqual(consultation_doc.payment_status, "Draft Invoice Pending")
 
 

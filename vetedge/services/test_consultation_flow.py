@@ -24,9 +24,27 @@ from vetedge.services.consultation_flow import (
 	validate_service_branch_access,
 	validate_consultation_status_transition,
 )
+from vetedge.veterinary.doctype.veterinary_consultation.veterinary_consultation import (
+	normalize_consultation_payment_status_fields,
+)
 
 
 class TestConsultationFlow(TestCase):
+	def test_consultation_payment_status_normalizer_removes_draft_invoice_pending(self):
+		doc = frappe._dict(
+			payment_status="Draft Invoice Pending",
+			planned_treatments=[
+				frappe._dict(payment_status="Draft Invoice Pending"),
+				frappe._dict(payment_status="Partially Paid"),
+			],
+		)
+
+		normalize_consultation_payment_status_fields(doc)
+
+		self.assertEqual(doc.payment_status, "Unpaid")
+		self.assertEqual(doc.planned_treatments[0].payment_status, "Unpaid")
+		self.assertEqual(doc.planned_treatments[1].payment_status, "Partly Paid")
+
 	def test_consultation_type_master_doctype_is_defined(self):
 		doctype_path = (
 			Path(__file__).resolve().parents[1]
