@@ -1576,6 +1576,88 @@ class TestBillingCore(TestCase):
 		self.assertFalse(status["can_proceed"])
 		self.assertIn("submit the invoice", status["message"])
 
+	def test_resolve_billing_session_skips_closed_charge_parent(self):
+		closed = make_session(name="VBS-CLOSED", status="Closed")
+		active = make_session(name="VBS-ACTIVE", status="Active")
+		sessions = {closed.name: closed, active.name: active}
+
+		def get_doc(doctype, name=None):
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return sessions[name]
+			return frappe._dict(doctype=doctype, name=name)
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE and filters == {"source_doctype": "Veterinary Consultation", "source_name": "VCON-001"}:
+				return [frappe._dict(parent="VBS-CLOSED"), frappe._dict(parent="VBS-ACTIVE")]
+			return []
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True), get_value=Mock(return_value=None)),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=Mock(return_value=frappe._dict(enable_billing_sessions=1)),
+			get_all=get_all,
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		with patch.object(billing_core, "frappe", frappe_stub):
+			resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(resolved.name, "VBS-ACTIVE")
+
+	def test_resolve_billing_session_returns_closed_session_when_current_payloads_are_finalized(self):
+		charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Submitted Invoiced"})
+		closed = make_session(name="VBS-CLOSED", status="Closed", charges=[charge])
+
+		def get_doc(doctype, name=None):
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE:
+				return closed
+			return frappe._dict(doctype=doctype, name=name)
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE and filters == {"source_doctype": "Veterinary Consultation", "source_name": "VCON-001"}:
+				return [frappe._dict(parent="VBS-CLOSED")]
+			return []
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True), get_value=Mock(return_value=None)),
+			get_doc=get_doc,
+			get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: False),
+			get_single=Mock(return_value=frappe._dict(enable_billing_sessions=1)),
+			get_all=get_all,
+			_dict=frappe._dict,
+			ValidationError=frappe.ValidationError,
+			throw=Mock(side_effect=frappe.ValidationError),
+		)
+		with (
+			patch.object(billing_core, "frappe", frappe_stub),
+			patch.object(billing_core, "get_source_charge_payloads", return_value=[charge_payload("consultation-fee", "CONS-ITEM", 100)]),
+		):
+			resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001")
+
+		self.assertEqual(resolved.name, "VBS-CLOSED")
+
+	def test_new_billing_cycle_filters_payloads_finalized_in_prior_session(self):
+		session = make_session(name="VBS-NEW")
+		old_payload = charge_payload("consultation-fee", "CONS-ITEM", 100)
+		new_payload = charge_payload("new-row", "NEW-ITEM", 50)
+
+		def get_all(doctype, filters=None, fields=None, limit=None, **kwargs):
+			if (
+				doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE
+				and filters
+				and filters.get("charge_key") == "consultation-fee"
+			):
+				return [frappe._dict(parent="VBS-CLOSED")]
+			return []
+
+		frappe_stub = SimpleNamespace(get_all=get_all)
+		with patch.object(billing_core, "frappe", frappe_stub):
+			payloads = billing_core.filter_payloads_finalized_in_other_billing_sessions(session, [old_payload, new_payload])
+
+		self.assertEqual([payload["charge_key"] for payload in payloads], ["new-row"])
+
 	def test_consultation_resolves_existing_registration_billing_session(self):
 		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
 		session = make_session(name="VBS-REG", animal="PAT-001", customer="CUST-001", created_from_doctype="Veterinary Patient", created_from_name="PAT-001", current_draft_invoice="SINV-REG")
@@ -1740,6 +1822,32 @@ class TestBillingCore(TestCase):
 
 		self.assertTrue(status["can_proceed"])
 
+	def test_no_payment_gate_summary_closes_satisfied_session_after_invoice_submission(self):
+		charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Submitted Invoiced"})
+		session = make_session(payment_gate_mode="No Payment Gate", latest_invoice="SINV-001", charges=[charge])
+		invoice = make_invoice(docstatus=1, outstanding_amount=100)
+
+		with billing_core_context(session, invoice):
+			summary = billing_core.get_billing_session_summary(session)
+
+		self.assertEqual(session.status, "Closed")
+		self.assertEqual(summary["status"], "Closed")
+		self.assertTrue(summary["payment_gate"]["can_proceed"])
+		session.save.assert_called()
+
+	def test_no_payment_gate_summary_keeps_session_open_with_pending_unbilled_charge(self):
+		submitted_charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Submitted Invoiced"})
+		pending_charge = frappe._dict(charge_payload("new-row", "NEW-ITEM", 50))
+		session = make_session(payment_gate_mode="No Payment Gate", latest_invoice="SINV-001", charges=[submitted_charge, pending_charge])
+		invoice = make_invoice(docstatus=1, outstanding_amount=100)
+
+		with billing_core_context(session, invoice):
+			summary = billing_core.get_billing_session_summary(session)
+
+		self.assertEqual(session.status, "Active")
+		self.assertEqual(summary["status"], "Active")
+		self.assertFalse(summary["payment_gate"]["can_proceed"])
+
 	def test_partial_payment_gate_requires_paid_amount_across_session(self):
 		session = make_session(payment_gate_mode="Partial Payment Gate", latest_invoice="SINV-001", total_paid=0)
 		invoice = make_invoice(docstatus=1, outstanding_amount=100)
@@ -1751,6 +1859,17 @@ class TestBillingCore(TestCase):
 
 		self.assertFalse(blocked["can_proceed"])
 		self.assertTrue(allowed["can_proceed"])
+
+	def test_partial_payment_gate_summary_closes_after_valid_partial_payment(self):
+		charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Submitted Invoiced"})
+		session = make_session(payment_gate_mode="Partial Payment Gate", latest_invoice="SINV-001", charges=[charge])
+		invoice = make_invoice(docstatus=1, outstanding_amount=75)
+
+		with billing_core_context(session, invoice, paid_amount=25):
+			summary = billing_core.get_billing_session_summary(session)
+
+		self.assertEqual(session.status, "Closed")
+		self.assertTrue(summary["payment_gate"]["can_proceed"])
 
 	def test_full_payment_gate_requires_zero_session_outstanding(self):
 		session = make_session(payment_gate_mode="Full Payment Gate", latest_invoice="SINV-001")
@@ -1764,6 +1883,17 @@ class TestBillingCore(TestCase):
 
 		self.assertFalse(blocked["can_proceed"])
 		self.assertTrue(allowed["can_proceed"])
+
+	def test_full_payment_gate_summary_closes_after_full_payment(self):
+		charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Paid"})
+		session = make_session(payment_gate_mode="Full Payment Gate", latest_invoice="SINV-001", charges=[charge])
+		invoice = make_invoice(docstatus=1, outstanding_amount=0)
+
+		with billing_core_context(session, invoice, paid_amount=100):
+			summary = billing_core.get_billing_session_summary(session)
+
+		self.assertEqual(session.status, "Closed")
+		self.assertTrue(summary["payment_gate"]["can_proceed"])
 
 	def test_modal_summary_returns_session_payment_gate(self):
 		summary = {"name": "VBS-001", "payment_gate": {"can_proceed": True}, "invoices": []}

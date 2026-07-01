@@ -168,10 +168,18 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 		filters={"source_doctype": source_doctype, "source_name": source_name},
 		fields=["parent"],
 		order_by="modified desc",
-		limit=1,
+		limit=20,
 	)
-	if rows:
-		return frappe.get_doc(BILLING_SESSION_DOCTYPE, rows[0].parent)
+	closed_candidates = []
+	for row in rows:
+		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, row.parent)
+		if is_billing_session_open_for_continuity(session):
+			return session
+		if session.get("status") == "Closed":
+			closed_candidates.append(session)
+	for session in closed_candidates:
+		if closed_billing_session_covers_current_source_payloads(session, source_doctype, source_name):
+			return session
 
 	identity = get_source_billing_identity(source_doctype, source_name)
 	if source_doctype == "Veterinary Consultation":
@@ -548,6 +556,7 @@ def get_unbilled_diagnostic_reason(charge, invoice_docstatus) -> str:
 def get_billing_session_summary(session) -> dict:
 	session = ensure_session_doc(session)
 	refresh_billing_session_totals(session)
+	close_billing_session_if_satisfied(session)
 	ledger = get_billing_session_invoice_ledger(session)
 	invoices = ledger["invoices"]
 	gate = get_payment_gate_status(session)
@@ -589,6 +598,8 @@ def get_payment_gate_status(session) -> dict:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
 	if not ledger["invoices"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
+	if ledger["has_pending_uninvoiced_charges"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated for pending charges before completing this workflow."}
 	if ledger["has_active_draft_invoice"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Please submit the invoice before completing this workflow."}
 	if not ledger["submitted_invoice_count"]:
@@ -606,8 +617,6 @@ def get_payment_gate_status(session) -> dict:
 		if allowed and ledger["outstanding_amount"] > 0:
 			message = get_session_payment_warning(ledger) or message
 		return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": message if allowed else "A partial payment is required before service can proceed."}
-	if ledger["has_pending_uninvoiced_charges"]:
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Full payment required. There are pending uninvoiced charges."}
 	if ledger["has_unpaid_submitted_invoice"] or flt(ledger["outstanding_amount"]) > 0:
 		return {
 			"gate": mode,
@@ -623,6 +632,36 @@ def get_session_payment_warning(ledger: dict) -> str | None:
 	if flt(ledger.get("outstanding_amount")) > 0:
 		return "This billing session still has unpaid balance from earlier invoice(s)."
 	return None
+
+
+def close_billing_session_if_satisfied(session):
+	session = ensure_session_doc(session)
+	if session.get("status") in {"Closed", "Cancelled"}:
+		return session
+	refresh_billing_session_totals(session)
+	ledger = get_billing_session_invoice_ledger(session)
+	if not should_close_billing_session_for_lifecycle(session, ledger):
+		return session
+	session.status = "Closed"
+	session.save()
+	return session
+
+
+def should_close_billing_session_for_lifecycle(session, ledger: dict | None = None) -> bool:
+	session = ensure_session_doc(session)
+	if session.get("status") in {"Closed", "Cancelled"}:
+		return False
+	ledger = ledger or get_billing_session_invoice_ledger(session)
+	if ledger["has_active_draft_invoice"] or ledger["has_pending_uninvoiced_charges"]:
+		return False
+	if not ledger["submitted_invoice_count"]:
+		return False
+	mode = normalize_payment_gate_mode(session.get("payment_gate_mode"))
+	if mode == NO_PAYMENT_GATE:
+		return True
+	if mode == PARTIAL_PAYMENT_GATE:
+		return flt(ledger["total_paid"]) > 0
+	return not ledger["has_unpaid_submitted_invoice"] and flt(ledger["outstanding_amount"]) <= 0
 
 
 def format_money_for_message(amount, currency=None) -> str:
@@ -717,6 +756,7 @@ def sync_source_charge_payloads_to_billing_session(source_doctype: str, source_n
 def sync_single_source_to_billing_session(session, source_doctype: str, source_name: str):
 	session = ensure_session_doc(session)
 	payloads = get_source_charge_payloads(source_doctype, source_name, session)
+	payloads = filter_payloads_finalized_in_other_billing_sessions(session, payloads)
 	for payload in payloads:
 		add_or_update_session_charge(session, payload)
 	retire_missing_source_charges(session, source_doctype, source_name, payloads)
@@ -739,6 +779,7 @@ def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=
 			if should_skip_blocked_related_source_sync(source_doctype, source_name, trigger_source_doctype, trigger_source_name, exc):
 				continue
 			raise
+		payloads = filter_payloads_finalized_in_other_billing_sessions(session, payloads)
 		for payload in payloads:
 			add_or_update_session_charge(session, payload)
 		retire_missing_source_charges(session, source_doctype, source_name, payloads)
@@ -765,6 +806,76 @@ def should_skip_related_source_for_consultation_plan(source_doctype: str, source
 		return False
 	consultation = get_source_linked_consultation(source_doctype, source_name)
 	return bool(consultation and consultation_has_eligible_plan_rows(consultation))
+
+
+def closed_billing_session_covers_current_source_payloads(session, source_doctype: str, source_name: str) -> bool:
+	session = ensure_session_doc(session)
+	try:
+		payloads = get_source_charge_payloads(source_doctype, source_name, session)
+	except Exception:
+		return False
+	current_keys = {
+		key
+		for payload in payloads
+		for key in get_payload_charge_keys(payload)
+	}
+	if not current_keys:
+		return True
+	finalized_keys = {
+		row.get("charge_key")
+		for row in session.get("charges") or []
+		if row.get("source_doctype") == source_doctype
+		and row.get("source_name") == source_name
+		and row.get("billing_status") in {"Submitted Invoiced", "Paid"}
+	}
+	return current_keys.issubset(finalized_keys)
+
+
+def filter_payloads_finalized_in_other_billing_sessions(session, payloads: list[dict]) -> list[dict]:
+	session = ensure_session_doc(session)
+	return [payload for payload in payloads if not payload_finalized_in_other_billing_session(session, payload)]
+
+
+def payload_finalized_in_other_billing_session(session, payload: dict) -> bool:
+	source_doctype = payload.get("source_doctype")
+	source_name = payload.get("source_name")
+	if not source_doctype or not source_name:
+		return False
+	for charge_key in get_payload_charge_keys(payload):
+		if any(
+			row.get("charge_key") == charge_key
+			and row.get("source_doctype") == source_doctype
+			and row.get("source_name") == source_name
+			and row.get("billing_status") in {"Submitted Invoiced", "Paid"}
+			for row in session.get("charges") or []
+		):
+			continue
+		try:
+			rows = frappe.get_all(
+				BILLING_SESSION_CHARGE_DOCTYPE,
+				filters={
+					"charge_key": charge_key,
+					"source_doctype": source_doctype,
+					"source_name": source_name,
+					"billing_status": ["in", ["Submitted Invoiced", "Paid"]],
+				},
+				fields=["parent"],
+				limit=1,
+			)
+		except Exception:
+			return False
+		if any(row.parent != session.name for row in rows):
+			return True
+	return False
+
+
+def get_payload_charge_keys(payload: dict) -> list[str]:
+	keys = []
+	charge_key = payload.get("charge_key") or build_charge_key(payload)
+	if charge_key:
+		keys.append(charge_key)
+	keys.extend(key for key in payload.get("legacy_charge_keys") or [] if key and key not in keys)
+	return keys
 
 
 def consultation_has_eligible_plan_rows(consultation_name: str) -> bool:
@@ -1055,6 +1166,7 @@ def safe_refresh_billing_session(session_name: str, reconcile: bool = False):
 	if reconcile:
 		reconcile_session_charge_statuses(session)
 	refresh_billing_session_totals(session)
+	close_billing_session_if_satisfied(session)
 	session.save()
 	return session
 

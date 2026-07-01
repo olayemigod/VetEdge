@@ -871,6 +871,35 @@ class TestConsultationFlow(TestCase):
 		):
 			self.assertRaises(frappe.ValidationError, validate_completion_requirements, doc)
 
+	def test_completion_gate_is_skipped_during_billing_core_sync(self):
+		doc = frappe._dict(name="VCON-001", status="Completed")
+		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+		frappe.flags.vetedge_billing_core_syncing = True
+		try:
+			with (
+				patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+				patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+			):
+				validate_completion_requirements(doc)
+		finally:
+			frappe.flags.vetedge_billing_core_syncing = previous
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
+	def test_completion_gate_is_skipped_when_status_did_not_change(self):
+		doc = frappe._dict(name="VCON-001", status="Completed")
+		doc.has_value_changed = lambda fieldname: False
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
 	def test_consultation_status_transition_allows_in_progress_to_billing(self):
 		validate_consultation_status_transition("In Progress", "Awaiting Payment")
 

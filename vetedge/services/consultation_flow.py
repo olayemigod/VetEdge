@@ -689,6 +689,10 @@ def validate_enabled_item(item: str | None) -> None:
 
 
 def validate_completion_requirements(doc) -> None:
+	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
+		return
+	if not should_validate_final_workflow_gate(doc):
+		return
 	assert_consultation_can_proceed(doc, doc.status)
 	validate_consultation_dispensary_requirements(doc)
 
@@ -700,6 +704,16 @@ def validate_completion_requirements(doc) -> None:
 			"Veterinary Vital Signs are required before completing this consultation.",
 			frappe.ValidationError,
 		)
+
+
+def should_validate_final_workflow_gate(doc) -> bool:
+	status = doc.get("status") if hasattr(doc, "get") else getattr(doc, "status", None)
+	if status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
+		return False
+	has_changed = getattr(doc, "has_value_changed", None)
+	if callable(has_changed):
+		return bool(has_changed("status"))
+	return True
 
 
 def is_vitals_required_before_completion() -> bool:
