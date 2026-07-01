@@ -93,6 +93,7 @@ def validate_lab_test(doc) -> None:
 def validate_lab_order(doc) -> None:
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
 
+	normalize_new_standalone_lab_order_status(doc, previous)
 	validate_lab_order_status(doc, previous)
 	resolve_lab_order_context(doc)
 	validate_lab_order_consultation_link(doc)
@@ -103,6 +104,23 @@ def validate_lab_order(doc) -> None:
 	validate_lab_order_items(doc)
 	validate_lab_order_status_requirements(doc)
 	sync_lab_order_review_metadata(doc)
+
+
+def normalize_new_standalone_lab_order_status(doc, previous=None) -> None:
+	if previous is not None:
+		return
+	if doc.get("consultation"):
+		return
+	if doc.get("status") not in {"Result Entered", "Reviewed"}:
+		return
+	if any(_row_has_lab_result_content(row) for row in doc.get("lab_tests") or []):
+		return
+	doc.status = "Draft"
+	for row in doc.get("lab_tests") or []:
+		if row.get("status") in {"Result Entered", "Reviewed"}:
+			row.status = "Requested"
+		if row.get("result_status") == "Reviewed":
+			row.result_status = "Pending"
 
 
 def validate_lab_order_status(doc, previous=None) -> None:
@@ -332,7 +350,7 @@ def validate_lab_order_items(doc) -> None:
 		if row.billing_item:
 			validate_sales_item(row.billing_item, "Lab Billing Item", allow_stock=False)
 
-		has_result = any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS)
+		has_result = _row_has_lab_result_content(row)
 		if has_result:
 			validate_lab_result_format_content(row)
 			validate_lab_result_actor_permissions(row, current_user, doc)
@@ -370,7 +388,7 @@ def validate_lab_order_status_requirements(doc) -> None:
 	for row in doc.get("lab_tests") or []:
 		if row.status == "Cancelled":
 			continue
-		if not any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS):
+		if not _row_has_lab_result_content(row):
 			frappe.throw(
 				f"Enter a result value or result text for {row.lab_test_template} before marking this lab order as {doc.status}.",
 				frappe.ValidationError,
@@ -389,6 +407,10 @@ def validate_lab_result_format_content(row) -> None:
 		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text", "result_attachment")
 	):
 		frappe.throw(f"Enter or upload a result for {row.lab_test_template}.", frappe.ValidationError)
+
+
+def _row_has_lab_result_content(row) -> bool:
+	return any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS)
 
 
 def get_lab_order_linked_invoice_billing_status(doc) -> str | None:

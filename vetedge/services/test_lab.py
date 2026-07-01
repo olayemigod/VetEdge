@@ -75,6 +75,7 @@ class TestLabWorkflow(TestCase):
 		script = script_path.read_text()
 
 		self.assertIn("open_lab_order_dialog_safely(frm)", script)
+		self.assertIn('__("Add New Lab Order")', script)
 		self.assertIn("show_lab_order_summary_dialog(frm, response.message.name)", script)
 		self.assertNotIn('frappe.set_route("Form", "Veterinary Lab Order", response.message.name)', script)
 
@@ -89,6 +90,7 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("show_review_result_dialog(frm, row)", script)
 		self.assertIn("Post / Upload Result", script)
 		self.assertIn("Update Result", script)
+		self.assertIn("Edit the Rate field before billing to change the lab test cost.", script)
 		self.assertNotIn('data-lab-result-action="upload"', script)
 		self.assertNotIn('"Upload Result"', script)
 		self.assertIn("result_attachment", script)
@@ -683,6 +685,24 @@ class TestLabWorkflow(TestCase):
 		self.assertEqual(row.entered_by, "doctor@example.com")
 		self.assertEqual(row.uploaded_by, "doctor@example.com")
 		self.assertEqual(row.uploaded_on, "2026-04-23 11:00:00")
+
+	def test_new_standalone_lab_order_with_accidental_reviewed_status_saves_without_result(self):
+		row = lab_result_row(
+			result_format="Value Driven",
+			result_value="",
+			status="Reviewed",
+			result_status="Reviewed",
+		)
+		doc = make_validation_doc(status="Reviewed", lab_tests=[row])
+		doc.consultation = None
+		doc.get = lambda key, default=None: doc[key] if key in doc else default
+
+		with validation_context():
+			validate_lab_order(doc)
+
+		self.assertEqual(doc.status, "Draft")
+		self.assertEqual(row.status, "Requested")
+		self.assertEqual(row.result_status, "Pending")
 
 
 def make_lab_order(linked_invoice=None):

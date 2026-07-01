@@ -388,7 +388,7 @@ function render_lab_order_item_workbench_row(frm, row) {
 	const resultFormat = escape_html(row.result_format || "Value Driven");
 	const rate = row.rate ?? "";
 	const rateCell = can_edit_lab_order_item_rate(frm, row)
-		? `<input class="form-control input-xs" type="number" step="0.01" min="0" data-lab-rate data-row-name="${rowName}" value="${escape_html(String(rate))}">`
+		? `<input class="form-control input-xs" type="number" step="0.01" min="0" data-lab-rate data-row-name="${rowName}" value="${escape_html(String(rate))}" title="${__("Edit the Rate field before billing to change the lab test cost.")}"><div class="text-muted small">${__("Editable before billing")}</div>`
 		: escape_html(String(rate));
 	const billingStatus = escape_html(row.billing_status || "Not Billed");
 	const resultStatus = escape_html(row.result_status || "Pending");

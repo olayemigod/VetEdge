@@ -703,7 +703,7 @@ function add_lab_actions(frm) {
 	}
 
 	if (!consultationScopeIsLocked(frm)) {
-		frm.add_custom_button(__("New Lab Order"), () => {
+		frm.add_custom_button(__("Add New Lab Order"), () => {
 			open_lab_order_dialog_safely(frm);
 		}, __("Clinical"));
 	}

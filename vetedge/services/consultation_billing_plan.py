@@ -125,9 +125,20 @@ def _update_plan_row_from_lab_order(plan_row, lab_row, item: str, rate: float | 
 	changed = False
 	for fieldname, value in new_values.items():
 		if plan_row.get(fieldname) != value:
-			plan_row[fieldname] = value
+			_set_child_value(plan_row, fieldname, value)
 			changed = True
 	return changed
+
+
+def _set_child_value(row, fieldname: str, value) -> None:
+	setter = getattr(row, "set", None)
+	if callable(setter):
+		setter(fieldname, value)
+		return
+	if hasattr(row, "__setitem__"):
+		row[fieldname] = value
+		return
+	setattr(row, fieldname, value)
 
 
 def _can_update_plan_row_from_source(row) -> bool:

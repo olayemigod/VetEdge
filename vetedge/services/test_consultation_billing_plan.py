@@ -69,6 +69,32 @@ class TestConsultationBillingPlan(TestCase):
 		self.assertEqual(consultation.planned_treatments[0].amount, 4500)
 		consultation.save.assert_called_once_with(ignore_permissions=True)
 
+	def test_lab_order_resave_updates_document_like_plan_row_without_item_assignment(self):
+		plan_row = DocumentLikePlanRow(
+			source_type="Lab Order",
+			source_document="VLAB-001",
+			source_detail_name="ROW-1",
+			item="LAB-CBC",
+			rate=9999,
+			qty=1,
+			billing_status="Pending",
+			payment_status="Not Billed",
+		)
+		consultation = make_consultation(planned_treatments=[plan_row])
+		order = frappe._dict(
+			name="VLAB-001",
+			consultation="VCON-001",
+			status="Requested",
+			lab_tests=[frappe._dict(name="ROW-1", lab_test_template="CBC", lab_test_name="Complete Blood Count", billing_item="LAB-CBC", rate=4500)],
+		)
+
+		with patch_plan_frappe(consultation, lab_rates={"CBC": 4500}):
+			sync_lab_order_to_consultation_plan(order)
+
+		self.assertEqual(plan_row.rate, 4500)
+		self.assertEqual(plan_row.amount, 4500)
+		consultation.save.assert_called_once_with(ignore_permissions=True)
+
 	def test_lab_order_resave_does_not_update_submitted_source_row_rate(self):
 		consultation = make_consultation(
 			planned_treatments=[
@@ -127,6 +153,17 @@ def make_consultation(planned_treatments=None):
 	consultation.append = lambda fieldname, row: consultation.setdefault(fieldname, []).append(frappe._dict(row)) or consultation[fieldname][-1]
 	consultation.save = Mock()
 	return consultation
+
+
+class DocumentLikePlanRow:
+	def __init__(self, **values):
+		self.__dict__.update(values)
+
+	def get(self, fieldname, default=None):
+		return getattr(self, fieldname, default)
+
+	def set(self, fieldname, value):
+		setattr(self, fieldname, value)
 
 
 def patch_plan_frappe(consultation, lab_rates=None, vaccine=None):
