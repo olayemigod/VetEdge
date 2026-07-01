@@ -89,6 +89,62 @@ class TestBillingCore(TestCase):
 		self.assertEqual(len(session.charges), 1)
 		self.assertEqual(session.charges[0].amount, 125)
 
+	def test_related_source_sync_skips_blocked_invoiced_hospitalisation_activity(self):
+		session = make_session()
+		blocker = frappe.ValidationError(
+			"This activity has already been invoiced. Cancel the invoice or create an adjustment before removing it."
+		)
+
+		def payloads(source_doctype, source_name, session_arg):
+			if source_doctype == "Veterinary Consultation":
+				return [charge_payload("consultation-fee", "CONSULT-ITEM", 100)]
+			if source_doctype == "Veterinary Hospitalisation":
+				raise blocker
+			return []
+
+		with (
+			patch.object(
+				billing_core,
+				"find_related_billable_sources_for_session",
+				return_value=[
+					("Veterinary Consultation", "VCON-001"),
+					("Veterinary Hospitalisation", "VHOS-001"),
+				],
+			),
+			patch.object(billing_core, "get_source_charge_payloads", side_effect=payloads),
+		):
+			billing_core.sync_all_related_sources_to_billing_session(
+				session,
+				trigger_source_doctype="Veterinary Consultation",
+				trigger_source_name="VCON-001",
+			)
+
+		self.assertEqual(len(session.charges), 1)
+		self.assertEqual(session.charges[0].item_code, "CONSULT-ITEM")
+		session.save.assert_called_once()
+
+	def test_direct_source_sync_does_not_skip_blocked_invoiced_hospitalisation_activity(self):
+		session = make_session()
+		blocker = frappe.ValidationError(
+			"This activity has already been invoiced. Cancel the invoice or create an adjustment before removing it."
+		)
+
+		with (
+			patch.object(
+				billing_core,
+				"find_related_billable_sources_for_session",
+				return_value=[("Veterinary Hospitalisation", "VHOS-001")],
+			),
+			patch.object(billing_core, "get_source_charge_payloads", side_effect=blocker),
+		):
+			self.assertRaises(
+				frappe.ValidationError,
+				billing_core.sync_all_related_sources_to_billing_session,
+				session,
+				"Veterinary Hospitalisation",
+				"VHOS-001",
+			)
+
 	def test_consultation_plan_payload_reuses_legacy_source_charge(self):
 		legacy_key = "Veterinary Lab Order:VLAB-001:Lab:LABROW-1"
 		new_key = "consultation-plan::Lab Order::VLAB-001::LABROW-1"

@@ -55,6 +55,9 @@ SAFE_SOURCE_INVOICE_CHILD_LINK_FIELDS = {
 	"Veterinary Hospitalisation Charge Item": {"field": "sales_invoice", "action": "clear", "extra_values": {"sales_invoice_item": None}},
 }
 CONSULTATION_PAYMENT_STATUSES = {"Not Billed", "Unpaid", "Partly Paid", "Paid", "Cancelled"}
+NON_BLOCKING_RELATED_SOURCE_SYNC_MESSAGES = {
+	"This activity has already been invoiced. Cancel the invoice or create an adjustment before removing it.",
+}
 
 
 def is_billing_sessions_enabled() -> bool:
@@ -730,7 +733,12 @@ def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=
 			continue
 		if should_skip_related_source_for_consultation_plan(source_doctype, source_name):
 			continue
-		payloads = get_source_charge_payloads(source_doctype, source_name, session)
+		try:
+			payloads = get_source_charge_payloads(source_doctype, source_name, session)
+		except frappe.ValidationError as exc:
+			if should_skip_blocked_related_source_sync(source_doctype, source_name, trigger_source_doctype, trigger_source_name, exc):
+				continue
+			raise
 		for payload in payloads:
 			add_or_update_session_charge(session, payload)
 		retire_missing_source_charges(session, source_doctype, source_name, payloads)
@@ -738,6 +746,18 @@ def sync_all_related_sources_to_billing_session(session, trigger_source_doctype=
 			retire_missing_consultation_plan_charges(session, source_name, payloads)
 	session.save()
 	return session
+
+
+def should_skip_blocked_related_source_sync(
+	source_doctype: str,
+	source_name: str,
+	trigger_source_doctype: str | None,
+	trigger_source_name: str | None,
+	exc: Exception,
+) -> bool:
+	if source_doctype == trigger_source_doctype and source_name == trigger_source_name:
+		return False
+	return str(exc) in NON_BLOCKING_RELATED_SOURCE_SYNC_MESSAGES
 
 
 def should_skip_related_source_for_consultation_plan(source_doctype: str, source_name: str) -> bool:
