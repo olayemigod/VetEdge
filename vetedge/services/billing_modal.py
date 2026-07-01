@@ -418,7 +418,12 @@ def get_billing_session_summary_for_source(
 		return None
 	if sync_source_charges and source_doctype == "Veterinary Consultation":
 		try:
-			from vetedge.services.billing_core import sync_source_charge_payloads_to_billing_session
+			from vetedge.services.billing_core import closed_billing_session_covers_current_source_payloads, sync_source_charge_payloads_to_billing_session
+
+			historical_session = resolve_billing_session(source_doctype, source_name, include_closed_satisfied=True)
+			if historical_session and historical_session.get("status") == "Closed":
+				if closed_billing_session_covers_current_source_payloads(historical_session, source_doctype, source_name):
+					return None
 
 			session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
 		except Exception:

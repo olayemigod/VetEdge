@@ -366,6 +366,46 @@ class TestBillingModal(TestCase):
 		self.assertEqual(state["invoice_action_label"], "Create Next Invoice")
 		self.assertEqual(state["pending_charge_count"], 1)
 
+	def test_consultation_modal_state_does_not_show_closed_satisfied_session_as_active(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			status="Open",
+			patient="VP-001",
+			primary_owner="CUST-001",
+			service_branch="Main",
+			linked_invoice="SINV-SUBMITTED",
+		)
+		invoice_summary = {
+			"name": "SINV-SUBMITTED",
+			"docstatus": 1,
+			"is_submitted": True,
+			"grand_total": 5000,
+			"paid_amount": 5000,
+			"outstanding_amount": 0,
+			"currency": "NGN",
+		}
+		closed_session = frappe._dict(name="VBS-CLOSED", status="Closed")
+
+		with (
+			patch.object(billing_modal, "require_internal_user"),
+			patch.object(billing_modal.frappe, "get_doc", return_value=source),
+			patch.object(billing_modal, "assert_can_read_source"),
+			patch.object(billing_modal, "get_linked_invoice_name", return_value="SINV-SUBMITTED"),
+			patch.object(billing_modal, "get_invoice_summary", return_value=invoice_summary),
+			patch.object(billing_modal, "get_payment_modes", return_value=[]),
+			patch("vetedge.services.billing_core.resolve_billing_session", return_value=closed_session),
+			patch("vetedge.services.billing_core.closed_billing_session_covers_current_source_payloads", return_value=True),
+			patch("vetedge.services.billing_core.sync_source_charge_payloads_to_billing_session", side_effect=AssertionError("closed satisfied sessions must not sync")),
+			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+		):
+			state = billing_modal.get_billing_modal_state("Veterinary Consultation", "VCON-001")
+
+		self.assertIsNone(state["billing_session"])
+		self.assertEqual(state["invoice"]["name"], "SINV-SUBMITTED")
+		self.assertFalse(state["can_create_or_update_invoice"])
+		self.assertEqual(state["open_invoice_name"], "SINV-SUBMITTED")
+
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
 

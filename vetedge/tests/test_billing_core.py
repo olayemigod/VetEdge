@@ -1634,8 +1634,10 @@ class TestBillingCore(TestCase):
 			patch.object(billing_core, "frappe", frappe_stub),
 			patch.object(billing_core, "get_source_charge_payloads", return_value=[charge_payload("consultation-fee", "CONS-ITEM", 100)]),
 		):
-			resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001")
+			active_resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001")
+			resolved = billing_core.resolve_billing_session("Veterinary Consultation", "VCON-001", include_closed_satisfied=True)
 
+		self.assertIsNone(active_resolved)
 		self.assertEqual(resolved.name, "VBS-CLOSED")
 
 	def test_new_billing_cycle_filters_payloads_finalized_in_prior_session(self):

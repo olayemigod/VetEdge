@@ -154,7 +154,7 @@ def normalize_payment_gate_mode(mode: str | None = None) -> str:
 	return FULL_PAYMENT_GATE
 
 
-def resolve_billing_session(source_doctype: str, source_name: str):
+def resolve_billing_session(source_doctype: str, source_name: str, include_closed_satisfied: bool = False):
 	if not is_billing_sessions_enabled():
 		return None
 	if source_uses_explicit_billing_session(source_doctype):
@@ -177,9 +177,10 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 			return session
 		if session.get("status") == "Closed":
 			closed_candidates.append(session)
-	for session in closed_candidates:
-		if closed_billing_session_covers_current_source_payloads(session, source_doctype, source_name):
-			return session
+	if include_closed_satisfied:
+		for session in closed_candidates:
+			if closed_billing_session_covers_current_source_payloads(session, source_doctype, source_name):
+				return session
 
 	identity = get_source_billing_identity(source_doctype, source_name)
 	if source_doctype == "Veterinary Consultation":
@@ -201,7 +202,7 @@ def resolve_billing_session(source_doctype: str, source_name: str):
 
 	consultation = identity.get("consultation") or find_active_consultation_for_identity(identity)
 	if consultation and source_doctype != "Veterinary Consultation":
-		consultation_session = resolve_billing_session("Veterinary Consultation", consultation)
+		consultation_session = resolve_billing_session("Veterinary Consultation", consultation, include_closed_satisfied=include_closed_satisfied)
 		if consultation_session and consultation_session.get("status") in ACTIVE_SESSION_STATUSES:
 			return consultation_session
 
