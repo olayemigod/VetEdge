@@ -1574,7 +1574,7 @@ class TestBillingCore(TestCase):
 			status = billing_core.get_payment_gate_status(session)
 
 		self.assertFalse(status["can_proceed"])
-		self.assertIn("active draft invoice", status["message"])
+		self.assertIn("submit the invoice", status["message"])
 
 	def test_consultation_resolves_existing_registration_billing_session(self):
 		consultation = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
@@ -1721,9 +1721,19 @@ class TestBillingCore(TestCase):
 		created.insert.assert_not_called()
 		session.check_permission.assert_called_with("write")
 
-	def test_no_payment_gate_allows_after_invoice_generation(self):
+	def test_no_payment_gate_blocks_until_invoice_is_submitted(self):
 		session = make_session(payment_gate_mode="No Payment Gate", current_draft_invoice="SINV-001", latest_invoice="SINV-001")
 		invoice = make_invoice(docstatus=0)
+
+		with billing_core_context(session, invoice):
+			status = billing_core.get_payment_gate_status(session)
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("submit the invoice", status["message"])
+
+	def test_no_payment_gate_allows_after_invoice_submission(self):
+		session = make_session(payment_gate_mode="No Payment Gate", latest_invoice="SINV-001")
+		invoice = make_invoice(docstatus=1, outstanding_amount=100)
 
 		with billing_core_context(session, invoice):
 			status = billing_core.get_payment_gate_status(session)

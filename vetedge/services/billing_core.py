@@ -589,15 +589,17 @@ def get_payment_gate_status(session) -> dict:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
 	if not ledger["invoices"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed."}
+	if ledger["has_active_draft_invoice"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Please submit the invoice before completing this workflow."}
+	if not ledger["submitted_invoice_count"]:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Please submit the invoice before completing this workflow."}
 	if mode == NO_PAYMENT_GATE:
 		return {
 			"gate": mode,
 			"can_proceed": True,
 			"status": "Allowed",
-			"message": get_session_payment_warning(ledger) or "Invoice has been generated. Payment is not required before proceeding.",
+			"message": get_session_payment_warning(ledger) or "Invoice has been submitted. Payment is not required before proceeding.",
 		}
-	if not ledger["submitted_invoice_count"]:
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "At least one linked Sales Invoice must be submitted before service can proceed."}
 	if mode == PARTIAL_PAYMENT_GATE:
 		allowed = flt(ledger["total_paid"]) > 0
 		message = "Payment gate passed."
@@ -606,8 +608,6 @@ def get_payment_gate_status(session) -> dict:
 		return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": message if allowed else "A partial payment is required before service can proceed."}
 	if ledger["has_pending_uninvoiced_charges"]:
 		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Full payment required. There are pending uninvoiced charges."}
-	if ledger["has_active_draft_invoice"]:
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "Full payment required. There is still an active draft invoice."}
 	if ledger["has_unpaid_submitted_invoice"] or flt(ledger["outstanding_amount"]) > 0:
 		return {
 			"gate": mode,

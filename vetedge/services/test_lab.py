@@ -51,6 +51,7 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("uploaded_by", fields)
 		self.assertIn("uploaded_on", fields)
 		self.assertEqual(fields["rate"]["fieldtype"], "Currency")
+		self.assertNotIn("fetch_from", fields["rate"])
 		self.assertEqual(fields["billing_status"]["in_list_view"], 1)
 		self.assertEqual(fields["result_status"]["in_list_view"], 1)
 		self.assertEqual(fields["result_summary"]["in_list_view"], 1)
@@ -85,6 +86,9 @@ class TestLabWorkflow(TestCase):
 
 		self.assertIn("apply_lab_test_result_metadata(frm, cdt, cdn)", script)
 		self.assertIn("show_add_lab_tests_dialog(frm)", script)
+		self.assertIn('__("Add Lab Orders")', script)
+		self.assertIn('title: __("Add Test Rows")', script)
+		self.assertNotIn('__("Add Lab Tests")', script)
 		self.assertIn("render_lab_tests_workbench(frm)", script)
 		self.assertIn("show_post_result_dialog(frm, row", script)
 		self.assertIn("show_review_result_dialog(frm, row)", script)
@@ -696,6 +700,7 @@ class TestLabWorkflow(TestCase):
 		doc = make_validation_doc(status="Reviewed", lab_tests=[row])
 		doc.consultation = None
 		doc.get = lambda key, default=None: doc[key] if key in doc else default
+		doc.is_new = lambda: True
 
 		with validation_context():
 			validate_lab_order(doc)

@@ -41,7 +41,7 @@
   {"fetch_from": "lab_test_template.test_name", "fieldname": "lab_test_name", "fieldtype": "Data", "label": "Test Name", "read_only": 1},
   {"fetch_from": "lab_test_template.sample_type", "fieldname": "sample_type", "fieldtype": "Data", "label": "Sample Type"},
   {"default": "Requested", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Requested\nSample Collected\nIn Progress\nResult Entered\nReviewed\nCancelled"},
-  {"fetch_from": "lab_test_template.default_rate", "fieldname": "rate", "fieldtype": "Currency", "in_list_view": 1, "label": "Rate"},
+  {"fieldname": "rate", "fieldtype": "Currency", "in_list_view": 1, "label": "Rate"},
   {"default": "Not Billed", "fieldname": "billing_status", "fieldtype": "Select", "in_list_view": 1, "label": "Billing Status", "options": "Not Billed\nDraft Invoiced\nSubmitted Invoiced\nPaid\nInvoice Linked\nCancelled", "read_only": 1},
   {"fieldname": "column_break_order_item", "fieldtype": "Column Break"},
   {"fetch_from": "lab_test_template.linked_item", "fieldname": "billing_item", "fieldtype": "Link", "label": "Billing Item", "options": "Item"},

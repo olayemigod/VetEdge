@@ -195,7 +195,7 @@ function apply_lab_test_result_metadata(frm, cdt, cdn) {
 }
 
 function add_creation_actions(frm) {
-	frm.add_custom_button(__("Add Lab Tests"), () => {
+	frm.add_custom_button(__("Add Lab Orders"), () => {
 		show_add_lab_tests_dialog(frm);
 	}, __("Clinical"));
 
@@ -213,7 +213,7 @@ function show_add_lab_tests_dialog(frm) {
 			const tests = response.message || [];
 			const selected = {};
 			const dialog = new frappe.ui.Dialog({
-				title: __("Add Lab Tests"),
+				title: __("Add Test Rows"),
 				fields: [
 					{ fieldname: "search", fieldtype: "Data", label: __("Search") },
 					{ fieldname: "tests_html", fieldtype: "HTML" },

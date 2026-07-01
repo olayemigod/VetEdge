@@ -107,7 +107,9 @@ def validate_lab_order(doc) -> None:
 
 
 def normalize_new_standalone_lab_order_status(doc, previous=None) -> None:
-	if previous is not None:
+	is_new_method = getattr(doc, "is_new", None)
+	is_new = bool(is_new_method()) if callable(is_new_method) else False
+	if previous is not None and not is_new:
 		return
 	if doc.get("consultation"):
 		return
