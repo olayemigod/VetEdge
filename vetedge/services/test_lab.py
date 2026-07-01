@@ -40,6 +40,10 @@ class TestLabWorkflow(TestCase):
 		fields = {field["fieldname"]: field for field in data["fields"]}
 
 		self.assertEqual(fields["result_format"]["options"], "Value Driven\nText / Narrative\nDocument Upload\nMixed")
+		self.assertIn("Ordered", fields["status"]["options"])
+		self.assertIn("Awaiting Review", fields["status"]["options"])
+		self.assertIn("Completed", fields["status"]["options"])
+		self.assertEqual(fields["result_status"]["options"], "Pending\nEntered\nAwaiting Review\nReviewed")
 		self.assertEqual(fields["result_unit"]["fetch_from"], "lab_test_template.result_unit")
 		self.assertEqual(fields["reference_range"]["fetch_from"], "lab_test_template.reference_range")
 		self.assertEqual(fields["abnormal_flag"]["fieldtype"], "Check")
@@ -65,6 +69,11 @@ class TestLabWorkflow(TestCase):
 		field_order = data["field_order"]
 		fields = {field["fieldname"]: field for field in data["fields"]}
 
+		self.assertEqual(fields["status"]["default"], "Draft")
+		self.assertIn("Ordered", fields["status"]["options"])
+		self.assertIn("Awaiting Review", fields["status"]["options"])
+		self.assertIn("Completed", fields["status"]["options"])
+		self.assertNotIn("Requested", fields["status"]["options"])
 		self.assertLess(field_order.index("lab_tests_section"), field_order.index("lab_tests"))
 		self.assertLess(field_order.index("lab_tests_workbench"), field_order.index("lab_tests"))
 		self.assertEqual(fields["lab_tests_section"]["fieldtype"], "Section Break")
@@ -94,6 +103,8 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("show_review_result_dialog(frm, row)", script)
 		self.assertIn("Post / Upload Result", script)
 		self.assertIn("Update Result", script)
+		self.assertIn('"Awaiting Review"', script)
+		self.assertIn('"Complete Lab Order"', script)
 		self.assertIn("Edit the Rate field before billing to change the lab test cost.", script)
 		self.assertNotIn('data-lab-result-action="upload"', script)
 		self.assertNotIn('"Upload Result"', script)
@@ -160,7 +171,7 @@ class TestLabWorkflow(TestCase):
 		inserted = []
 		created = frappe._dict(
 			name="VLAB-2026-00001",
-			status="Requested",
+			status="Ordered",
 			insert=lambda ignore_permissions=True: inserted.append(True),
 		)
 		consultation_doc = frappe._dict(
@@ -203,7 +214,7 @@ class TestLabWorkflow(TestCase):
 				sample_notes="Collect fasting sample",
 			)
 
-		self.assertEqual(result, {"name": "VLAB-2026-00001", "status": "Requested"})
+		self.assertEqual(result, {"name": "VLAB-2026-00001", "status": "Ordered"})
 		self.assertTrue(inserted)
 		self.assertEqual(created.patient, "VP-001")
 		self.assertEqual(created.primary_owner, "CUST-001")
@@ -307,7 +318,7 @@ class TestLabWorkflow(TestCase):
 			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
 
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(get_value=get_value),
+			db=SimpleNamespace(get_value=get_value, exists=lambda *args, **kwargs: False),
 			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
 			ValidationError=frappe.ValidationError,
 			PermissionError=frappe.PermissionError,
@@ -498,7 +509,7 @@ class TestLabWorkflow(TestCase):
 			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
 
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(get_value=get_value),
+			db=SimpleNamespace(get_value=get_value, exists=lambda *args, **kwargs: False),
 			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
 			ValidationError=frappe.ValidationError,
 			PermissionError=frappe.PermissionError,
@@ -550,11 +561,11 @@ class TestLabWorkflow(TestCase):
 		row = frappe._dict(
 			name="ROW-1",
 			lab_test_template="CBC",
-			status="Requested",
+			status="Ordered",
 			result_status="Pending",
 			get=lambda key, default=None: row[key] if key in row else default,
 		)
-		doc = make_validation_doc(status="Requested", lab_tests=[row])
+		doc = make_validation_doc(status="Ordered", lab_tests=[row])
 
 		with validation_context(
 			result_format="Mixed",
@@ -584,9 +595,21 @@ class TestLabWorkflow(TestCase):
 		with validation_context():
 			validate_lab_order(doc)
 
+		self.assertEqual(row.result_status, "Awaiting Review")
+		self.assertEqual(row.status, "Awaiting Review")
+		self.assertEqual(doc.status, "Awaiting Review")
+		self.assertEqual(row.result_summary, "12.3 mg/dL")
+
+	def test_validate_lab_order_without_review_required_marks_result_entered(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", result_unit="mg/dL")
+		doc = make_validation_doc(status="Result Entered", lab_tests=[row])
+
+		with validation_context(requires_result_review=0):
+			validate_lab_order(doc)
+
 		self.assertEqual(row.result_status, "Entered")
 		self.assertEqual(row.status, "Result Entered")
-		self.assertEqual(row.result_summary, "12.3 mg/dL")
+		self.assertEqual(doc.status, "Result Entered")
 
 	def test_validate_lab_order_accepts_text_narrative_result(self):
 		row = lab_result_row(result_format="Text / Narrative", result_text="No parasites seen")
@@ -595,7 +618,7 @@ class TestLabWorkflow(TestCase):
 		with validation_context(result_format="Text / Narrative"):
 			validate_lab_order(doc)
 
-		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.result_status, "Awaiting Review")
 
 	def test_validate_lab_order_accepts_mixed_result_with_attachment(self):
 		row = lab_result_row(result_format="Mixed", result_value="Positive", result_attachment="/private/files/lab.pdf")
@@ -604,7 +627,7 @@ class TestLabWorkflow(TestCase):
 		with validation_context(result_format="Mixed"):
 			validate_lab_order(doc)
 
-		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.result_status, "Awaiting Review")
 		self.assertEqual(row.uploaded_by, "doctor@example.com")
 
 	def test_doctor_upload_is_blocked_when_upload_setting_is_disabled(self):
@@ -663,7 +686,7 @@ class TestLabWorkflow(TestCase):
 			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
 
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(get_value=get_value),
+			db=SimpleNamespace(get_value=get_value, exists=lambda *args, **kwargs: False),
 			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
 			ValidationError=frappe.ValidationError,
 			PermissionError=frappe.PermissionError,
@@ -685,7 +708,7 @@ class TestLabWorkflow(TestCase):
 
 		self.assertEqual(row.result_format, "Document Upload")
 		self.assertEqual(row.requires_result_review, 1)
-		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.result_status, "Awaiting Review")
 		self.assertEqual(row.entered_by, "doctor@example.com")
 		self.assertEqual(row.uploaded_by, "doctor@example.com")
 		self.assertEqual(row.uploaded_on, "2026-04-23 11:00:00")
@@ -706,8 +729,85 @@ class TestLabWorkflow(TestCase):
 			validate_lab_order(doc)
 
 		self.assertEqual(doc.status, "Draft")
-		self.assertEqual(row.status, "Requested")
+		self.assertEqual(row.status, "Ordered")
 		self.assertEqual(row.result_status, "Pending")
+
+	def test_new_standalone_lab_order_does_not_default_to_reviewed(self):
+		row = lab_result_row(result_format="Value Driven", result_value="", status="Ordered", result_status="Pending")
+		doc = make_validation_doc(status="", lab_tests=[row])
+		doc.consultation = None
+		doc.is_new = lambda: True
+
+		with validation_context():
+			validate_lab_order(doc)
+
+		self.assertEqual(doc.status, "Draft")
+		self.assertEqual(row.status, "Ordered")
+
+	def test_completed_lab_order_blocks_when_invoice_missing(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", status="Reviewed", result_status="Reviewed")
+		doc = make_validation_doc(status="Completed", lab_tests=[row])
+		previous = make_validation_doc(status="Reviewed", lab_tests=[row])
+		doc.linked_invoice = ""
+		doc.get_doc_before_save = lambda: previous
+
+		with validation_context():
+			with patch("vetedge.services.lab.use_billing_core_for_lab_order", return_value=False):
+				with self.assertRaises(frappe.ValidationError) as exc:
+					validate_lab_order(doc)
+
+		self.assertIn("Sales Invoice must be generated", str(exc.exception))
+
+	def test_completed_lab_order_blocks_when_invoice_is_draft(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", status="Reviewed", result_status="Reviewed")
+		doc = make_validation_doc(status="Completed", lab_tests=[row])
+		previous = make_validation_doc(status="Reviewed", lab_tests=[row])
+		doc.linked_invoice = "SINV-DRAFT"
+		doc.get_doc_before_save = lambda: previous
+
+		with validation_context() as context:
+			context.stack.enter_context(patch("vetedge.services.lab.use_billing_core_for_lab_order", return_value=False))
+			context.stack.enter_context(patch.object(context.frappe_stub.db, "exists", return_value=True))
+			context.stack.enter_context(
+				patch.object(
+					context.frappe_stub.db,
+					"get_value",
+					side_effect=lambda doctype, name, fields=None, as_dict=False, **kwargs: (
+						frappe._dict(docstatus=0, status="Draft", outstanding_amount=1000)
+						if doctype == "Sales Invoice"
+						else context.get_value(doctype, name, fields, as_dict, **kwargs)
+					),
+				)
+			)
+			with self.assertRaises(frappe.ValidationError) as exc:
+				validate_lab_order(doc)
+
+		self.assertIn("Please submit the invoice", str(exc.exception))
+
+	def test_completed_lab_order_allows_submitted_invoice_under_legacy_gate(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", status="Reviewed", result_status="Reviewed")
+		doc = make_validation_doc(status="Completed", lab_tests=[row])
+		previous = make_validation_doc(status="Reviewed", lab_tests=[row])
+		doc.linked_invoice = "SINV-SUBMITTED"
+		doc.get_doc_before_save = lambda: previous
+
+		with validation_context() as context:
+			context.stack.enter_context(patch("vetedge.services.lab.use_billing_core_for_lab_order", return_value=False))
+			context.stack.enter_context(patch.object(context.frappe_stub.db, "exists", return_value=True))
+			context.stack.enter_context(
+				patch.object(
+					context.frappe_stub.db,
+					"get_value",
+					side_effect=lambda doctype, name, fields=None, as_dict=False, **kwargs: (
+						frappe._dict(docstatus=1, status="Unpaid", outstanding_amount=1000)
+						if doctype == "Sales Invoice"
+						else context.get_value(doctype, name, fields, as_dict, **kwargs)
+					),
+				)
+			)
+			validate_lab_order(doc)
+
+		self.assertEqual(doc.status, "Completed")
 
 
 def make_lab_order(linked_invoice=None):
@@ -753,7 +853,7 @@ def lab_result_row(**overrides):
 	return row
 
 
-def make_validation_doc(status="Requested", lab_tests=None):
+def make_validation_doc(status="Ordered", lab_tests=None):
 	doc = frappe._dict(
 		doctype="Veterinary Lab Order",
 		name="VLAB-VALIDATION",
@@ -821,11 +921,16 @@ class validation_context:
 			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
 
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(get_value=get_value),
+			db=SimpleNamespace(
+				get_value=get_value,
+				exists=lambda *args, **kwargs: False,
+			),
 			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
 			ValidationError=frappe.ValidationError,
 			PermissionError=frappe.PermissionError,
 		)
+		self.get_value = get_value
+		self.frappe_stub = frappe_stub
 		self.stack.enter_context(patch("vetedge.services.lab.frappe", frappe_stub))
 		self.stack.enter_context(patch("vetedge.services.lab.get_current_user", return_value="doctor@example.com"))
 		self.stack.enter_context(patch("vetedge.services.lab.now_datetime", return_value="2026-04-23 11:00:00"))

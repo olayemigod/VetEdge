@@ -2,11 +2,15 @@
 	try {
 		const labOrderStatusPalette = {
 			Draft: "gray",
-			Requested: "blue",
+			Ordered: "blue",
 			"Sample Collected": "orange",
+			"Sent to Lab": "orange",
 			"In Progress": "yellow",
+			"Result Pending": "yellow",
 			"Result Entered": "purple",
+			"Awaiting Review": "purple",
 			Reviewed: "green",
+			Completed: "green",
 			Cancelled: "red",
 		};
 

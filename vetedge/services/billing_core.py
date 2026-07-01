@@ -1892,6 +1892,8 @@ def is_patient_registration_fee_paid(patient, customer=None) -> bool:
 
 def get_lab_order_charge_payloads(lab_order_name: str, session=None) -> list[dict]:
 	order = frappe.get_doc("Veterinary Lab Order", lab_order_name)
+	if order.get("status") == "Cancelled":
+		return []
 	cost_center = get_billing_cost_center(order.service_branch, required=True)
 	return build_lab_payloads(order, cost_center)
 

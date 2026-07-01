@@ -138,7 +138,7 @@ function configure_lab_result_editability(frm, cdt = null, cdn = null) {
 		return;
 	}
 
-	const orderLocked = ["Reviewed", "Cancelled"].includes(frm.doc.status);
+	const orderLocked = ["Completed", "Cancelled"].includes(frm.doc.status);
 	frm.set_df_property("lab_tests", "read_only", orderLocked ? 1 : 0);
 	["result_value", "result_unit", "reference_range", "abnormal_flag"].forEach((fieldname) => {
 		grid.update_docfield_property(fieldname, "depends_on", "eval:['Value Driven', 'Mixed'].includes(doc.result_format)");
@@ -195,6 +195,9 @@ function apply_lab_test_result_metadata(frm, cdt, cdn) {
 }
 
 function add_creation_actions(frm) {
+	if (["Reviewed", "Completed", "Cancelled"].includes(frm.doc.status)) {
+		return;
+	}
 	frm.add_custom_button(__("Add Lab Orders"), () => {
 		show_add_lab_tests_dialog(frm);
 	}, __("Clinical"));
@@ -310,7 +313,7 @@ function add_selected_lab_tests(frm, tests, selected) {
 		row.billing_item = test.linked_item;
 		row.rate = selected[name].rate || test.default_rate || 0;
 		row.billing_status = frm.doc.linked_invoice ? "Invoice Linked" : "Not Billed";
-		row.status = frm.doc.status && frm.doc.status !== "Draft" ? frm.doc.status : "Requested";
+		row.status = frm.doc.status && frm.doc.status !== "Draft" ? frm.doc.status : "Ordered";
 		row.result_format = test.result_format || "Value Driven";
 		row.result_unit = test.result_unit;
 		row.reference_range = test.reference_range;
@@ -408,10 +411,12 @@ function render_lab_order_item_workbench_row(frm, row) {
 }
 
 function render_lab_result_action_buttons(rowName, row) {
-	const locked = ["Reviewed", "Cancelled"].includes(row.status) || ["Reviewed"].includes(row.result_status);
+	const locked = ["Completed", "Cancelled"].includes(row.status);
+	const reviewed = ["Reviewed"].includes(row.status) || ["Reviewed"].includes(row.result_status);
 	const hasResult = has_lab_result_content(row);
+	const reviewPending = hasResult && row.requires_result_review && ["Awaiting Review"].includes(row.result_status);
 	const buttons = [];
-	if (!locked) {
+	if (!locked && !reviewed) {
 		buttons.push(
 			`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="post" data-row-name="${rowName}">${hasResult ? __("Update Result") : __("Post / Upload Result")}</button>`
 		);
@@ -419,7 +424,7 @@ function render_lab_result_action_buttons(rowName, row) {
 	if (hasResult) {
 		buttons.push(`<button type="button" class="btn btn-xs btn-default" data-lab-result-action="view" data-row-name="${rowName}">${__("View Result")}</button>`);
 	}
-	if (!locked && hasResult && row.requires_result_review) {
+	if (!locked && reviewPending) {
 		buttons.push(`<button type="button" class="btn btn-xs btn-primary" data-lab-result-action="review" data-row-name="${rowName}">${__("Review Result")}</button>`);
 	}
 	return buttons.join(" ");
@@ -457,7 +462,7 @@ function show_post_result_dialog(frm, row) {
 }
 
 function can_edit_lab_order_item_rate(frm, row) {
-	if (["Reviewed", "Cancelled"].includes(frm.doc.status) || ["Reviewed", "Cancelled"].includes(row.status)) {
+	if (["Reviewed", "Completed", "Cancelled"].includes(frm.doc.status) || ["Reviewed", "Completed", "Cancelled"].includes(row.status)) {
 		return false;
 	}
 	if (["Submitted Invoiced", "Paid", "Cancelled"].includes(row.billing_status)) {
@@ -483,12 +488,15 @@ function apply_lab_result_values(frm, row, values) {
 	);
 	Promise.all(setters).then(() => {
 		const updated = locals[childDoctype]?.[row.name] || row;
-		frappe.model.set_value(childDoctype, row.name, "result_status", "Entered");
-		frappe.model.set_value(childDoctype, row.name, "status", "Result Entered");
+		const needsReview = Boolean(updated.requires_result_review);
+		const rowStatus = needsReview ? "Awaiting Review" : "Result Entered";
+		const resultStatus = needsReview ? "Awaiting Review" : "Entered";
+		frappe.model.set_value(childDoctype, row.name, "result_status", resultStatus);
+		frappe.model.set_value(childDoctype, row.name, "status", rowStatus);
 		frappe.model.set_value(childDoctype, row.name, "result_summary", get_lab_result_summary(updated));
 		frappe.model.set_value(childDoctype, row.name, "result_action", "Result Actions");
-		if (!["Result Entered", "Reviewed", "Cancelled"].includes(frm.doc.status)) {
-			frm.set_value("status", "Result Entered");
+		if (!["Result Entered", "Awaiting Review", "Reviewed", "Completed", "Cancelled"].includes(frm.doc.status)) {
+			frm.set_value("status", rowStatus);
 		}
 		frm.refresh_field("lab_tests");
 		render_lab_tests_workbench(frm);
@@ -627,27 +635,47 @@ function show_lab_test_dialog(frm) {
 }
 
 function add_status_actions(frm) {
-	if (frm.is_new() || ["Reviewed", "Cancelled"].includes(frm.doc.status)) {
+	if (frm.is_new() || ["Completed", "Cancelled"].includes(frm.doc.status)) {
 		return;
 	}
 
 	const transitions = {
-		Draft: [[__("Request Lab Tests"), "Requested"]],
-		Requested: [
+		Draft: [[__("Order Lab Tests"), "Ordered"]],
+		Ordered: [
 			[__("Mark Sample Collected"), "Sample Collected"],
+			[__("Send to Lab"), "Sent to Lab"],
 			[__("Start Processing"), "In Progress"],
 			[__("Cancel Lab Order"), "Cancelled"],
 		],
 		"Sample Collected": [
+			[__("Send to Lab"), "Sent to Lab"],
 			[__("Start Processing"), "In Progress"],
 			[__("Cancel Lab Order"), "Cancelled"],
 		],
+		"Sent to Lab": [
+			[__("Start Processing"), "In Progress"],
+			[__("Mark Result Pending"), "Result Pending"],
+			[__("Cancel Lab Order"), "Cancelled"],
+		],
 		"In Progress": [
+			[__("Mark Result Pending"), "Result Pending"],
+			[__("Cancel Lab Order"), "Cancelled"],
+		],
+		"Result Pending": [
 			[__("Mark Result Entered"), "Result Entered"],
 			[__("Cancel Lab Order"), "Cancelled"],
 		],
 		"Result Entered": [
 			[__("Mark Reviewed"), "Reviewed"],
+			[__("Complete Lab Order"), "Completed"],
+			[__("Cancel Lab Order"), "Cancelled"],
+		],
+		"Awaiting Review": [
+			[__("Mark Reviewed"), "Reviewed"],
+			[__("Cancel Lab Order"), "Cancelled"],
+		],
+		Reviewed: [
+			[__("Complete Lab Order"), "Completed"],
 			[__("Cancel Lab Order"), "Cancelled"],
 		],
 	};
