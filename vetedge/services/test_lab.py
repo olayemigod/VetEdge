@@ -44,6 +44,10 @@ class TestLabWorkflow(TestCase):
 		self.assertEqual(fields["reference_range"]["fetch_from"], "lab_test_template.reference_range")
 		self.assertEqual(fields["abnormal_flag"]["fieldtype"], "Check")
 		self.assertEqual(fields["result_attachment"]["fieldtype"], "Attach")
+		self.assertEqual(fields["requires_document_upload"]["fetch_from"], "lab_test_template.requires_document_upload")
+		self.assertEqual(fields["allows_manual_result_entry"]["fetch_from"], "lab_test_template.allows_manual_result_entry")
+		self.assertEqual(fields["allows_doctor_result_entry"]["fetch_from"], "lab_test_template.allows_doctor_result_entry")
+		self.assertEqual(fields["requires_result_review"]["fetch_from"], "lab_test_template.requires_result_review")
 		self.assertIn("uploaded_by", fields)
 		self.assertIn("uploaded_on", fields)
 
@@ -54,6 +58,14 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("open_lab_order_dialog_safely(frm)", script)
 		self.assertIn("show_lab_order_summary_dialog(frm, response.message.name)", script)
 		self.assertNotIn('frappe.set_route("Form", "Veterinary Lab Order", response.message.name)', script)
+
+	def test_lab_order_script_copies_result_metadata_and_handles_upload_fields(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_lab_order/veterinary_lab_order.js"
+		script = script_path.read_text()
+
+		self.assertIn("apply_lab_test_result_metadata(frm, cdt, cdn)", script)
+		self.assertIn("result_attachment", script)
+		self.assertIn("requires_document_upload", script)
 
 	def test_create_lab_order_invoice_creates_invoice_when_none_exists(self):
 		order = make_lab_order()
@@ -469,6 +481,102 @@ class TestLabWorkflow(TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				validate_lab_order(doc)
 
+	def test_system_manager_can_correct_reviewed_result(self):
+		previous_row = lab_result_row(
+			result_format="Value Driven",
+			result_value="Normal",
+			status="Reviewed",
+			result_status="Reviewed",
+			entered_by="doctor@example.com",
+			entered_on="2026-04-23 11:00:00",
+		)
+		current_row = frappe._dict(previous_row)
+		current_row.result_value = "Corrected"
+		current_row.get = lambda key, default=None: current_row[key] if key in current_row else default
+		doc = make_validation_doc(status="Reviewed", lab_tests=[current_row])
+		previous = make_validation_doc(status="Reviewed", lab_tests=[previous_row])
+		doc.doctor_reviewed_by = "doctor@example.com"
+		doc.doctor_reviewed_on = "2026-04-23 12:00:00"
+		previous.doctor_reviewed_by = "doctor@example.com"
+		previous.doctor_reviewed_on = "2026-04-23 12:00:00"
+		doc.get_doc_before_save = lambda: previous
+
+		with validation_context():
+			with (
+				patch("vetedge.services.lab.get_current_user", return_value="admin@example.com"),
+				patch("vetedge.services.lab.get_user_roles", return_value={"System Manager"}),
+				patch("vetedge.services.lab.can_review_lab_results"),
+			):
+				validate_lab_order(doc)
+
+		self.assertEqual(current_row.result_value, "Corrected")
+		self.assertEqual(current_row.result_status, "Reviewed")
+
+	def test_validate_lab_order_copies_lab_test_result_metadata_to_order_row(self):
+		row = frappe._dict(
+			name="ROW-1",
+			lab_test_template="CBC",
+			status="Requested",
+			result_status="Pending",
+			get=lambda key, default=None: row[key] if key in row else default,
+		)
+		doc = make_validation_doc(status="Requested", lab_tests=[row])
+
+		with validation_context(
+			result_format="Mixed",
+			result_unit="mg/dL",
+			reference_range="10-20",
+			requires_document_upload=1,
+			allows_manual_result_entry=1,
+			allows_doctor_result_entry=0,
+			requires_result_review=1,
+		):
+			validate_lab_order(doc)
+
+		self.assertEqual(row.result_format, "Mixed")
+		self.assertEqual(row.result_unit, "mg/dL")
+		self.assertEqual(row.reference_range, "10-20")
+		self.assertEqual(row.requires_document_upload, 1)
+		self.assertEqual(row.allows_doctor_result_entry, 0)
+		self.assertEqual(row.requires_result_review, 1)
+
+	def test_validate_lab_order_accepts_value_driven_result(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", result_unit="mg/dL")
+		doc = make_validation_doc(status="Result Entered", lab_tests=[row])
+
+		with validation_context():
+			validate_lab_order(doc)
+
+		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.status, "Result Entered")
+
+	def test_validate_lab_order_accepts_text_narrative_result(self):
+		row = lab_result_row(result_format="Text / Narrative", result_text="No parasites seen")
+		doc = make_validation_doc(status="Result Entered", lab_tests=[row])
+
+		with validation_context(result_format="Text / Narrative"):
+			validate_lab_order(doc)
+
+		self.assertEqual(row.result_status, "Entered")
+
+	def test_validate_lab_order_accepts_mixed_result_with_attachment(self):
+		row = lab_result_row(result_format="Mixed", result_value="Positive", result_attachment="/private/files/lab.pdf")
+		doc = make_validation_doc(status="Result Entered", lab_tests=[row])
+
+		with validation_context(result_format="Mixed"):
+			validate_lab_order(doc)
+
+		self.assertEqual(row.result_status, "Entered")
+		self.assertEqual(row.uploaded_by, "doctor@example.com")
+
+	def test_doctor_upload_is_blocked_when_upload_setting_is_disabled(self):
+		row = lab_result_row(result_format="Document Upload", result_attachment="/private/files/cbc.pdf")
+		doc = make_validation_doc(status="Result Entered", lab_tests=[row])
+
+		with validation_context(result_format="Document Upload", upload_side_effect=frappe.PermissionError):
+			with self.assertRaises(frappe.PermissionError):
+				validate_lab_order(doc)
+
 	def test_validate_lab_order_treats_result_attachment_as_entered_result(self):
 		row = frappe._dict(
 			name="ROW-1",
@@ -532,10 +640,13 @@ class TestLabWorkflow(TestCase):
 			patch("vetedge.services.lab.can_access_branch_data"),
 			patch("vetedge.services.lab.can_request_lab_tests"),
 			patch("vetedge.services.lab.can_enter_lab_results"),
+			patch("vetedge.services.lab.can_upload_lab_results"),
+			patch("vetedge.services.lab.get_user_roles", return_value={"VetEdge Doctor"}),
 		):
 			validate_lab_order(doc)
 
 		self.assertEqual(row.result_format, "Document Upload")
+		self.assertEqual(row.requires_result_review, 1)
 		self.assertEqual(row.result_status, "Entered")
 		self.assertEqual(row.entered_by, "doctor@example.com")
 		self.assertEqual(row.uploaded_by, "doctor@example.com")
@@ -561,6 +672,120 @@ def make_lab_order(linked_invoice=None):
 	)
 	order.get = lambda key, default=None: order[key] if key in order else default
 	return order
+
+
+def lab_result_row(**overrides):
+	row = frappe._dict(
+		name="ROW-1",
+		lab_test_template="CBC",
+		result_format=overrides.pop("result_format", "Value Driven"),
+		result_value=overrides.pop("result_value", ""),
+		result_unit=overrides.pop("result_unit", ""),
+		reference_range=overrides.pop("reference_range", ""),
+		abnormal_flag=overrides.pop("abnormal_flag", 0),
+		result_text=overrides.pop("result_text", ""),
+		result_attachment=overrides.pop("result_attachment", ""),
+		remarks=overrides.pop("remarks", ""),
+		status=overrides.pop("status", "In Progress"),
+		result_status=overrides.pop("result_status", "Pending"),
+		billing_item=overrides.pop("billing_item", "LAB-CBC"),
+		**overrides,
+	)
+	row.get = lambda key, default=None: row[key] if key in row else default
+	return row
+
+
+def make_validation_doc(status="Requested", lab_tests=None):
+	doc = frappe._dict(
+		doctype="Veterinary Lab Order",
+		name="VLAB-VALIDATION",
+		patient="VP-001",
+		primary_owner="CUST-001",
+		consultation="VCON-001",
+		service_branch="Main Branch",
+		status=status,
+		requested_by="doctor@example.com",
+		requested_on="2026-04-23 10:00:00",
+		lab_tests=lab_tests or [],
+	)
+	doc.get = lambda key, default=None: doc[key] if key in doc else default
+	doc.get_doc_before_save = lambda: None
+	return doc
+
+
+class validation_context:
+	def __init__(
+		self,
+		result_format="Value Driven",
+		result_unit="mg/dL",
+		reference_range="10-20",
+		requires_document_upload=0,
+		allows_manual_result_entry=1,
+		allows_doctor_result_entry=1,
+		requires_result_review=1,
+		upload_side_effect=None,
+	):
+		self.result_format = result_format
+		self.result_unit = result_unit
+		self.reference_range = reference_range
+		self.requires_document_upload = requires_document_upload
+		self.allows_manual_result_entry = allows_manual_result_entry
+		self.allows_doctor_result_entry = allows_doctor_result_entry
+		self.requires_result_review = requires_result_review
+		self.upload_side_effect = upload_side_effect
+		self.stack = None
+
+	def __enter__(self):
+		from contextlib import ExitStack
+
+		self.stack = ExitStack()
+
+		def get_value(doctype, name, fields=None, as_dict=False, **kwargs):
+			if doctype == "Veterinary Patient":
+				return frappe._dict(primary_owner="CUST-001", default_branch="Main Branch")
+			if doctype == "Veterinary Consultation":
+				return frappe._dict(patient="VP-001", primary_owner="CUST-001", service_branch="Main Branch")
+			if doctype == "Veterinary Lab Test":
+				return frappe._dict(
+					test_name="Complete Blood Count",
+					sample_type="Blood",
+					linked_item="LAB-CBC",
+					default_rate=5000,
+					is_active=1,
+					result_format=self.result_format,
+					result_unit=self.result_unit,
+					reference_range=self.reference_range,
+					requires_document_upload=self.requires_document_upload,
+					allows_manual_result_entry=self.allows_manual_result_entry,
+					allows_doctor_result_entry=self.allows_doctor_result_entry,
+					requires_result_review=self.requires_result_review,
+				)
+			raise AssertionError(f"Unexpected get_value call: {doctype} {name} {fields}")
+
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(get_value=get_value),
+			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)(message)),
+			ValidationError=frappe.ValidationError,
+			PermissionError=frappe.PermissionError,
+		)
+		self.stack.enter_context(patch("vetedge.services.lab.frappe", frappe_stub))
+		self.stack.enter_context(patch("vetedge.services.lab.get_current_user", return_value="doctor@example.com"))
+		self.stack.enter_context(patch("vetedge.services.lab.now_datetime", return_value="2026-04-23 11:00:00"))
+		self.stack.enter_context(patch("vetedge.services.billing.validate_sales_item"))
+		self.stack.enter_context(patch("vetedge.services.lab.can_access_consultation"))
+		self.stack.enter_context(patch("vetedge.services.lab.can_access_branch_data"))
+		self.stack.enter_context(patch("vetedge.services.lab.can_request_lab_tests"))
+		self.stack.enter_context(patch("vetedge.services.lab.can_enter_lab_results"))
+		self.stack.enter_context(patch("vetedge.services.lab.get_user_roles", return_value={"VetEdge Doctor"}))
+		if self.upload_side_effect:
+			self.stack.enter_context(patch("vetedge.services.lab.can_upload_lab_results", side_effect=self.upload_side_effect))
+		else:
+			self.stack.enter_context(patch("vetedge.services.lab.can_upload_lab_results"))
+		return self
+
+	def __exit__(self, exc_type, exc, tb):
+		self.stack.close()
+		return False
 
 
 def make_sales_invoice(name, docstatus=0):

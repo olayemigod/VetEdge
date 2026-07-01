@@ -5,13 +5,19 @@ from frappe.utils import cint, flt, now_datetime
 
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.permissions import (
+	ELEVATED_ROLES,
+	ROLE_LAB_TECHNICIAN,
+	ROLE_VETEDGE_DOCTOR,
 	can_access_branch_data,
 	can_access_consultation,
 	can_access_lab_order,
 	can_enter_lab_results,
 	can_request_lab_tests,
 	can_review_lab_results,
+	can_upload_lab_results,
 	get_current_user,
+	get_user_roles,
+	get_veterinary_settings_flag,
 )
 from vetedge.services.portal_access import require_internal_user
 
@@ -42,6 +48,10 @@ VALID_LAB_ORDER_STATUS_TRANSITIONS = {
 
 LAB_RESULT_FIELDS = (
 	"result_format",
+	"requires_document_upload",
+	"allows_manual_result_entry",
+	"allows_doctor_result_entry",
+	"requires_result_review",
 	"result_value",
 	"result_unit",
 	"reference_range",
@@ -51,6 +61,7 @@ LAB_RESULT_FIELDS = (
 	"remarks",
 )
 LAB_RESULT_CONTENT_FIELDS = ("result_value", "result_text", "remarks", "result_attachment")
+LAB_RESULT_UPLOAD_FIELDS = ("result_attachment",)
 LAB_REVIEW_FINAL_STATUSES = {"Reviewed", "Cancelled"}
 LAB_RESULT_ENTRY_STATUSES = {"Sample Collected", "In Progress", "Result Entered"}
 LAB_RESULT_FORMATS = {"Value Driven", "Text / Narrative", "Document Upload", "Mixed"}
@@ -194,7 +205,7 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 	if not user or user == "Guest":
 		return
 
-	if previous and _has_reviewed_result_edit(doc, previous):
+	if previous and _has_reviewed_result_edit(doc, previous) and not _can_edit_reviewed_lab_results(user):
 		frappe.throw(
 			"Reviewed lab results are read-only and cannot be edited.",
 			frappe.ValidationError,
@@ -203,8 +214,12 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 	if previous is None:
 		if doc.status in LAB_RESULT_ENTRY_STATUSES:
 			can_enter_lab_results(user, doc, raise_exception=True)
+			if _has_lab_result_upload(doc):
+				can_upload_lab_results(user, doc, raise_exception=True)
 		elif doc.status == "Reviewed":
 			can_review_lab_results(user, doc, raise_exception=True)
+			if _has_lab_result_upload(doc):
+				can_upload_lab_results(user, doc, raise_exception=True)
 		return
 
 	if doc.status != previous.status:
@@ -221,6 +236,8 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 
 	if previous and _lab_result_content_changed(doc, previous):
 		can_enter_lab_results(user, doc, raise_exception=True)
+		if _lab_result_upload_changed(doc, previous):
+			can_upload_lab_results(user, doc, raise_exception=True)
 
 
 def validate_lab_order_items(doc) -> None:
@@ -273,6 +290,12 @@ def validate_lab_order_items(doc) -> None:
 			row.billing_item = lab_test.linked_item
 		if not row.get("result_format"):
 			row.result_format = lab_test.get("result_format") or "Value Driven"
+		if row.get("result_format") not in LAB_RESULT_FORMATS:
+			frappe.throw(f"Invalid lab result format for {row.lab_test_template}: {row.get('result_format')}", frappe.ValidationError)
+		row.requires_document_upload = cint(lab_test.get("requires_document_upload"))
+		row.allows_manual_result_entry = cint(lab_test.get("allows_manual_result_entry", 1))
+		row.allows_doctor_result_entry = cint(lab_test.get("allows_doctor_result_entry", 1))
+		row.requires_result_review = cint(lab_test.get("requires_result_review", 1)) if is_lab_result_review_required() else 0
 		if not row.get("result_unit") and lab_test.get("result_unit"):
 			row.result_unit = lab_test.result_unit
 		if not row.get("reference_range") and lab_test.get("reference_range"):
@@ -282,6 +305,8 @@ def validate_lab_order_items(doc) -> None:
 
 		has_result = any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS)
 		if has_result:
+			validate_lab_result_format_content(row)
+			validate_lab_result_actor_permissions(row, current_user, doc)
 			if not row.entered_by:
 				row.entered_by = current_user
 			if not row.entered_on:
@@ -322,6 +347,37 @@ def validate_lab_order_status_requirements(doc) -> None:
 			)
 
 
+def validate_lab_result_format_content(row) -> None:
+	result_format = row.get("result_format") or "Value Driven"
+	if result_format == "Value Driven" and not row.get("result_value"):
+		frappe.throw(f"Enter a result value for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Text / Narrative" and not row.get("result_text"):
+		frappe.throw(f"Enter a narrative result for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Document Upload" and not row.get("result_attachment"):
+		frappe.throw(f"Upload a result document for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Mixed" and not any(
+		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text", "result_attachment")
+	):
+		frappe.throw(f"Enter or upload a result for {row.lab_test_template}.", frappe.ValidationError)
+
+
+def validate_lab_result_actor_permissions(row, user: str | None, doc) -> None:
+	if not user or user == "Guest":
+		return
+	if not cint(row.get("allows_manual_result_entry", 1)) and any(
+		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text")
+	):
+		frappe.throw(f"Manual result entry is not allowed for {row.lab_test_template}.", frappe.PermissionError)
+	roles = get_user_roles(user)
+	is_elevated = bool(roles & ELEVATED_ROLES)
+	is_lab_staff = bool(roles & {ROLE_LAB_TECHNICIAN, "VetEdge Lab Technician"})
+	is_doctor = bool(roles & {ROLE_VETEDGE_DOCTOR})
+	if is_doctor and not (is_elevated or is_lab_staff) and not cint(row.get("allows_doctor_result_entry", 1)):
+		frappe.throw(f"Doctors are not allowed to enter results for {row.lab_test_template}.", frappe.PermissionError)
+	if row.get("result_attachment") and is_doctor and not (is_elevated or is_lab_staff):
+		can_upload_lab_results(user, doc, raise_exception=True)
+
+
 def sync_lab_order_review_metadata(doc) -> None:
 	if doc.status != "Reviewed":
 		return
@@ -332,6 +388,19 @@ def sync_lab_order_review_metadata(doc) -> None:
 		doc.doctor_reviewed_by = reviewer
 	if not doc.doctor_reviewed_on:
 		doc.doctor_reviewed_on = now_datetime()
+
+
+def is_lab_result_review_required() -> bool:
+	return get_veterinary_settings_flag("require_lab_result_review", default=True)
+
+
+def _can_edit_reviewed_lab_results(user: str | None) -> bool:
+	roles = get_user_roles(user)
+	if roles & ELEVATED_ROLES:
+		return True
+	if not get_veterinary_settings_flag("allow_lab_result_edit_after_review", default=False):
+		return False
+	return can_review_lab_results(user, raise_exception=False)
 
 
 def handle_lab_order_after_insert(doc) -> None:
@@ -939,6 +1008,26 @@ def _lab_result_content_changed(doc, previous) -> bool:
 		if not previous_row:
 			continue
 		for fieldname in LAB_RESULT_FIELDS + ("status", "result_status"):
+			if (row.get(fieldname) or None) != (previous_row.get(fieldname) or None):
+				return True
+	return False
+
+
+def _has_lab_result_upload(doc) -> bool:
+	return any(row.get("result_attachment") not in (None, "") for row in doc.get("lab_tests") or [])
+
+
+def _lab_result_upload_changed(doc, previous) -> bool:
+	current_rows = {row.name or f"idx-{idx}": row for idx, row in enumerate(doc.get("lab_tests") or [], start=1)}
+	previous_rows = {row.name or f"idx-{idx}": row for idx, row in enumerate(previous.get("lab_tests") or [], start=1)}
+
+	for key, row in current_rows.items():
+		previous_row = previous_rows.get(key)
+		if not previous_row:
+			if row.get("result_attachment") not in (None, ""):
+				return True
+			continue
+		for fieldname in LAB_RESULT_UPLOAD_FIELDS:
 			if (row.get(fieldname) or None) != (previous_row.get(fieldname) or None):
 				return True
 	return False

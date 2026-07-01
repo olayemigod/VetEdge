@@ -541,6 +541,37 @@ def can_enter_lab_results(user: str | None, context=None, raise_exception: bool 
 	)
 
 
+def can_upload_lab_results(user: str | None, context=None, raise_exception: bool = False) -> bool:
+	user = user or get_current_user()
+	if not is_internal_staff_user(user):
+		return _deny(
+			raise_exception,
+			"This action is only available to clinic staff.",
+			"lab_result_upload_blocked",
+			reference_doctype=getattr(context, "doctype", None) if context else None,
+			reference_name=getattr(context, "name", None) if context else None,
+			user=user,
+		)
+
+	if user_has_any_role(user, {*_role_group(ROLE_LAB_TECHNICIAN), *ELEVATED_ROLES}):
+		return True
+
+	if user_has_any_role(user, _role_group(ROLE_VETEDGE_DOCTOR)) and get_veterinary_settings_flag(
+		"allow_doctor_lab_result_upload",
+		default=False,
+	):
+		return True
+
+	return _deny(
+		raise_exception,
+		"Only lab staff or permitted doctors can upload lab result files.",
+		"lab_result_upload_blocked",
+		reference_doctype=getattr(context, "doctype", None) if context else None,
+		reference_name=getattr(context, "name", None) if context else None,
+		user=user,
+	)
+
+
 def can_review_lab_results(user: str | None, context=None, raise_exception: bool = False) -> bool:
 	user = user or get_current_user()
 	if not is_internal_staff_user(user):

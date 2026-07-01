@@ -94,6 +94,12 @@ frappe.ui.form.on("Veterinary Lab Order", {
 });
 
 frappe.ui.form.on("Veterinary Lab Order Item", {
+	lab_test_template(frm, cdt, cdn) {
+		apply_lab_test_result_metadata(frm, cdt, cdn);
+	},
+	result_format(frm, cdt, cdn) {
+		configure_lab_result_editability(frm, cdt, cdn);
+	},
 	form_render(frm, cdt, cdn) {
 		configure_lab_result_editability(frm, cdt, cdn);
 	},
@@ -110,7 +116,49 @@ function configure_lab_result_editability(frm, cdt = null, cdn = null) {
 
 	const orderLocked = ["Reviewed", "Cancelled"].includes(frm.doc.status);
 	frm.set_df_property("lab_tests", "read_only", orderLocked ? 1 : 0);
+	["result_value", "result_unit", "reference_range", "abnormal_flag"].forEach((fieldname) => {
+		grid.update_docfield_property(fieldname, "depends_on", "eval:['Value Driven', 'Mixed'].includes(doc.result_format)");
+	});
+	grid.update_docfield_property("result_text", "depends_on", "eval:['Text / Narrative', 'Mixed'].includes(doc.result_format)");
+	grid.update_docfield_property("result_attachment", "depends_on", "eval:['Document Upload', 'Mixed'].includes(doc.result_format)");
 	frm.refresh_field("lab_tests");
+}
+
+function apply_lab_test_result_metadata(frm, cdt, cdn) {
+	const row = locals[cdt]?.[cdn];
+	if (!row?.lab_test_template) {
+		return;
+	}
+
+	frappe.db
+		.get_value("Veterinary Lab Test", row.lab_test_template, [
+			"result_format",
+			"result_unit",
+			"reference_range",
+			"requires_document_upload",
+			"allows_manual_result_entry",
+			"allows_doctor_result_entry",
+			"requires_result_review",
+			"sample_type",
+			"linked_item",
+		])
+		.then((result) => {
+			const test = result?.message || {};
+			frappe.model.set_value(cdt, cdn, "result_format", test.result_format || "Value Driven");
+			frappe.model.set_value(cdt, cdn, "result_unit", test.result_unit || "");
+			frappe.model.set_value(cdt, cdn, "reference_range", test.reference_range || "");
+			frappe.model.set_value(cdt, cdn, "requires_document_upload", test.requires_document_upload ? 1 : 0);
+			frappe.model.set_value(cdt, cdn, "allows_manual_result_entry", test.allows_manual_result_entry === 0 ? 0 : 1);
+			frappe.model.set_value(cdt, cdn, "allows_doctor_result_entry", test.allows_doctor_result_entry === 0 ? 0 : 1);
+			frappe.model.set_value(cdt, cdn, "requires_result_review", test.requires_result_review === 0 ? 0 : 1);
+			if (test.sample_type && !row.sample_type) {
+				frappe.model.set_value(cdt, cdn, "sample_type", test.sample_type);
+			}
+			if (test.linked_item && !row.billing_item) {
+				frappe.model.set_value(cdt, cdn, "billing_item", test.linked_item);
+			}
+			configure_lab_result_editability(frm, cdt, cdn);
+		});
 }
 
 function add_creation_actions(frm) {
@@ -131,6 +179,19 @@ function show_lab_test_dialog(frm) {
 				label: __("Sample Type"),
 				options: "\nBlood\nSerum\nPlasma\nUrine\nFeces\nSwab\nTissue\nOther",
 			},
+			{
+				fieldname: "result_format",
+				fieldtype: "Select",
+				label: __("Result Format"),
+				options: "Value Driven\nText / Narrative\nDocument Upload\nMixed",
+				default: "Value Driven",
+			},
+			{ fieldname: "result_unit", fieldtype: "Data", label: __("Result Unit") },
+			{ fieldname: "reference_range", fieldtype: "Small Text", label: __("Reference Range") },
+			{ fieldname: "requires_document_upload", fieldtype: "Check", label: __("Requires Document Upload") },
+			{ fieldname: "allows_manual_result_entry", fieldtype: "Check", label: __("Allows Manual Result Entry"), default: 1 },
+			{ fieldname: "allows_doctor_result_entry", fieldtype: "Check", label: __("Allows Doctor Result Entry"), default: 1 },
+			{ fieldname: "requires_result_review", fieldtype: "Check", label: __("Requires Result Review"), default: 1 },
 			{ fieldname: "linked_item", fieldtype: "Link", label: __("Linked Billing Item"), options: "Item" },
 			{ fieldname: "default_rate", fieldtype: "Currency", label: __("Default Rate") },
 			{ fieldname: "description", fieldtype: "Small Text", label: __("Description") },

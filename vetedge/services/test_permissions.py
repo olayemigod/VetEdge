@@ -12,6 +12,7 @@ from vetedge.services.permissions import (
 	can_create_grooming_session,
 	can_dispense,
 	can_enter_lab_results,
+	can_upload_lab_results,
 	can_manage_grooming_billing,
 	can_progress_grooming_session,
 	can_review_lab_results,
@@ -151,6 +152,33 @@ class TestPermissions(TestCase):
 				lab_order,
 				raise_exception=True,
 			)
+
+	def test_doctor_lab_result_upload_respects_settings_gate(self):
+		lab_order = frappe._dict(name="VLAB-001", doctype="Veterinary Lab Order")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Doctor"}),
+			patch("vetedge.services.permissions.get_veterinary_settings_flag", return_value=False),
+			patch("vetedge.services.permissions.frappe.throw", side_effect=frappe.PermissionError),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				can_upload_lab_results,
+				"doctor@example.com",
+				lab_order,
+				raise_exception=True,
+			)
+
+	def test_doctor_lab_result_upload_allowed_when_setting_allows_it(self):
+		lab_order = frappe._dict(name="VLAB-001", doctype="Veterinary Lab Order")
+
+		with (
+			patch("vetedge.services.permissions.is_internal_staff_user", return_value=True),
+			patch("vetedge.services.permissions.get_user_roles", return_value={"VetEdge Doctor"}),
+			patch("vetedge.services.permissions.get_veterinary_settings_flag", return_value=True),
+		):
+			self.assertTrue(can_upload_lab_results("doctor@example.com", lab_order, raise_exception=True))
 
 	def test_lab_technician_cannot_review_lab_results(self):
 		lab_order = frappe._dict(name="VLAB-001", doctype="Veterinary Lab Order")
