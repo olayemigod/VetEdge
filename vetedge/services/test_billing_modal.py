@@ -497,10 +497,16 @@ class TestBillingModal(TestCase):
 		invoice.posting_date = "2026-06-18"
 		invoice.due_date = "2026-06-01"
 
-		with modal_action_context(source, invoice):
+		with (
+			modal_action_context(source, invoice),
+			patch("vetedge.services.billing_core.nowdate", return_value="2026-06-18"),
+		):
 			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
 
+		self.assertEqual(invoice.set_posting_time, 1)
+		self.assertEqual(invoice.posting_date, "2026-06-18")
 		self.assertEqual(str(invoice.due_date), "2026-06-18")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
 
 	def test_submit_modal_invoice_corrects_due_date_before_effective_submit_posting_date(self):
@@ -517,11 +523,14 @@ class TestBillingModal(TestCase):
 
 		with (
 			modal_action_context(source, invoice),
-			patch.object(billing_modal, "nowdate", return_value="2026-06-18"),
+			patch("vetedge.services.billing_core.nowdate", return_value="2026-06-18"),
 		):
 			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
 
+		self.assertEqual(invoice.set_posting_time, 1)
+		self.assertEqual(invoice.posting_date, "2026-06-18")
 		self.assertEqual(str(invoice.due_date), "2026-06-18")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
 
 	def test_submit_modal_invoice_preserves_due_date_after_posting_date(self):
@@ -535,10 +544,16 @@ class TestBillingModal(TestCase):
 		invoice.posting_date = "2026-06-18"
 		invoice.due_date = "2026-07-18"
 
-		with modal_action_context(source, invoice):
+		with (
+			modal_action_context(source, invoice),
+			patch("vetedge.services.billing_core.nowdate", return_value="2026-06-18"),
+		):
 			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
 
+		self.assertEqual(invoice.set_posting_time, 1)
+		self.assertEqual(invoice.posting_date, "2026-06-18")
 		self.assertEqual(invoice.due_date, "2026-07-18")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
 
 	def test_submit_modal_invoice_preserves_valid_payment_terms_due_date_after_effective_posting_date(self):
@@ -555,11 +570,14 @@ class TestBillingModal(TestCase):
 
 		with (
 			modal_action_context(source, invoice),
-			patch.object(billing_modal, "nowdate", return_value="2026-06-18"),
+			patch("vetedge.services.billing_core.nowdate", return_value="2026-06-18"),
 		):
 			billing_modal.submit_modal_invoice("Veterinary Consultation", "VCON-001")
 
+		self.assertEqual(invoice.set_posting_time, 1)
+		self.assertEqual(invoice.posting_date, "2026-06-18")
 		self.assertEqual(invoice.due_date, "2026-07-18")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
 
 	def test_submit_modal_invoice_blocks_already_submitted_invoice(self):
@@ -737,6 +755,7 @@ def make_invoice(name="SINV-001", docstatus=1, outstanding_amount=1000):
 		paid_amount=0,
 		outstanding_amount=outstanding_amount,
 		currency="NGN",
+		save=Mock(),
 		submit=Mock(),
 	)
 

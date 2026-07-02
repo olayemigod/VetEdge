@@ -734,6 +734,67 @@ class TestBillingCore(TestCase):
 
 		self.assertEqual(invoice.due_date, "2026-06-01")
 
+	def test_prepare_vetedge_invoice_for_submit_sets_posting_time_and_dates(self):
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[])
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-05-15"
+		invoice.set_posting_time = 0
+
+		with (
+			patch.object(billing_core, "is_vetedge_linked_sales_invoice", return_value=True),
+			patch.object(billing_core, "nowdate", return_value="2026-07-02"),
+		):
+			billing_core.prepare_vetedge_invoice_for_submit(invoice)
+
+		self.assertEqual(invoice.set_posting_time, 1)
+		self.assertEqual(invoice.posting_date, "2026-07-02")
+		self.assertEqual(invoice.due_date, "2026-07-02")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
+
+	def test_prepare_vetedge_invoice_for_submit_preserves_valid_future_due_date(self):
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[])
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-08-15"
+		invoice.set_posting_time = 0
+
+		with (
+			patch.object(billing_core, "is_vetedge_linked_sales_invoice", return_value=True),
+			patch.object(billing_core, "nowdate", return_value="2026-07-02"),
+		):
+			billing_core.prepare_vetedge_invoice_for_submit(invoice)
+
+		self.assertEqual(invoice.posting_date, "2026-07-02")
+		self.assertEqual(invoice.due_date, "2026-08-15")
+		invoice.save.assert_called_once_with(ignore_permissions=True)
+
+	def test_prepare_vetedge_invoice_for_submit_does_not_modify_non_vetedge_invoice(self):
+		invoice = make_invoice("SINV-OTHER", docstatus=0, items=[])
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-05-15"
+		invoice.set_posting_time = 0
+
+		with patch.object(billing_core, "is_vetedge_linked_sales_invoice", return_value=False):
+			billing_core.prepare_vetedge_invoice_for_submit(invoice)
+
+		self.assertEqual(invoice.set_posting_time, 0)
+		self.assertEqual(invoice.posting_date, "2026-05-01")
+		self.assertEqual(invoice.due_date, "2026-05-15")
+		invoice.save.assert_not_called()
+
+	def test_prepare_vetedge_invoice_for_submit_does_not_mutate_submitted_invoice(self):
+		invoice = make_invoice("SINV-SUB", docstatus=1, items=[])
+		invoice.posting_date = "2026-05-01"
+		invoice.due_date = "2026-05-15"
+		invoice.set_posting_time = 0
+
+		with patch.object(billing_core, "is_vetedge_linked_sales_invoice", return_value=True):
+			billing_core.prepare_vetedge_invoice_for_submit(invoice)
+
+		self.assertEqual(invoice.set_posting_time, 0)
+		self.assertEqual(invoice.posting_date, "2026-05-01")
+		self.assertEqual(invoice.due_date, "2026-05-15")
+		invoice.save.assert_not_called()
+
 	def test_should_run_final_billing_gate_requires_status_transition(self):
 		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", status="Completed")
 		doc.get_doc_before_save = lambda: frappe._dict(status="Completed")

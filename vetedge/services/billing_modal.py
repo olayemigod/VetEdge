@@ -700,7 +700,9 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 	if not frappe.has_permission("Sales Invoice", "submit", doc=invoice_doc):
 		frappe.throw("You do not have permission to submit this Sales Invoice.", frappe.PermissionError)
 
-	ensure_invoice_due_date_not_before_posting_date(invoice_doc)
+	from vetedge.services.billing_core import prepare_vetedge_invoice_for_submit
+
+	prepare_vetedge_invoice_for_submit(invoice_doc, verified_vetedge_link=True)
 	invoice_doc.submit()
 	return {"invoice": invoice_doc.name, "state": get_billing_modal_state(source_doctype, source_name)}
 

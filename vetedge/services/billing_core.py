@@ -2456,6 +2456,30 @@ def normalize_vetedge_sales_invoice_dates(invoice, method: str | None = None) ->
 	normalize_billing_session_invoice_dates(invoice)
 
 
+def prepare_vetedge_invoice_for_submit(invoice, verified_vetedge_link: bool = False) -> None:
+	if cint(invoice.get("docstatus")) != 0:
+		return
+	if not (verified_vetedge_link or is_vetedge_linked_sales_invoice(invoice)):
+		return
+
+	if invoice_has_field(invoice, "set_posting_time"):
+		invoice.set_posting_time = 1
+	invoice.posting_date = nowdate()
+	normalize_billing_session_invoice_dates(invoice)
+	save_method = getattr(invoice, "save", None)
+	if callable(save_method):
+		save_method(**{"ignore_permissions": True})
+
+
+def invoice_has_field(invoice, fieldname: str) -> bool:
+	if hasattr(invoice, "meta") and getattr(invoice.meta, "has_field", None):
+		return bool(invoice.meta.has_field(fieldname))
+	try:
+		return bool(frappe.get_meta(invoice.doctype).has_field(fieldname))
+	except Exception:
+		return fieldname in invoice
+
+
 def is_vetedge_linked_sales_invoice(invoice) -> bool:
 	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
 		return True
