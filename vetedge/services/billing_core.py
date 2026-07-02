@@ -1337,11 +1337,11 @@ def lab_order_to_billing_charges(doc) -> list[dict]:
 
 
 def vaccination_to_billing_charges(doc) -> list[dict]:
-	item_code = frappe.db.get_value("Veterinary Vaccine", doc.get("vaccine"), "default_item") if doc.get("vaccine") else None
+	item_code = doc.get("billing_item") or (frappe.db.get_value("Veterinary Vaccine", doc.get("vaccine"), "default_item") if doc.get("vaccine") else None)
 	if not item_code:
 		return []
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
-	return [build_source_charge(doc, "Vaccination", doc.name, item_code, 1, None, None, cost_center)]
+	return [build_source_charge(doc, "Vaccination", doc.name, item_code, 1, None, doc.get("rate"), cost_center)]
 
 
 def registration_to_billing_charges(doc) -> list[dict]:
@@ -1989,7 +1989,7 @@ def get_hospitalisation_charge_payloads(hospitalisation_name: str, session=None)
 def get_vaccination_charge_payloads(vaccination_name: str, session=None) -> list[dict]:
 	doc = frappe.get_doc("Veterinary Vaccination Record", vaccination_name)
 	vaccine = frappe.db.get_value("Veterinary Vaccine", doc.get("vaccine"), ["default_item", "price_list"], as_dict=True) if doc.get("vaccine") else None
-	item_code = vaccine.get("default_item") if vaccine else None
+	item_code = doc.get("billing_item") or (vaccine.get("default_item") if vaccine else None)
 	if not item_code:
 		return []
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
@@ -2001,7 +2001,7 @@ def get_vaccination_charge_payloads(vaccination_name: str, session=None) -> list
 			item_code,
 			1,
 			None,
-			None,
+			doc.get("rate"),
 			cost_center,
 			master_price_list=vaccine.get("price_list"),
 		)
@@ -2012,9 +2012,9 @@ def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cos
 	if not frappe.db.exists("DocType", "Veterinary Vaccination Record"):
 		return []
 	payloads = []
-	for row in frappe.get_all("Veterinary Vaccination Record", filters={"linked_consultation": consultation_name, "status": ["!=", "Cancelled"]}, fields=["name", "vaccine"]):
+	for row in frappe.get_all("Veterinary Vaccination Record", filters={"linked_consultation": consultation_name, "status": ["!=", "Cancelled"]}, fields=["name", "vaccine", "billing_item", "rate"]):
 		vaccine = frappe.db.get_value("Veterinary Vaccine", row.vaccine, ["default_item", "price_list"], as_dict=True) or {}
-		item_code = vaccine.get("default_item")
+		item_code = row.get("billing_item") or vaccine.get("default_item")
 		if item_code:
 			doc = frappe._dict(doctype="Veterinary Vaccination Record", name=row.name, service_branch=None)
 			payloads.append(
@@ -2025,7 +2025,7 @@ def get_vaccination_charge_payloads_for_consultation(consultation_name: str, cos
 					item_code,
 					1,
 					None,
-					None,
+					row.get("rate"),
 					cost_center,
 					master_price_list=vaccine.get("price_list"),
 				)

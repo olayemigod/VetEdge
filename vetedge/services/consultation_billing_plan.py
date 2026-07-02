@@ -59,13 +59,17 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 		["vaccine_name", "default_item", "default_price"],
 		as_dict=True,
 	) or {}
-	item = vaccine.get("default_item")
+	item = doc.get("billing_item") or vaccine.get("default_item")
 	if not item:
 		return
 
 	consultation = frappe.get_doc(CONSULTATION_DOCTYPE, consultation_name)
 	source_detail = doc.get("vaccine") or doc.name
-	if _has_source_row(consultation, "Vaccination", doc.name, source_detail):
+	rate = doc.get("rate") if doc.get("rate") not in (None, "") else vaccine.get("default_price")
+	existing_row = _get_source_row(consultation, "Vaccination", doc.name, source_detail)
+	if existing_row:
+		if _update_plan_row_from_vaccination(existing_row, doc, item, vaccine.get("vaccine_name"), rate):
+			_save_consultation(consultation)
 		return
 
 	_add_plan_row(
@@ -77,7 +81,7 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 		item=item,
 		description=vaccine.get("vaccine_name") or doc.get("vaccine"),
 		qty=1,
-		rate=vaccine.get("default_price"),
+		rate=rate,
 		notes=doc.get("notes"),
 	)
 	_save_consultation(consultation)
@@ -121,6 +125,26 @@ def _update_plan_row_from_lab_order(plan_row, lab_row, item: str, rate: float | 
 		"rate": flt(rate),
 		"amount": qty * flt(rate),
 		"notes": lab_row.get("notes"),
+	}
+	changed = False
+	for fieldname, value in new_values.items():
+		if plan_row.get(fieldname) != value:
+			_set_child_value(plan_row, fieldname, value)
+			changed = True
+	return changed
+
+
+def _update_plan_row_from_vaccination(plan_row, doc, item: str, vaccine_name: str | None, rate: float | None) -> bool:
+	if not _can_update_plan_row_from_source(plan_row):
+		return False
+	qty = flt(plan_row.get("qty")) or 1
+	new_values = {
+		"item": item,
+		"description": vaccine_name or doc.get("vaccine"),
+		"qty": qty,
+		"rate": flt(rate),
+		"amount": qty * flt(rate),
+		"notes": doc.get("notes"),
 	}
 	changed = False
 	for fieldname, value in new_values.items():

@@ -106,6 +106,17 @@ _install_stub_modules()
 from vetedge.services import vaccination
 
 
+class DictDoc(dict):
+	def __getattr__(self, fieldname):
+		try:
+			return self[fieldname]
+		except KeyError as exc:
+			raise AttributeError(fieldname) from exc
+
+	def __setattr__(self, fieldname, value):
+		self[fieldname] = value
+
+
 class VaccinationPermissionTests(TestCase):
 	def test_doctor_can_administer_vaccine(self):
 		with patch.object(vaccination, "is_internal_staff_user", return_value=True), patch.object(
@@ -242,6 +253,68 @@ class VaccinationBatchTests(TestCase):
 
 
 class VaccinationWorkflowTests(TestCase):
+	def test_prepare_vaccination_billing_fields_sets_item_rate_and_amount(self):
+		doc = DictDoc(vaccine="Rabies", billing_item=None, rate=None, amount=None, rate_manually_edited=0)
+
+		with patch.object(vaccination, "get_vaccine_defaults", return_value=vaccination.VaccineDefaults(default_item="VAC-RAB", default_price=7500)):
+			vaccination.prepare_vaccination_billing_fields(doc)
+
+		self.assertEqual(doc.billing_item, "VAC-RAB")
+		self.assertEqual(doc.rate, 7500)
+		self.assertEqual(doc.amount, 7500)
+		self.assertEqual(doc.rate_manually_edited, 0)
+
+	def test_prepare_vaccination_billing_fields_preserves_edited_rate(self):
+		doc = DictDoc(vaccine="Rabies", billing_item="VAC-RAB", rate=9200, amount=None, rate_manually_edited=1)
+
+		with patch.object(vaccination, "get_vaccine_defaults", return_value=vaccination.VaccineDefaults(default_item="VAC-RAB", default_price=7500)):
+			vaccination.prepare_vaccination_billing_fields(doc)
+
+		self.assertEqual(doc.rate, 9200)
+		self.assertEqual(doc.amount, 9200)
+		self.assertEqual(doc.rate_manually_edited, 1)
+
+	def test_vaccination_rate_edit_is_blocked_after_submitted_invoice(self):
+		doc = DictDoc(rate=9200, linked_invoice="SINV-001")
+		previous = SimpleNamespace(rate=7500, linked_invoice="SINV-001")
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(get_value=Mock(return_value=1)),
+			ValidationError=Exception,
+			throw=Mock(side_effect=Exception("blocked")),
+		)
+
+		with patch.object(vaccination, "frappe", frappe_stub):
+			with self.assertRaises(Exception):
+				vaccination.validate_vaccination_rate_edit_protection(doc, previous)
+
+	def test_legacy_vaccination_invoice_uses_edited_rate(self):
+		doc = DictDoc(
+			name="VVAC-001",
+			vaccine="Rabies",
+			billing_item="VAC-RAB",
+			rate=9200,
+			service_branch="Main Branch",
+			linked_invoice=None,
+			linked_consultation=None,
+			primary_owner="CUST-001",
+			company="VetEdge Co",
+			administered_on="2026-04-30",
+		)
+		invoice = SimpleNamespace(name="SINV-001", insert=Mock())
+		frappe_stub = SimpleNamespace(
+			get_doc=Mock(return_value=invoice),
+			get_meta=Mock(return_value=SimpleNamespace(has_field=Mock(return_value=False))),
+		)
+
+		with patch.object(vaccination, "frappe", frappe_stub), patch.object(vaccination, "use_billing_core_for_vaccination", return_value=False), patch.object(
+			vaccination, "get_vaccine_defaults", return_value=vaccination.VaccineDefaults(default_item="VAC-RAB", default_price=7500)
+		), patch.object(vaccination, "get_billing_cost_center", return_value="CC-001"), patch.object(vaccination, "build_invoice_item", return_value={"item_code": "VAC-RAB", "qty": 1, "rate": 9200, "amount": 9200}) as build_item:
+			invoice_name = vaccination.create_vaccination_invoice(doc)
+
+		self.assertEqual(invoice_name, "SINV-001")
+		build_item.assert_called_once_with("VAC-RAB", 1, None, 9200, "CC-001")
+		invoice.insert.assert_called_once_with(ignore_permissions=True)
+
 	def test_create_vaccination_from_consultation_creates_record_and_invoice(self):
 		consultation_doc = SimpleNamespace(
 			name="CONS-001",

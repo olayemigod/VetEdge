@@ -147,6 +147,74 @@ class TestConsultationBillingPlan(TestCase):
 		self.assertEqual(row.rate, 7500)
 		self.assertEqual(row.payment_status, "Not Billed")
 
+	def test_vaccination_resave_updates_existing_editable_source_row_rate_without_duplicate(self):
+		consultation = make_consultation(
+			planned_treatments=[
+				frappe._dict(
+					source_type="Vaccination",
+					source_document="VVAC-001",
+					source_detail_name="Rabies",
+					item="VAC-RAB",
+					rate=7500,
+					amount=7500,
+					billing_status="Pending",
+					payment_status="Not Billed",
+				)
+			]
+		)
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			linked_consultation="VCON-001",
+			status="Draft",
+			vaccine="Rabies",
+			billing_item="VAC-RAB",
+			rate=9200,
+			notes="Updated charge",
+		)
+
+		with patch_plan_frappe(consultation, vaccine={"vaccine_name": "Rabies Vaccine", "default_item": "VAC-RAB", "default_price": 7500}):
+			sync_vaccination_to_consultation_plan(record)
+
+		self.assertEqual(len(consultation.planned_treatments), 1)
+		row = consultation.planned_treatments[0]
+		self.assertEqual(row.rate, 9200)
+		self.assertEqual(row.amount, 9200)
+		self.assertEqual(row.notes, "Updated charge")
+		consultation.save.assert_called_once()
+
+	def test_vaccination_resave_does_not_update_submitted_source_row_rate(self):
+		consultation = make_consultation(
+			planned_treatments=[
+				frappe._dict(
+					source_type="Vaccination",
+					source_document="VVAC-001",
+					source_detail_name="Rabies",
+					item="VAC-RAB",
+					rate=7500,
+					amount=7500,
+					billing_status="Submitted Invoiced",
+					payment_status="Unpaid",
+				)
+			]
+		)
+		record = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			linked_consultation="VCON-001",
+			status="Draft",
+			vaccine="Rabies",
+			billing_item="VAC-RAB",
+			rate=9200,
+		)
+
+		with patch_plan_frappe(consultation, vaccine={"vaccine_name": "Rabies Vaccine", "default_item": "VAC-RAB", "default_price": 7500}):
+			sync_vaccination_to_consultation_plan(record)
+
+		self.assertEqual(len(consultation.planned_treatments), 1)
+		self.assertEqual(consultation.planned_treatments[0].rate, 7500)
+		consultation.save.assert_not_called()
+
 
 def make_consultation(planned_treatments=None):
 	consultation = frappe._dict(name="VCON-001", planned_treatments=planned_treatments or [])

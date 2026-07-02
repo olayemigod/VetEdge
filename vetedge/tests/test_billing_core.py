@@ -795,6 +795,37 @@ class TestBillingCore(TestCase):
 		self.assertEqual(invoice.due_date, "2026-05-15")
 		invoice.save.assert_not_called()
 
+	def test_vaccination_charge_payload_uses_record_rate(self):
+		doc = frappe._dict(
+			doctype="Veterinary Vaccination Record",
+			name="VVAC-001",
+			vaccine="Rabies",
+			billing_item="VAC-RAB",
+			rate=9200,
+			service_branch="Main Branch",
+		)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=doc),
+			patch.object(billing_core.frappe.db, "get_value", return_value=frappe._dict(default_item="VAC-RAB", price_list="Standard Selling")),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-001"),
+			patch.object(billing_core, "build_source_charge", return_value={"item_code": "VAC-RAB", "rate": 9200}) as build_charge,
+		):
+			payloads = billing_core.get_vaccination_charge_payloads("VVAC-001")
+
+		self.assertEqual(payloads, [{"item_code": "VAC-RAB", "rate": 9200}])
+		build_charge.assert_called_once_with(
+			doc,
+			"Vaccination",
+			"Rabies",
+			"VAC-RAB",
+			1,
+			None,
+			9200,
+			"CC-001",
+			master_price_list="Standard Selling",
+		)
+
 	def test_should_run_final_billing_gate_requires_status_transition(self):
 		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", status="Completed")
 		doc.get_doc_before_save = lambda: frappe._dict(status="Completed")

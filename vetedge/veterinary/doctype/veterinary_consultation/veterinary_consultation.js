@@ -1531,6 +1531,13 @@ function show_vaccination_dialog(frm) {
 		title: __("New Vaccination"),
 		fields: [
 			{ fieldtype: "Link", fieldname: "vaccine", label: __("Vaccine"), options: "Veterinary Vaccine", reqd: 1 },
+			{ fieldtype: "Link", fieldname: "billing_item", label: __("Billing Item"), options: "Item", read_only: 1 },
+			{
+				fieldtype: "Currency",
+				fieldname: "rate",
+				label: __("Rate"),
+				description: __("Edit the Rate before billing to change the vaccination charge."),
+			},
 			{ fieldtype: "Data", fieldname: "dose", label: __("Dose") },
 			{ fieldtype: "Select", fieldname: "route", label: __("Route"), options: "\nOral\nSubcutaneous\nIntramuscular\nIntranasal\nTopical\nOther" },
 			{ fieldtype: "Datetime", fieldname: "administered_on", label: __("Administered On"), default: frappe.datetime.now_datetime(), reqd: 1 },
@@ -1566,6 +1573,19 @@ function show_vaccination_dialog(frm) {
 			});
 		},
 	});
+
+	dialog.fields_dict.vaccine.df.onchange = async () => {
+		const vaccine = dialog.get_value("vaccine");
+		if (!vaccine) {
+			dialog.set_value("billing_item", null);
+			dialog.set_value("rate", null);
+			return;
+		}
+		const response = await frappe.db.get_value("Veterinary Vaccine", vaccine, ["default_item", "default_price"]);
+		const defaults = response?.message || {};
+		dialog.set_value("billing_item", defaults.default_item || null);
+		dialog.set_value("rate", defaults.default_price || 0);
+	};
 
 	dialog.show();
 }

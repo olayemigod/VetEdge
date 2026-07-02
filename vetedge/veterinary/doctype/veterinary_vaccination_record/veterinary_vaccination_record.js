@@ -21,6 +21,7 @@ frappe.ui.form.on("Veterinary Vaccination Record", {
 
 	refresh(frm) {
 		add_workflow_actions(frm);
+		set_billing_field_state(frm);
 	},
 
 	patient(frm) {
@@ -31,7 +32,16 @@ frappe.ui.form.on("Veterinary Vaccination Record", {
 	},
 
 	vaccine(frm) {
+		void populate_billing_defaults(frm);
 		void populate_next_due_date(frm);
+	},
+
+	rate(frm) {
+		if (frm.__setting_vaccination_rate) {
+			return;
+		}
+		frm.set_value("rate_manually_edited", frm.doc.rate ? 1 : 0);
+		update_vaccination_amount(frm);
 	},
 
 	administered_on(frm) {
@@ -44,6 +54,13 @@ frappe.ui.form.on("Veterinary Vaccination Record", {
 		}
 	},
 });
+
+function set_billing_field_state(frm) {
+	const locked = ["Administered", "Cancelled"].includes(frm.doc.status);
+	frm.set_df_property("billing_item", "read_only", locked);
+	frm.set_df_property("rate", "read_only", locked);
+	frm.set_df_property("rate", "description", __("Edit the Rate before billing to change the vaccination charge."));
+}
 
 function add_workflow_actions(frm) {
 	if (frm.is_new() || frm.doc.status === "Cancelled") {
@@ -118,4 +135,30 @@ async function populate_next_due_date(frm) {
 	await frm.set_value("next_due_date", frappe.datetime.add_days(administeredDate, days));
 	frm.__setting_vaccination_due_date = false;
 	frm.__next_due_date_manually_set = false;
+}
+
+async function populate_billing_defaults(frm) {
+	if (!frm.doc.vaccine) {
+		return;
+	}
+
+	const response = await frappe.db.get_value(
+		"Veterinary Vaccine",
+		frm.doc.vaccine,
+		["default_item", "default_price"]
+	);
+	const defaults = response?.message || {};
+	if (!frm.doc.billing_item && defaults.default_item) {
+		await frm.set_value("billing_item", defaults.default_item);
+	}
+	if (!frm.doc.rate_manually_edited && !frm.doc.rate && defaults.default_price != null) {
+		frm.__setting_vaccination_rate = true;
+		await frm.set_value("rate", defaults.default_price);
+		frm.__setting_vaccination_rate = false;
+	}
+	update_vaccination_amount(frm);
+}
+
+function update_vaccination_amount(frm) {
+	frm.set_value("amount", flt(frm.doc.rate || 0));
 }
