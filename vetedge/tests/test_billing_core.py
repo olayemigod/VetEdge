@@ -678,6 +678,27 @@ class TestBillingCore(TestCase):
 		invoice.save.assert_called_once()
 		self.assertEqual(len(invoice.get("items")), 1)
 
+	def test_apply_invoice_session_defaults_normalizes_old_due_date_when_posting_date_moves(self):
+		session = make_session()
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[])
+		invoice.posting_date = "2026-06-01"
+		invoice.due_date = "2026-05-30"
+
+		with patch.object(billing_core, "nowdate", return_value="2026-07-02"):
+			billing_core.apply_invoice_session_defaults(invoice, session)
+
+		self.assertEqual(invoice.posting_date, "2026-07-02")
+		self.assertEqual(invoice.due_date, "2026-07-02")
+
+	def test_invoice_date_normalizer_does_not_mutate_submitted_invoice(self):
+		invoice = make_invoice("SINV-SUB", docstatus=1, items=[])
+		invoice.posting_date = "2026-07-02"
+		invoice.due_date = "2026-06-01"
+
+		billing_core.normalize_billing_session_invoice_dates(invoice)
+
+		self.assertEqual(invoice.due_date, "2026-06-01")
+
 
 	def test_submitted_current_invoice_creates_new_draft_for_new_charge(self):
 		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[])

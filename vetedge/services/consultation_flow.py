@@ -710,10 +710,10 @@ def should_validate_final_workflow_gate(doc) -> bool:
 	status = doc.get("status") if hasattr(doc, "get") else getattr(doc, "status", None)
 	if status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
 		return False
-	has_changed = getattr(doc, "has_value_changed", None)
-	if callable(has_changed):
-		return bool(has_changed("status"))
-	return True
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	if not previous:
+		return False
+	return previous.status != status
 
 
 def is_vitals_required_before_completion() -> bool:

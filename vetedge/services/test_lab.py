@@ -758,6 +758,19 @@ class TestLabWorkflow(TestCase):
 
 		self.assertIn("Sales Invoice must be generated", str(exc.exception))
 
+	def test_ordinary_lab_order_save_with_billable_rows_does_not_run_completion_gate(self):
+		row = lab_result_row(result_format="Value Driven", result_value="12.3", status="Awaiting Review", result_status="Awaiting Review")
+		doc = make_validation_doc(status="Awaiting Review", lab_tests=[row])
+		previous = make_validation_doc(status="Awaiting Review", lab_tests=[row])
+		doc.linked_invoice = ""
+		doc.get_doc_before_save = lambda: previous
+
+		with validation_context():
+			with patch("vetedge.services.lab.use_billing_core_for_lab_order", side_effect=AssertionError("completion gate should not run")):
+				validate_lab_order(doc)
+
+		self.assertEqual(doc.status, "Awaiting Review")
+
 	def test_completed_lab_order_blocks_when_invoice_is_draft(self):
 		row = lab_result_row(result_format="Value Driven", result_value="12.3", status="Reviewed", result_status="Reviewed")
 		doc = make_validation_doc(status="Completed", lab_tests=[row])

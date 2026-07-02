@@ -2381,10 +2381,11 @@ def get_unbilled_source_payloads(session, source_doctype: str, source_name: str)
 
 
 def apply_invoice_session_defaults(invoice, session) -> None:
+	if cint(invoice.get("docstatus")) != 0:
+		return
 	invoice.customer = session.customer
 	invoice.company = session.company or get_default_company()
 	invoice.posting_date = nowdate()
-	invoice.due_date = invoice.get("due_date") or invoice.posting_date
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
 		invoice.branch = session.branch
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("cost_center"):
@@ -2393,6 +2394,8 @@ def apply_invoice_session_defaults(invoice, session) -> None:
 
 
 def normalize_billing_session_invoice_dates(invoice) -> None:
+	if cint(invoice.get("docstatus")) != 0:
+		return
 	posting_date = invoice.get("posting_date") or nowdate()
 	due_date = invoice.get("due_date") or posting_date
 	if getdate(due_date) < getdate(posting_date):

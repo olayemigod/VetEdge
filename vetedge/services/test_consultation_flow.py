@@ -860,6 +860,7 @@ class TestConsultationFlow(TestCase):
 
 	def test_completion_requires_vitals_when_setting_is_active(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
 
 		with (
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
@@ -889,7 +890,20 @@ class TestConsultationFlow(TestCase):
 
 	def test_completion_gate_is_skipped_when_status_did_not_change(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")
-		doc.has_value_changed = lambda fieldname: False
+		doc.get_doc_before_save = lambda: frappe._dict(status="Completed")
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
+	def test_completion_gate_is_skipped_on_ordinary_ready_for_treatment_save(self):
+		doc = frappe._dict(name="VCON-001", status="Ready for Treatment")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
 
 		with (
 			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
