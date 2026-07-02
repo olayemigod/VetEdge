@@ -174,6 +174,7 @@ has_permission = {
 
 doc_events = {
 	"Sales Invoice": {
+		"before_validate": "vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
 		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_invoice_branch",
 		"on_update": [
 			"vetedge.services.registration_billing.update_registration_status_from_invoice",

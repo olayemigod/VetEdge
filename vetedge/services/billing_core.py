@@ -629,6 +629,47 @@ def get_payment_gate_status(session) -> dict:
 	return {"gate": mode, "can_proceed": allowed, "status": "Allowed" if allowed else "Blocked", "message": "Payment gate passed." if allowed else "Full payment is required before service can proceed."}
 
 
+def should_run_final_billing_gate(doc, status_field: str = "status", final_statuses: set[str] | None = None) -> bool:
+	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
+		return False
+
+	final_statuses = set(final_statuses or {"Completed", "Discharged", "Closed"})
+	current_status = _get_doc_field_value(doc, status_field)
+	if current_status not in final_statuses:
+		return False
+
+	previous_status = _get_previous_doc_field_value(doc, status_field)
+	if not previous_status:
+		return False
+	if previous_status == current_status:
+		return False
+	if previous_status in final_statuses:
+		return False
+	return True
+
+
+def _get_doc_field_value(doc, fieldname: str):
+	if hasattr(doc, "get"):
+		return doc.get(fieldname)
+	return getattr(doc, fieldname, None)
+
+
+def _get_previous_doc_field_value(doc, fieldname: str):
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	if previous:
+		return _get_doc_field_value(previous, fieldname)
+
+	is_new = doc.is_new() if getattr(doc, "is_new", None) else False
+	doctype = _get_doc_field_value(doc, "doctype")
+	name = _get_doc_field_value(doc, "name")
+	if is_new or not doctype or not name:
+		return None
+	try:
+		return frappe.db.get_value(doctype, name, fieldname)
+	except Exception:
+		return None
+
+
 def get_session_payment_warning(ledger: dict) -> str | None:
 	if flt(ledger.get("outstanding_amount")) > 0:
 		return "This billing session still has unpaid balance from earlier invoice(s)."
@@ -2405,6 +2446,62 @@ def normalize_billing_session_invoice_dates(invoice) -> None:
 	# Hospitalisation/session stock usage is posted explicitly with Stock Entry, not Sales Invoice stock update.
 	if invoice.get("update_stock"):
 		invoice.update_stock = 0
+
+
+def normalize_vetedge_sales_invoice_dates(invoice, method: str | None = None) -> None:
+	if cint(invoice.get("docstatus")) != 0:
+		return
+	if not is_vetedge_linked_sales_invoice(invoice):
+		return
+	normalize_billing_session_invoice_dates(invoice)
+
+
+def is_vetedge_linked_sales_invoice(invoice) -> bool:
+	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
+		return True
+
+	name = invoice.get("name")
+	if name and invoice_name_is_linked_to_vetedge(name):
+		return True
+
+	remarks = (invoice.get("remarks") or "").lower()
+	if "vetedge billing session" in remarks:
+		return True
+	return False
+
+
+def invoice_name_is_linked_to_vetedge(invoice_name: str) -> bool:
+	if not invoice_name:
+		return False
+	if _db_exists_safely(BILLING_SESSION_DOCTYPE, {"current_draft_invoice": invoice_name}):
+		return True
+	if _db_exists_safely(BILLING_SESSION_DOCTYPE, {"latest_invoice": invoice_name}):
+		return True
+	if _db_exists_safely(BILLING_SESSION_CHARGE_DOCTYPE, {"invoice": invoice_name}):
+		return True
+
+	for doctype, fieldname in (
+		("Veterinary Consultation", "linked_invoice"),
+		("Veterinary Lab Order", "linked_invoice"),
+		("Veterinary Vaccination Record", "linked_invoice"),
+		("Veterinary Hospitalisation", "sales_invoice"),
+		("Pet Grooming Session", "linked_invoice"),
+		("Pet Boarding Booking", "linked_invoice"),
+		("Veterinary Patient", "registration_invoice"),
+		("Veterinary Consultation Invoice Reference", "sales_invoice"),
+	):
+		if _doctype_has_field(doctype, fieldname) and _db_exists_safely(doctype, {fieldname: invoice_name}):
+			return True
+	return False
+
+
+def _db_exists_safely(doctype: str, filters) -> bool:
+	try:
+		if not frappe.db.exists("DocType", doctype):
+			return False
+		return bool(frappe.db.exists(doctype, filters))
+	except Exception:
+		return False
 
 
 def append_invoice_item_from_charge(invoice, charge):

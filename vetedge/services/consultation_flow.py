@@ -691,12 +691,11 @@ def validate_enabled_item(item: str | None) -> None:
 def validate_completion_requirements(doc) -> None:
 	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
 		return
-	if not should_validate_final_workflow_gate(doc):
-		return
-	assert_consultation_can_proceed(doc, doc.status)
-	validate_consultation_dispensary_requirements(doc)
+	if should_validate_final_workflow_gate(doc):
+		assert_consultation_can_proceed(doc, doc.status)
+		validate_consultation_dispensary_requirements(doc)
 
-	if doc.status != "Completed":
+	if not _status_transitioned_to(doc, "Completed"):
 		return
 
 	if is_vitals_required_before_completion() and not has_vitals_for_consultation(doc.name):
@@ -707,13 +706,19 @@ def validate_completion_requirements(doc) -> None:
 
 
 def should_validate_final_workflow_gate(doc) -> bool:
-	status = doc.get("status") if hasattr(doc, "get") else getattr(doc, "status", None)
-	if status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
-		return False
-	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
-	if not previous:
-		return False
-	return previous.status != status
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	return should_run_final_billing_gate(
+		doc,
+		status_field="status",
+		final_statuses={"Pending Dispensary", "Ready for Treatment", "Completed"},
+	)
+
+
+def _status_transitioned_to(doc, target_status: str) -> bool:
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	return should_run_final_billing_gate(doc, status_field="status", final_statuses={target_status})
 
 
 def is_vitals_required_before_completion() -> bool:

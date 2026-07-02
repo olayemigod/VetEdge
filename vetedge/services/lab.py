@@ -452,10 +452,9 @@ def validate_lab_order_status_requirements(doc) -> None:
 
 
 def validate_lab_order_completion_gate(doc, previous=None) -> None:
-	if doc.status != "Completed":
-		return
-	previous_status = normalize_lab_order_status(previous.status) if previous else None
-	if previous_status == "Completed":
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	if not should_run_final_billing_gate(doc, status_field="status", final_statuses={"Completed"}):
 		return
 	if not lab_order_has_billable_items(doc):
 		return

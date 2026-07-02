@@ -699,6 +699,57 @@ class TestBillingCore(TestCase):
 
 		self.assertEqual(invoice.due_date, "2026-06-01")
 
+	def test_vetedge_linked_sales_invoice_validate_hook_normalizes_direct_draft_edit(self):
+		invoice = make_invoice("SINV-DRAFT", docstatus=0, items=[])
+		invoice.posting_date = "2026-07-02"
+		invoice.due_date = "2026-06-01"
+
+		def exists(doctype, filters=None):
+			if doctype == "DocType":
+				return filters in {billing_core.BILLING_SESSION_DOCTYPE, billing_core.BILLING_SESSION_CHARGE_DOCTYPE}
+			return doctype == billing_core.BILLING_SESSION_CHARGE_DOCTYPE and filters == {"invoice": "SINV-DRAFT"}
+
+		with patch.object(billing_core.frappe.db, "exists", side_effect=exists):
+			billing_core.normalize_vetedge_sales_invoice_dates(invoice)
+
+		self.assertEqual(invoice.due_date, "2026-07-02")
+
+	def test_non_vetedge_sales_invoice_validate_hook_does_not_change_due_date(self):
+		invoice = make_invoice("SINV-OTHER", docstatus=0, items=[])
+		invoice.posting_date = "2026-07-02"
+		invoice.due_date = "2026-06-01"
+
+		with patch.object(billing_core.frappe.db, "exists", return_value=False):
+			billing_core.normalize_vetedge_sales_invoice_dates(invoice)
+
+		self.assertEqual(invoice.due_date, "2026-06-01")
+
+	def test_vetedge_sales_invoice_validate_hook_does_not_mutate_submitted_invoice(self):
+		invoice = make_invoice("SINV-SUB", docstatus=1, items=[])
+		invoice.posting_date = "2026-07-02"
+		invoice.due_date = "2026-06-01"
+
+		with patch.object(billing_core, "is_vetedge_linked_sales_invoice", return_value=True):
+			billing_core.normalize_vetedge_sales_invoice_dates(invoice)
+
+		self.assertEqual(invoice.due_date, "2026-06-01")
+
+	def test_should_run_final_billing_gate_requires_status_transition(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", status="Completed")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Completed")
+
+		self.assertFalse(billing_core.should_run_final_billing_gate(doc, final_statuses={"Completed"}))
+
+		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
+		self.assertTrue(billing_core.should_run_final_billing_gate(doc, final_statuses={"Completed"}))
+
+	def test_should_run_final_billing_gate_uses_db_fallback_for_ordinary_save(self):
+		doc = frappe._dict(doctype="Veterinary Consultation", name="VCON-001", status="Completed")
+		doc.is_new = lambda: False
+
+		with patch.object(billing_core.frappe.db, "get_value", return_value="Completed"):
+			self.assertFalse(billing_core.should_run_final_billing_gate(doc, final_statuses={"Completed"}))
+
 
 	def test_submitted_current_invoice_creates_new_draft_for_new_charge(self):
 		session = make_session(current_draft_invoice="SINV-SUB", latest_invoice="SINV-SUB", charges=[])
