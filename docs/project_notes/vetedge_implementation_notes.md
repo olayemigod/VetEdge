@@ -1,0 +1,195 @@
+# VetEdge Implementation Notes
+
+This is the living project note for VetEdge implementation status, decisions, known issues, workarounds, risks, and phase progress.
+
+## Update Discipline
+
+This file is not an append-only dump. Whenever future work is completed:
+
+1. Open and read this file first.
+2. Search for the relevant section, phase, bug, feature, or known issue.
+3. If a matching section exists, update it in place.
+4. If a bug was fixed, update the original known issue entry with:
+   - fixed status
+   - commit hash, when available
+   - files changed
+   - verification/tests
+   - remaining risk, if any
+5. If the work changes a previous decision, revise the earlier decision instead of adding a contradictory note.
+6. Add a new section only when no relevant section exists.
+7. Keep the note organized and readable.
+8. Do not append raw completion summaries to the bottom.
+9. Include commit hash when available.
+10. Include a manual workaround only when it is still relevant.
+
+## Current Status
+
+- Current branch at note creation: `fix/vetedge-drift-bugs`
+- Baseline commit at note creation: `f27acc4`
+- Context: recent work has focused on stabilizing drift and bug fixes across permissions, UI cleanup, consultation billing, lab workflow, settings behavior, and vaccination pricing/UI cleanup.
+- ERPNext remains the source of truth for accounting documents, invoice status, Payment Entry creation, stock, customer, and company records.
+- VetEdge service-layer code remains the intended home for veterinary workflow logic. Doctypes should stay thin.
+
+## Phase Progress
+
+### Phase 1 - Permission and Access Drift
+
+Status: recently stabilized.
+
+Summary:
+- Permission and branch-access drift has been treated as a server-side concern.
+- Branch awareness must remain enforced in service logic and document validation, not only through UI filters.
+- Cross-branch treatment remains allowed, but operational branch context must be explicit.
+
+### Phase 2 - UI Labels, Sidebar, and Medical History Cleanup
+
+Status: recently stabilized.
+
+Summary:
+- UI copy and labels were cleaned up for clearer clinic workflows.
+- Medical history remains patient-centric and VetEdge-owned.
+- Medical history must not depend on Marley.
+
+### Phase 3 - Master Pricing Foundation
+
+Status: recently stabilized.
+
+Summary:
+- Pricing foundation work supports settings-driven billing behavior.
+- Billing must continue to use ERPNext Sales Invoice and Payment Entry.
+- Branch to Cost Center mapping remains mandatory for accounting impact.
+
+### Phase 4 / 4B - Consultation Billing Plan and Multiple Invoice Restoration
+
+Status: recently stabilized with remaining historical invoice caveat.
+
+Summary:
+- Consultation billing source data is anchored to editable consultation planned treatment rows.
+- Multiple invoice/cycle behavior was restored around draft and submitted invoice boundaries.
+- Submitted Sales Invoices must not be mutated by VetEdge.
+- Newly added billable rows after a submitted invoice should create or update the next draft/cycle.
+
+### Phase 5 - Consultation Billing Settings
+
+Status: recently stabilized.
+
+Summary:
+- Consultation billing enablement and default item auto-add behavior are separate decisions.
+- Enabling consultation billing does not force insertion of a default consultation item.
+- Default consultation item auto-add remains settings-driven.
+
+### Phase 6A - Lab Result Structure and Settings
+
+Status: recently stabilized.
+
+Summary:
+- No new Lab Result DocType is planned for now.
+- Lab Order Item remains the storage surface for result data.
+- Settings should control workflow behavior without creating duplicate lab result storage.
+
+### Phase 6B - Lab Result Entry and Upload Workflow
+
+Status: recently stabilized.
+
+Summary:
+- Lab result entry and uploads remain attached to the lab order item workflow.
+- Result entry should preserve source document traceability.
+- Lab workflow should avoid duplicating clinical or billing source rows.
+
+### Phase 6C - Lab Order UX Redesign
+
+Status: recently stabilized.
+
+Summary:
+- Lab UI uses a full-width workbench pattern.
+- Dialogs are used for focused result entry and supporting actions.
+- The UX should remain operational and dense enough for clinic staff workflows.
+
+### Phase 6D - Lab Order Workflow and Status Cleanup
+
+Status: recently stabilized.
+
+Summary:
+- Lab status handling was cleaned up around practical workflow states.
+- Status transitions should remain server-validated.
+- Lab workflow decisions should avoid creating extra doctypes unless the storage model truly requires it.
+
+### Phase 7 - Vaccination Workflow Pricing/UI Cleanup
+
+Status: in progress / recently touched.
+
+Summary:
+- Vaccination pricing and UI cleanup is part of the recent drift-fix context.
+- Vaccination work must continue to follow ERPNext accounting boundaries.
+- Future vaccination changes should preserve branch-aware pricing and source document traceability.
+
+## Billing Core Decisions
+
+- Consultation `planned_treatments` is the editable billing source of truth.
+- Source-linked lab and vaccination rows cannot be removed directly from the billing plan unless the source document is cancelled.
+- Submitted Sales Invoices must never be mutated by VetEdge.
+- New billable rows added after a submitted invoice should create or update the next draft invoice/cycle.
+- Satisfied Billing Sessions are historical records, not active billing targets.
+- Billing must continue through ERPNext Sales Invoice and Payment Entry.
+- VetEdge must not mark invoices paid manually or bypass ERPNext GL.
+- Branch to Cost Center mapping remains mandatory for billing.
+
+## Lab Workflow Decisions
+
+- Do not create a new Lab Result DocType for now.
+- Lab Order Item remains the storage surface for lab result data.
+- Lab UI uses a full-width workbench and dialogs.
+- Lab result storage must preserve traceability to the Lab Order and Lab Order Item.
+- Lab workflow status changes should be validated server-side.
+
+## Settings Decisions
+
+- Default consultation item auto-add is settings-driven.
+- Consultation billing enabled does not force a default consultation item.
+- Settings should enable configurable clinic behavior without hiding accounting or source-document rules.
+- Payment integration behavior must remain provider-agnostic and support backend modes such as `stub`, `erpnext_native`, and `processedge_core`.
+
+## Known Issues and Workarounds
+
+### Historical Sales Invoice Posting Date / Due Date Validation
+
+Status: known historical issue; do not spend more time unless newly generated VetEdge invoices also fail through the Billing / Payment modal.
+
+Issue:
+Some older VetEdge draft Sales Invoices may still trigger ERPNext submit-time Posting Date / Due Date validation if they bypass VetEdge submit preparation or lack VetEdge linkage markers.
+
+Current decision:
+Do not spend more time on this unless newly generated VetEdge invoices also fail through the Billing / Payment modal.
+
+Manual workaround:
+Open the Sales Invoice directly, tick Edit Posting Date and Time, set Posting Date and Due Date to today or later, save, then submit.
+
+Fix status:
+- Not fixed globally for historical drafts.
+- No commit hash yet for a targeted fix.
+- Remaining risk: old draft invoices may still need manual correction if they lack VetEdge linkage markers or bypass the prepared VetEdge submission path.
+
+## Fixed Issues
+
+- Recent drift/bug-fix work stabilized permission/access behavior, UI labels, medical history cleanup, master pricing foundations, consultation billing settings, lab result workflow, lab order UX/status cleanup, and vaccination pricing/UI cleanup.
+- Future fixed issues should be recorded here only when they do not already have a matching known issue entry above. If a known issue is fixed, update that known issue in place.
+
+## Risks and Revisit Items
+
+- Revisit historical Sales Invoice date validation only if newly generated VetEdge invoices fail through the Billing / Payment modal.
+- Continue verifying that submitted invoices are treated as immutable and that new rows after submission create or update the next draft/cycle.
+- Confirm source-linked lab and vaccination billing rows cannot be removed directly while their source document remains active.
+- Keep Lab Order Item as the lab result storage surface unless a future workflow proves a separate result DocType is necessary.
+- Preserve provider-agnostic payment service interfaces and avoid gateway-specific logic in VetEdge modules.
+- Maintain global readiness by avoiding country-specific payment gateway, currency, or deployment assumptions.
+
+## Manual QA Checklist
+
+- Confirm consultation billing can create or update draft invoices from `planned_treatments`.
+- Confirm submitted invoices are not mutated by later VetEdge billing actions.
+- Confirm added billable rows after a submitted invoice move into the next draft/cycle.
+- Confirm source-linked lab/vaccination rows are protected from direct removal while the source document is active.
+- Confirm consultation billing enabled does not auto-add a default item unless the setting is enabled.
+- Confirm lab result entry and uploads remain stored on Lab Order Item.
+- Confirm the lab workbench remains full-width and dialog-driven for focused actions.
+- Confirm historical draft invoice workaround remains valid only for older affected invoices.
