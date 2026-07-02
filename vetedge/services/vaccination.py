@@ -222,13 +222,18 @@ def validate_vaccination_rate_edit_protection(doc, previous=None) -> None:
 
 
 def prepare_vaccination_billing_fields(doc, previous=None) -> None:
-	vaccine = get_vaccine_defaults(doc.vaccine)
+	defaults = get_vaccination_billing_defaults(
+		doc.vaccine,
+		company=doc.get("company"),
+		customer=doc.get("primary_owner"),
+		branch=doc.get("service_branch"),
+	)
 	if not doc.get("billing_item") or _should_refresh_vaccination_billing_defaults(doc, previous):
-		doc.billing_item = vaccine.default_item
+		doc.billing_item = defaults.get("billing_item")
 	if doc.get("rate") not in (None, "") and flt(doc.get("rate")) < 0:
 		frappe.throw("Vaccination Rate cannot be negative.", frappe.ValidationError)
 
-	default_rate = vaccine.default_price
+	default_rate = defaults.get("rate")
 	if _should_set_default_vaccination_rate(doc, previous) and default_rate not in (None, ""):
 		doc.rate = flt(default_rate)
 
@@ -257,9 +262,45 @@ def _should_set_default_vaccination_rate(doc, previous=None) -> bool:
 
 def _rate_changed_by_user(doc, previous=None) -> bool:
 	if not previous:
-		default_rate = get_vaccine_defaults(doc.vaccine).default_price if doc.get("vaccine") else None
+		default_rate = get_vaccination_billing_defaults(doc.vaccine).get("rate") if doc.get("vaccine") else None
 		return doc.get("rate") not in (None, "") and default_rate not in (None, "") and flt(doc.get("rate")) != flt(default_rate)
 	return flt(doc.get("rate")) != flt(getattr(previous, "rate", 0) or 0)
+
+
+@frappe.whitelist()
+def get_vaccination_billing_defaults(
+	vaccine: str,
+	company: str | None = None,
+	customer: str | None = None,
+	branch: str | None = None,
+) -> dict:
+	if not vaccine:
+		return {"billing_item": None, "rate": 0, "amount": 0}
+
+	defaults = get_vaccine_defaults(vaccine)
+	item_code = defaults.default_item
+	rate = flt(defaults.default_price)
+	if item_code and rate <= 0:
+		try:
+			from vetedge.services.billing_core import _get_item_selling_rate
+
+			rate = flt(
+				_get_item_selling_rate(
+					item_code,
+					company=company,
+					customer=customer,
+					branch=branch,
+					master_price_list=defaults.price_list,
+				)
+			)
+		except Exception:
+			rate = 0
+
+	return {
+		"billing_item": item_code,
+		"rate": rate,
+		"amount": rate,
+	}
 
 
 def validate_branch_action_access(doc, previous=None) -> None:

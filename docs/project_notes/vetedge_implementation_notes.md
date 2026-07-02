@@ -120,6 +120,9 @@ Status: in progress / recently touched.
 
 Summary:
 - Vaccination pricing and UI cleanup is part of the recent drift-fix context.
+- Standalone Vaccination Records now show `Pricing and Billing` by default; the section is not collapsible.
+- Selecting a vaccine auto-loads the billing item, rate, and amount using vaccine defaults first, then Billing Core item price fallback.
+- Edited Vaccination Record rates remain the billing source before invoice submission and are protected once the linked invoice is submitted or cancelled.
 - Vaccination work must continue to follow ERPNext accounting boundaries.
 - Future vaccination changes should preserve branch-aware pricing and source document traceability.
 

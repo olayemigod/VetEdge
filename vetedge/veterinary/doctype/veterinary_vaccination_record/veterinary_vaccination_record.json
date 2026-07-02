@@ -192,10 +192,9 @@
    "label": "Notes"
   },
   {
-   "collapsible": 1,
    "fieldname": "integration_section",
    "fieldtype": "Section Break",
-   "label": "Billing and Stock"
+   "label": "Pricing and Billing"
   },
   {
    "description": "Vaccine or service item used for billing.",

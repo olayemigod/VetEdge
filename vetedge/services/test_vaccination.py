@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -253,6 +254,45 @@ class VaccinationBatchTests(TestCase):
 
 
 class VaccinationWorkflowTests(TestCase):
+	def test_vaccination_record_pricing_section_is_visible_by_default(self):
+		meta_path = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_vaccination_record"
+			/ "veterinary_vaccination_record.json"
+		)
+		meta = json.loads(meta_path.read_text())
+		section = next(field for field in meta["fields"] if field["fieldname"] == "integration_section")
+
+		self.assertEqual(section["label"], "Pricing and Billing")
+		self.assertNotIn("collapsible", section)
+		self.assertNotIn("collapsible_depends_on", section)
+
+	def test_vaccination_billing_defaults_fall_back_to_item_price(self):
+		with patch.object(
+			vaccination,
+			"get_vaccine_defaults",
+			return_value=vaccination.VaccineDefaults(default_item="VAC-RAB", default_price=None, price_list="Clinic Selling"),
+		), patch("vetedge.services.billing_core._get_item_selling_rate", return_value=8800) as get_rate:
+			defaults = vaccination.get_vaccination_billing_defaults(
+				"Rabies",
+				company="VetEdge Co",
+				customer="CUST-001",
+				branch="Main Branch",
+			)
+
+		self.assertEqual(defaults["billing_item"], "VAC-RAB")
+		self.assertEqual(defaults["rate"], 8800)
+		self.assertEqual(defaults["amount"], 8800)
+		get_rate.assert_called_once_with(
+			"VAC-RAB",
+			company="VetEdge Co",
+			customer="CUST-001",
+			branch="Main Branch",
+			master_price_list="Clinic Selling",
+		)
+
 	def test_prepare_vaccination_billing_fields_sets_item_rate_and_amount(self):
 		doc = DictDoc(vaccine="Rabies", billing_item=None, rate=None, amount=None, rate_manually_edited=0)
 
