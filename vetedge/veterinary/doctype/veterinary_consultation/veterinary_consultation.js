@@ -537,9 +537,6 @@ frappe.ui.form.on("Planned Treatment Item", {
 			if (!row.uom && item.stock_uom) {
 				frappe.model.set_value(cdt, cdn, "uom", item.stock_uom);
 			}
-			if (!flt(row.rate) && flt(item.standard_rate)) {
-				frappe.model.set_value(cdt, cdn, "rate", flt(item.standard_rate));
-			}
 			update_planned_treatment_amount(cdt, cdn);
 		});
 
@@ -547,9 +544,18 @@ frappe.ui.form.on("Planned Treatment Item", {
 			method: "vetedge.services.treatment_items.get_treatment_item_defaults_for_consultation",
 			args: {
 				item_code: row.item,
+				company: frm.doc.company,
+				customer: frm.doc.primary_owner,
+				branch: frm.doc.service_branch,
 			},
 			callback(result) {
 				const defaults = result.message || {};
+				if (!row.uom && defaults.uom) {
+					frappe.model.set_value(cdt, cdn, "uom", defaults.uom);
+				}
+				if (!flt(row.rate) && defaults.rate != null) {
+					frappe.model.set_value(cdt, cdn, "rate", flt(defaults.rate));
+				}
 				if (!row.service_type && defaults.service_type) {
 					frappe.model.set_value(cdt, cdn, "service_type", defaults.service_type);
 				}

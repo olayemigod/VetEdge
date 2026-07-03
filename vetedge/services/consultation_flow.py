@@ -26,6 +26,10 @@ from vetedge.services.permissions import (
 )
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.treatment_items import apply_planned_treatment_defaults
+from vetedge.services.consultation_billing_plan import (
+	ensure_default_consultation_item_to_plan,
+	validate_default_consultation_plan_row_edit,
+)
 
 
 CONSULTATION_STATUSES = {
@@ -86,6 +90,8 @@ def validate_consultation(doc) -> None:
 		validate_registration_payment_before_first_consultation(doc.patient, current_consultation=getattr(doc, "name", None))
 	validate_linked_appointment(doc)
 	set_consultation_title(doc)
+	ensure_default_consultation_item_to_plan(doc)
+	validate_default_consultation_plan_row_edit(doc)
 	validate_service_branch_access(doc)
 	validate_consultation_children(doc)
 	sync_consultation_dispensary_state(doc)
@@ -637,7 +643,12 @@ def validate_consultation_children(doc) -> None:
 		validate_enabled_link("Veterinary Diagnosis", row.diagnosis, "Diagnosis")
 
 	for row in doc.get("planned_treatments") or []:
-		apply_planned_treatment_defaults(row)
+		apply_planned_treatment_defaults(
+			row,
+			company=doc.get("company"),
+			customer=doc.get("primary_owner"),
+			branch=doc.get("service_branch"),
+		)
 		if flt(row.qty) <= 0:
 			frappe.throw("Planned Treatment Qty must be greater than zero.", frappe.ValidationError)
 		if row.get("rate") not in (None, "") and flt(row.rate) < 0:

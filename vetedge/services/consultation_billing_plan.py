@@ -9,6 +9,88 @@ LAB_ORDER_DOCTYPE = "Veterinary Lab Order"
 VACCINATION_RECORD_DOCTYPE = "Veterinary Vaccination Record"
 VACCINE_DOCTYPE = "Veterinary Vaccine"
 LAB_TEST_DOCTYPE = "Veterinary Lab Test"
+DEFAULT_CONSULTATION_SOURCE_DETAIL = "Default Consultation Fee"
+
+
+def ensure_default_consultation_item_to_plan(doc) -> bool:
+	from vetedge.services.billing import get_consultation_billing_settings, should_auto_add_default_consultation_item
+	from vetedge.services.treatment_items import get_planned_treatment_item_billing_defaults
+
+	if not doc or doc.doctype != CONSULTATION_DOCTYPE:
+		return False
+	settings = get_consultation_billing_settings()
+	if not should_auto_add_default_consultation_item(settings):
+		return False
+
+	item = settings.consultation_item
+	existing_row = _get_source_row(doc, "Consultation", doc.name, DEFAULT_CONSULTATION_SOURCE_DETAIL)
+	defaults = get_planned_treatment_item_billing_defaults(
+		item,
+		company=doc.get("company"),
+		customer=doc.get("primary_owner"),
+		branch=doc.get("service_branch"),
+	)
+	rate = defaults.rate if defaults else None
+	if existing_row:
+		return _update_default_consultation_plan_row(existing_row, doc, item, rate)
+
+	_add_plan_row(
+		doc,
+		source_type="Consultation",
+		source_doctype=CONSULTATION_DOCTYPE,
+		source_document=doc.name,
+		source_detail_name=DEFAULT_CONSULTATION_SOURCE_DETAIL,
+		item=item,
+		description="Consultation Fee",
+		qty=1,
+		rate=rate,
+		notes=None,
+	)
+	return True
+
+
+def validate_default_consultation_plan_row_edit(doc) -> None:
+	from vetedge.services.billing import can_edit_default_consultation_billing_item, get_consultation_billing_settings, should_auto_add_default_consultation_item
+
+	settings = get_consultation_billing_settings()
+	if not should_auto_add_default_consultation_item(settings) or can_edit_default_consultation_billing_item(settings):
+		return
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	if not previous:
+		return
+	old_row = _get_source_row(previous, "Consultation", previous.name, DEFAULT_CONSULTATION_SOURCE_DETAIL)
+	new_row = _get_source_row(doc, "Consultation", doc.name, DEFAULT_CONSULTATION_SOURCE_DETAIL)
+	if not old_row or not new_row:
+		return
+	protected_fields = ("item", "qty", "rate")
+	for fieldname in protected_fields:
+		old_value = flt(old_row.get(fieldname)) if fieldname in {"qty", "rate", "amount"} else old_row.get(fieldname)
+		new_value = flt(new_row.get(fieldname)) if fieldname in {"qty", "rate", "amount"} else new_row.get(fieldname)
+		if old_value != new_value:
+			frappe.throw("Default consultation billing item editing is disabled in Veterinary Settings.", frappe.ValidationError)
+
+
+def _update_default_consultation_plan_row(plan_row, doc, item: str, rate: float | None) -> bool:
+	if not _can_update_plan_row_from_source(plan_row):
+		return False
+	if plan_row.get("item") != item:
+		return False
+	qty = flt(plan_row.get("qty")) or 1
+	new_values = {
+		"source_doctype": CONSULTATION_DOCTYPE,
+		"source_document": doc.name,
+		"description": plan_row.get("description") or "Consultation Fee",
+		"qty": qty,
+		"amount": qty * flt(plan_row.get("rate") if plan_row.get("rate") not in (None, "") else rate),
+	}
+	if plan_row.get("rate") in (None, ""):
+		new_values["rate"] = flt(rate)
+	changed = False
+	for fieldname, value in new_values.items():
+		if plan_row.get(fieldname) != value:
+			_set_child_value(plan_row, fieldname, value)
+			changed = True
+	return changed
 
 
 def sync_lab_order_to_consultation_plan(doc) -> None:
@@ -188,23 +270,25 @@ def _add_plan_row(
 ) -> None:
 	qty = flt(qty) or 1
 	rate = flt(rate)
-	consultation.append(
-		"planned_treatments",
-		{
-			"item": item,
-			"description": description,
-			"qty": qty,
-			"rate": rate,
-			"amount": qty * rate,
-			"source_type": source_type,
-			"source_doctype": source_doctype,
-			"source_document": source_document,
-			"source_detail_name": source_detail_name,
-			"billing_status": "Pending",
-			"payment_status": "Not Billed",
-			"notes": notes,
-		},
-	)
+	row = {
+		"item": item,
+		"description": description,
+		"qty": qty,
+		"rate": rate,
+		"amount": qty * rate,
+		"source_type": source_type,
+		"source_doctype": source_doctype,
+		"source_document": source_document,
+		"source_detail_name": source_detail_name,
+		"billing_status": "Pending",
+		"payment_status": "Not Billed",
+		"notes": notes,
+	}
+	append = getattr(consultation, "append", None)
+	if callable(append):
+		append("planned_treatments", row)
+	else:
+		consultation.setdefault("planned_treatments", []).append(frappe._dict(row))
 
 
 def _save_consultation(consultation) -> None:

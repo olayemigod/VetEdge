@@ -30,7 +30,7 @@
   {"default": "0", "fieldname": "rate", "fieldtype": "Currency", "in_list_view": 1, "label": "Rate"},
   {"default": "0", "fieldname": "amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Amount", "read_only": 1},
   {"collapsible": 1, "fieldname": "source_section", "fieldtype": "Section Break", "label": "Source"},
-  {"fieldname": "source_type", "fieldtype": "Select", "in_list_view": 1, "label": "Source Type", "options": "\nTreatment\nLab Order\nVaccination"},
+  {"fieldname": "source_type", "fieldtype": "Select", "in_list_view": 1, "label": "Source Type", "options": "\nTreatment\nConsultation\nLab Order\nVaccination"},
   {"fieldname": "source_doctype", "fieldtype": "Data", "label": "Source DocType", "read_only": 1},
   {"fieldname": "source_document", "fieldtype": "Dynamic Link", "label": "Source Document", "options": "source_doctype", "read_only": 1},
   {"fieldname": "source_detail_name", "fieldtype": "Data", "label": "Source Detail", "read_only": 1},

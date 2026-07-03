@@ -65,6 +65,9 @@ Status: recently stabilized with remaining historical invoice caveat.
 
 Summary:
 - Consultation billing source data is anchored to editable consultation planned treatment rows.
+- Manual treatment rows and default consultation fee rows should be visible in `planned_treatments` and use editable row rates before billing.
+- Billing Core should not create a hidden default consultation fee when the visible planned row represents that charge.
+- Registration billing should not be duplicated inside consultation billing when an active registration invoice/session already exists.
 - Multiple invoice/cycle behavior was restored around draft and submitted invoice boundaries.
 - Submitted Sales Invoices must not be mutated by VetEdge.
 - Newly added billable rows after a submitted invoice should create or update the next draft/cycle.
@@ -76,7 +79,7 @@ Status: recently stabilized.
 Summary:
 - Consultation billing enablement and default item auto-add behavior are separate decisions.
 - Enabling consultation billing does not force insertion of a default consultation item.
-- Default consultation item auto-add remains settings-driven.
+- Default consultation item auto-add remains settings-driven and materializes as a visible planned treatment row when enabled.
 
 ### Phase 6A - Lab Result Structure and Settings
 
@@ -149,6 +152,7 @@ Summary:
 
 - Default consultation item auto-add is settings-driven.
 - Consultation billing enabled does not force a default consultation item.
+- Default consultation item editability is settings-driven and scoped to that default fee row only.
 - Settings should enable configurable clinic behavior without hiding accounting or source-document rules.
 - Payment integration behavior must remain provider-agnostic and support backend modes such as `stub`, `erpnext_native`, and `processedge_core`.
 

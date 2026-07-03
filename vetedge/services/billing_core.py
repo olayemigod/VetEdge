@@ -1616,18 +1616,18 @@ def get_source_payment_gate_mode(source_doctype: str) -> str:
 
 
 def get_consultation_charge_payloads(consultation_name: str, session=None) -> list[dict]:
-	from vetedge.services.billing import get_consultation_billing_settings, should_auto_add_default_consultation_item
+	from vetedge.services.billing import get_consultation_billing_settings
 
 	doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	settings = get_consultation_billing_settings()
 	if not (settings.enabled or settings.enable_treatment_billing):
 		return []
+	if ensure_default_consultation_plan_row(doc):
+		doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	if restore_active_source_linked_consultation_plan_rows(doc):
 		doc = frappe.get_doc("Veterinary Consultation", consultation_name)
 	cost_center = get_billing_cost_center(doc.service_branch, required=True)
 	payloads = []
-	if should_auto_add_default_consultation_item(settings):
-		payloads.append(build_source_charge(doc, "Consultation Fee", doc.name, settings.consultation_item, 1, None, None, cost_center))
 	registration_payload = get_registration_charge_payload_for_consultation(doc, session)
 	if registration_payload:
 		payloads.append(registration_payload)
@@ -1668,6 +1668,29 @@ def get_consultation_charge_payloads(consultation_name: str, session=None) -> li
 		if get_payload_source_key(payload) not in planned_source_keys
 	)
 	return payloads
+
+
+def ensure_default_consultation_plan_row(doc) -> bool:
+	from vetedge.services.consultation_billing_plan import ensure_default_consultation_item_to_plan
+
+	changed = ensure_default_consultation_item_to_plan(doc)
+	if changed:
+		save_billing_core_source_doc(doc)
+	return changed
+
+
+def save_billing_core_source_doc(doc) -> None:
+	save_method = getattr(doc, "save", None)
+	if not callable(save_method):
+		return
+	if getattr(doc, "flags", None) is not None:
+		doc.flags.ignore_permissions = True
+	previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+	frappe.flags.vetedge_billing_core_syncing = True
+	try:
+		save_method(**{"ignore_permissions": True})
+	finally:
+		frappe.flags.vetedge_billing_core_syncing = previous
 
 
 def restore_active_source_linked_consultation_plan_rows(doc) -> bool:
@@ -1803,7 +1826,7 @@ def get_consultation_plan_source_key(row) -> tuple[str, str, str] | None:
 	source_type = normalize_consultation_plan_source_type(row.get("source_type"))
 	source_document = row.get("source_document")
 	source_detail = row.get("source_detail_name") or row.get("source_detail")
-	if source_type in {"Lab Order", "Vaccination"} and source_document and source_detail:
+	if source_type in {"Consultation", "Lab Order", "Vaccination"} and source_document and source_detail:
 		return source_type, source_document, source_detail
 	return None
 
@@ -1828,6 +1851,8 @@ def get_consultation_plan_legacy_charge_keys(row) -> list[str]:
 		]
 	if source_type == "Vaccination":
 		return [f"Veterinary Vaccination Record:{source_document}:Vaccination:{source_detail}"]
+	if source_type == "Consultation":
+		return [f"Veterinary Consultation:{source_document}:Consultation Fee:{source_document}"]
 	return []
 
 
@@ -1840,7 +1865,7 @@ def get_payload_source_key(payload: dict) -> tuple[str, str, str] | None:
 		source_type = "Vaccination"
 	source_document = payload.get("source_name")
 	source_detail = payload.get("source_detail_name")
-	if source_type in {"Lab Order", "Vaccination"} and source_document and source_detail:
+	if source_type in {"Consultation", "Lab Order", "Vaccination"} and source_document and source_detail:
 		return source_type, source_document, source_detail
 	return None
 
@@ -1874,7 +1899,41 @@ def should_include_registration_charge_for_consultation(consultation_doc, sessio
 	charge_key = get_registration_charge_key(patient)
 	if session and get_session_charge(ensure_session_doc(session), charge_key):
 		return False
+	if has_active_registration_invoice_or_session(patient, consultation_doc.get("primary_owner")):
+		return False
 	return True
+
+
+def has_active_registration_invoice_or_session(patient: str, customer: str | None = None) -> bool:
+	if not patient or not frappe.db.exists("Veterinary Patient", patient):
+		return False
+	patient_doc = frappe.db.get_value("Veterinary Patient", patient, ["primary_owner", "registration_invoice"], as_dict=True)
+	if not patient_doc:
+		return False
+	if customer and patient_doc.get("primary_owner") and patient_doc.get("primary_owner") != customer:
+		return False
+	invoice_name = patient_doc.get("registration_invoice")
+	if invoice_name and frappe.db.exists("Sales Invoice", invoice_name):
+		docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
+		if docstatus != 2:
+			return True
+	try:
+		rows = frappe.get_all(
+			BILLING_SESSION_DOCTYPE,
+			filters={
+				"animal": patient,
+				"customer": customer or patient_doc.get("primary_owner"),
+				"status": get_open_session_status_filter(),
+			},
+			fields=["name"],
+		)
+	except Exception:
+		return False
+	for row in rows:
+		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, row.name)
+		if session_is_registration_origin(session):
+			return True
+	return False
 
 
 def get_registration_charge_payload_for_consultation(consultation_doc, session):

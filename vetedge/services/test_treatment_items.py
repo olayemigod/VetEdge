@@ -9,6 +9,7 @@ import frappe
 
 from vetedge.services.treatment_items import (
 	apply_planned_treatment_defaults,
+	get_planned_treatment_item_billing_defaults,
 	get_treatment_item_defaults,
 	get_treatment_item_link_options,
 	validate_treatment_item_profile,
@@ -45,6 +46,57 @@ class TestTreatmentItems(TestCase):
 
 		self.assertEqual(row.service_type, "Medication Service")
 		self.assertEqual(row.treatment_type, "Medication")
+
+	def test_planned_treatment_defaults_use_billing_core_price_fallback(self):
+		frappe_stub = make_frappe_stub(
+			exists=lambda doctype, name=None: doctype == "DocType",
+			get_value=lambda doctype, name, fields=None, as_dict=False: frappe._dict(
+				item="MED-001",
+				service_type="Medication Service",
+				treatment_type="Medication",
+				shelf_life_in_days=365,
+				price_list="Clinic Selling",
+				default_price=0,
+			)
+			if doctype == "Veterinary Treatment Item"
+			else frappe._dict(stock_uom="Nos", standard_rate=300),
+		)
+
+		with (
+			patch("vetedge.services.treatment_items.frappe", frappe_stub),
+			patch("vetedge.services.billing_core._get_item_selling_rate", return_value=1250) as get_rate,
+		):
+			defaults = get_planned_treatment_item_billing_defaults("MED-001", company="VetEdge Co", customer="CUST-001", branch="Main")
+
+		self.assertEqual(defaults.rate, 1250)
+		self.assertEqual(defaults.uom, "Nos")
+		get_rate.assert_called_once_with(
+			"MED-001",
+			company="VetEdge Co",
+			customer="CUST-001",
+			branch="Main",
+			uom="Nos",
+			master_price_list="Clinic Selling",
+		)
+
+	def test_apply_planned_treatment_defaults_does_not_overwrite_existing_rate(self):
+		row = frappe._dict(item="MED-001", service_type=None, treatment_type=None, rate=999)
+
+		with patch(
+			"vetedge.services.treatment_items.get_planned_treatment_item_billing_defaults",
+			return_value=SimpleNamespace(
+				item="MED-001",
+				service_type="Medication Service",
+				treatment_type="Medication",
+				shelf_life_in_days=180,
+				uom="Nos",
+				rate=1250,
+			),
+		), patch("vetedge.services.treatment_items.get_treatment_item_defaults", return_value=None):
+			apply_planned_treatment_defaults(row)
+
+		self.assertEqual(row.rate, 999)
+		self.assertEqual(row.service_type, "Medication Service")
 
 	def test_validate_treatment_item_profile_accepts_valid_links(self):
 		doc = frappe._dict(

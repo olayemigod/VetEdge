@@ -1001,10 +1001,56 @@ class TestBillingCore(TestCase):
 			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
 			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
 			patch.object(billing_core, "build_source_charge", side_effect=fake_charge),
+			patch("vetedge.services.treatment_items.get_planned_treatment_item_billing_defaults", return_value=SimpleNamespace(rate=750, uom="Nos")),
 		):
 			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
 
 		self.assertEqual([payload["item_code"] for payload in payloads], ["CONSULT-ITEM"])
+		self.assertEqual(len(consultation.planned_treatments), 1)
+		self.assertEqual(consultation.planned_treatments[0].source_type, "Consultation")
+		self.assertEqual(consultation.planned_treatments[0].source_detail_name, "Default Consultation Fee")
+
+	def test_consultation_default_item_plan_row_is_not_duplicated(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-001",
+			service_branch="Main",
+			primary_owner="CUST-001",
+			company="Company A",
+			planned_treatments=[
+				frappe._dict(
+					name="ROW-CONS",
+					item="CONSULT-ITEM",
+					qty=1,
+					rate=900,
+					source_type="Consultation",
+					source_doctype="Veterinary Consultation",
+					source_document="VCON-001",
+					source_detail_name="Default Consultation Fee",
+				)
+			],
+		)
+		settings = SimpleNamespace(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			enable_treatment_billing=False,
+			auto_add_default_consultation_billing_item=True,
+		)
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing, "get_consultation_billing_settings", return_value=settings),
+			patch.object(billing_core, "get_billing_cost_center", return_value="CC-Main"),
+			patch.object(billing_core, "get_registration_charge_payload_for_consultation", return_value=None),
+			patch.object(billing_core, "get_lab_order_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "get_vaccination_charge_payloads_for_consultation", return_value=[]),
+			patch.object(billing_core, "build_source_charge", return_value={"item_code": "CONSULT-ITEM", "rate": 900}),
+			patch("vetedge.services.treatment_items.get_planned_treatment_item_billing_defaults", return_value=SimpleNamespace(rate=750, uom="Nos")),
+		):
+			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
+
+		self.assertEqual(len(consultation.planned_treatments), 1)
+		self.assertEqual(payloads[0]["rate"], 900)
 
 	def test_consultation_default_item_is_not_forced_when_auto_add_disabled(self):
 		consultation = frappe._dict(
@@ -1033,6 +1079,53 @@ class TestBillingCore(TestCase):
 			payloads = billing_core.get_consultation_charge_payloads("VCON-001")
 
 		self.assertEqual(payloads, [])
+
+	def test_registration_charge_not_added_when_patient_has_active_registration_invoice(self):
+		consultation = frappe._dict(name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		rule = SimpleNamespace(enabled=True, require_payment_before_first_consultation=True)
+
+		def get_value(doctype, name, fields=None, as_dict=False):
+			if doctype == "Veterinary Patient" and fields == "default_branch":
+				return "Main"
+			if doctype == "Veterinary Patient":
+				return frappe._dict(primary_owner="CUST-001", registration_invoice="SINV-REG-001")
+			if doctype == "Sales Invoice":
+				return 0
+			return None
+
+		with (
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch.object(billing_core.frappe.db, "exists", return_value=True),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=get_value),
+		):
+			include = billing_core.should_include_registration_charge_for_consultation(consultation, None)
+
+		self.assertFalse(include)
+
+	def test_registration_charge_not_added_when_registration_session_exists(self):
+		consultation = frappe._dict(name="VCON-001", patient="PAT-001", primary_owner="CUST-001", service_branch="Main")
+		rule = SimpleNamespace(enabled=True, require_payment_before_first_consultation=True)
+		session = make_session(name="VBS-REG", created_from_doctype="Veterinary Patient", source_context_doctype="Veterinary Patient")
+
+		def get_value(doctype, name, fields=None, as_dict=False):
+			if doctype == "Veterinary Patient" and fields == "default_branch":
+				return "Main"
+			if doctype == "Veterinary Patient":
+				return frappe._dict(primary_owner="CUST-001", registration_invoice=None)
+			return None
+
+		with (
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch.object(billing_core.frappe.db, "exists", return_value=True),
+			patch.object(billing_core.frappe.db, "get_value", side_effect=get_value),
+			patch.object(billing_core.frappe, "get_all", return_value=[frappe._dict(name="VBS-REG")]),
+			patch.object(billing_core.frappe, "get_doc", return_value=session),
+		):
+			include = billing_core.should_include_registration_charge_for_consultation(consultation, None)
+
+		self.assertFalse(include)
 
 	def test_explicit_consultation_plan_rows_bill_when_default_item_auto_add_disabled(self):
 		consultation = frappe._dict(
