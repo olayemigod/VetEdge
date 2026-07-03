@@ -68,6 +68,7 @@ Summary:
 - Manual treatment rows and default consultation fee rows should be visible in `planned_treatments` and use editable row rates before billing.
 - Billing Core should not create a hidden default consultation fee when the visible planned row represents that charge.
 - Registration billing should not be duplicated inside consultation billing when an active registration invoice/session already exists.
+- Ready for Treatment locks clinical order mutation, but Billing / Payment modal state, invoice sync, submit, payment, and historical invoice reads may reconcile existing eligible billing rows under internal billing-sync context.
 - Multiple invoice/cycle behavior was restored around draft and submitted invoice boundaries.
 - Submitted Sales Invoices must not be mutated by VetEdge.
 - Newly added billable rows after a submitted invoice should create or update the next draft/cycle.

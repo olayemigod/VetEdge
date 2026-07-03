@@ -294,4 +294,17 @@ def _add_plan_row(
 def _save_consultation(consultation) -> None:
 	if getattr(consultation, "flags", None) is not None:
 		consultation.flags.ignore_permissions = True
-	consultation.save(ignore_permissions=True)
+	flags = getattr(frappe, "flags", None)
+	previous_core = getattr(flags, "vetedge_billing_core_syncing", False) if flags else False
+	previous_modal = getattr(flags, "vetedge_billing_modal_syncing", False) if flags else False
+	previous_lock_bypass = getattr(flags, "ignore_consultation_treatment_lock_for_billing_sync", False) if flags else False
+	if flags is not None:
+		flags.vetedge_billing_core_syncing = True
+		flags.ignore_consultation_treatment_lock_for_billing_sync = True
+	try:
+		consultation.save(ignore_permissions=True)
+	finally:
+		if flags is not None:
+			flags.vetedge_billing_core_syncing = previous_core
+			flags.vetedge_billing_modal_syncing = previous_modal
+			flags.ignore_consultation_treatment_lock_for_billing_sync = previous_lock_bypass

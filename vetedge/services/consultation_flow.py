@@ -151,6 +151,9 @@ def consultation_scope_is_locked(status: str | None) -> bool:
 
 
 def validate_consultation_scope_lock(doc) -> None:
+	if is_internal_billing_sync_context():
+		return
+
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
 	if not previous or not consultation_scope_is_locked(previous.status):
 		return
@@ -162,6 +165,15 @@ def validate_consultation_scope_lock(doc) -> None:
 		"Treatment items cannot be added or changed after the consultation is Ready for Treatment. "
 		"Start a new consultation to capture additional treatment, lab, vaccine, or other clinical orders.",
 		frappe.ValidationError,
+	)
+
+
+def is_internal_billing_sync_context() -> bool:
+	flags = getattr(frappe, "flags", None)
+	return bool(
+		getattr(flags, "vetedge_billing_core_syncing", False)
+		or getattr(flags, "vetedge_billing_modal_syncing", False)
+		or getattr(flags, "ignore_consultation_treatment_lock_for_billing_sync", False)
 	)
 
 

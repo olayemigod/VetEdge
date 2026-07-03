@@ -858,6 +858,26 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(doc.planned_treatments[0].amount, 100)
 		self.assertEqual(doc.planned_treatments[1].amount, 500)
 
+	def test_ready_for_treatment_lock_is_skipped_during_billing_sync(self):
+		from vetedge.services.consultation_flow import validate_consultation_scope_lock
+
+		doc = frappe._dict(
+			name="VCON-001",
+			status="Ready for Treatment",
+			planned_treatments=[frappe._dict(name="ROW-1", item="CONSULT-ITEM", qty=1, rate=250)],
+		)
+		doc.get_doc_before_save = lambda: frappe._dict(
+			status="Ready for Treatment",
+			planned_treatments=[frappe._dict(name="ROW-1", item="CONSULT-ITEM", qty=1, rate=100)],
+		)
+
+		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+		frappe.flags.vetedge_billing_core_syncing = True
+		try:
+			validate_consultation_scope_lock(doc)
+		finally:
+			frappe.flags.vetedge_billing_core_syncing = previous
+
 	def test_completion_requires_vitals_when_setting_is_active(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")
 		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
