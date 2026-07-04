@@ -369,6 +369,36 @@ class TestRegistrationBilling(TestCase):
 		):
 			validate_registration_payment_before_first_consultation("VP-001")
 
+	def test_registration_payment_gate_uses_billing_group_source_status(self):
+		patient_doc = frappe._dict(
+			name="VP-001",
+			default_branch="Main",
+			registration_status=AWAITING_PAYMENT_STATUS,
+			registration_invoice=None,
+		)
+		rule = RegistrationBillingRule(True, "Main", "REG-ITEM", 100, True, True)
+
+		with (
+			patch("vetedge.services.registration_billing.use_billing_core_for_registration", return_value=True),
+			patch("vetedge.services.registration_billing.frappe.db.get_value", return_value=patient_doc),
+			patch("vetedge.services.registration_billing.get_registration_rule", return_value=rule),
+			patch("vetedge.services.registration_billing.is_first_consultation_for_patient", return_value=True),
+			patch(
+				"vetedge.services.billing_core.get_source_payment_gate_status",
+				return_value={
+					"can_proceed": True,
+					"message": "Payment gate passed.",
+					"linked_invoice_count": 1,
+					"paid_amount": 100,
+				},
+			) as source_gate,
+			patch("vetedge.services.billing_core.get_payment_gate_status") as session_gate,
+		):
+			validate_registration_payment_before_first_consultation("VP-001", current_consultation="VCON-001")
+
+		source_gate.assert_called_once_with("Veterinary Patient", "VP-001")
+		session_gate.assert_not_called()
+
 	def test_registration_payment_gate_blocks_missing_invoice_even_if_status_is_paid(self):
 		patient_doc = frappe._dict(
 			name="VP-001",
