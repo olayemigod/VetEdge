@@ -732,6 +732,7 @@ def get_source_payment_gate_status(source_doctype: str, source_name: str) -> dic
 				"status": "Blocked",
 				"message": "A Sales Invoice must be generated for pending charges before completing this workflow.",
 				"invoices": invoice_history,
+				**get_invoice_gate_summary(invoice_history),
 			}
 		return get_invoice_collection_payment_gate_status(
 			invoice_history,
@@ -759,6 +760,8 @@ def get_source_payment_gate_status(source_doctype: str, source_name: str) -> dic
 		"can_proceed": False,
 		"status": "Blocked",
 		"message": "A Sales Invoice must be generated before service can proceed.",
+		"invoices": [],
+		**get_invoice_gate_summary([]),
 	}
 
 
@@ -805,7 +808,56 @@ def get_billing_group_invoice_history(source_doctype: str, source_name: str, inc
 				continue
 			add(charge.get("invoice"), "session_charge" if charge_matches_source(charge, source_doctype, source_name) else "related_service", session, charge)
 
-	return list(history.values())
+	rows = list(history.values())
+	if source_doctype == "Veterinary Consultation":
+		merge_consultation_invoice_references_from_billing_group(source_name, rows)
+	return rows
+
+
+def merge_consultation_invoice_references_from_billing_group(consultation_name: str, invoice_history: list[dict]) -> None:
+	"""Restore missing consultation invoice history from reliable billing-group evidence."""
+	if not consultation_name or not invoice_history:
+		return
+	if not safe_doctype_exists("Veterinary Consultation") or not safe_doctype_exists("Consultation Invoice Reference"):
+		return
+	try:
+		consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
+	except Exception:
+		return
+	if not callable(getattr(consultation, "append", None)) or not callable(getattr(consultation, "save", None)):
+		return
+
+	existing = {
+		row.get("sales_invoice")
+		for row in consultation.get("consultation_invoices") or []
+		if row.get("sales_invoice")
+	}
+	missing = []
+	for row in invoice_history:
+		invoice_name = row.get("name") or row.get("invoice")
+		if not invoice_name or invoice_name in existing or cint(row.get("docstatus")) == 2:
+			continue
+		if not billing_group_row_has_reliable_consultation_reference(row, consultation_name):
+			continue
+		missing.append(invoice_name)
+		existing.add(invoice_name)
+
+	if not missing:
+		return
+	for invoice_name in missing:
+		consultation.append("consultation_invoices", {"sales_invoice": invoice_name})
+	run_with_billing_core_sync_flag(lambda: consultation.save())
+
+
+def billing_group_row_has_reliable_consultation_reference(row: dict, consultation_name: str) -> bool:
+	if row.get("source_doctype") == "Veterinary Consultation" and row.get("source_name") == consultation_name:
+		return True
+	for evidence in row.get("evidence") or []:
+		if evidence.get("source_doctype") == "Veterinary Consultation" and evidence.get("source_name") == consultation_name:
+			return True
+		if evidence.get("relation_type") in {"billing_session", "session_charge", "related_service"} and evidence.get("billing_session"):
+			return True
+	return False
 
 
 def build_billing_group_invoice_row(invoice_name: str) -> dict:
@@ -938,14 +990,15 @@ def get_invoice_collection_payment_gate_status(invoice_rows_or_names: list, gate
 		invoice_rows = get_invoice_rows_for_gate(invoice_rows_or_names)
 	else:
 		invoice_rows = invoice_rows_or_names
+	summary = get_invoice_gate_summary(invoice_rows)
 	if not invoice_rows:
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed.", "invoices": []}
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed.", "invoices": [], **summary}
 
 	submitted_rows = [row for row in invoice_rows if row.get("docstatus") == 1]
 	draft_rows = [row for row in invoice_rows if row.get("docstatus") == 0]
 	if not submitted_rows:
 		message = "Please submit the invoice before completing this workflow." if draft_rows else "A Sales Invoice must be generated before service can proceed."
-		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": message, "invoices": invoice_rows}
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": message, "invoices": invoice_rows, **summary}
 
 	if mode == NO_PAYMENT_GATE:
 		return {
@@ -954,6 +1007,7 @@ def get_invoice_collection_payment_gate_status(invoice_rows_or_names: list, gate
 			"status": "Allowed",
 			"message": "Invoice has been submitted. Payment is not required before proceeding.",
 			"invoices": invoice_rows,
+			**summary,
 		}
 
 	if mode == PARTIAL_PAYMENT_GATE:
@@ -964,6 +1018,7 @@ def get_invoice_collection_payment_gate_status(invoice_rows_or_names: list, gate
 			"status": "Allowed" if allowed else "Blocked",
 			"message": "Payment gate passed." if allowed else "A partial payment must be recorded before service can proceed.",
 			"invoices": invoice_rows,
+			**summary,
 		}
 
 	outstanding = sum(flt(row.get("outstanding_amount")) for row in submitted_rows)
@@ -974,6 +1029,18 @@ def get_invoice_collection_payment_gate_status(invoice_rows_or_names: list, gate
 		"status": "Allowed" if allowed else "Blocked",
 		"message": "Payment gate passed." if allowed else f"Full payment required. {format_money_for_message(outstanding, invoice_rows[0].get('currency'))} is still outstanding across this billing session.",
 		"invoices": invoice_rows,
+		**summary,
+	}
+
+
+def get_invoice_gate_summary(invoice_rows: list[dict] | None) -> dict:
+	rows = [row for row in invoice_rows or [] if cint(row.get("docstatus")) != 2]
+	return {
+		"linked_invoice_count": len([row for row in rows if row.get("name") or row.get("invoice")]),
+		"paid_amount": flt(sum(flt(row.get("paid_amount")) for row in rows)),
+		"outstanding_amount": flt(sum(flt(row.get("outstanding_amount")) for row in rows)),
+		"submitted_invoice_count": len([row for row in rows if cint(row.get("docstatus")) == 1]),
+		"draft_invoice_count": len([row for row in rows if cint(row.get("docstatus")) == 0]),
 	}
 
 
@@ -1398,6 +1465,9 @@ def detach_invoice_from_vetedge_sources(invoice_name: str, *, reason: str | None
 			if meta.has_field(child_field):
 				fields.append(child_field)
 		for row in frappe.get_all(child_doctype, filters={fieldname: invoice_name}, fields=fields):
+			if should_preserve_source_child_invoice_reference(child_doctype, invoice_name):
+				detached.append({"doctype": child_doctype, "name": row.name, "field": fieldname, "preserved": True})
+				continue
 			if config.get("action") == "delete":
 				run_with_billing_core_sync_flag(lambda row_name=row.name, doctype=child_doctype: frappe.delete_doc(doctype, row_name))
 			else:
@@ -1408,6 +1478,15 @@ def detach_invoice_from_vetedge_sources(invoice_name: str, *, reason: str | None
 				frappe.db.set_value(child_doctype, row.name, values, update_modified=False)
 			detached.append({"doctype": child_doctype, "name": row.name, "field": fieldname})
 	return detached
+
+
+def should_preserve_source_child_invoice_reference(child_doctype: str, invoice_name: str) -> bool:
+	if child_doctype != "Consultation Invoice Reference":
+		return False
+	try:
+		return cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) == 1
+	except Exception:
+		return True
 
 
 def safe_doctype_exists(doctype: str) -> bool:
@@ -2880,7 +2959,7 @@ def invoice_name_is_linked_to_vetedge(invoice_name: str) -> bool:
 		("Pet Grooming Session", "linked_invoice"),
 		("Pet Boarding Booking", "linked_invoice"),
 		("Veterinary Patient", "registration_invoice"),
-		("Veterinary Consultation Invoice Reference", "sales_invoice"),
+		("Consultation Invoice Reference", "sales_invoice"),
 	):
 		if _doctype_has_field(doctype, fieldname) and _db_exists_safely(doctype, {fieldname: invoice_name}):
 			return True

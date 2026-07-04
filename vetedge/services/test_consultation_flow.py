@@ -935,6 +935,20 @@ class TestConsultationFlow(TestCase):
 		gate.assert_not_called()
 		dispensary_gate.assert_not_called()
 
+	def test_completion_gate_uses_canonical_billing_group_result(self):
+		doc = frappe._dict(name="VCON-2026-00069", status="Ready for Treatment")
+		doc.get_doc_before_save = lambda: frappe._dict(status="In Progress")
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", return_value=None) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+			patch("vetedge.services.consultation_flow.is_vitals_required_before_completion", return_value=False),
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_called_once_with(doc, "Ready for Treatment")
+		dispensary_gate.assert_called_once_with(doc)
+
 	def test_consultation_status_transition_allows_in_progress_to_billing(self):
 		validate_consultation_status_transition("In Progress", "Awaiting Payment")
 

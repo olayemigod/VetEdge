@@ -566,6 +566,30 @@ class TestBillingCore(TestCase):
 		self.assertEqual(source_links[0].payment_status, "Not Billed")
 		self.assertEqual(source_links[1].get("deleted"), True)
 
+	def test_submitted_consultation_invoice_reference_is_preserved_by_detach(self):
+		session = make_session(latest_invoice="SINV-SUB")
+		invoice = make_invoice("SINV-SUB", docstatus=1, outstanding_amount=0)
+		source_links = [
+			frappe._dict(
+				{
+					"doctype": "Consultation Invoice Reference",
+					"name": "CIR-SUB",
+					"field": "sales_invoice",
+					"value": "SINV-SUB",
+					"parent": "VCON-001",
+					"parenttype": "Veterinary Consultation",
+					"parentfield": "consultation_invoices",
+				}
+			)
+		]
+
+		with billing_core_context(session, invoice, source_links=source_links):
+			detached = billing_core.detach_invoice_from_vetedge_sources("SINV-SUB", reason="cancel_unpaid_invoice", session=session)
+
+		self.assertFalse(source_links[0].get("deleted"))
+		self.assertEqual(source_links[0].value, "SINV-SUB")
+		self.assertTrue(any(row.get("preserved") for row in detached if row.get("doctype") == "Consultation Invoice Reference"))
+
 	def test_submitted_unpaid_invoice_cancellation_detaches_consultation_link_before_cancel(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
 		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-SUB", "billing_status": "Cancelled"})
@@ -2301,6 +2325,66 @@ class TestBillingCore(TestCase):
 		self.assertTrue(history[1]["is_active_session_invoice"])
 		self.assertEqual(history[0]["relation_type"], "related_service")
 		self.assertEqual(history[0]["payment_state"], "Paid")
+
+	def test_consultation_invoice_references_are_merged_from_billing_group_history(self):
+		consultation = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-2026-00070",
+			consultation_invoices=[frappe._dict(sales_invoice="ACC-SINV-2026-00129")],
+		)
+		consultation.append = lambda fieldname, row: consultation.setdefault(fieldname, []).append(frappe._dict(row)) or consultation[fieldname][-1]
+		consultation.save = Mock()
+		history = [
+			frappe._dict(
+				{
+					"name": "ACC-SINV-2026-00129",
+					"docstatus": 1,
+					"evidence": [
+						{"relation_type": "direct_source", "source_doctype": "Veterinary Consultation", "source_name": "VCON-2026-00070"}
+					],
+				}
+			),
+			frappe._dict(
+				{
+					"name": "ACC-SINV-2026-00130",
+					"docstatus": 1,
+					"evidence": [
+						{
+							"relation_type": "session_charge",
+							"billing_session": "VBS-2026-00031",
+							"source_doctype": "Veterinary Consultation",
+							"source_name": "VCON-2026-00070",
+						}
+					],
+				}
+			),
+			frappe._dict(
+				{
+					"name": "ACC-SINV-2026-00131",
+					"docstatus": 2,
+					"evidence": [
+						{
+							"relation_type": "session_charge",
+							"billing_session": "VBS-2026-00031",
+							"source_doctype": "Veterinary Consultation",
+							"source_name": "VCON-2026-00070",
+						}
+					],
+				}
+			),
+		]
+
+		with (
+			patch.object(billing_core, "safe_doctype_exists", return_value=True),
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+		):
+			billing_core.merge_consultation_invoice_references_from_billing_group("VCON-2026-00070", history)
+
+		self.assertEqual(
+			[row.sales_invoice for row in consultation.consultation_invoices],
+			["ACC-SINV-2026-00129", "ACC-SINV-2026-00130"],
+		)
+		consultation.save.assert_called_once()
 
 	def test_billing_group_history_supports_hospitalisation_context_sessions(self):
 		session = make_session(

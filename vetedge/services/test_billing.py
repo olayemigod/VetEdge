@@ -480,6 +480,47 @@ class TestConsultationBilling(TestCase):
 		with patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings):
 			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
 
+	def test_validate_consultation_invoice_before_progress_uses_billing_group_gate(self):
+		consultation = make_consultation()
+		consultation.name = "VCON-2026-00069"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+		group_status = {
+			"gate": "Partial Payment Gate",
+			"can_proceed": True,
+			"message": "Payment gate passed.",
+			"linked_invoice_count": 2,
+			"paid_amount": 10000,
+			"outstanding_amount": 69000,
+		}
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.get_consultation_billing_group_gate_status", return_value=group_status),
+			patch("vetedge.services.billing.is_active_sales_invoice", side_effect=AssertionError("legacy invoice check must not run")),
+		):
+			validate_consultation_invoice_before_progress(consultation, "Ready for Treatment")
+
+	def test_validate_consultation_payment_before_treatment_uses_billing_group_gate(self):
+		consultation = make_consultation()
+		consultation.name = "VCON-2026-00069"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+		group_status = {
+			"gate": "Partial Payment Gate",
+			"can_proceed": True,
+			"message": "Payment gate passed.",
+			"linked_invoice_count": 2,
+			"paid_amount": 10000,
+			"outstanding_amount": 69000,
+		}
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.user_has_any_role", return_value=False),
+			patch("vetedge.services.billing.get_consultation_billing_group_gate_status", return_value=group_status),
+			patch("vetedge.services.billing.get_consultation_invoice_names", side_effect=AssertionError("legacy invoice list must not run")),
+		):
+			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
+
 	def test_get_invoice_access_summary_uses_invoice_permission_helper(self):
 		invoice_row = frappe._dict(
 			name="SINV-001",

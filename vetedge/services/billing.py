@@ -406,6 +406,12 @@ def consultation_requires_invoice_before_progress(doc, target_status: str | None
 
 
 def validate_consultation_invoice_before_progress(doc, target_status: str | None = None) -> None:
+	source_gate = get_consultation_billing_group_gate_status(doc)
+	if billing_group_gate_has_invoice_evidence(source_gate):
+		if source_gate.get("can_proceed"):
+			return
+		frappe.throw(source_gate.get("message") or "A Sales Invoice must be generated before service can proceed.", frappe.ValidationError)
+
 	if not consultation_requires_invoice_before_progress(doc, target_status):
 		return
 
@@ -427,10 +433,16 @@ def validate_consultation_payment_before_treatment(doc, target_status: str | Non
 	if target_status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
 		return
 
-	if not consultation_requires_invoice_before_progress(doc, target_status):
+	if user_has_any_role(get_current_user(), {*ELEVATED_ROLES, ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"}):
 		return
 
-	if user_has_any_role(get_current_user(), {*ELEVATED_ROLES, ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"}):
+	source_gate = get_consultation_billing_group_gate_status(doc)
+	if billing_group_gate_has_invoice_evidence(source_gate):
+		if source_gate.get("can_proceed"):
+			return
+		frappe.throw(source_gate.get("message") or "Full payment is required before service can proceed.", frappe.ValidationError)
+
+	if not consultation_requires_invoice_before_progress(doc, target_status):
 		return
 
 	invoice_names = get_consultation_invoice_names(doc)
@@ -451,6 +463,27 @@ def validate_consultation_payment_before_treatment(doc, target_status: str | Non
 				"All consultation-related invoices, including vaccination invoices, must be fully paid before treatment can proceed.",
 				frappe.ValidationError,
 			)
+
+
+def get_consultation_billing_group_gate_status(doc) -> dict | None:
+	try:
+		from vetedge.services.billing_core import get_source_payment_gate_status, is_billing_sessions_enabled
+
+		if not is_billing_sessions_enabled():
+			return None
+		if not doc.get("name"):
+			return None
+		return get_source_payment_gate_status("Veterinary Consultation", doc.name)
+	except Exception:
+		return None
+
+
+def billing_group_gate_has_invoice_evidence(status: dict | None) -> bool:
+	if not status:
+		return False
+	if status.get("linked_invoice_count"):
+		return True
+	return bool(status.get("invoices"))
 
 
 def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBillingSettings) -> None:
