@@ -14,6 +14,7 @@ from vetedge.services.billing_core import get_consultation_payment_status
 class VeterinaryConsultation(Document):
 	def validate(self) -> None:
 		reset_vetedge_copy_state(self)
+		set_default_consultation_type(self)
 		normalize_consultation_payment_status_fields(self)
 		validate_consultation(self)
 
@@ -30,3 +31,8 @@ def normalize_consultation_payment_status_fields(doc) -> None:
 	for row in doc.get("planned_treatments") or []:
 		if row.get("payment_status"):
 			row.payment_status = get_consultation_payment_status(row.get("payment_status"))
+
+
+def set_default_consultation_type(doc) -> None:
+	if not doc.get("consultation_type"):
+		doc.consultation_type = "General Consultation"

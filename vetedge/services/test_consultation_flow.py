@@ -97,7 +97,8 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(field["label"], "Consultation Type")
 		self.assertEqual(field["fieldtype"], "Link")
 		self.assertEqual(field["options"], "Consultation Type")
-		self.assertFalse(field.get("reqd"))
+		self.assertEqual(field.get("default"), "General Consultation")
+		self.assertEqual(field.get("reqd"), 1)
 		self.assertIn("consultation_type", doctype["field_order"])
 
 	def test_consultation_feature_flag_blocks_validation(self):

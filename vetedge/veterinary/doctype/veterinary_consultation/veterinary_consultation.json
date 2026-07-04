@@ -52,7 +52,7 @@
   {"fieldname": "patient", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "reqd": 1, "search_index": 1},
   {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "no_copy": 1, "options": "Draft\nIn Progress\nAwaiting Payment\nPending Dispensary\nReady for Treatment\nCompleted\nCancelled", "reqd": 1},
   {"default": "Now", "fieldname": "consultation_datetime", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Consultation Date/Time", "no_copy": 1, "reqd": 1, "search_index": 1},
-  {"fieldname": "consultation_type", "fieldtype": "Link", "in_standard_filter": 1, "label": "Consultation Type", "options": "Consultation Type"},
+  {"default": "General Consultation", "fieldname": "consultation_type", "fieldtype": "Link", "in_standard_filter": 1, "label": "Consultation Type", "options": "Consultation Type", "reqd": 1},
   {"fieldname": "primary_owner", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Primary Owner", "options": "Customer", "read_only": 1},
   {"fieldname": "service_branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Service Branch", "options": "Branch", "reqd": 1},
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
