@@ -717,6 +717,315 @@ def can_proceed_with_payment_gate(session) -> bool:
 	return bool(get_payment_gate_status(session).get("can_proceed"))
 
 
+def get_source_payment_gate_status(source_doctype: str, source_name: str) -> dict:
+	"""Evaluate workflow gates without treating closed sessions as active modal state."""
+	active_session = resolve_billing_session(source_doctype, source_name)
+	historical_session = resolve_closed_satisfied_billing_session_for_source(source_doctype, source_name)
+	invoice_history = get_billing_group_invoice_history(source_doctype, source_name, include_related=True, sessions=[active_session, historical_session])
+
+	if invoice_history:
+		active_ledger = get_billing_session_invoice_ledger(active_session) if active_session else {}
+		if active_ledger.get("has_pending_uninvoiced_charges"):
+			return {
+				"gate": normalize_payment_gate_mode(get_source_payment_gate_mode(source_doctype)),
+				"can_proceed": False,
+				"status": "Blocked",
+				"message": "A Sales Invoice must be generated for pending charges before completing this workflow.",
+				"invoices": invoice_history,
+			}
+		return get_invoice_collection_payment_gate_status(
+			invoice_history,
+			normalize_payment_gate_mode(get_source_payment_gate_mode(source_doctype)),
+		)
+
+	if active_session:
+		active_ledger = get_billing_session_invoice_ledger(active_session)
+		if active_ledger["has_pending_uninvoiced_charges"] or active_ledger["has_active_draft_invoice"]:
+			return get_payment_gate_status(active_session)
+		if active_ledger["submitted_invoice_count"]:
+			active_status = get_payment_gate_status(active_session)
+			if not active_status.get("can_proceed") or not historical_session:
+				return active_status
+
+	if historical_session:
+		return get_payment_gate_status(historical_session)
+
+	if active_session:
+		return get_payment_gate_status(active_session)
+
+	mode = normalize_payment_gate_mode(get_source_payment_gate_mode(source_doctype))
+	return {
+		"gate": mode,
+		"can_proceed": False,
+		"status": "Blocked",
+		"message": "A Sales Invoice must be generated before service can proceed.",
+	}
+
+
+def get_billing_group_invoice_history(source_doctype: str, source_name: str, include_related: bool = True, sessions: list | tuple | None = None) -> list[dict]:
+	"""Return reliable invoice history for a VetEdge service billing group.
+
+	The group is built only from explicit VetEdge links: source invoice fields,
+	consultation invoice child rows, Billing Sessions, and Billing Session Charges.
+	"""
+	history: OrderedDict[str, dict] = OrderedDict()
+
+	def add(invoice_name, relation_type: str, billing_session=None, source_row=None):
+		if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+			return
+		if invoice_name not in history:
+			history[invoice_name] = build_billing_group_invoice_row(invoice_name)
+		row = history[invoice_name]
+		evidence = {
+			"relation_type": relation_type,
+			"billing_session": getattr(billing_session, "name", None) or billing_session,
+			"source_doctype": (source_row or {}).get("source_doctype"),
+			"source_name": (source_row or {}).get("source_name"),
+			"source_detail_name": (source_row or {}).get("source_detail_name"),
+			"charge_key": (source_row or {}).get("charge_key"),
+		}
+		if not row.get("relation_type"):
+			row.update({key: value for key, value in evidence.items() if value})
+		elif row.get("relation_type") == "billing_session" and relation_type != "billing_session":
+			row.update({key: value for key, value in evidence.items() if value})
+		row.setdefault("evidence", []).append({key: value for key, value in evidence.items() if value})
+		if evidence.get("billing_session") and not row.get("billing_session"):
+			row["billing_session"] = evidence["billing_session"]
+		if billing_session and getattr(billing_session, "status", None) in ACTIVE_SESSION_STATUSES:
+			row["is_active_session_invoice"] = True
+			row["is_history_invoice"] = False
+
+	add_direct_source_invoices_to_history(source_doctype, source_name, add)
+
+	for session in get_billing_group_sessions(source_doctype, source_name, include_related=include_related, extra_sessions=sessions):
+		for invoice_name in get_session_invoice_names(session):
+			add(invoice_name, "billing_session", session)
+		for charge in session.get("charges") or []:
+			if not include_related and not charge_matches_source(charge, source_doctype, source_name):
+				continue
+			add(charge.get("invoice"), "session_charge" if charge_matches_source(charge, source_doctype, source_name) else "related_service", session, charge)
+
+	return list(history.values())
+
+
+def build_billing_group_invoice_row(invoice_name: str) -> dict:
+	invoice = frappe.get_doc("Sales Invoice", invoice_name)
+	docstatus = cint(invoice.get("docstatus"))
+	state = get_invoice_payment_state(invoice.name) if docstatus == 1 else {}
+	outstanding = flt(state.get("outstanding_amount", invoice.get("outstanding_amount")))
+	paid = flt(state.get("paid_amount", invoice.get("paid_amount")))
+	grand_total = flt(invoice.get("grand_total"))
+	if docstatus == 0:
+		payment_state = "Draft"
+	elif docstatus == 2:
+		payment_state = "Cancelled"
+	elif outstanding <= 0:
+		payment_state = "Paid"
+	elif paid > 0 or (grand_total and outstanding < grand_total):
+		payment_state = "Partly Paid"
+	else:
+		payment_state = "Unpaid"
+	return {
+		"invoice": invoice.name,
+		"name": invoice.name,
+		"docstatus": docstatus,
+		"status": invoice.get("status"),
+		"posting_date": invoice.get("posting_date"),
+		"due_date": invoice.get("due_date"),
+		"grand_total": grand_total,
+		"outstanding_amount": outstanding,
+		"paid_amount": paid,
+		"currency": invoice.get("currency"),
+		"payment_state": payment_state,
+		"has_payment": bool(state.get("has_payment") or paid > 0 or (docstatus == 1 and grand_total and outstanding < grand_total)),
+		"is_fully_paid": bool(state.get("is_fully_paid") or (docstatus == 1 and outstanding <= 0)),
+		"is_active_session_invoice": False,
+		"is_history_invoice": True,
+	}
+
+
+def add_direct_source_invoices_to_history(source_doctype: str, source_name: str, add) -> None:
+	if source_doctype == "Veterinary Consultation":
+		try:
+			doc = frappe.get_doc(source_doctype, source_name)
+			for row in doc.get("consultation_invoices") or []:
+				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+			add(doc.get("linked_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+		except Exception:
+			pass
+		if frappe.db.exists("DocType", "Consultation Invoice Reference"):
+			for row in frappe.get_all(
+				"Consultation Invoice Reference",
+				filters={"parenttype": "Veterinary Consultation", "parent": source_name},
+				fields=["sales_invoice"],
+			):
+				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+		if frappe.db.exists("DocType", "Consultation Billing Source"):
+			for row in frappe.get_all(
+				"Consultation Billing Source",
+				filters={"parenttype": "Veterinary Consultation", "parent": source_name},
+				fields=["sales_invoice", "source_type", "source_name"],
+			):
+				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+		return
+
+	link_field = SAFE_SOURCE_INVOICE_LINK_FIELDS.get(source_doctype, {}).get("field")
+	if link_field and doctype_has_field(source_doctype, link_field):
+		add(frappe.db.get_value(source_doctype, source_name, link_field), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+
+
+def get_billing_group_sessions(source_doctype: str, source_name: str, include_related: bool = True, extra_sessions: list | tuple | None = None) -> list:
+	sessions: OrderedDict[str, object] = OrderedDict()
+
+	def add_session(session):
+		if not session:
+			return
+		if isinstance(session, str):
+			if not frappe.db.exists(BILLING_SESSION_DOCTYPE, session):
+				return
+			session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session)
+		if session.get("name"):
+			sessions[session.name] = session
+
+	for session in extra_sessions or []:
+		add_session(session)
+
+	for row in frappe.get_all(
+		BILLING_SESSION_CHARGE_DOCTYPE,
+		filters={"source_doctype": source_doctype, "source_name": source_name},
+		fields=["parent"],
+		order_by="modified desc",
+		limit=100,
+	):
+		add_session(row.get("parent"))
+
+	for fieldname in ("created_from_doctype", "source_context_doctype"):
+		for row in frappe.get_all(
+			BILLING_SESSION_DOCTYPE,
+			filters={fieldname: source_doctype, fieldname.replace("doctype", "name"): source_name},
+			fields=["name"],
+			order_by="modified desc",
+			limit=50,
+		):
+			add_session(row.get("name"))
+
+	if include_related:
+		context = get_source_context(source_doctype, source_name)
+		if context != (source_doctype, source_name):
+			for row in frappe.get_all(
+				BILLING_SESSION_DOCTYPE,
+				filters={"source_context_doctype": context[0], "source_context_name": context[1]},
+				fields=["name"],
+				order_by="modified desc",
+				limit=50,
+			):
+				add_session(row.get("name"))
+
+	return list(sessions.values())
+
+
+def charge_matches_source(charge, source_doctype: str, source_name: str) -> bool:
+	return charge.get("source_doctype") == source_doctype and charge.get("source_name") == source_name
+
+
+def get_source_invoice_names_for_gate(source_doctype: str, source_name: str, *sessions) -> list[str]:
+	return [row.get("name") for row in get_billing_group_invoice_history(source_doctype, source_name, include_related=True, sessions=sessions)]
+
+
+def get_invoice_collection_payment_gate_status(invoice_rows_or_names: list, gate_mode: str) -> dict:
+	mode = normalize_payment_gate_mode(gate_mode)
+	if invoice_rows_or_names and isinstance(invoice_rows_or_names[0], str):
+		invoice_rows = get_invoice_rows_for_gate(invoice_rows_or_names)
+	else:
+		invoice_rows = invoice_rows_or_names
+	if not invoice_rows:
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": "A Sales Invoice must be generated before service can proceed.", "invoices": []}
+
+	submitted_rows = [row for row in invoice_rows if row.get("docstatus") == 1]
+	draft_rows = [row for row in invoice_rows if row.get("docstatus") == 0]
+	if not submitted_rows:
+		message = "Please submit the invoice before completing this workflow." if draft_rows else "A Sales Invoice must be generated before service can proceed."
+		return {"gate": mode, "can_proceed": False, "status": "Blocked", "message": message, "invoices": invoice_rows}
+
+	if mode == NO_PAYMENT_GATE:
+		return {
+			"gate": mode,
+			"can_proceed": True,
+			"status": "Allowed",
+			"message": "Invoice has been submitted. Payment is not required before proceeding.",
+			"invoices": invoice_rows,
+		}
+
+	if mode == PARTIAL_PAYMENT_GATE:
+		allowed = any(row.get("has_payment") or row.get("is_fully_paid") for row in submitted_rows)
+		return {
+			"gate": mode,
+			"can_proceed": allowed,
+			"status": "Allowed" if allowed else "Blocked",
+			"message": "Payment gate passed." if allowed else "A partial payment must be recorded before service can proceed.",
+			"invoices": invoice_rows,
+		}
+
+	outstanding = sum(flt(row.get("outstanding_amount")) for row in submitted_rows)
+	allowed = outstanding <= 0
+	return {
+		"gate": mode,
+		"can_proceed": allowed,
+		"status": "Allowed" if allowed else "Blocked",
+		"message": "Payment gate passed." if allowed else f"Full payment required. {format_money_for_message(outstanding, invoice_rows[0].get('currency'))} is still outstanding across this billing session.",
+		"invoices": invoice_rows,
+	}
+
+
+def get_invoice_rows_for_gate(invoice_names: list[str]) -> list[dict]:
+	rows = []
+	for invoice_name in invoice_names:
+		if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+			continue
+		invoice = frappe.get_doc("Sales Invoice", invoice_name)
+		docstatus = cint(invoice.get("docstatus"))
+		state = get_invoice_payment_state(invoice.name) if docstatus == 1 else {}
+		rows.append(
+			{
+				"invoice": invoice.name,
+				"name": invoice.name,
+				"docstatus": docstatus,
+				"status": invoice.get("status"),
+				"grand_total": flt(invoice.get("grand_total")),
+				"outstanding_amount": flt(state.get("outstanding_amount", invoice.get("outstanding_amount"))),
+				"paid_amount": flt(state.get("paid_amount", invoice.get("paid_amount"))),
+				"currency": invoice.get("currency"),
+				"has_payment": bool(state.get("has_payment")),
+				"is_fully_paid": bool(state.get("is_fully_paid")),
+			}
+		)
+	return rows
+
+
+def resolve_closed_satisfied_billing_session_for_source(source_doctype: str, source_name: str):
+	if not is_billing_sessions_enabled():
+		return None
+	rows = frappe.get_all(
+		BILLING_SESSION_CHARGE_DOCTYPE,
+		filters={"source_doctype": source_doctype, "source_name": source_name},
+		fields=["parent"],
+		order_by="modified desc",
+		limit=50,
+	)
+	seen = set()
+	for row in rows:
+		parent = row.get("parent")
+		if not parent or parent in seen:
+			continue
+		seen.add(parent)
+		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, parent)
+		if session.get("status") != "Closed":
+			continue
+		if closed_billing_session_covers_current_source_payloads(session, source_doctype, source_name):
+			return session
+	return None
+
+
 @frappe.whitelist()
 def create_or_update_invoice_for_billing_session(session_name: str, confirm: bool = False, confirmation_type: str | None = None):
 	session = frappe.get_doc(BILLING_SESSION_DOCTYPE, session_name)

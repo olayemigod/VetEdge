@@ -2119,6 +2119,226 @@ class TestBillingCore(TestCase):
 		self.assertFalse(blocked["can_proceed"])
 		self.assertTrue(allowed["can_proceed"])
 
+	def test_source_payment_gate_uses_closed_partial_paid_session_when_active_session_is_empty(self):
+		active = make_session(name="VBS-ACTIVE", payment_gate_mode="Partial Payment Gate", charges=[])
+		closed = make_session(
+			name="VBS-CLOSED",
+			status="Closed",
+			payment_gate_mode="Partial Payment Gate",
+			latest_invoice="SINV-OLD",
+			charges=[
+				frappe._dict(
+					{
+						**charge_payload("consultation-fee", "CONS-ITEM", 100),
+						"invoice": "SINV-OLD",
+						"billing_status": "Submitted Invoiced",
+					}
+				),
+			],
+		)
+		invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=75)
+
+		with (
+			multi_invoice_billing_context(closed, {"SINV-OLD": invoice}, {"SINV-OLD": 25}),
+			patch.object(billing_core, "resolve_billing_session", return_value=active),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=closed),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-001")
+
+		self.assertTrue(status["can_proceed"])
+		self.assertEqual(status["gate"], "Partial Payment Gate")
+
+	def test_source_payment_gate_partial_allows_when_one_consultation_invoice_is_paid(self):
+		paid_invoice = make_invoice("ACC-SINV-2026-00127", docstatus=1, outstanding_amount=0)
+		unpaid_invoice = make_invoice("ACC-SINV-2026-00128", docstatus=1, outstanding_amount=100)
+
+		with (
+			multi_invoice_billing_context(
+				make_session(payment_gate_mode="Partial Payment Gate"),
+				{"ACC-SINV-2026-00127": paid_invoice, "ACC-SINV-2026-00128": unpaid_invoice},
+				{"ACC-SINV-2026-00127": 100, "ACC-SINV-2026-00128": 0},
+			),
+			patch.object(billing_core, "resolve_billing_session", return_value=None),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=None),
+			patch.object(
+				billing_core,
+				"get_billing_group_invoice_history",
+				return_value=[
+					billing_core.build_billing_group_invoice_row("ACC-SINV-2026-00127"),
+					billing_core.build_billing_group_invoice_row("ACC-SINV-2026-00128"),
+				],
+			),
+			patch.object(billing_core, "get_source_payment_gate_mode", return_value="Partial Payment Gate"),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-2026-00069")
+
+		self.assertTrue(status["can_proceed"])
+		self.assertEqual([row["name"] for row in status["invoices"]], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
+		self.assertNotIn("Sales Invoice must be generated", status["message"])
+
+	def test_source_payment_gate_partial_blocks_submitted_invoice_without_payment(self):
+		unpaid_invoice = make_invoice("ACC-SINV-2026-00128", docstatus=1, outstanding_amount=100)
+
+		with (
+			multi_invoice_billing_context(
+				make_session(payment_gate_mode="Partial Payment Gate"),
+				{"ACC-SINV-2026-00128": unpaid_invoice},
+				{"ACC-SINV-2026-00128": 0},
+			),
+			patch.object(billing_core, "resolve_billing_session", return_value=None),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=None),
+			patch.object(
+				billing_core,
+				"get_billing_group_invoice_history",
+				return_value=[billing_core.build_billing_group_invoice_row("ACC-SINV-2026-00128")],
+			),
+			patch.object(billing_core, "get_source_payment_gate_mode", return_value="Partial Payment Gate"),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-2026-00069")
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("partial payment", status["message"])
+		self.assertNotIn("Sales Invoice must be generated", status["message"])
+
+	def test_source_payment_gate_partial_draft_only_requires_submission_not_generation(self):
+		draft_invoice = make_invoice("ACC-SINV-2026-00128", docstatus=0, outstanding_amount=100)
+
+		with (
+			multi_invoice_billing_context(
+				make_session(payment_gate_mode="Partial Payment Gate"),
+				{"ACC-SINV-2026-00128": draft_invoice},
+			),
+			patch.object(billing_core, "resolve_billing_session", return_value=None),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=None),
+			patch.object(
+				billing_core,
+				"get_billing_group_invoice_history",
+				return_value=[billing_core.build_billing_group_invoice_row("ACC-SINV-2026-00128")],
+			),
+			patch.object(billing_core, "get_source_payment_gate_mode", return_value="Partial Payment Gate"),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-2026-00069")
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("submit the invoice", status["message"])
+		self.assertNotIn("Sales Invoice must be generated", status["message"])
+
+	def test_source_payment_gate_keeps_active_pending_rows_blocking_even_with_closed_paid_session(self):
+		active = make_session(
+			name="VBS-ACTIVE",
+			payment_gate_mode="Partial Payment Gate",
+			charges=[frappe._dict(charge_payload("new-treatment", "TREAT-ITEM", 50))],
+		)
+		closed = make_session(
+			name="VBS-CLOSED",
+			status="Closed",
+			payment_gate_mode="Partial Payment Gate",
+			latest_invoice="SINV-OLD",
+			charges=[
+				frappe._dict(
+					{
+						**charge_payload("consultation-fee", "CONS-ITEM", 100),
+						"invoice": "SINV-OLD",
+						"billing_status": "Submitted Invoiced",
+					}
+				),
+			],
+		)
+		invoice = make_invoice("SINV-OLD", docstatus=1, outstanding_amount=75)
+
+		with (
+			multi_invoice_billing_context(closed, {"SINV-OLD": invoice}, {"SINV-OLD": 25}),
+			patch.object(billing_core, "resolve_billing_session", return_value=active),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=closed),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-001")
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("Sales Invoice must be generated", status["message"])
+
+	def test_billing_group_invoice_history_returns_direct_and_related_session_invoices(self):
+		registration_charge = frappe._dict(
+			{
+				**charge_payload("registration-fee", "REG-ITEM", 100),
+				"source_doctype": "Veterinary Patient",
+				"source_name": "VP-001",
+				"invoice": "ACC-SINV-2026-00127",
+				"billing_status": "Submitted Invoiced",
+			}
+		)
+		consultation_charge = frappe._dict(
+			{
+				**charge_payload("consultation-fee", "CONS-ITEM", 100),
+				"source_doctype": "Veterinary Consultation",
+				"source_name": "VCON-2026-00069",
+				"invoice": "ACC-SINV-2026-00128",
+				"billing_status": "Draft Invoiced",
+			}
+		)
+		session = make_session(
+			name="VBS-2026-00069",
+			status="Active",
+			payment_gate_mode="Partial Payment Gate",
+			current_draft_invoice="ACC-SINV-2026-00128",
+			latest_invoice="ACC-SINV-2026-00128",
+			charges=[registration_charge, consultation_charge],
+		)
+		paid_invoice = make_invoice("ACC-SINV-2026-00127", docstatus=1, outstanding_amount=0)
+		pending_invoice = make_invoice("ACC-SINV-2026-00128", docstatus=0, outstanding_amount=100)
+
+		with multi_invoice_billing_context(
+			session,
+			{"ACC-SINV-2026-00127": paid_invoice, "ACC-SINV-2026-00128": pending_invoice},
+			{"ACC-SINV-2026-00127": 100, "ACC-SINV-2026-00128": 0},
+		):
+			history = billing_core.get_billing_group_invoice_history(
+				"Veterinary Consultation",
+				"VCON-2026-00069",
+				sessions=[session],
+			)
+
+		self.assertEqual([row["name"] for row in history], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
+		self.assertTrue(history[1]["is_active_session_invoice"])
+		self.assertEqual(history[0]["relation_type"], "related_service")
+		self.assertEqual(history[0]["payment_state"], "Paid")
+
+	def test_billing_group_history_supports_hospitalisation_context_sessions(self):
+		session = make_session(
+			name="VBS-HOSP",
+			source_context_doctype="Veterinary Hospitalisation",
+			source_context_name="VHOS-001",
+			latest_invoice="SINV-HOSP",
+			charges=[
+				frappe._dict(
+					{
+						**charge_payload("consultation-fee", "CONS-ITEM", 100),
+						"source_doctype": "Veterinary Consultation",
+						"source_name": "VCON-001",
+						"invoice": "SINV-HOSP",
+						"billing_status": "Submitted Invoiced",
+					}
+				)
+			],
+		)
+		invoice = make_invoice("SINV-HOSP", docstatus=1, outstanding_amount=0)
+
+		def get_all(doctype, filters=None, fields=None, order_by=None, limit=None):
+			if doctype == billing_core.BILLING_SESSION_DOCTYPE and filters == {
+				"source_context_doctype": "Veterinary Hospitalisation",
+				"source_context_name": "VHOS-001",
+			}:
+				return [frappe._dict(name="VBS-HOSP")]
+			return []
+
+		with (
+			multi_invoice_billing_context(session, {"SINV-HOSP": invoice}, {"SINV-HOSP": 100}),
+			patch.object(billing_core.frappe, "get_all", side_effect=get_all),
+		):
+			history = billing_core.get_billing_group_invoice_history("Veterinary Hospitalisation", "VHOS-001")
+
+		self.assertEqual([row["name"] for row in history], ["SINV-HOSP"])
+		self.assertEqual(history[0]["relation_type"], "related_service")
+
 	def test_partial_payment_gate_summary_closes_after_valid_partial_payment(self):
 		charge = frappe._dict({**charge_payload("consultation-fee", "CONS-ITEM", 100), "invoice": "SINV-001", "billing_status": "Submitted Invoiced"})
 		session = make_session(payment_gate_mode="Partial Payment Gate", latest_invoice="SINV-001", charges=[charge])

@@ -299,6 +299,8 @@ class TestBillingModal(TestCase):
 			patch("vetedge.services.billing_core.get_billing_session_summary", return_value=session_summary),
 			patch("vetedge.services.billing_core.sync_source_charge_payloads_to_billing_session", side_effect=AssertionError("summary must not sync charges")),
 			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+			patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=[]),
+			patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value=None),
 		):
 			state = billing_modal.get_billing_modal_state("Veterinary Hospitalisation", "VHOS-001")
 
@@ -358,6 +360,8 @@ class TestBillingModal(TestCase):
 			patch("vetedge.services.billing_core.sync_source_charge_payloads_to_billing_session", return_value=session) as sync_mock,
 			patch("vetedge.services.billing_core.get_billing_session_summary", return_value=session_summary),
 			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+			patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=[]),
+			patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value=None),
 		):
 			state = billing_modal.get_billing_modal_state("Veterinary Consultation", "VCON-001")
 
@@ -398,6 +402,22 @@ class TestBillingModal(TestCase):
 			patch("vetedge.services.billing_core.closed_billing_session_covers_current_source_payloads", return_value=True),
 			patch("vetedge.services.billing_core.sync_source_charge_payloads_to_billing_session", side_effect=AssertionError("closed satisfied sessions must not sync")),
 			patch.object(billing_modal, "is_billing_sessions_enabled", return_value=True),
+			patch.object(
+				billing_modal,
+				"get_billing_group_history_for_modal",
+				return_value=[
+					{
+						"name": "SINV-SUBMITTED",
+						"invoice": "SINV-SUBMITTED",
+						"docstatus": 1,
+						"grand_total": 5000,
+						"paid_amount": 5000,
+						"outstanding_amount": 0,
+						"payment_state": "Paid",
+					}
+				],
+			),
+			patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value={"can_proceed": True, "message": "Payment gate passed."}),
 		):
 			state = billing_modal.get_billing_modal_state("Veterinary Consultation", "VCON-001")
 
@@ -405,6 +425,64 @@ class TestBillingModal(TestCase):
 		self.assertEqual(state["invoice"]["name"], "SINV-SUBMITTED")
 		self.assertFalse(state["can_create_or_update_invoice"])
 		self.assertEqual(state["open_invoice_name"], "SINV-SUBMITTED")
+
+	def test_billing_modal_totals_use_billing_group_history_for_multiple_invoices(self):
+		invoice_summary = {"name": "ACC-SINV-2026-00128", "docstatus": 0, "grand_total": 25000, "paid_amount": 0, "outstanding_amount": 25000}
+		session_summary = {"name": "VBS-ACTIVE", "total_invoiced": 25000, "total_paid": 0, "outstanding_amount": 25000, "payment_status": "Draft Invoice Pending"}
+		history = [
+			{"name": "ACC-SINV-2026-00127", "docstatus": 1, "grand_total": 100000, "paid_amount": 100000, "outstanding_amount": 0, "payment_state": "Paid"},
+			{"name": "ACC-SINV-2026-00128", "docstatus": 0, "grand_total": 25000, "paid_amount": 0, "outstanding_amount": 25000, "payment_state": "Draft"},
+		]
+
+		totals = billing_modal.get_billing_modal_totals(session_summary, invoice_summary, history)
+
+		self.assertEqual(totals["linked_invoices"], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
+		self.assertEqual(totals["linked_invoice_count"], 2)
+		self.assertEqual(totals["total_amount"], 125000)
+		self.assertEqual(totals["paid_amount"], 100000)
+		self.assertEqual(totals["payment_status"], "Partly Paid")
+		self.assertEqual(totals["current_invoice_name"], "ACC-SINV-2026-00128")
+
+	def test_billing_modal_state_separates_active_session_from_invoice_history(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-2026-00069",
+			status="Open",
+			patient="VP-001",
+			primary_owner="CUST-001",
+			service_branch="Main",
+			linked_invoice="ACC-SINV-2026-00128",
+		)
+		invoice_summary = {"name": "ACC-SINV-2026-00128", "docstatus": 0, "is_draft": True, "grand_total": 25000, "paid_amount": 0, "outstanding_amount": 25000}
+		session_summary = {
+			"name": "VBS-ACTIVE",
+			"current_draft_invoice": "ACC-SINV-2026-00128",
+			"latest_invoice": "ACC-SINV-2026-00128",
+			"invoices": [{"name": "ACC-SINV-2026-00128", "docstatus": 0, "grand_total": 25000, "paid_amount": 0, "outstanding_amount": 25000}],
+			"charges": [],
+		}
+		history = [
+			{"name": "ACC-SINV-2026-00127", "invoice": "ACC-SINV-2026-00127", "docstatus": 1, "grand_total": 100000, "paid_amount": 100000, "outstanding_amount": 0, "payment_state": "Paid", "is_history_invoice": True},
+			{"name": "ACC-SINV-2026-00128", "invoice": "ACC-SINV-2026-00128", "docstatus": 0, "grand_total": 25000, "paid_amount": 0, "outstanding_amount": 25000, "payment_state": "Draft", "is_active_session_invoice": True},
+		]
+
+		with (
+			patch.object(billing_modal, "require_internal_user"),
+			patch.object(billing_modal.frappe, "get_doc", return_value=source),
+			patch.object(billing_modal, "assert_can_read_source"),
+			patch.object(billing_modal, "get_linked_invoice_name", return_value="ACC-SINV-2026-00128"),
+			patch.object(billing_modal, "get_invoice_summary", return_value=invoice_summary),
+			patch.object(billing_modal, "get_payment_modes", return_value=[]),
+			patch.object(billing_modal, "get_billing_session_summary_for_source", return_value=session_summary),
+			patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=history),
+			patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value={"gate": "Partial Payment Gate", "can_proceed": True, "message": "Payment gate passed."}),
+		):
+			state = billing_modal.get_billing_modal_state("Veterinary Consultation", "VCON-2026-00069")
+
+		self.assertEqual(state["billing_session"]["name"], "VBS-ACTIVE")
+		self.assertEqual([row["name"] for row in state["invoice_history"]], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
+		self.assertEqual(state["linked_invoices"], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
+		self.assertTrue(state["payment_gate"]["can_proceed"])
 
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()

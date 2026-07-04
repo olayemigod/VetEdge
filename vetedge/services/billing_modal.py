@@ -458,13 +458,39 @@ def get_primary_session_invoice_summary(session_summary: dict | None, fallback: 
 	return fallback
 
 
-def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict | None) -> dict:
+def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict | None, invoice_history: list[dict] | None = None) -> dict:
 	current_total = flt(invoice_summary.get("grand_total")) if invoice_summary else 0
 	current_paid = flt(invoice_summary.get("paid_amount")) if invoice_summary else 0
 	current_outstanding = flt(invoice_summary.get("outstanding_amount")) if invoice_summary else 0
 	current_name = invoice_summary.get("name") if invoice_summary else None
 	current_status = invoice_summary.get("payment_status") or invoice_summary.get("status") if invoice_summary else None
 	currency = invoice_summary.get("currency") if invoice_summary else None
+
+	if invoice_history:
+		active_invoices = [row for row in invoice_history if cint(row.get("docstatus")) != 2]
+		linked_invoices = [row.get("name") or row.get("invoice") for row in active_invoices if row.get("name") or row.get("invoice")]
+		total = sum(flt(row.get("grand_total")) for row in active_invoices)
+		paid = sum(flt(row.get("paid_amount")) for row in active_invoices)
+		outstanding = sum(flt(row.get("outstanding_amount")) for row in active_invoices)
+		currency = currency or next((row.get("currency") for row in active_invoices if row.get("currency")), None)
+		return {
+			"total_amount": total,
+			"paid_amount": paid,
+			"outstanding_amount": outstanding,
+			"payment_status": get_history_payment_status(active_invoices),
+			"billing_session_total": flt((session_summary or {}).get("total_invoiced")),
+			"billing_session_paid": flt((session_summary or {}).get("total_paid")),
+			"billing_session_outstanding": flt((session_summary or {}).get("outstanding_amount")),
+			"billing_session_status": (session_summary or {}).get("payment_status"),
+			"linked_invoice_count": len(linked_invoices),
+			"linked_invoices": linked_invoices,
+			"current_invoice_total": current_total,
+			"current_invoice_paid": current_paid,
+			"current_invoice_outstanding": current_outstanding,
+			"current_invoice_name": current_name,
+			"current_invoice_status": current_status,
+			"currency": currency,
+		}
 
 	if not session_summary:
 		return {
@@ -514,6 +540,25 @@ def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict
 	}
 
 
+def get_history_payment_status(invoice_history: list[dict]) -> str | None:
+	if not invoice_history:
+		return None
+	submitted = [row for row in invoice_history if cint(row.get("docstatus")) == 1]
+	has_draft = any(cint(row.get("docstatus")) == 0 for row in invoice_history)
+	if any(row.get("payment_state") == "Partly Paid" or flt(row.get("paid_amount")) > 0 for row in invoice_history):
+		if has_draft or not (submitted and all(row.get("payment_state") == "Paid" for row in submitted)):
+			return "Partly Paid"
+	if submitted and all(row.get("payment_state") == "Paid" for row in submitted) and not has_draft:
+		return "Paid"
+	if any(row.get("payment_state") == "Partly Paid" or flt(row.get("paid_amount")) > 0 for row in invoice_history):
+		return "Partly Paid"
+	if submitted:
+		return "Unpaid"
+	if has_draft:
+		return "Draft"
+	return None
+
+
 def get_payment_modes() -> list[str]:
 	if not frappe.db.exists("DocType", "Mode of Payment"):
 		return []
@@ -539,8 +584,10 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		sync_source_charges=source_doctype == "Veterinary Consultation",
 	)
 	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
+	invoice_history = get_billing_group_history_for_modal(source_doctype, source_name)
 	actions = get_available_actions(config, invoice_summary, session_summary)
-	totals = get_billing_modal_totals(session_summary, invoice_summary)
+	totals = get_billing_modal_totals(session_summary, invoice_summary, invoice_history)
+	payment_gate = get_billing_group_payment_gate_for_modal(source_doctype, source_name) if invoice_history else None
 	state = {
 		"config": {
 			"source_doctype": config.source_doctype,
@@ -550,8 +597,10 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		},
 		"source": build_source_summary(doc, config),
 		"invoice": invoice_summary,
+		"invoice_history": invoice_history,
+		"billing_group_invoice_history": invoice_history,
 		"billing_session": session_summary,
-		"payment_gate": (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
+		"payment_gate": payment_gate or (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
 		"actions": actions,
 		"payment_modes": get_payment_modes(),
 		**totals,
@@ -569,6 +618,22 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	):
 		state[fieldname] = actions.get(fieldname)
 	return state
+
+
+def get_billing_group_history_for_modal(source_doctype: str, source_name: str) -> list[dict]:
+	if not source_supports_billing_session(source_doctype) or not is_billing_sessions_enabled():
+		return []
+	from vetedge.services.billing_core import get_billing_group_invoice_history
+
+	return get_billing_group_invoice_history(source_doctype, source_name, include_related=True)
+
+
+def get_billing_group_payment_gate_for_modal(source_doctype: str, source_name: str) -> dict | None:
+	if not source_supports_billing_session(source_doctype) or not is_billing_sessions_enabled():
+		return None
+	from vetedge.services.billing_core import get_source_payment_gate_status
+
+	return get_source_payment_gate_status(source_doctype, source_name)
 
 
 @frappe.whitelist()

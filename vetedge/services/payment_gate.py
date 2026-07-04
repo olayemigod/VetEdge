@@ -138,14 +138,11 @@ def assert_consultation_can_proceed(doc, target_status: str | None = None) -> No
 		return
 
 	if use_billing_core_for_payment_gate():
-		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
+		from vetedge.services.billing_core import get_source_payment_gate_status
 
-		if is_billable_consultation(doc) and not resolve_billing_session("Veterinary Consultation", doc.name):
-			sync_source_to_billing_session("Veterinary Consultation", doc.name)
-		session = resolve_billing_session("Veterinary Consultation", doc.name)
-		if not session:
+		if not is_billable_consultation(doc):
 			return
-		status = get_payment_gate_status(session)
+		status = get_source_payment_gate_status("Veterinary Consultation", doc.name)
 		if status.get("can_proceed"):
 			if status.get("gate") == NO_PAYMENT_GATE:
 				notify_no_payment_gate_warning([invoice.get("name") for invoice in status.get("invoices", []) if invoice.get("name")])
