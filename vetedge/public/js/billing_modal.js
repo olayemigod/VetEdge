@@ -67,13 +67,13 @@
 		const warning = session.session_warning || (ledger.outstanding_amount > 0 ? __("This billing session still has unpaid balance from earlier invoice(s).") : "");
 		return `
 			<div class="ve-billing-section">
-				<h4>${__("Billing Session")}</h4>
+				<h4>${__("Current Billing Cycle")}</h4>
 				<div class="ve-billing-grid">
 					${labelValue(__("Billing Session"), session.name)}
 					${labelValue(__("Session Total"), money(session.total_invoiced || ledger.total_invoiced || session.total_charges, currency))}
 					${labelValue(__("Total Paid"), money(session.total_paid || ledger.total_paid, currency))}
 					${labelValue(__("Total Outstanding"), money(session.outstanding_amount || ledger.outstanding_amount, currency))}
-					${labelValue(__("Payment Status"), session.payment_status || ledger.payment_status)}
+					${labelValue(__("Current Billing Cycle Status"), session.payment_status || ledger.payment_status)}
 					${labelValue(__("Gate Mode"), session.payment_gate_mode || gate.gate)}
 					${labelValue(__("Gate Result"), gate.can_proceed ? __("Allowed") : __("Blocked"))}
 				</div>
@@ -85,21 +85,33 @@
 	function renderLinkedInvoiceAction(row) {
 		const invoiceName = row.name || row.invoice;
 		const openButton = `<button class="btn btn-default btn-xs" data-action="open-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__("Open")}</button>`;
-		if (row.can_pay) {
-			return `${openButton} <button class="btn btn-primary btn-xs" data-action="pay-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__(row.action_label || "Pay")}</button>`;
+		if (row.can_pay_outstanding || row.can_pay) {
+			return `${openButton} <button class="btn btn-primary btn-xs" data-action="pay-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__(row.action_label || "Pay Outstanding")}</button>`;
+		}
+		if (row.can_submit_invoice) {
+			return `${openButton} <button class="btn btn-primary btn-xs" data-action="submit-ledger-invoice" data-invoice="${escapeHtml(invoiceName)}">${__("Submit Invoice")}</button>`;
 		}
 		return `${openButton} <span class="text-muted small">${escapeHtml(__(row.action_label || ""))}</span>`;
 	}
 
+	function getLinkedInvoiceRows(state) {
+		const session = state.billing_session || {};
+		const history = state.invoice_history || state.billing_group_invoice_history || [];
+		if (history.length) {
+			return history;
+		}
+		return session?.invoices || session?.invoice_ledger?.invoices || [];
+	}
+
 	function renderLinkedInvoices(state) {
 		const session = state.billing_session || null;
-		const invoices = session?.invoices || session?.invoice_ledger?.invoices || [];
+		const invoices = getLinkedInvoiceRows(state);
 		if (!invoices.length) {
 			return "";
 		}
 		return `
 			<div class="ve-billing-section">
-				<h4>${__("Linked Invoices")}</h4>
+				<h4>${__("Linked Invoice History")}</h4>
 				<table class="table table-bordered table-condensed ve-billing-table">
 					<thead>
 						<tr>
@@ -110,6 +122,7 @@
 							<th class="text-right">${__("Grand Total")}</th>
 							<th class="text-right">${__("Paid")}</th>
 							<th class="text-right">${__("Outstanding")}</th>
+							<th>${__("Source")}</th>
 							<th>${__("Action")}</th>
 						</tr>
 					</thead>
@@ -117,12 +130,13 @@
 						${invoices.map((row) => `
 							<tr>
 								<td>${escapeHtml(row.name || row.invoice)}</td>
-								<td>${escapeHtml(row.status || (row.docstatus === 0 ? __("Draft") : row.docstatus === 1 ? __("Submitted") : __("Cancelled")))}</td>
+								<td>${escapeHtml(row.payment_status || row.payment_state || row.status || (row.docstatus === 0 ? __("Draft") : row.docstatus === 1 ? __("Submitted") : __("Cancelled")))}</td>
 								<td>${escapeHtml(row.posting_date || "")}</td>
 								<td>${escapeHtml(row.due_date || "")}</td>
 								<td class="text-right">${money(row.grand_total || row.rounded_total, row.currency)}</td>
 								<td class="text-right">${money(row.paid_amount, row.currency)}</td>
 								<td class="text-right">${money(row.outstanding_amount, row.currency)}</td>
+								<td>${escapeHtml(row.source_label || row.relation_type || "")}</td>
 								<td>${renderLinkedInvoiceAction(row)}</td>
 							</tr>
 						`).join("")}
@@ -189,12 +203,13 @@
 		const hasSession = Boolean(state.billing_session);
 		const paymentBlock = hasSession || invoice
 			? `
-				<div class="ve-billing-grid">
-					${labelValue(__("Payment Status"), state.payment_status || invoice?.payment_status)}
-					${labelValue(hasSession ? __("Billing Session Total") : __("Invoice Total"), money(state.total_amount ?? invoice?.grand_total, paymentCurrency))}
-					${labelValue(__("Paid Amount"), money(state.paid_amount ?? invoice?.paid_amount, paymentCurrency))}
-					${labelValue(__("Outstanding Amount"), money(state.outstanding_amount ?? invoice?.outstanding_amount, paymentCurrency))}
-					${hasSession ? labelValue(__("Linked Invoices"), state.linked_invoice_count || 0) : ""}
+					<div class="ve-billing-grid">
+						${labelValue(__("Billing Group Payment Status"), state.payment_status || invoice?.payment_status)}
+						${hasSession ? labelValue(__("Current Billing Cycle Status"), state.billing_session_status) : ""}
+						${labelValue(hasSession ? __("Billing Group Total") : __("Invoice Total"), money(state.total_amount ?? invoice?.grand_total, paymentCurrency))}
+						${labelValue(__("Paid Amount"), money(state.paid_amount ?? invoice?.paid_amount, paymentCurrency))}
+						${labelValue(__("Outstanding Amount"), money(state.outstanding_amount ?? invoice?.outstanding_amount, paymentCurrency))}
+						${hasSession ? labelValue(__("Linked Invoices"), state.linked_invoice_count || 0) : ""}
 				</div>
 				${state.outstanding_amount <= 0 && (hasSession || actions.is_paid) ? `<div class="alert alert-success" style="margin-top: 10px;">${__("Paid / No outstanding amount.")}</div>` : ""}
 			`
@@ -325,7 +340,7 @@
 
 	function findLinkedInvoice(state, invoiceName) {
 		const session = state.billing_session || null;
-		const invoices = session?.invoices || session?.invoice_ledger?.invoices || [];
+		const invoices = getLinkedInvoiceRows(state);
 		return invoices.find((row) => (row.name || row.invoice) === invoiceName);
 	}
 	function openFullInvoice(invoice) {
@@ -507,7 +522,7 @@
 			wrapper.find("[data-action='pay-ledger-invoice']").on("click", (event) => {
 				const invoiceName = event.currentTarget.dataset.invoice;
 				const invoice = findLinkedInvoice(state, invoiceName);
-				if (!invoice || !invoice.can_pay) {
+				if (!invoice || !(invoice.can_pay_outstanding || invoice.can_pay)) {
 					frappe.msgprint(__("This invoice cannot be paid from here."));
 					return;
 				}
@@ -516,6 +531,13 @@
 					await refreshSourceForm();
 					paint();
 				}, invoice);
+			});
+			wrapper.find("[data-action='submit-ledger-invoice']").on("click", (event) => {
+				runAction(
+					"vetedge.services.billing_modal.submit_modal_invoice",
+					{ ...ctx, invoice: event.currentTarget.dataset.invoice },
+					__("Submitting invoice...")
+				);
 			});
 		}
 

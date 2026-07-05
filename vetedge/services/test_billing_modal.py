@@ -487,7 +487,9 @@ class TestBillingModal(TestCase):
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
 
-		self.assertIn("Billing Session Total", js)
+		self.assertIn("Billing Group Total", js)
+		self.assertIn("Billing Group Payment Status", js)
+		self.assertIn("Current Billing Cycle Status", js)
 		self.assertIn("state.outstanding_amount", js)
 		self.assertIn("currentInvoicePaymentBlock", js)
 		self.assertIn("Current Draft Invoice", js)
@@ -907,3 +909,66 @@ class modal_action_context:
 
 def get_app_file(relative_path: str) -> Path:
 	return Path(__file__).resolve().parents[2] / relative_path
+
+
+class TestBillingModalInvoiceHistoryRendering(TestCase):
+	def test_invoice_history_rows_are_enriched_with_per_invoice_actions(self):
+		from vetedge.services.billing_modal import enrich_invoice_history_for_modal
+
+		rows = enrich_invoice_history_for_modal(
+			[
+				{
+					"name": "ACC-SINV-PAID",
+					"docstatus": 1,
+					"grand_total": 11000,
+					"paid_amount": 11000,
+					"outstanding_amount": 0,
+					"payment_state": "Paid",
+					"source_doctype": "Veterinary Consultation",
+					"source_name": "VCON-HISTORY",
+				},
+				{
+					"name": "ACC-SINV-UNPAID",
+					"docstatus": 1,
+					"grand_total": 7000,
+					"paid_amount": 0,
+					"outstanding_amount": 7000,
+					"payment_state": "Unpaid",
+					"source_doctype": "Veterinary Consultation",
+					"source_name": "VCON-HISTORY",
+				},
+				{
+					"name": "ACC-SINV-DRAFT",
+					"docstatus": 0,
+					"grand_total": 2000,
+					"paid_amount": 0,
+					"outstanding_amount": 2000,
+					"payment_state": "Draft",
+				},
+				{"docstatus": 1, "outstanding_amount": 1},
+			]
+		)
+
+		self.assertEqual([row["name"] for row in rows], ["ACC-SINV-PAID", "ACC-SINV-UNPAID", "ACC-SINV-DRAFT"])
+		paid, unpaid, draft = rows
+		self.assertTrue(paid["can_open_invoice"])
+		self.assertFalse(paid["can_pay_outstanding"])
+		self.assertEqual(paid["action_label"], "Paid")
+		self.assertTrue(unpaid["can_pay_outstanding"])
+		self.assertTrue(unpaid["can_pay"])
+		self.assertEqual(unpaid["action_label"], "Pay Outstanding")
+		self.assertTrue(draft["can_submit_invoice"])
+		self.assertFalse(draft["can_pay_outstanding"])
+		self.assertEqual(draft["action_label"], "Open / Submit")
+
+	def test_billing_modal_js_renders_billing_group_history_not_latest_only(self):
+		js_path = Path(__file__).resolve().parents[1] / "public" / "js" / "billing_modal.js"
+		source = js_path.read_text(encoding="utf-8")
+
+		self.assertIn("function getLinkedInvoiceRows(state)", source)
+		self.assertIn("state.invoice_history || state.billing_group_invoice_history", source)
+		self.assertIn("Linked Invoice History", source)
+		self.assertIn("Billing Group Payment Status", source)
+		self.assertIn("Current Billing Cycle Status", source)
+		self.assertIn("can_pay_outstanding", source)
+		self.assertIn("submit-ledger-invoice", source)

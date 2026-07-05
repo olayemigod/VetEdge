@@ -625,7 +625,50 @@ def get_billing_group_history_for_modal(source_doctype: str, source_name: str) -
 		return []
 	from vetedge.services.billing_core import get_billing_group_invoice_history
 
-	return get_billing_group_invoice_history(source_doctype, source_name, include_related=True)
+	return enrich_invoice_history_for_modal(get_billing_group_invoice_history(source_doctype, source_name, include_related=True))
+
+
+def enrich_invoice_history_for_modal(invoice_history: list[dict] | None) -> list[dict]:
+	rows = []
+	for source in invoice_history or []:
+		row = dict(source)
+		invoice_name = row.get("name") or row.get("invoice")
+		if not invoice_name:
+			continue
+		docstatus = cint(row.get("docstatus"))
+		outstanding = flt(row.get("outstanding_amount"))
+		payment_state = row.get("payment_state") or row.get("payment_status") or row.get("status")
+		row["invoice"] = invoice_name
+		row["name"] = invoice_name
+		row["payment_status"] = payment_state
+		row["source_label"] = get_invoice_history_source_label(row)
+		row["can_open_invoice"] = bool(invoice_name)
+		row["can_pay_outstanding"] = bool(invoice_name and docstatus == 1 and outstanding > 0)
+		row["can_pay"] = row["can_pay_outstanding"]
+		row["can_submit_invoice"] = bool(invoice_name and docstatus == 0)
+		if row["can_pay_outstanding"]:
+			row["action_label"] = "Pay Outstanding"
+		elif docstatus == 0:
+			row["action_label"] = "Open / Submit"
+		elif docstatus == 1 and outstanding <= 0:
+			row["action_label"] = "Paid"
+		elif docstatus == 2:
+			row["action_label"] = "Cancelled"
+		else:
+			row["action_label"] = row.get("action_label") or "View"
+		rows.append(row)
+	return rows
+
+
+def get_invoice_history_source_label(row: dict) -> str:
+	source_doctype = row.get("source_doctype")
+	source_name = row.get("source_name")
+	source_detail = row.get("source_detail_name")
+	relation_type = row.get("relation_type")
+	parts = [part for part in (source_doctype, source_name, source_detail) if part]
+	if parts:
+		return " / ".join(parts)
+	return (relation_type or "").replace("_", " ").title()
 
 
 def get_billing_group_payment_gate_for_modal(source_doctype: str, source_name: str) -> dict | None:
@@ -888,6 +931,8 @@ def assert_invoice_is_linked_to_source_or_session(invoice_name: str, doc, config
 		return
 	session_summary = get_billing_session_summary_for_source(doc.doctype, doc.name)
 	if session_summary and any(row.get("name") == invoice_name for row in session_summary.get("invoices") or []):
+		return
+	if any((row.get("name") or row.get("invoice")) == invoice_name for row in get_billing_group_history_for_modal(doc.doctype, doc.name)):
 		return
 	frappe.throw("The selected Sales Invoice is not linked to this billing source.", frappe.PermissionError)
 
