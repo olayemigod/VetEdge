@@ -1289,42 +1289,250 @@ function show_consultation_cancellation_preflight(frm) {
 		freeze_message: __("Checking cancellation safety..."),
 		callback(result) {
 			const preflight = result.message || {};
-			const blockers = preflight.blockers || [];
-			const warnings = preflight.warnings || [];
-			const lines = [];
-			if (blockers.length) {
-				lines.push(`<p>${__("This consultation cannot be cancelled directly.")}</p>`);
-				lines.push("<ul>");
-				blockers.slice(0, 8).forEach((row) => {
-					lines.push(`<li>${frappe.utils.escape_html(row.message || row.type || "")}</li>`);
-				});
-				lines.push("</ul>");
-				if (preflight.allowed_actions?.length) {
-					lines.push(`<p><strong>${__("Available resolution actions")}:</strong> ${frappe.utils.escape_html(preflight.allowed_actions.join(", "))}</p>`);
-				}
-				frappe.msgprint({
-					title: __("Cancellation Blocked"),
-					indicator: "red",
-					message: lines.join(""),
-				});
-				return;
-			}
-
-			if (warnings.length) {
-				lines.push(`<p>${__("Cancellation appears safe, but review these linked draft dependencies first.")}</p>`);
-				lines.push("<ul>");
-				warnings.slice(0, 8).forEach((row) => {
-					lines.push(`<li>${frappe.utils.escape_html(row.message || row.type || "")}</li>`);
-				});
-				lines.push("</ul>");
-			}
-
-			frappe.confirm(
-				lines.join("") || __("Cancel this consultation?"),
-				() => perform_consultation_status_transition(frm, "Cancelled")
-			);
+			show_consultation_cancellation_dialog(frm, preflight);
 		},
 	});
+}
+
+function show_consultation_cancellation_dialog(frm, preflight) {
+	const canCancel = Boolean(preflight.can_cancel);
+	const dialog = new frappe.ui.Dialog({
+		title: canCancel ? __("Confirm Consultation Cancellation") : __("Consultation Cancellation Preflight"),
+		size: "extra-large",
+		fields: [{ fieldtype: "HTML", fieldname: "preflight_html" }],
+		primary_action_label: canCancel ? __("Cancel Consultation") : __("Close"),
+		primary_action() {
+			if (!canCancel) {
+				dialog.hide();
+				return;
+			}
+			frappe.confirm(__("Cancel this consultation now?"), () => {
+				dialog.hide();
+				perform_consultation_status_transition(frm, "Cancelled");
+			});
+		},
+		secondary_action_label: __("Close"),
+		secondary_action() {
+			dialog.hide();
+		},
+	});
+
+	dialog.fields_dict.preflight_html.$wrapper.html(render_consultation_cancellation_preflight(preflight));
+	dialog.fields_dict.preflight_html.$wrapper.find("[data-resolution-action]").on("click", function () {
+		const action = $(this).attr("data-resolution-action");
+		const label = $(this).text();
+		frappe.msgprint({
+			title: __("Resolution Guidance"),
+			indicator: "blue",
+			message: render_consultation_resolution_guidance(action, label),
+		});
+	});
+	dialog.show();
+}
+
+function render_consultation_cancellation_preflight(preflight) {
+	const canCancel = Boolean(preflight.can_cancel);
+	const summary = canCancel
+		? __("Cancellation appears safe. No submitted invoice, payment, stock, or active linked clinical dependency was found.")
+		: get_consultation_cancellation_blocked_summary(preflight);
+	const statusClass = canCancel ? "alert-success" : "alert-danger";
+
+	return `
+		<div class="vetedge-cancellation-preflight">
+			<style>
+				.ve-cancel-section { margin-bottom: 18px; }
+				.ve-cancel-section h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+				.ve-cancel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+				.ve-cancel-card { border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+				.ve-cancel-card-title { font-weight: 600; word-break: break-word; }
+				.ve-cancel-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+				.ve-cancel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+				@media (max-width: 767px) { .ve-cancel-grid { grid-template-columns: 1fr; } }
+			</style>
+			<div class="alert ${statusClass}">
+				<strong>${canCancel ? __("Safe to cancel") : __("Cannot cancel directly")}</strong>
+				<div>${escape_consultation_history_html(summary)}</div>
+			</div>
+			${render_cancellation_blockers(preflight.blockers || [])}
+			${render_cancellation_warnings(preflight.warnings || [])}
+			${render_cancellation_invoice_section(preflight.linked_invoices || [])}
+			${render_cancellation_dependency_sections(preflight)}
+			${render_cancellation_resolution_actions(preflight.allowed_action_options || [], canCancel)}
+			${render_cancellation_patient_outstanding_context(preflight.outstanding_context || [])}
+		</div>
+	`;
+}
+
+function get_consultation_cancellation_blocked_summary(preflight) {
+	const summary = preflight.billing_group_summary || {};
+	if (flt(summary.paid_amount) > 0) {
+		return __("This consultation cannot be cancelled directly because payment or submitted invoices exist. Choose a financial resolution before cancellation.");
+	}
+	const hasSubmittedInvoice = (preflight.linked_invoices || []).some((row) => cint(row.docstatus) === 1);
+	if (hasSubmittedInvoice) {
+		return __("This consultation has a submitted invoice. Submitted invoices cannot be changed automatically. Please resolve the invoice through accounts/admin before cancellation.");
+	}
+	return __("Resolve the listed blockers before cancelling this consultation.");
+}
+
+function render_cancellation_blockers(blockers) {
+	if (!blockers.length) {
+		return "";
+	}
+	return render_cancellation_card_section(__("Blockers"), blockers.map((row) => ({
+		title: row.document || row.invoice || row.type,
+		meta: row.status || row.type,
+		message: row.message,
+	})));
+}
+
+function render_cancellation_warnings(warnings) {
+	if (!warnings.length) {
+		return "";
+	}
+	return render_cancellation_card_section(__("Warnings"), warnings.map((row) => ({
+		title: row.document || row.invoice || row.source_document || row.type,
+		meta: row.status || row.type,
+		message: row.message,
+	})));
+}
+
+function render_cancellation_invoice_section(invoices) {
+	if (!invoices.length) {
+		return "";
+	}
+	return `
+		<div class="ve-cancel-section">
+			<h4>${__("Blocking Invoices")}</h4>
+			<div class="ve-cancel-grid">
+				${invoices.map(render_cancellation_invoice_card).join("")}
+			</div>
+		</div>
+	`;
+}
+
+function render_cancellation_invoice_card(invoice) {
+	const currency = invoice.currency || frappe.defaults.get_default("currency");
+	const total = format_currency(flt(invoice.grand_total), currency);
+	const paid = format_currency(flt(invoice.paid_amount), currency);
+	const outstanding = format_currency(flt(invoice.outstanding_amount), currency);
+	const status = invoice.payment_state || invoice.status || __("Unknown");
+	const reason = cint(invoice.docstatus) === 1
+		? __("Submitted invoice requires accounts/admin resolution.")
+		: __("Draft invoice should be cleaned up through Billing Core if cancellation proceeds.");
+	return `
+		<div class="ve-cancel-card">
+			<div class="ve-cancel-card-title">${escape_consultation_history_html(invoice.invoice || invoice.name)}</div>
+			<div class="ve-cancel-meta">${escape_consultation_history_html(status)}</div>
+			<div class="ve-cancel-meta">${__("Total")}: ${total} | ${__("Paid")}: ${paid} | ${__("Outstanding")}: ${outstanding}</div>
+			<div class="ve-cancel-meta">${escape_consultation_history_html(reason)}</div>
+		</div>
+	`;
+}
+
+function render_cancellation_dependency_sections(preflight) {
+	const sections = [
+		[__("Lab Orders"), preflight.linked_lab_orders || [], "name"],
+		[__("Vaccination Records"), preflight.linked_vaccinations || [], "name"],
+		[__("Hospitalisation Records"), preflight.linked_hospitalisations || [], "name"],
+		[__("Stock Entries"), preflight.linked_stock_entries || [], "name"],
+		[__("Billing Sessions"), preflight.linked_billing_sessions || [], "name"],
+		[__("Notification Items"), preflight.linked_notifications || [], "name"],
+		[__("Planned Treatment Source Rows"), preflight.linked_planned_treatments || [], "name"],
+	];
+	return sections
+		.filter(([, rows]) => rows.length)
+		.map(([title, rows, nameField]) => render_cancellation_card_section(
+			title,
+			rows.map((row) => ({
+				title: row[nameField] || row.document || row.source_document || row.item || row.type,
+				meta: row.status || row.payment_status || row.billing_status || row.docstatus || row.source_type,
+				message: row.message || row.description || row.source_document || "",
+			}))
+		))
+		.join("");
+}
+
+function render_cancellation_resolution_actions(options, canCancel) {
+	if (canCancel || !options.length) {
+		return "";
+	}
+	return `
+		<div class="ve-cancel-section">
+			<h4>${__("Financial Resolution Options")}</h4>
+			<p class="text-muted">${__("Submitted accounting documents are not changed automatically. Select an option below to see guidance for the next step.")}</p>
+			<div class="ve-cancel-actions">
+				${options.map((option) => `
+					<button class="btn btn-default btn-sm" type="button" data-resolution-action="${escape_consultation_history_html(option.value)}">
+						${escape_consultation_history_html(option.label)}
+					</button>
+				`).join("")}
+			</div>
+		</div>
+	`;
+}
+
+function render_cancellation_patient_outstanding_context(rows) {
+	if (!rows.length) {
+		return "";
+	}
+	return `
+		<div class="ve-cancel-section">
+			<h4>${__("Other Outstanding Invoices for this Patient")}</h4>
+			<p class="text-muted">${__("These invoices belong to this patient/customer but are not part of this consultation billing group. Paying them will not satisfy or cancel this consultation.")}</p>
+			<div class="ve-cancel-grid">
+				${rows.map(render_patient_outstanding_cancellation_card).join("")}
+			</div>
+		</div>
+	`;
+}
+
+function render_patient_outstanding_cancellation_card(invoice) {
+	const currency = invoice.currency || frappe.defaults.get_default("currency");
+	return `
+		<div class="ve-cancel-card">
+			<div class="ve-cancel-card-title">${escape_consultation_history_html(invoice.invoice || invoice.name)}</div>
+			<div class="ve-cancel-meta">${escape_consultation_history_html(invoice.payment_state || invoice.status || __("Outstanding"))}</div>
+			<div class="ve-cancel-meta">${__("Total")}: ${format_currency(flt(invoice.grand_total), currency)}</div>
+			<div class="ve-cancel-meta">${__("Outstanding")}: ${format_currency(flt(invoice.outstanding_amount), currency)}</div>
+			<div class="ve-cancel-meta">${__("Informational only; not a cancellation blocker.")}</div>
+		</div>
+	`;
+}
+
+function render_cancellation_card_section(title, rows) {
+	if (!rows.length) {
+		return "";
+	}
+	return `
+		<div class="ve-cancel-section">
+			<h4>${title}</h4>
+			<div class="ve-cancel-grid">
+				${rows.map((row) => `
+					<div class="ve-cancel-card">
+						<div class="ve-cancel-card-title">${escape_consultation_history_html(row.title || "")}</div>
+						${row.meta ? `<div class="ve-cancel-meta">${escape_consultation_history_html(row.meta)}</div>` : ""}
+						${row.message ? `<div class="ve-cancel-meta">${escape_consultation_history_html(row.message)}</div>` : ""}
+					</div>
+				`).join("")}
+			</div>
+		</div>
+	`;
+}
+
+function render_consultation_resolution_guidance(action, label) {
+	const guidance = {
+		retain_payment_clinical_cancel_only: __("Use this only when the clinic intentionally keeps the payment and records a clinical cancellation without changing submitted accounting documents."),
+		refund_required: __("Create and process the refund through accounts/admin policy. VetEdge does not create refund Payment Entries automatically in this phase."),
+		issue_customer_credit: __("Accounts/admin should issue customer credit or a credit note through the approved accounting workflow."),
+		reschedule_consultation: __("Create or update the follow-up appointment/consultation plan. Existing submitted invoices remain unchanged."),
+		admin_accounting_correction: __("Accounts/admin must review submitted invoices, payments, and stock documents manually before cancellation."),
+		admin_review_required: __("Accounts/admin review is required before this consultation can be cancelled."),
+	};
+	return `
+		<p><strong>${escape_consultation_history_html(label || action)}</strong></p>
+		<p>${escape_consultation_history_html(guidance[action] || __("Resolve the listed blockers before cancellation."))}</p>
+	`;
 }
 
 function perform_consultation_status_transition(frm, status) {

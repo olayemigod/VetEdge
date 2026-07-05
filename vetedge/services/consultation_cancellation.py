@@ -15,6 +15,18 @@ FINANCIAL_RESOLUTION_ACTIONS = [
 	"admin_accounting_correction",
 ]
 
+RESOLUTION_ACTION_LABELS = {
+	"cancel_consultation": "Cancel consultation",
+	"admin_review_required": "Admin review required",
+	"retain_payment_clinical_cancel_only": "Retain payment and cancel clinical record only",
+	"refund_required": "Refund required",
+	"issue_customer_credit": "Issue customer credit",
+	"reschedule_consultation": "Reschedule consultation",
+	"admin_accounting_correction": "Admin/accounting correction",
+	"review_draft_dependencies_then_cancel": "Review draft dependencies, then cancel",
+	"choose_financial_resolution": "Choose a financial resolution",
+}
+
 LAB_FINAL_STATUSES = {"Result Entered", "Awaiting Review", "Reviewed", "Completed"}
 VACCINATION_FINAL_STATUSES = {"Administered"}
 HOSPITALISATION_ACTIVE_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
@@ -56,6 +68,7 @@ def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
 	linked_notifications = get_linked_notifications(consultation_name)
 
 	can_cancel = not blockers
+	allowed_actions = get_allowed_cancellation_actions(billing_group_summary, can_cancel)
 	return {
 		"can_cancel": can_cancel,
 		"consultation": consultation.name,
@@ -72,7 +85,8 @@ def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
 		"linked_notifications": linked_notifications,
 		"blockers": blockers,
 		"warnings": warnings,
-		"allowed_actions": get_allowed_cancellation_actions(billing_group_summary, can_cancel),
+		"allowed_actions": allowed_actions,
+		"allowed_action_options": get_cancellation_action_options(allowed_actions),
 		"recommended_next_action": get_recommended_cancellation_action(blockers, warnings, billing_group_summary),
 	}
 
@@ -398,6 +412,13 @@ def get_allowed_cancellation_actions(summary: dict, can_cancel: bool) -> list[st
 	if flt(summary.get("paid_amount")) > 0:
 		return FINANCIAL_RESOLUTION_ACTIONS[:]
 	return ["admin_review_required"]
+
+
+def get_cancellation_action_options(actions: list[str]) -> list[dict]:
+	return [
+		{"value": action, "label": RESOLUTION_ACTION_LABELS.get(action, action.replace("_", " ").title())}
+		for action in actions
+	]
 
 
 def get_recommended_cancellation_action(blockers: list[dict], warnings: list[dict], summary: dict) -> str:

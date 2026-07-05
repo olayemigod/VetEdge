@@ -115,6 +115,11 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(preflight["billing_group_summary"]["payment_status"], "Paid")
 		self.assertIn("refund_required", preflight["allowed_actions"])
 		self.assertIn("issue_customer_credit", preflight["allowed_actions"])
+		self.assertIn(
+			"Retain payment and cancel clinical record only",
+			[row["label"] for row in preflight["allowed_action_options"]],
+		)
+		self.assertIn("Admin/accounting correction", [row["label"] for row in preflight["allowed_action_options"]])
 
 	def test_partly_paid_billing_group_blocks_and_preserves_multiple_invoice_rows(self):
 		preflight = self.build_preflight(
@@ -214,3 +219,19 @@ class TestConsultationCancellationPreflight(TestCase):
 
 		self.assertIn("Choose a financial resolution", str(ctx.exception))
 		self.assertIn("Submitted invoices cannot be changed automatically", str(ctx.exception))
+
+	def test_consultation_cancel_ui_renders_structured_preflight_sections(self):
+		script_path = (
+			__import__("pathlib").Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_consultation"
+			/ "veterinary_consultation.js"
+		)
+		script = script_path.read_text()
+
+		self.assertIn("show_consultation_cancellation_dialog", script)
+		self.assertIn("Financial Resolution Options", script)
+		self.assertIn("Other Outstanding Invoices for this Patient", script)
+		self.assertIn("These invoices belong to this patient/customer but are not part of this consultation billing group", script)
+		self.assertIn("perform_consultation_status_transition(frm, \"Cancelled\")", script)
