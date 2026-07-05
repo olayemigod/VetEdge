@@ -155,7 +155,7 @@
 			<div class="ve-billing-section">
 				<h4>${__("Other Outstanding Invoices for this Patient")}</h4>
 				<div class="alert alert-info">
-					${__("Paying these invoices does not count as payment for this consultation unless linked to this billing group.")}
+					${__("These invoices are not part of this consultation billing group. Paying them will not satisfy this consultation’s payment gate unless explicitly linked.")}
 				</div>
 				<table class="table table-bordered table-condensed ve-billing-table">
 					<thead>

@@ -784,12 +784,21 @@ def get_billing_group_invoice_history(source_doctype: str, source_name: str, inc
 	add_direct_source_invoices_to_history(source_doctype, source_name, add)
 
 	for session in get_billing_group_sessions(source_doctype, source_name, include_related=include_related, extra_sessions=sessions):
-		for invoice_name in get_session_invoice_names(session):
-			add(invoice_name, "billing_session", session)
-		for charge in session.get("charges") or []:
-			if not include_related and not charge_matches_source(charge, source_doctype, source_name):
-				continue
-			add(charge.get("invoice"), "session_charge" if charge_matches_source(charge, source_doctype, source_name) else "related_service", session, charge)
+		charges = session.get("charges") or []
+		context_matches = billing_session_matches_source_context(session, source_doctype, source_name)
+		has_current_source_charge = any(charge_matches_source(charge, source_doctype, source_name) for charge in charges)
+		for charge in charges:
+			if charge_matches_source(charge, source_doctype, source_name):
+				add(charge.get("invoice"), "session_charge", session, charge)
+			elif include_related and (
+				context_matches
+				or charge_is_explicitly_related_to_source(charge, source_doctype, source_name)
+				or (has_current_source_charge and charge_can_share_current_session_with_source(charge, source_doctype, source_name))
+			):
+				add(charge.get("invoice"), "related_service", session, charge)
+		if context_matches and not charges:
+			for invoice_name in get_session_invoice_names(session):
+				add(invoice_name, "billing_session", session)
 
 	rows = list(history.values())
 	if source_doctype == "Veterinary Consultation":
@@ -828,27 +837,33 @@ def get_patient_outstanding_invoice_context(
 	)
 	context = []
 	for row in rows:
-		if cint(row.get("docstatus")) == 1 and flt(row.get("outstanding_amount")) <= 0:
+		docstatus = cint(row.get("docstatus"))
+		grand_total = flt(row.get("grand_total"))
+		outstanding = flt(row.get("outstanding_amount"))
+		if docstatus == 1 and outstanding <= 0:
+			continue
+		if docstatus == 0 and grand_total <= 0:
 			continue
 		item_patient = get_invoice_patient_marker(row.get("name"))
 		if patient and item_patient and item_patient != patient:
 			continue
-		payment_state = "Draft" if cint(row.get("docstatus")) == 0 else ("Partly Paid" if flt(row.get("paid_amount")) > 0 else "Unpaid")
+		payment_state = "Draft" if docstatus == 0 else ("Partly Paid" if flt(row.get("paid_amount")) > 0 else "Unpaid")
 		context.append(
 			{
 				"invoice": row.get("name"),
 				"name": row.get("name"),
-				"docstatus": cint(row.get("docstatus")),
+				"docstatus": docstatus,
 				"status": row.get("status"),
 				"posting_date": row.get("posting_date"),
 				"due_date": row.get("due_date"),
-				"grand_total": flt(row.get("grand_total")),
-				"outstanding_amount": flt(row.get("outstanding_amount")),
+				"grand_total": grand_total,
+				"outstanding_amount": outstanding,
 				"paid_amount": flt(row.get("paid_amount")),
 				"currency": row.get("currency"),
 				"payment_state": payment_state,
 				"relation_type": "patient_outstanding_context",
 				"source_label": "Other outstanding invoice for this patient",
+				"context_type": "patient_outstanding",
 				"informational_only": True,
 				"does_not_satisfy_current_gate": True,
 			}
@@ -916,7 +931,30 @@ def billing_group_row_has_reliable_consultation_reference(row: dict, consultatio
 	for evidence in row.get("evidence") or []:
 		if evidence.get("source_doctype") == "Veterinary Consultation" and evidence.get("source_name") == consultation_name:
 			return True
-		if evidence.get("relation_type") in {"billing_session", "session_charge", "related_service"} and evidence.get("billing_session"):
+		if evidence.get("billing_session") and billing_session_is_consultation_context(evidence.get("billing_session"), consultation_name):
+			return True
+	return False
+
+
+def billing_session_is_consultation_context(session_name: str, consultation_name: str) -> bool:
+	if not session_name or not consultation_name or not safe_doctype_exists(BILLING_SESSION_DOCTYPE):
+		return False
+	try:
+		session = frappe.db.get_value(
+			BILLING_SESSION_DOCTYPE,
+			session_name,
+			["source_context_doctype", "source_context_name", "created_from_doctype", "created_from_name"],
+			as_dict=True,
+		)
+	except Exception:
+		return False
+	if not session:
+		return False
+	for doctype_field, name_field in (
+		("source_context_doctype", "source_context_name"),
+		("created_from_doctype", "created_from_name"),
+	):
+		if session.get(doctype_field) == "Veterinary Consultation" and session.get(name_field) == consultation_name:
 			return True
 	return False
 
@@ -959,11 +997,16 @@ def build_billing_group_invoice_row(invoice_name: str) -> dict:
 
 def add_direct_source_invoices_to_history(source_doctype: str, source_name: str, add) -> None:
 	if source_doctype == "Veterinary Consultation":
+		def add_consultation_invoice(invoice_name):
+			if not invoice_name or invoice_has_conflicting_consultation_source(invoice_name, source_name):
+				return
+			add(invoice_name, "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+
 		try:
 			doc = frappe.get_doc(source_doctype, source_name)
 			for row in doc.get("consultation_invoices") or []:
-				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
-			add(doc.get("linked_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+				add_consultation_invoice(row.get("sales_invoice"))
+			add_consultation_invoice(doc.get("linked_invoice"))
 		except Exception:
 			pass
 		if frappe.db.exists("DocType", "Consultation Invoice Reference"):
@@ -972,19 +1015,62 @@ def add_direct_source_invoices_to_history(source_doctype: str, source_name: str,
 				filters={"parenttype": "Veterinary Consultation", "parent": source_name},
 				fields=["sales_invoice"],
 			):
-				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+				add_consultation_invoice(row.get("sales_invoice"))
 		if frappe.db.exists("DocType", "Consultation Billing Source"):
 			for row in frappe.get_all(
 				"Consultation Billing Source",
 				filters={"parenttype": "Veterinary Consultation", "parent": source_name},
 				fields=["sales_invoice", "source_type", "source_name"],
 			):
-				add(row.get("sales_invoice"), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+				add_consultation_invoice(row.get("sales_invoice"))
 		return
 
 	link_field = SAFE_SOURCE_INVOICE_LINK_FIELDS.get(source_doctype, {}).get("field")
 	if link_field and doctype_has_field(source_doctype, link_field):
 		add(frappe.db.get_value(source_doctype, source_name, link_field), "direct_source", None, {"source_doctype": source_doctype, "source_name": source_name})
+
+
+def invoice_has_conflicting_consultation_source(invoice_name: str, consultation_name: str) -> bool:
+	"""Detect stale consultation invoice refs that conflict with stronger source evidence."""
+	if not invoice_name or not consultation_name or not safe_doctype_exists(BILLING_SESSION_CHARGE_DOCTYPE):
+		return False
+	try:
+		rows = frappe.get_all(
+			BILLING_SESSION_CHARGE_DOCTYPE,
+			filters={"invoice": invoice_name},
+			fields=["parent", "source_doctype", "source_name"],
+			limit=20,
+		)
+	except Exception:
+		return False
+	for row in rows:
+		if row.get("source_doctype") == "Veterinary Consultation" and row.get("source_name") and row.get("source_name") != consultation_name:
+			return True
+		parent = row.get("parent")
+		if parent and billing_session_has_conflicting_consultation_context(parent, consultation_name):
+			return True
+	return False
+
+
+def billing_session_has_conflicting_consultation_context(session_name: str, consultation_name: str) -> bool:
+	if not session_name or not safe_doctype_exists(BILLING_SESSION_DOCTYPE):
+		return False
+	try:
+		session = frappe.db.get_value(
+			BILLING_SESSION_DOCTYPE,
+			session_name,
+			["source_context_doctype", "source_context_name", "created_from_doctype", "created_from_name"],
+			as_dict=True,
+		)
+	except Exception:
+		return False
+	for doctype_field, name_field in (
+		("source_context_doctype", "source_context_name"),
+		("created_from_doctype", "created_from_name"),
+	):
+		if session and session.get(doctype_field) == "Veterinary Consultation" and session.get(name_field) and session.get(name_field) != consultation_name:
+			return True
+	return False
 
 
 def get_billing_group_sessions(source_doctype: str, source_name: str, include_related: bool = True, extra_sessions: list | tuple | None = None) -> list:
@@ -1039,6 +1125,66 @@ def get_billing_group_sessions(source_doctype: str, source_name: str, include_re
 
 def charge_matches_source(charge, source_doctype: str, source_name: str) -> bool:
 	return charge.get("source_doctype") == source_doctype and charge.get("source_name") == source_name
+
+
+def billing_session_matches_source_context(session, source_doctype: str, source_name: str) -> bool:
+	if not session:
+		return False
+	for doctype_field, name_field in (
+		("source_context_doctype", "source_context_name"),
+		("created_from_doctype", "created_from_name"),
+	):
+		if session.get(doctype_field) == source_doctype and session.get(name_field) == source_name:
+			return True
+	return False
+
+
+def charge_is_explicitly_related_to_source(charge, source_doctype: str, source_name: str) -> bool:
+	charge_doctype = charge.get("source_doctype")
+	charge_name = charge.get("source_name")
+	if not charge_doctype or not charge_name:
+		return False
+	if source_doctype == "Veterinary Consultation":
+		return source_is_linked_to_consultation(charge_doctype, charge_name, source_name)
+	if source_doctype == "Veterinary Hospitalisation":
+		return source_is_linked_to_hospitalisation(charge_doctype, charge_name, source_name)
+	return False
+
+
+def charge_can_share_current_session_with_source(charge, source_doctype: str, source_name: str) -> bool:
+	"""Allow explicitly mixed current sessions without importing another service group."""
+	charge_doctype = charge.get("source_doctype")
+	charge_name = charge.get("source_name")
+	if not charge_doctype or not charge_name:
+		return False
+	if charge_doctype == source_doctype:
+		return charge_name == source_name
+	if source_doctype == "Veterinary Consultation" and charge_doctype == "Veterinary Patient":
+		return True
+	return False
+
+
+def source_is_linked_to_consultation(source_doctype: str, source_name: str, consultation_name: str) -> bool:
+	if source_doctype == "Veterinary Consultation":
+		return source_name == consultation_name
+	field_map = {
+		"Veterinary Lab Order": "consultation",
+		"Veterinary Vaccination Record": "linked_consultation",
+		"Veterinary Hospitalisation": "linked_consultation",
+	}
+	fieldname = field_map.get(source_doctype)
+	if fieldname and doctype_has_field(source_doctype, fieldname):
+		return frappe.db.get_value(source_doctype, source_name, fieldname) == consultation_name
+	return False
+
+
+def source_is_linked_to_hospitalisation(source_doctype: str, source_name: str, hospitalisation_name: str) -> bool:
+	if source_doctype == "Veterinary Hospitalisation":
+		return source_name == hospitalisation_name
+	for fieldname in ("hospitalisation", "linked_hospitalisation"):
+		if doctype_has_field(source_doctype, fieldname) and frappe.db.get_value(source_doctype, source_name, fieldname) == hospitalisation_name:
+			return True
+	return False
 
 
 def get_source_invoice_names_for_gate(source_doctype: str, source_name: str, *sessions) -> list[str]:

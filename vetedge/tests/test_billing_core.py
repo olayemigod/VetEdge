@@ -2216,6 +2216,79 @@ class TestBillingCore(TestCase):
 
 		self.assertIsNone(session)
 
+	def test_stale_consultation_invoice_reference_with_conflicting_charge_is_excluded(self):
+		consultation = frappe._dict(
+			name="VCON-CURRENT",
+			linked_invoice=None,
+			consultation_invoices=[frappe._dict(sales_invoice="ACC-SINV-OLD")],
+			get=lambda key, default=None: consultation[key] if key in consultation else default,
+		)
+		added = []
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core.frappe.db, "exists", return_value=False),
+			patch.object(billing_core, "invoice_has_conflicting_consultation_source", return_value=True),
+		):
+			billing_core.add_direct_source_invoices_to_history(
+				"Veterinary Consultation",
+				"VCON-CURRENT",
+				lambda invoice, relation, session=None, source_row=None: added.append(invoice),
+			)
+
+		self.assertEqual(added, [])
+
+	def test_patient_outstanding_context_includes_draft_and_submitted_unpaid_invoices(self):
+		rows = [
+			frappe._dict(
+				name="ACC-SINV-SUBMITTED",
+				docstatus=1,
+				status="Unpaid",
+				posting_date="2026-07-01",
+				due_date="2026-07-01",
+				grand_total=7000,
+				paid_amount=0,
+				outstanding_amount=7000,
+				currency="NGN",
+			),
+			frappe._dict(
+				name="ACC-SINV-DRAFT",
+				docstatus=0,
+				status="Draft",
+				posting_date="2026-07-01",
+				due_date="2026-07-01",
+				grand_total=3500,
+				paid_amount=0,
+				outstanding_amount=3500,
+				currency="NGN",
+			),
+			frappe._dict(
+				name="ACC-SINV-PAID",
+				docstatus=1,
+				status="Paid",
+				posting_date="2026-07-01",
+				due_date="2026-07-01",
+				grand_total=1000,
+				paid_amount=1000,
+				outstanding_amount=0,
+				currency="NGN",
+			),
+		]
+
+		with (
+			patch.object(billing_core, "safe_doctype_exists", return_value=True),
+			patch.object(billing_core.frappe, "get_all", return_value=rows),
+			patch.object(billing_core, "get_invoice_patient_marker", return_value=None),
+		):
+			context = billing_core.get_patient_outstanding_invoice_context(
+				patient="PAT-001",
+				customer="CUST-001",
+				exclude_billing_group={"ACC-SINV-CURRENT"},
+			)
+
+		self.assertEqual([row["name"] for row in context], ["ACC-SINV-SUBMITTED", "ACC-SINV-DRAFT"])
+		self.assertEqual({row["context_type"] for row in context}, {"patient_outstanding"})
+
 	def test_old_patient_invoice_does_not_satisfy_current_consultation_partial_gate(self):
 		old_paid_invoice = make_invoice("ACC-SINV-OLD", docstatus=1, outstanding_amount=0)
 

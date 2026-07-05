@@ -526,7 +526,7 @@ class TestBillingModal(TestCase):
 		self.assertIn("Billing Group Payment Status", js)
 		self.assertIn("Current Billing Cycle Status", js)
 		self.assertIn("Other Outstanding Invoices for this Patient", js)
-		self.assertIn("does not count as payment for this consultation", js)
+		self.assertIn("not part of this consultation billing group", js)
 		self.assertIn("state.outstanding_amount", js)
 		self.assertIn("currentInvoicePaymentBlock", js)
 		self.assertIn("Current Draft Invoice", js)
