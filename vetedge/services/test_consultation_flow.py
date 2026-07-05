@@ -992,7 +992,7 @@ class TestConsultationFlow(TestCase):
 				"Ready for Treatment",
 			)
 
-	def test_transition_consultation_status_uses_cancellation_preflight(self):
+	def test_transition_consultation_status_uses_safe_cancellation_execution(self):
 		doc = frappe._dict(
 			name="VCON-001",
 			status="Ready for Treatment",
@@ -1007,7 +1007,10 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
-			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError) as preflight,
+			patch(
+				"vetedge.services.consultation_cancellation.execute_consultation_cancellation",
+				side_effect=frappe.ValidationError,
+			) as safe_cancel,
 		):
 			self.assertRaises(
 				frappe.ValidationError,
@@ -1015,7 +1018,7 @@ class TestConsultationFlow(TestCase):
 				"VCON-001",
 				"Cancelled",
 			)
-		preflight.assert_called_once_with("VCON-001")
+		safe_cancel.assert_called_once_with("VCON-001")
 
 	def test_consultation_status_transition_rejects_completed_reopen(self):
 		frappe_stub = make_frappe_stub()

@@ -39,6 +39,34 @@ def get_consultation_cancellation_preflight(consultation_name: str) -> dict:
 	return build_consultation_cancellation_preflight(consultation_name)
 
 
+@frappe.whitelist()
+def cancel_consultation_safely(consultation_name: str, reason: str | None = None) -> dict:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	return execute_consultation_cancellation(consultation_name, reason=reason)
+
+
+def execute_consultation_cancellation(consultation_name: str, reason: str | None = None) -> dict:
+	preflight = validate_consultation_can_be_cancelled(consultation_name)
+	cleanup_result = cleanup_safe_draft_dependencies(consultation_name, preflight)
+
+	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
+	consultation.status = "Cancelled"
+	if reason:
+		set_cancellation_reason_if_supported(consultation, reason)
+	consultation.save()
+
+	return {
+		"status": consultation.status,
+		"consultation": consultation.name,
+		"cleaned_draft_invoices": cleanup_result["cleaned_draft_invoices"],
+		"closed_billing_sessions": cleanup_result["closed_billing_sessions"],
+		"warnings": preflight.get("warnings") or [],
+		"preserved_references": cleanup_result["preserved_references"],
+		"message": "Consultation cancelled after safe draft cleanup.",
+	}
+
+
 def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
 	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
 	blockers: list[dict] = []
@@ -99,6 +127,146 @@ def validate_consultation_can_be_cancelled(consultation_name: str) -> dict:
 	message = build_cancellation_blocker_message(preflight)
 	frappe.throw(message, frappe.ValidationError)
 	return preflight
+
+
+def cleanup_safe_draft_dependencies(consultation_name: str, preflight: dict) -> dict:
+	cleaned_draft_invoices: list[str] = []
+	preserved_references: list[dict] = []
+	for row in preflight.get("linked_invoices") or []:
+		if cint(row.get("docstatus")) != 0:
+			preserved_references.append({"invoice": row.get("invoice"), "reason": "non_draft_invoice_preserved"})
+			continue
+		invoice_name = row.get("invoice") or row.get("name")
+		if not invoice_name:
+			continue
+		if not is_draft_invoice_safe_for_consultation_cleanup(invoice_name, consultation_name):
+			frappe.throw(
+				f"Draft invoice {invoice_name} is not exclusive to this consultation billing group and was not cleaned up.",
+				frappe.ValidationError,
+			)
+		cleanup_draft_invoice_for_consultation(invoice_name, consultation_name)
+		cleaned_draft_invoices.append(invoice_name)
+
+	closed_billing_sessions = close_safe_draft_billing_sessions(consultation_name)
+	return {
+		"cleaned_draft_invoices": cleaned_draft_invoices,
+		"closed_billing_sessions": closed_billing_sessions,
+		"preserved_references": preserved_references,
+	}
+
+
+def is_draft_invoice_safe_for_consultation_cleanup(invoice_name: str, consultation_name: str) -> bool:
+	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+		return False
+	if cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) != 0:
+		return False
+	if not safe_doctype_exists("Veterinary Billing Session Charge"):
+		return True
+	rows = frappe.get_all(
+		"Veterinary Billing Session Charge",
+		filters={"invoice": invoice_name},
+		fields=["source_doctype", "source_name"],
+		limit=100,
+	)
+	for row in rows:
+		if not source_belongs_to_consultation_group(row.get("source_doctype"), row.get("source_name"), consultation_name):
+			return False
+	return True
+
+
+def source_belongs_to_consultation_group(source_doctype: str | None, source_name: str | None, consultation_name: str) -> bool:
+	if not source_doctype or not source_name:
+		return True
+	if source_doctype == "Veterinary Consultation":
+		return source_name == consultation_name
+	field_map = {
+		"Veterinary Lab Order": "consultation",
+		"Veterinary Vaccination Record": "linked_consultation",
+		"Veterinary Hospitalisation": "linked_consultation",
+	}
+	fieldname = field_map.get(source_doctype)
+	if fieldname and safe_doctype_exists(source_doctype) and frappe.get_meta(source_doctype).has_field(fieldname):
+		return frappe.db.get_value(source_doctype, source_name, fieldname) == consultation_name
+	return False
+
+
+def cleanup_draft_invoice_for_consultation(invoice_name: str, consultation_name: str) -> None:
+	from vetedge.services.billing_core import (
+		detach_invoice_from_billing_session,
+		detach_invoice_from_vetedge_sources,
+		run_with_billing_core_sync_flag,
+	)
+
+	session_names = get_billing_session_names_for_invoice(invoice_name, consultation_name)
+	for session_name in session_names:
+		session = frappe.get_doc("Veterinary Billing Session", session_name)
+		session = detach_invoice_from_billing_session(session, invoice_name, reason="consultation_cancelled")
+		for charge in session.get("charges") or []:
+			if charge.get("billing_status") not in {"Submitted Invoiced", "Paid", "Cancelled", "Skipped"}:
+				charge.billing_status = "Cancelled"
+		session.save()
+	detach_invoice_from_vetedge_sources(invoice_name, reason="consultation_cancelled")
+	run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))
+
+
+def get_billing_session_names_for_invoice(invoice_name: str, consultation_name: str | None = None) -> list[str]:
+	if not safe_doctype_exists("Veterinary Billing Session Charge"):
+		return []
+	session_names = []
+	for row in frappe.get_all("Veterinary Billing Session Charge", filters={"invoice": invoice_name}, fields=["parent"], limit=100):
+		if row.get("parent") and row.get("parent") not in session_names:
+			session_names.append(row.get("parent"))
+	if session_names or not consultation_name:
+		return session_names
+	return [
+		row.get("name")
+		for row in get_linked_billing_sessions(consultation_name)
+		if row.get("current_draft_invoice") == invoice_name or row.get("latest_invoice") == invoice_name
+	]
+
+
+def close_safe_draft_billing_sessions(consultation_name: str) -> list[str]:
+	closed: list[str] = []
+	for row in get_linked_billing_sessions(consultation_name):
+		session_name = row.get("name")
+		if not session_name or not frappe.db.exists("Veterinary Billing Session", session_name):
+			continue
+		session = frappe.get_doc("Veterinary Billing Session", session_name)
+		if not is_billing_session_safe_to_cancel_for_consultation(session, consultation_name):
+			continue
+		session.status = "Cancelled"
+		if session.get("current_draft_invoice"):
+			session.current_draft_invoice = None
+		if session.get("latest_invoice") and not frappe.db.exists("Sales Invoice", session.get("latest_invoice")):
+			session.latest_invoice = None
+		for charge in session.get("charges") or []:
+			if charge.get("billing_status") not in {"Submitted Invoiced", "Paid", "Cancelled", "Skipped"}:
+				charge.billing_status = "Cancelled"
+		session.save()
+		closed.append(session.name)
+	return closed
+
+
+def is_billing_session_safe_to_cancel_for_consultation(session, consultation_name: str) -> bool:
+	if session.get("status") in {"Closed", "Cancelled", "Paid"}:
+		return False
+	for invoice_name in filter(None, {session.get("current_draft_invoice"), session.get("latest_invoice")}):
+		if frappe.db.exists("Sales Invoice", invoice_name) and cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) != 0:
+			return False
+	for charge in session.get("charges") or []:
+		if charge.get("billing_status") in {"Submitted Invoiced", "Paid"}:
+			return False
+		if not source_belongs_to_consultation_group(charge.get("source_doctype"), charge.get("source_name"), consultation_name):
+			return False
+	return True
+
+
+def set_cancellation_reason_if_supported(consultation, reason: str) -> None:
+	meta = frappe.get_meta("Veterinary Consultation")
+	for fieldname in ("cancellation_reason", "cancel_reason", "reason_for_cancellation"):
+		if meta.has_field(fieldname):
+			consultation.set(fieldname, reason)
+			return
 
 
 def build_cancellation_blocker_message(preflight: dict) -> str:

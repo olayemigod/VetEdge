@@ -1308,7 +1308,7 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 			}
 			frappe.confirm(__("Cancel this consultation now?"), () => {
 				dialog.hide();
-				perform_consultation_status_transition(frm, "Cancelled");
+				perform_safe_consultation_cancellation(frm);
 			});
 		},
 		secondary_action_label: __("Close"),
@@ -1533,6 +1533,34 @@ function render_consultation_resolution_guidance(action, label) {
 		<p><strong>${escape_consultation_history_html(label || action)}</strong></p>
 		<p>${escape_consultation_history_html(guidance[action] || __("Resolve the listed blockers before cancellation."))}</p>
 	`;
+}
+
+function perform_safe_consultation_cancellation(frm) {
+	frappe.call({
+		method: "vetedge.services.consultation_cancellation.cancel_consultation_safely",
+		args: {
+			consultation_name: frm.doc.name,
+		},
+		freeze: true,
+		freeze_message: __("Cancelling consultation..."),
+		callback(result) {
+			const message = result.message || {};
+			const cleaned = message.cleaned_draft_invoices || [];
+			const sessions = message.closed_billing_sessions || [];
+			const details = [];
+			if (cleaned.length) {
+				details.push(`${__("Draft invoices cleaned")}: ${cleaned.map(escape_consultation_history_html).join(", ")}`);
+			}
+			if (sessions.length) {
+				details.push(`${__("Billing sessions closed")}: ${sessions.map(escape_consultation_history_html).join(", ")}`);
+			}
+			frappe.show_alert({
+				message: details.length ? details.join(" | ") : __("Consultation cancelled"),
+				indicator: "green",
+			});
+			frm.reload_doc();
+		},
+	});
 }
 
 function perform_consultation_status_transition(frm, status) {

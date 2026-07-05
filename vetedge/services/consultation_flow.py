@@ -200,6 +200,10 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 		reference_name=consultation
 	)
 	validate_consultation_status_transition(doc.status, status)
+	if status == "Cancelled":
+		from vetedge.services.consultation_cancellation import execute_consultation_cancellation
+
+		return execute_consultation_cancellation(consultation)
 	assert_consultation_can_proceed(doc, status)
 	previous = SimpleNamespace(status=doc.status)
 	doc.status = status

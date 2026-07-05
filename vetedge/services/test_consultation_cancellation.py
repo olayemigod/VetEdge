@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 
@@ -80,6 +80,70 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(preflight["linked_invoices"], [])
 		self.assertEqual(preflight["outstanding_context"][0]["invoice"], "ACC-SINV-OLD")
 		self.assertEqual(preflight["blockers"], [])
+
+	def test_execute_safe_cancellation_sets_cancelled_after_cleanup(self):
+		doc = frappe._dict(name="VCON-001", status="In Progress")
+		doc.save = Mock()
+		with (
+			patch.object(consultation_cancellation, "validate_consultation_can_be_cancelled", return_value={"can_cancel": True, "warnings": []}) as validate,
+			patch.object(
+				consultation_cancellation,
+				"cleanup_safe_draft_dependencies",
+				return_value={"cleaned_draft_invoices": [], "closed_billing_sessions": [], "preserved_references": []},
+			) as cleanup,
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=doc),
+		):
+			result = consultation_cancellation.execute_consultation_cancellation("VCON-001")
+
+		validate.assert_called_once_with("VCON-001")
+		cleanup.assert_called_once()
+		self.assertEqual(doc.status, "Cancelled")
+		doc.save.assert_called_once()
+		self.assertEqual(result["status"], "Cancelled")
+
+	def test_execute_safe_cancellation_blocks_when_preflight_blocks(self):
+		with patch.object(consultation_cancellation, "validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.execute_consultation_cancellation("VCON-001")
+
+	def test_safe_cancellation_cleanup_ignores_patient_outstanding_context(self):
+		with (
+			patch.object(consultation_cancellation, "cleanup_draft_invoice_for_consultation") as cleanup_invoice,
+			patch.object(consultation_cancellation, "close_safe_draft_billing_sessions", return_value=[]),
+		):
+			result = consultation_cancellation.cleanup_safe_draft_dependencies(
+				"VCON-001",
+				{
+					"linked_invoices": [],
+					"outstanding_context": [{"invoice": "ACC-SINV-OLD", "docstatus": 0}],
+				},
+			)
+
+		cleanup_invoice.assert_not_called()
+		self.assertEqual(result["cleaned_draft_invoices"], [])
+
+	def test_safe_cancellation_cleanup_deletes_safe_draft_invoice(self):
+		with (
+			patch.object(consultation_cancellation, "is_draft_invoice_safe_for_consultation_cleanup", return_value=True),
+			patch.object(consultation_cancellation, "cleanup_draft_invoice_for_consultation") as cleanup_invoice,
+			patch.object(consultation_cancellation, "close_safe_draft_billing_sessions", return_value=["VBS-001"]),
+		):
+			result = consultation_cancellation.cleanup_safe_draft_dependencies(
+				"VCON-001",
+				{"linked_invoices": [{"invoice": "ACC-SINV-DRAFT", "docstatus": 0}]},
+			)
+
+		cleanup_invoice.assert_called_once_with("ACC-SINV-DRAFT", "VCON-001")
+		self.assertEqual(result["cleaned_draft_invoices"], ["ACC-SINV-DRAFT"])
+		self.assertEqual(result["closed_billing_sessions"], ["VBS-001"])
+
+	def test_safe_cancellation_cleanup_rejects_draft_invoice_from_another_context(self):
+		with patch.object(consultation_cancellation, "is_draft_invoice_safe_for_consultation_cleanup", return_value=False):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.cleanup_safe_draft_dependencies(
+					"VCON-001",
+					{"linked_invoices": [{"invoice": "ACC-SINV-OTHER", "docstatus": 0}]},
+				)
 
 	def test_submitted_unpaid_invoice_blocks_direct_cancellation(self):
 		preflight = self.build_preflight(
@@ -234,4 +298,4 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("Financial Resolution Options", script)
 		self.assertIn("Other Outstanding Invoices for this Patient", script)
 		self.assertIn("These invoices belong to this patient/customer but are not part of this consultation billing group", script)
-		self.assertIn("perform_consultation_status_transition(frm, \"Cancelled\")", script)
+		self.assertIn("vetedge.services.consultation_cancellation.cancel_consultation_safely", script)
