@@ -2200,6 +2200,41 @@ class TestBillingCore(TestCase):
 		self.assertEqual([row["name"] for row in status["invoices"]], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
 		self.assertNotIn("Sales Invoice must be generated", status["message"])
 
+	def test_non_registration_patient_session_is_not_consultation_billing_group(self):
+		unrelated = make_session(
+			name="VBS-OLD",
+			current_draft_invoice="ACC-SINV-OLD",
+			charges=[frappe._dict({"source_doctype": "Veterinary Consultation", "source_name": "VCON-OLD", "billing_status": "Draft Invoiced"})],
+		)
+
+		with (
+			patch.object(billing_core.frappe, "get_all", return_value=[frappe._dict(name="VBS-OLD")]),
+			patch.object(billing_core.frappe, "get_doc", return_value=unrelated),
+			patch.object(billing_core, "session_is_registration_origin", return_value=False),
+		):
+			session = billing_core.find_registration_billing_session_for_consultation({"patient": "PAT-001", "customer": "CUST-001"})
+
+		self.assertIsNone(session)
+
+	def test_old_patient_invoice_does_not_satisfy_current_consultation_partial_gate(self):
+		old_paid_invoice = make_invoice("ACC-SINV-OLD", docstatus=1, outstanding_amount=0)
+
+		with (
+			multi_invoice_billing_context(
+				make_session(payment_gate_mode="Partial Payment Gate"),
+				{"ACC-SINV-OLD": old_paid_invoice},
+				{"ACC-SINV-OLD": 100},
+			),
+			patch.object(billing_core, "resolve_billing_session", return_value=None),
+			patch.object(billing_core, "resolve_closed_satisfied_billing_session_for_source", return_value=None),
+			patch.object(billing_core, "get_billing_group_invoice_history", return_value=[]),
+			patch.object(billing_core, "get_source_payment_gate_mode", return_value="Partial Payment Gate"),
+		):
+			status = billing_core.get_source_payment_gate_status("Veterinary Consultation", "VCON-CURRENT")
+
+		self.assertFalse(status["can_proceed"])
+		self.assertIn("Sales Invoice must be generated", status["message"])
+
 	def test_source_payment_gate_partial_blocks_submitted_invoice_without_payment(self):
 		unpaid_invoice = make_invoice("ACC-SINV-2026-00128", docstatus=1, outstanding_amount=100)
 

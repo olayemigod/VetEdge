@@ -585,6 +585,7 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	)
 	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
 	invoice_history = get_billing_group_history_for_modal(source_doctype, source_name)
+	patient_outstanding_context = get_patient_outstanding_context_for_modal(doc, invoice_history)
 	actions = get_available_actions(config, invoice_summary, session_summary)
 	totals = get_billing_modal_totals(session_summary, invoice_summary, invoice_history)
 	payment_gate = get_billing_group_payment_gate_for_modal(source_doctype, source_name) if invoice_history else None
@@ -599,6 +600,7 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		"invoice": invoice_summary,
 		"invoice_history": invoice_history,
 		"billing_group_invoice_history": invoice_history,
+		"patient_outstanding_context": patient_outstanding_context,
 		"billing_session": session_summary,
 		"payment_gate": payment_gate or (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
 		"actions": actions,
@@ -626,6 +628,27 @@ def get_billing_group_history_for_modal(source_doctype: str, source_name: str) -
 	from vetedge.services.billing_core import get_billing_group_invoice_history
 
 	return enrich_invoice_history_for_modal(get_billing_group_invoice_history(source_doctype, source_name, include_related=True))
+
+
+def get_patient_outstanding_context_for_modal(doc, invoice_history: list[dict] | None = None) -> list[dict]:
+	from vetedge.services.billing_core import get_patient_outstanding_invoice_context
+
+	excluded = {row.get("name") or row.get("invoice") for row in invoice_history or []}
+	rows = get_patient_outstanding_invoice_context(
+		patient=doc.get("patient") or doc.get("animal") or (doc.get("name") if doc.get("doctype") == "Veterinary Patient" else None),
+		customer=doc.get("primary_owner") or doc.get("customer"),
+		exclude_billing_group=excluded,
+	)
+	return enrich_patient_outstanding_context_for_modal(rows)
+
+
+def enrich_patient_outstanding_context_for_modal(invoice_history: list[dict] | None) -> list[dict]:
+	rows = enrich_invoice_history_for_modal(invoice_history)
+	for row in rows:
+		row["informational_only"] = True
+		row["does_not_satisfy_current_gate"] = True
+		row["source_label"] = row.get("source_label") or "Other outstanding invoice for this patient"
+	return rows
 
 
 def enrich_invoice_history_for_modal(invoice_history: list[dict] | None) -> list[dict]:
@@ -933,6 +956,8 @@ def assert_invoice_is_linked_to_source_or_session(invoice_name: str, doc, config
 	if session_summary and any(row.get("name") == invoice_name for row in session_summary.get("invoices") or []):
 		return
 	if any((row.get("name") or row.get("invoice")) == invoice_name for row in get_billing_group_history_for_modal(doc.doctype, doc.name)):
+		return
+	if any((row.get("name") or row.get("invoice")) == invoice_name for row in get_patient_outstanding_context_for_modal(doc, [])):
 		return
 	frappe.throw("The selected Sales Invoice is not linked to this billing source.", frappe.PermissionError)
 

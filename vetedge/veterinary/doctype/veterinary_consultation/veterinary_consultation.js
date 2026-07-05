@@ -1272,6 +1272,62 @@ function add_dispensary_actions(frm) {
 }
 
 function transition_consultation(frm, status) {
+	if (status === "Cancelled") {
+		show_consultation_cancellation_preflight(frm);
+		return;
+	}
+	perform_consultation_status_transition(frm, status);
+}
+
+function show_consultation_cancellation_preflight(frm) {
+	frappe.call({
+		method: "vetedge.services.consultation_cancellation.get_consultation_cancellation_preflight",
+		args: {
+			consultation_name: frm.doc.name,
+		},
+		freeze: true,
+		freeze_message: __("Checking cancellation safety..."),
+		callback(result) {
+			const preflight = result.message || {};
+			const blockers = preflight.blockers || [];
+			const warnings = preflight.warnings || [];
+			const lines = [];
+			if (blockers.length) {
+				lines.push(`<p>${__("This consultation cannot be cancelled directly.")}</p>`);
+				lines.push("<ul>");
+				blockers.slice(0, 8).forEach((row) => {
+					lines.push(`<li>${frappe.utils.escape_html(row.message || row.type || "")}</li>`);
+				});
+				lines.push("</ul>");
+				if (preflight.allowed_actions?.length) {
+					lines.push(`<p><strong>${__("Available resolution actions")}:</strong> ${frappe.utils.escape_html(preflight.allowed_actions.join(", "))}</p>`);
+				}
+				frappe.msgprint({
+					title: __("Cancellation Blocked"),
+					indicator: "red",
+					message: lines.join(""),
+				});
+				return;
+			}
+
+			if (warnings.length) {
+				lines.push(`<p>${__("Cancellation appears safe, but review these linked draft dependencies first.")}</p>`);
+				lines.push("<ul>");
+				warnings.slice(0, 8).forEach((row) => {
+					lines.push(`<li>${frappe.utils.escape_html(row.message || row.type || "")}</li>`);
+				});
+				lines.push("</ul>");
+			}
+
+			frappe.confirm(
+				lines.join("") || __("Cancel this consultation?"),
+				() => perform_consultation_status_transition(frm, "Cancelled")
+			);
+		},
+	});
+}
+
+function perform_consultation_status_transition(frm, status) {
 	frappe.call({
 		method: "vetedge.services.consultation_flow.transition_consultation_status",
 		args: {

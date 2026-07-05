@@ -484,12 +484,49 @@ class TestBillingModal(TestCase):
 		self.assertEqual(state["linked_invoices"], ["ACC-SINV-2026-00127", "ACC-SINV-2026-00128"])
 		self.assertTrue(state["payment_gate"]["can_proceed"])
 
+	def test_billing_modal_state_separates_patient_outstanding_context(self):
+		source = frappe._dict(
+			doctype="Veterinary Consultation",
+			name="VCON-CURRENT",
+			status="Open",
+			patient="VP-001",
+			primary_owner="CUST-001",
+			service_branch="Main",
+		)
+		history = [
+			{"name": "ACC-SINV-CURRENT", "invoice": "ACC-SINV-CURRENT", "docstatus": 1, "grand_total": 10000, "paid_amount": 10000, "outstanding_amount": 0, "payment_state": "Paid"}
+		]
+		outstanding = [
+			{"name": "ACC-SINV-OLD", "invoice": "ACC-SINV-OLD", "docstatus": 0, "grand_total": 7000, "paid_amount": 0, "outstanding_amount": 7000, "payment_state": "Draft", "informational_only": True}
+		]
+
+		with (
+			patch.object(billing_modal, "require_internal_user"),
+			patch.object(billing_modal.frappe, "get_doc", return_value=source),
+			patch.object(billing_modal, "assert_can_read_source"),
+			patch.object(billing_modal, "get_linked_invoice_name", return_value=None),
+			patch.object(billing_modal, "get_invoice_summary", return_value=None),
+			patch.object(billing_modal, "get_payment_modes", return_value=[]),
+			patch.object(billing_modal, "get_billing_session_summary_for_source", return_value=None),
+			patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=history),
+			patch.object(billing_modal, "get_patient_outstanding_context_for_modal", return_value=outstanding),
+			patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value={"gate": "Partial Payment Gate", "can_proceed": True, "message": "Payment gate passed."}),
+		):
+			state = billing_modal.get_billing_modal_state("Veterinary Consultation", "VCON-CURRENT")
+
+		self.assertEqual([row["name"] for row in state["invoice_history"]], ["ACC-SINV-CURRENT"])
+		self.assertEqual([row["name"] for row in state["patient_outstanding_context"]], ["ACC-SINV-OLD"])
+		self.assertEqual(state["linked_invoice_count"], 1)
+		self.assertEqual(state["linked_invoices"], ["ACC-SINV-CURRENT"])
+
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
 
 		self.assertIn("Billing Group Total", js)
 		self.assertIn("Billing Group Payment Status", js)
 		self.assertIn("Current Billing Cycle Status", js)
+		self.assertIn("Other Outstanding Invoices for this Patient", js)
+		self.assertIn("does not count as payment for this consultation", js)
 		self.assertIn("state.outstanding_amount", js)
 		self.assertIn("currentInvoicePaymentBlock", js)
 		self.assertIn("Current Draft Invoice", js)

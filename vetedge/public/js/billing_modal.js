@@ -146,6 +146,45 @@
 		`;
 	}
 
+	function renderPatientOutstandingContext(state) {
+		const invoices = state.patient_outstanding_context || [];
+		if (!invoices.length) {
+			return "";
+		}
+		return `
+			<div class="ve-billing-section">
+				<h4>${__("Other Outstanding Invoices for this Patient")}</h4>
+				<div class="alert alert-info">
+					${__("Paying these invoices does not count as payment for this consultation unless linked to this billing group.")}
+				</div>
+				<table class="table table-bordered table-condensed ve-billing-table">
+					<thead>
+						<tr>
+							<th>${__("Invoice")}</th>
+							<th>${__("Status")}</th>
+							<th class="text-right">${__("Grand Total")}</th>
+							<th class="text-right">${__("Paid")}</th>
+							<th class="text-right">${__("Outstanding")}</th>
+							<th>${__("Action")}</th>
+						</tr>
+					</thead>
+					<tbody>
+						${invoices.map((row) => `
+							<tr>
+								<td>${escapeHtml(row.name || row.invoice)}</td>
+								<td>${escapeHtml(row.payment_status || row.payment_state || row.status || "")}</td>
+								<td class="text-right">${money(row.grand_total || row.rounded_total, row.currency)}</td>
+								<td class="text-right">${money(row.paid_amount, row.currency)}</td>
+								<td class="text-right">${money(row.outstanding_amount, row.currency)}</td>
+								<td>${renderLinkedInvoiceAction(row)}</td>
+							</tr>
+						`).join("")}
+					</tbody>
+				</table>
+			</div>
+		`;
+	}
+
 	function renderTaxes(invoice) {
 		const taxes = invoice?.taxes || [];
 		if (!taxes.length && !invoice?.discount_amount) {
@@ -294,6 +333,7 @@
 			</div>
 			${renderSessionSummary(state)}
 			${renderLinkedInvoices(state)}
+			${renderPatientOutstandingContext(state)}
 			<div class="ve-billing-section">
 				<h4>${__("Invoice")}</h4>
 				${invoiceBlock}
@@ -340,7 +380,7 @@
 
 	function findLinkedInvoice(state, invoiceName) {
 		const session = state.billing_session || null;
-		const invoices = getLinkedInvoiceRows(state);
+		const invoices = [...getLinkedInvoiceRows(state), ...(state.patient_outstanding_context || [])];
 		return invoices.find((row) => (row.name || row.invoice) === invoiceName);
 	}
 	function openFullInvoice(invoice) {

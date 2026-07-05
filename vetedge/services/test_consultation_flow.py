@@ -115,6 +115,7 @@ class TestConsultationFlow(TestCase):
 
 	def test_consultation_defaults_practitioner_to_current_doctor(self):
 		doc = frappe._dict(
+			name="VCON-001",
 			patient="VP-001",
 			primary_owner=None,
 			consulting_practitioner=None,
@@ -991,11 +992,11 @@ class TestConsultationFlow(TestCase):
 				"Ready for Treatment",
 			)
 
-	def test_transition_consultation_status_blocks_cancelling_paid_consultation(self):
+	def test_transition_consultation_status_uses_cancellation_preflight(self):
 		doc = frappe._dict(
 			name="VCON-001",
 			status="Ready for Treatment",
-			payment_status="Paid",
+			payment_status="Unpaid",
 			save=lambda: doc,
 		)
 		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: doc)
@@ -1006,7 +1007,7 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
-			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError) as preflight,
 		):
 			self.assertRaises(
 				frappe.ValidationError,
@@ -1014,6 +1015,7 @@ class TestConsultationFlow(TestCase):
 				"VCON-001",
 				"Cancelled",
 			)
+		preflight.assert_called_once_with("VCON-001")
 
 	def test_consultation_status_transition_rejects_completed_reopen(self):
 		frappe_stub = make_frappe_stub()
@@ -1078,6 +1080,7 @@ class TestConsultationFlow(TestCase):
 
 	def test_validate_consultation_blocks_saving_paid_consultation_as_cancelled(self):
 		doc = frappe._dict(
+			name="VCON-001",
 			patient="VP-001",
 			primary_owner="CUST-001",
 			consulting_practitioner="doctor@example.com",
@@ -1125,9 +1128,11 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
 			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError) as preflight,
 		):
 			with self.assertRaises(frappe.ValidationError):
 				validate_consultation(doc)
+		preflight.assert_called_once_with("VCON-001")
 
 	def test_linked_appointment_must_belong_to_selected_patient(self):
 		doc = frappe._dict(

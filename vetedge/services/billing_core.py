@@ -110,16 +110,13 @@ def find_registration_billing_session_for_consultation(identity: dict | None):
 		fields=["name", "created_from_doctype", "source_context_doctype", "current_draft_invoice", "latest_invoice", "status"],
 		order_by="modified desc",
 	)
-	fallback = None
 	for row in rows:
 		session = frappe.get_doc(BILLING_SESSION_DOCTYPE, row.name)
 		if not is_billing_session_open_for_continuity(session):
 			continue
 		if session_is_registration_origin(session):
 			return session
-		if fallback is None and session_has_active_draft_or_pending_charges(session):
-			fallback = session
-	return fallback
+	return None
 
 
 def session_is_registration_origin(session) -> bool:
@@ -206,20 +203,6 @@ def resolve_billing_session(source_doctype: str, source_name: str, include_close
 		if consultation_session and consultation_session.get("status") in ACTIVE_SESSION_STATUSES:
 			return consultation_session
 
-	if identity.get("patient") and identity.get("customer"):
-		rows = frappe.get_all(
-			BILLING_SESSION_DOCTYPE,
-			filters={
-				"animal": identity.get("patient"),
-				"customer": identity.get("customer"),
-				"status": get_active_session_status_filter(),
-			},
-			fields=["name"],
-			order_by="modified desc",
-			limit=1,
-		)
-		if rows:
-			return frappe.get_doc(BILLING_SESSION_DOCTYPE, rows[0].name)
 	return None
 
 
@@ -812,6 +795,84 @@ def get_billing_group_invoice_history(source_doctype: str, source_name: str, inc
 	if source_doctype == "Veterinary Consultation":
 		merge_consultation_invoice_references_from_billing_group(source_name, rows)
 	return rows
+
+
+def get_patient_outstanding_invoice_context(
+	patient: str | None = None,
+	customer: str | None = None,
+	exclude_billing_group: Iterable[str] | None = None,
+	limit: int = 50,
+) -> list[dict]:
+	"""Return patient/customer outstanding invoices for display only.
+
+	This is intentionally not billing-group truth. Do not use these rows for
+	workflow gates, cancellation blockers, duplicate protection, or source sync.
+	"""
+	if not customer and patient and safe_doctype_exists("Veterinary Patient"):
+		customer = frappe.db.get_value("Veterinary Patient", patient, "primary_owner")
+	if not customer or not safe_doctype_exists("Sales Invoice"):
+		return []
+
+	excluded = {name for name in (exclude_billing_group or []) if name}
+	filters = [
+		["customer", "=", customer],
+		["docstatus", "!=", 2],
+		["name", "not in", list(excluded) or [""]],
+	]
+	rows = frappe.get_all(
+		"Sales Invoice",
+		filters=filters,
+		fields=["name", "docstatus", "status", "posting_date", "due_date", "grand_total", "outstanding_amount", "paid_amount", "currency"],
+		order_by="posting_date desc, modified desc",
+		limit=limit,
+	)
+	context = []
+	for row in rows:
+		if cint(row.get("docstatus")) == 1 and flt(row.get("outstanding_amount")) <= 0:
+			continue
+		item_patient = get_invoice_patient_marker(row.get("name"))
+		if patient and item_patient and item_patient != patient:
+			continue
+		payment_state = "Draft" if cint(row.get("docstatus")) == 0 else ("Partly Paid" if flt(row.get("paid_amount")) > 0 else "Unpaid")
+		context.append(
+			{
+				"invoice": row.get("name"),
+				"name": row.get("name"),
+				"docstatus": cint(row.get("docstatus")),
+				"status": row.get("status"),
+				"posting_date": row.get("posting_date"),
+				"due_date": row.get("due_date"),
+				"grand_total": flt(row.get("grand_total")),
+				"outstanding_amount": flt(row.get("outstanding_amount")),
+				"paid_amount": flt(row.get("paid_amount")),
+				"currency": row.get("currency"),
+				"payment_state": payment_state,
+				"relation_type": "patient_outstanding_context",
+				"source_label": "Other outstanding invoice for this patient",
+				"informational_only": True,
+				"does_not_satisfy_current_gate": True,
+			}
+		)
+	return context
+
+
+def get_invoice_patient_marker(invoice_name: str | None) -> str | None:
+	if not invoice_name:
+		return None
+	meta = frappe.get_meta("Sales Invoice")
+	for fieldname in ("patient", "animal", "vetedge_patient"):
+		if meta.has_field(fieldname):
+			value = frappe.db.get_value("Sales Invoice", invoice_name, fieldname)
+			if value:
+				return value
+	try:
+		for item in frappe.get_doc("Sales Invoice", invoice_name).get("items") or []:
+			for fieldname in ("patient", "animal", "vetedge_patient"):
+				if item.get(fieldname):
+					return item.get(fieldname)
+	except Exception:
+		return None
+	return None
 
 
 def merge_consultation_invoice_references_from_billing_group(consultation_name: str, invoice_history: list[dict]) -> None:

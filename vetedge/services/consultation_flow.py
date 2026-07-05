@@ -30,6 +30,7 @@ from vetedge.services.consultation_billing_plan import (
 	ensure_default_consultation_item_to_plan,
 	validate_default_consultation_plan_row_edit,
 )
+from vetedge.services.consultation_cancellation import validate_consultation_can_be_cancelled
 
 
 CONSULTATION_STATUSES = {
@@ -138,12 +139,10 @@ def validate_paid_consultation_cancellation(doc, previous=None) -> None:
 	previous_status = getattr(previous, "status", None) if previous else None
 	if previous_status == "Cancelled":
 		return
+	if not getattr(doc, "name", None):
+		return
 
-	if getattr(doc, "payment_status", None) == "Paid":
-		frappe.throw(
-			"Paid consultations cannot be cancelled. Start the appropriate refund or finance reversal flow first, then create a new consultation if needed.",
-			frappe.ValidationError,
-		)
+	validate_consultation_can_be_cancelled(doc.name)
 
 
 def consultation_scope_is_locked(status: str | None) -> bool:
