@@ -1321,11 +1321,7 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 	dialog.fields_dict.preflight_html.$wrapper.find("[data-resolution-action]").on("click", function () {
 		const action = $(this).attr("data-resolution-action");
 		const label = $(this).text();
-		frappe.msgprint({
-			title: __("Resolution Guidance"),
-			indicator: "blue",
-			message: render_consultation_resolution_guidance(action, label),
-		});
+		show_consultation_resolution_decision_dialog(frm, dialog, action, label);
 	});
 	dialog.show();
 }
@@ -1357,6 +1353,7 @@ function render_consultation_cancellation_preflight(preflight) {
 			${render_cancellation_warnings(preflight.warnings || [])}
 			${render_cancellation_invoice_section(preflight.linked_invoices || [])}
 			${render_cancellation_dependency_sections(preflight)}
+			${render_existing_cancellation_resolution(preflight.existing_resolution)}
 			${render_cancellation_resolution_actions(preflight.allowed_action_options || [], canCancel)}
 			${render_cancellation_patient_outstanding_context(preflight.outstanding_context || [])}
 		</div>
@@ -1460,13 +1457,31 @@ function render_cancellation_resolution_actions(options, canCancel) {
 	return `
 		<div class="ve-cancel-section">
 			<h4>${__("Financial Resolution Options")}</h4>
-			<p class="text-muted">${__("Submitted accounting documents are not changed automatically. Select an option below to see guidance for the next step.")}</p>
+			<p class="text-muted">${__("Submitted accounting documents are not changed automatically. Select an option below to record the intended resolution path.")}</p>
 			<div class="ve-cancel-actions">
 				${options.map((option) => `
 					<button class="btn btn-default btn-sm" type="button" data-resolution-action="${escape_consultation_history_html(option.value)}">
 						${escape_consultation_history_html(option.label)}
 					</button>
 				`).join("")}
+			</div>
+		</div>
+	`;
+}
+
+function render_existing_cancellation_resolution(resolution) {
+	if (!resolution) {
+		return "";
+	}
+	return `
+		<div class="ve-cancel-section">
+			<h4>${__("Recorded Resolution Decision")}</h4>
+			<div class="ve-cancel-card">
+				<div class="ve-cancel-card-title">${escape_consultation_history_html(resolution.resolution_action || resolution.resolution_action_key || "")}</div>
+				<div class="ve-cancel-meta">${__("Status")}: ${escape_consultation_history_html(resolution.resolution_status || "")}</div>
+				<div class="ve-cancel-meta">${__("Selected By")}: ${escape_consultation_history_html(resolution.selected_by || "")}</div>
+				<div class="ve-cancel-meta">${__("Selected On")}: ${escape_consultation_history_html(resolution.selected_on || "")}</div>
+				${resolution.reason ? `<div class="ve-cancel-meta">${__("Reason")}: ${escape_consultation_history_html(resolution.reason)}</div>` : ""}
 			</div>
 		</div>
 	`;
@@ -1518,6 +1533,51 @@ function render_cancellation_card_section(title, rows) {
 			</div>
 		</div>
 	`;
+}
+
+function show_consultation_resolution_decision_dialog(frm, preflightDialog, action, label) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Record Cancellation Resolution"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "guidance",
+				options: render_consultation_resolution_guidance(action, label),
+			},
+			{
+				fieldtype: "Small Text",
+				fieldname: "reason",
+				label: __("Reason / Note"),
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Record Decision"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.consultation_cancellation.record_consultation_cancellation_resolution",
+				args: {
+					consultation_name: frm.doc.name,
+					resolution_action: action,
+					reason: values.reason,
+				},
+				freeze: true,
+				freeze_message: __("Recording resolution decision..."),
+				callback(result) {
+					dialog.hide();
+					if (preflightDialog) {
+						preflightDialog.hide();
+					}
+					frappe.msgprint({
+						title: __("Resolution Decision Recorded"),
+						indicator: "green",
+						message: __("Resolution decision recorded. Accounting action has not yet been performed."),
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	dialog.show();
 }
 
 function render_consultation_resolution_guidance(action, label) {

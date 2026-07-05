@@ -261,6 +261,100 @@ class TestConsultationCancellationPreflight(TestCase):
 		)
 		self.assertIn("Admin/accounting correction", [row["label"] for row in preflight["allowed_action_options"]])
 
+	def build_paid_resolution_preflight(self):
+		return {
+			"can_cancel": False,
+			"blockers": [{"type": "paid_invoice", "invoice": "ACC-SINV-PAID"}],
+			"warnings": [],
+			"allowed_actions": consultation_cancellation.FINANCIAL_RESOLUTION_ACTIONS[:],
+			"linked_invoices": [
+				{
+					"invoice": "ACC-SINV-PAID",
+					"docstatus": 1,
+					"status": "Paid",
+					"payment_state": "Paid",
+					"grand_total": 11000,
+					"paid_amount": 11000,
+					"outstanding_amount": 0,
+				}
+			],
+			"billing_group_summary": {"paid_amount": 11000, "outstanding_amount": 0},
+		}
+
+	def test_authorized_user_can_record_cancellation_resolution_decision(self):
+		consultation = frappe._dict(
+			name="VCON-001",
+			patient="VP-001",
+			primary_owner="CUST-001",
+			service_branch="Main",
+			company="VetCo",
+			status="Ready for Treatment",
+		)
+		decision = frappe._dict(name="VCCR-001")
+		decision.insert = Mock()
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation, "safe_doctype_exists", return_value=True),
+			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=None),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=consultation),
+			patch.object(consultation_cancellation.frappe, "new_doc", return_value=decision),
+			patch.object(consultation_cancellation.frappe, "get_roles", return_value=["Accounts User"]),
+			patch.object(consultation_cancellation.frappe, "delete_doc") as delete_doc,
+		):
+			result = consultation_cancellation.record_consultation_cancellation_resolution(
+				"VCON-001",
+				"refund_required",
+				reason="Owner requested refund review.",
+			)
+
+		decision.insert.assert_called_once()
+		delete_doc.assert_not_called()
+		self.assertEqual(decision.consultation, "VCON-001")
+		self.assertEqual(decision.patient, "VP-001")
+		self.assertEqual(decision.customer, "CUST-001")
+		self.assertEqual(decision.resolution_action_key, "refund_required")
+		self.assertEqual(decision.resolution_action, "Refund required")
+		self.assertEqual(decision.reason, "Owner requested refund review.")
+		self.assertEqual(decision.billing_group_paid_amount, 11000)
+		self.assertEqual(result["resolution_action_key"], "refund_required")
+		self.assertEqual(result["related_invoices"][0]["invoice"], "ACC-SINV-PAID")
+		self.assertNotEqual(consultation.status, "Cancelled")
+
+	def test_invalid_cancellation_resolution_action_is_rejected(self):
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation.frappe, "get_roles", return_value=["Accounts User"]),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.record_consultation_cancellation_resolution("VCON-001", "delete_invoice")
+
+	def test_resolution_action_not_allowed_by_preflight_is_rejected(self):
+		preflight = self.build_paid_resolution_preflight()
+		preflight["allowed_actions"] = ["refund_required"]
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=preflight),
+			patch.object(consultation_cancellation.frappe, "get_roles", return_value=["Accounts User"]),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.record_consultation_cancellation_resolution("VCON-001", "issue_customer_credit")
+
+	def test_approved_cancellation_resolution_is_not_overwritten(self):
+		existing = frappe._dict(name="VCCR-APPROVED", resolution_status="Approved")
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation, "safe_doctype_exists", return_value=True),
+			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=existing),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=frappe._dict(name="VCON-001")),
+			patch.object(consultation_cancellation.frappe, "get_roles", return_value=["Accounts User"]),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.record_consultation_cancellation_resolution("VCON-001", "refund_required")
+
+	def test_unauthorized_user_cannot_record_cancellation_resolution(self):
+		with patch.object(consultation_cancellation.frappe, "get_roles", return_value=["VetEdge Doctor"]):
+			with self.assertRaises(frappe.PermissionError):
+				consultation_cancellation.validate_user_can_record_cancellation_resolution("doctor@example.com")
+
 	def test_partly_paid_billing_group_blocks_and_preserves_multiple_invoice_rows(self):
 		preflight = self.build_preflight(
 			invoices=[
@@ -375,3 +469,6 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("Other Outstanding Invoices for this Patient", script)
 		self.assertIn("These invoices belong to this patient/customer but are not part of this consultation billing group", script)
 		self.assertIn("vetedge.services.consultation_cancellation.cancel_consultation_safely", script)
+		self.assertIn("Recorded Resolution Decision", script)
+		self.assertIn("vetedge.services.consultation_cancellation.record_consultation_cancellation_resolution", script)
+		self.assertIn("Resolution decision recorded. Accounting action has not yet been performed.", script)

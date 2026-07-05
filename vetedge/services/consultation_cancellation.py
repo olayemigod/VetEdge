@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+
 import frappe
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, now_datetime
 
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.permissions import can_access_consultation
@@ -30,6 +32,17 @@ RESOLUTION_ACTION_LABELS = {
 LAB_FINAL_STATUSES = {"Result Entered", "Awaiting Review", "Reviewed", "Completed"}
 VACCINATION_FINAL_STATUSES = {"Administered"}
 HOSPITALISATION_ACTIVE_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
+CANCELLATION_RESOLUTION_DOCTYPE = "Veterinary Consultation Cancellation Resolution"
+RESOLUTION_RECORDER_ROLES = {
+	"System Manager",
+	"VetEdge Administrator",
+	"Branch Manager",
+	"VetEdge Branch Manager",
+	"Accounts/Cashier",
+	"VetEdge Accounts/Cashier",
+	"Accounts User",
+	"Accounts Manager",
+}
 
 
 @frappe.whitelist()
@@ -44,6 +57,48 @@ def cancel_consultation_safely(consultation_name: str, reason: str | None = None
 	require_internal_user()
 	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
 	return execute_consultation_cancellation(consultation_name, reason=reason)
+
+
+@frappe.whitelist()
+def get_cancellation_resolution_options(consultation_name: str) -> dict:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	preflight = build_consultation_cancellation_preflight(consultation_name)
+	return {
+		"consultation": consultation_name,
+		"can_record_resolution": can_record_resolution_for_preflight(preflight)
+		and user_can_record_cancellation_resolution(frappe.session.user),
+		"allowed_action_options": get_recordable_resolution_options(preflight),
+		"existing_resolution": get_consultation_cancellation_resolution(consultation_name),
+		"billing_group_summary": preflight.get("billing_group_summary") or {},
+	}
+
+
+@frappe.whitelist()
+def get_consultation_cancellation_resolution(consultation_name: str) -> dict | None:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	return get_latest_cancellation_resolution(consultation_name)
+
+
+@frappe.whitelist()
+def record_consultation_cancellation_resolution(
+	consultation_name: str,
+	resolution_action: str,
+	reason: str | None = None,
+	linked_new_consultation: str | None = None,
+	linked_new_appointment: str | None = None,
+) -> dict:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	validate_user_can_record_cancellation_resolution(frappe.session.user)
+	return record_cancellation_resolution_decision(
+		consultation_name,
+		resolution_action,
+		reason=reason,
+		linked_new_consultation=linked_new_consultation,
+		linked_new_appointment=linked_new_appointment,
+	)
 
 
 def execute_consultation_cancellation(consultation_name: str, reason: str | None = None) -> dict:
@@ -121,6 +176,7 @@ def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
 		"warnings": warnings,
 		"allowed_actions": allowed_actions,
 		"allowed_action_options": get_cancellation_action_options(allowed_actions),
+		"existing_resolution": get_latest_cancellation_resolution(consultation_name),
 		"recommended_next_action": get_recommended_cancellation_action(blockers, warnings, billing_group_summary),
 	}
 
@@ -695,6 +751,209 @@ def get_recommended_cancellation_action(blockers: list[dict], warnings: list[dic
 	if flt(summary.get("paid_amount")) > 0:
 		return "choose_financial_resolution"
 	return "admin_review_required"
+
+
+def record_cancellation_resolution_decision(
+	consultation_name: str,
+	resolution_action: str,
+	reason: str | None = None,
+	linked_new_consultation: str | None = None,
+	linked_new_appointment: str | None = None,
+) -> dict:
+	preflight = build_consultation_cancellation_preflight(consultation_name)
+	if not can_record_resolution_for_preflight(preflight):
+		frappe.throw(
+			"Cancellation resolution can only be recorded when the consultation is blocked by submitted or paid billing.",
+			frappe.ValidationError,
+		)
+	action_key = normalize_resolution_action(resolution_action)
+	if action_key not in FINANCIAL_RESOLUTION_ACTIONS or action_key not in (preflight.get("allowed_actions") or []):
+		frappe.throw("Select a valid cancellation resolution action for this consultation.", frappe.ValidationError)
+	if not safe_doctype_exists(CANCELLATION_RESOLUTION_DOCTYPE):
+		frappe.throw("Cancellation resolution records are not installed. Please run migrate.", frappe.ValidationError)
+
+	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
+	existing = get_open_cancellation_resolution_doc(consultation_name)
+	if existing and existing.get("resolution_status") in {"Approved", "Completed"}:
+		frappe.throw("An approved or completed cancellation resolution already exists for this consultation.", frappe.ValidationError)
+	doc = existing or frappe.new_doc(CANCELLATION_RESOLUTION_DOCTYPE)
+	populate_cancellation_resolution_doc(
+		doc,
+		consultation,
+		preflight,
+		action_key,
+		reason=reason,
+		linked_new_consultation=linked_new_consultation,
+		linked_new_appointment=linked_new_appointment,
+	)
+	if existing:
+		doc.save()
+	else:
+		doc.insert()
+	return serialize_cancellation_resolution(doc)
+
+
+def populate_cancellation_resolution_doc(
+	doc,
+	consultation,
+	preflight: dict,
+	action_key: str,
+	reason: str | None = None,
+	linked_new_consultation: str | None = None,
+	linked_new_appointment: str | None = None,
+) -> None:
+	summary = preflight.get("billing_group_summary") or {}
+	doc.consultation = consultation.name
+	doc.patient = consultation.get("patient")
+	doc.customer = consultation.get("primary_owner") or consultation.get("customer")
+	doc.branch = consultation.get("service_branch") or consultation.get("branch")
+	doc.company = consultation.get("company")
+	doc.resolution_action_key = action_key
+	doc.resolution_action = RESOLUTION_ACTION_LABELS.get(action_key, action_key.replace("_", " ").title())
+	doc.resolution_status = doc.get("resolution_status") or "Pending Review"
+	doc.reason = reason
+	doc.selected_by = frappe.session.user
+	doc.selected_on = now_datetime()
+	doc.linked_new_consultation = linked_new_consultation
+	doc.linked_new_appointment = linked_new_appointment
+	doc.billing_group_paid_amount = flt(summary.get("paid_amount"))
+	doc.billing_group_outstanding_amount = flt(summary.get("outstanding_amount"))
+	doc.related_invoices = json.dumps(build_resolution_invoice_snapshot(preflight.get("linked_invoices") or []), default=str)
+	doc.notes = "Resolution decision only. No refund, credit note, Payment Entry, Stock Entry, or Sales Invoice reversal was created."
+
+
+def build_resolution_invoice_snapshot(invoices: list[dict]) -> list[dict]:
+	return [
+		{
+			"invoice": row.get("invoice") or row.get("name"),
+			"docstatus": cint(row.get("docstatus")),
+			"status": row.get("status"),
+			"payment_state": row.get("payment_state"),
+			"grand_total": flt(row.get("grand_total")),
+			"paid_amount": flt(row.get("paid_amount")),
+			"outstanding_amount": flt(row.get("outstanding_amount")),
+			"billing_session": row.get("billing_session"),
+			"relation_type": row.get("relation_type"),
+		}
+		for row in invoices
+		if row.get("invoice") or row.get("name")
+	]
+
+
+def can_record_resolution_for_preflight(preflight: dict) -> bool:
+	if preflight.get("can_cancel"):
+		return False
+	blocker_types = {row.get("type") for row in preflight.get("blockers") or []}
+	return bool(
+		blocker_types.intersection({"paid_invoice", "submitted_invoice"})
+		or flt((preflight.get("billing_group_summary") or {}).get("paid_amount")) > 0
+	)
+
+
+def get_recordable_resolution_options(preflight: dict) -> list[dict]:
+	if not can_record_resolution_for_preflight(preflight):
+		return []
+	return get_cancellation_action_options(
+		[action for action in preflight.get("allowed_actions") or [] if action in FINANCIAL_RESOLUTION_ACTIONS]
+	)
+
+
+def normalize_resolution_action(action: str | None) -> str:
+	if not action:
+		return ""
+	if action in FINANCIAL_RESOLUTION_ACTIONS:
+		return action
+	reverse = {label: key for key, label in RESOLUTION_ACTION_LABELS.items()}
+	return reverse.get(action, str(action).strip().lower().replace(" ", "_"))
+
+
+def get_open_cancellation_resolution_doc(consultation_name: str):
+	if not safe_doctype_exists(CANCELLATION_RESOLUTION_DOCTYPE):
+		return None
+	rows = frappe.get_all(
+		CANCELLATION_RESOLUTION_DOCTYPE,
+		filters={"consultation": consultation_name, "resolution_status": ["in", ["Draft", "Pending Review", "Approved", "Completed"]]},
+		fields=["name", "resolution_status"],
+		order_by="modified desc",
+		limit=1,
+	)
+	if not rows:
+		return None
+	return frappe.get_doc(CANCELLATION_RESOLUTION_DOCTYPE, rows[0].name)
+
+
+def get_latest_cancellation_resolution(consultation_name: str) -> dict | None:
+	if not safe_doctype_exists(CANCELLATION_RESOLUTION_DOCTYPE):
+		return None
+	rows = frappe.get_all(
+		CANCELLATION_RESOLUTION_DOCTYPE,
+		filters={"consultation": consultation_name},
+		fields=[
+			"name",
+			"consultation",
+			"resolution_action",
+			"resolution_action_key",
+			"resolution_status",
+			"reason",
+			"selected_by",
+			"selected_on",
+			"approved_by",
+			"approved_on",
+			"linked_new_consultation",
+			"linked_new_appointment",
+			"billing_group_paid_amount",
+			"billing_group_outstanding_amount",
+			"related_invoices",
+		],
+		order_by="modified desc",
+		limit=1,
+	)
+	if not rows:
+		return None
+	return serialize_cancellation_resolution(frappe._dict(rows[0]))
+
+
+def serialize_cancellation_resolution(doc) -> dict:
+	return {
+		"name": doc.get("name"),
+		"consultation": doc.get("consultation"),
+		"resolution_action": doc.get("resolution_action"),
+		"resolution_action_key": doc.get("resolution_action_key"),
+		"resolution_status": doc.get("resolution_status"),
+		"reason": doc.get("reason"),
+		"selected_by": doc.get("selected_by"),
+		"selected_on": doc.get("selected_on"),
+		"approved_by": doc.get("approved_by"),
+		"approved_on": doc.get("approved_on"),
+		"linked_new_consultation": doc.get("linked_new_consultation"),
+		"linked_new_appointment": doc.get("linked_new_appointment"),
+		"billing_group_paid_amount": flt(doc.get("billing_group_paid_amount")),
+		"billing_group_outstanding_amount": flt(doc.get("billing_group_outstanding_amount")),
+		"related_invoices": parse_json_field(doc.get("related_invoices")),
+	}
+
+
+def parse_json_field(value):
+	if not value:
+		return []
+	if isinstance(value, (list, dict)):
+		return value
+	try:
+		return json.loads(value)
+	except Exception:
+		return value
+
+
+def validate_user_can_record_cancellation_resolution(user: str) -> None:
+	if not user_can_record_cancellation_resolution(user):
+		frappe.throw("You do not have permission to record consultation cancellation resolution decisions.", frappe.PermissionError)
+
+
+def user_can_record_cancellation_resolution(user: str) -> bool:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles:
+		return False
+	return bool(set(get_roles(user)) & RESOLUTION_RECORDER_ROLES)
 
 
 def safe_doctype_exists(doctype: str) -> bool:
