@@ -1666,14 +1666,13 @@ def detach_invoice_from_vetedge_sources(invoice_name: str, *, reason: str | None
 		fieldname = config.get("field")
 		if not fieldname or not safe_meta_has_field(child_doctype, fieldname):
 			continue
-		fields = ["name"]
-		meta = frappe.get_meta(child_doctype)
-		for child_field in ("parent", "parenttype", "parentfield"):
-			if meta.has_field(child_field):
-				fields.append(child_field)
+		fields = ["name", "parent", "parenttype", "parentfield"]
 		for row in frappe.get_all(child_doctype, filters={fieldname: invoice_name}, fields=fields):
 			if should_preserve_source_child_invoice_reference(child_doctype, invoice_name):
 				detached.append({"doctype": child_doctype, "name": row.name, "field": fieldname, "preserved": True})
+				continue
+			if child_doctype == "Consultation Invoice Reference":
+				detached.extend(detach_consultation_invoice_reference_from_parent(row, invoice_name, fieldname))
 				continue
 			if config.get("action") == "delete":
 				run_with_billing_core_sync_flag(lambda row_name=row.name, doctype=child_doctype: frappe.delete_doc(doctype, row_name))
@@ -1685,6 +1684,26 @@ def detach_invoice_from_vetedge_sources(invoice_name: str, *, reason: str | None
 				frappe.db.set_value(child_doctype, row.name, values, update_modified=False)
 			detached.append({"doctype": child_doctype, "name": row.name, "field": fieldname})
 	return detached
+
+
+def detach_consultation_invoice_reference_from_parent(row, invoice_name: str, fieldname: str) -> list[dict]:
+	parent = row.get("parent")
+	if not parent or row.get("parenttype") != "Veterinary Consultation":
+		return [{"doctype": "Consultation Invoice Reference", "name": row.name, "field": fieldname, "skipped": True, "reason": "missing_parent_context"}]
+	try:
+		consultation = frappe.get_doc("Veterinary Consultation", parent)
+	except Exception:
+		return [{"doctype": "Consultation Invoice Reference", "name": row.name, "field": fieldname, "skipped": True, "reason": "parent_not_available"}]
+	remaining = [
+		child
+		for child in consultation.get("consultation_invoices") or []
+		if child.get(fieldname) != invoice_name
+	]
+	if len(remaining) == len(consultation.get("consultation_invoices") or []):
+		return [{"doctype": "Consultation Invoice Reference", "name": row.name, "field": fieldname, "skipped": True, "reason": "reference_not_found_on_parent"}]
+	consultation.set("consultation_invoices", remaining)
+	run_with_billing_core_sync_flag(lambda: consultation.save())
+	return [{"doctype": "Consultation Invoice Reference", "name": row.name, "field": fieldname, "parent": parent}]
 
 
 def should_preserve_source_child_invoice_reference(child_doctype: str, invoice_name: str) -> bool:

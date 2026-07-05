@@ -61,6 +61,38 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertTrue(preflight["can_cancel"])
 		self.assertEqual(preflight["billing_group_summary"]["draft_invoice_count"], 1)
 		self.assertEqual(preflight["warnings"][0]["type"], "draft_invoice")
+		self.assertEqual(preflight["warnings"][0]["display_label"], "Invoice ACC-SINV-DRAFT")
+
+	def test_default_consultation_fee_uses_human_friendly_label(self):
+		row = frappe._dict(
+			name="4tvh8ar53n",
+			source_type="Consultation",
+			source_detail_name="default_consultation_fee",
+			description="consultation fee",
+		)
+
+		self.assertEqual(consultation_cancellation.get_planned_treatment_display_label(row), "Consultation Fee")
+
+	def test_planned_treatment_warning_does_not_use_child_row_id_as_primary_label(self):
+		preflight = self.build_preflight(
+			planned_treatments=[
+				frappe._dict(
+					name="4tvh8ar53n",
+					source_type="Consultation",
+					source_doctype="Veterinary Consultation",
+					source_document="VCON-001",
+					source_detail_name="default_consultation_fee",
+					description="consultation fee",
+				)
+			]
+		)
+
+		self.assertTrue(preflight["can_cancel"])
+		self.assertEqual(preflight["linked_planned_treatments"][0]["display_label"], "Consultation Fee")
+		warning = preflight["warnings"][0]
+		self.assertEqual(warning["display_label"], "Consultation Fee")
+		self.assertIn("Consultation Fee", warning["message"])
+		self.assertNotIn("4tvh8ar53n", warning["message"])
 
 	def test_old_patient_outstanding_invoice_is_informational_not_blocking(self):
 		preflight = self.build_preflight(
@@ -89,7 +121,7 @@ class TestConsultationCancellationPreflight(TestCase):
 			patch.object(
 				consultation_cancellation,
 				"cleanup_safe_draft_dependencies",
-				return_value={"cleaned_draft_invoices": [], "closed_billing_sessions": [], "preserved_references": []},
+				return_value={"cleaned_draft_invoices": [], "skipped_draft_invoices": [], "closed_billing_sessions": [], "preserved_references": []},
 			) as cleanup,
 			patch.object(consultation_cancellation.frappe, "get_doc", return_value=doc),
 		):
@@ -100,6 +132,30 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(doc.status, "Cancelled")
 		doc.save.assert_called_once()
 		self.assertEqual(result["status"], "Cancelled")
+
+	def test_execute_safe_cancellation_reports_preserved_patient_outstanding_context(self):
+		doc = frappe._dict(name="VCON-001", status="In Progress")
+		doc.save = Mock()
+		with (
+			patch.object(
+				consultation_cancellation,
+				"validate_consultation_can_be_cancelled",
+				return_value={
+					"can_cancel": True,
+					"warnings": [],
+					"outstanding_context": [{"invoice": "ACC-SINV-OLD", "context_type": "patient_outstanding"}],
+				},
+			),
+			patch.object(
+				consultation_cancellation,
+				"cleanup_safe_draft_dependencies",
+				return_value={"cleaned_draft_invoices": [], "skipped_draft_invoices": [], "closed_billing_sessions": [], "preserved_references": []},
+			),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=doc),
+		):
+			result = consultation_cancellation.execute_consultation_cancellation("VCON-001")
+
+		self.assertEqual(result["preserved_patient_outstanding_invoices"], ["ACC-SINV-OLD"])
 
 	def test_execute_safe_cancellation_blocks_when_preflight_blocks(self):
 		with patch.object(consultation_cancellation, "validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError):
@@ -136,6 +192,26 @@ class TestConsultationCancellationPreflight(TestCase):
 		cleanup_invoice.assert_called_once_with("ACC-SINV-DRAFT", "VCON-001")
 		self.assertEqual(result["cleaned_draft_invoices"], ["ACC-SINV-DRAFT"])
 		self.assertEqual(result["closed_billing_sessions"], ["VBS-001"])
+
+	def test_safe_draft_sales_invoice_cleanup_uses_narrow_internal_delete(self):
+		with (
+			patch.object(consultation_cancellation, "is_draft_invoice_safe_for_consultation_cleanup", return_value=True),
+			patch.object(consultation_cancellation.frappe, "delete_doc") as delete_doc,
+		):
+			consultation_cancellation.delete_safe_draft_sales_invoice("ACC-SINV-DRAFT", "VCON-001")
+
+		delete_doc.assert_called_once_with("Sales Invoice", "ACC-SINV-DRAFT", ignore_permissions=True)
+
+	def test_unproven_draft_sales_invoice_cleanup_returns_friendly_blocker(self):
+		with (
+			patch.object(consultation_cancellation, "is_draft_invoice_safe_for_consultation_cleanup", return_value=False),
+			patch.object(consultation_cancellation.frappe, "delete_doc") as delete_doc,
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				consultation_cancellation.delete_safe_draft_sales_invoice("ACC-SINV-OTHER", "VCON-001")
+
+		delete_doc.assert_not_called()
+		self.assertIn("Please ask Accounts/Admin to review it", str(ctx.exception))
 
 	def test_safe_cancellation_cleanup_rejects_draft_invoice_from_another_context(self):
 		with patch.object(consultation_cancellation, "is_draft_invoice_safe_for_consultation_cleanup", return_value=False):

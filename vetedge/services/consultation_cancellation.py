@@ -60,9 +60,15 @@ def execute_consultation_cancellation(consultation_name: str, reason: str | None
 		"status": consultation.status,
 		"consultation": consultation.name,
 		"cleaned_draft_invoices": cleanup_result["cleaned_draft_invoices"],
+		"skipped_draft_invoices": cleanup_result["skipped_draft_invoices"],
 		"closed_billing_sessions": cleanup_result["closed_billing_sessions"],
 		"warnings": preflight.get("warnings") or [],
 		"preserved_references": cleanup_result["preserved_references"],
+		"preserved_patient_outstanding_invoices": [
+			row.get("invoice") or row.get("name")
+			for row in preflight.get("outstanding_context") or []
+			if row.get("invoice") or row.get("name")
+		],
 		"message": "Consultation cancelled after safe draft cleanup.",
 	}
 
@@ -131,6 +137,7 @@ def validate_consultation_can_be_cancelled(consultation_name: str) -> dict:
 
 def cleanup_safe_draft_dependencies(consultation_name: str, preflight: dict) -> dict:
 	cleaned_draft_invoices: list[str] = []
+	skipped_draft_invoices: list[dict] = []
 	preserved_references: list[dict] = []
 	for row in preflight.get("linked_invoices") or []:
 		if cint(row.get("docstatus")) != 0:
@@ -140,6 +147,7 @@ def cleanup_safe_draft_dependencies(consultation_name: str, preflight: dict) -> 
 		if not invoice_name:
 			continue
 		if not is_draft_invoice_safe_for_consultation_cleanup(invoice_name, consultation_name):
+			skipped_draft_invoices.append({"invoice": invoice_name, "reason": "not_exclusive_to_current_consultation"})
 			frappe.throw(
 				f"Draft invoice {invoice_name} is not exclusive to this consultation billing group and was not cleaned up.",
 				frappe.ValidationError,
@@ -150,6 +158,7 @@ def cleanup_safe_draft_dependencies(consultation_name: str, preflight: dict) -> 
 	closed_billing_sessions = close_safe_draft_billing_sessions(consultation_name)
 	return {
 		"cleaned_draft_invoices": cleaned_draft_invoices,
+		"skipped_draft_invoices": skipped_draft_invoices,
 		"closed_billing_sessions": closed_billing_sessions,
 		"preserved_references": preserved_references,
 	}
@@ -206,7 +215,23 @@ def cleanup_draft_invoice_for_consultation(invoice_name: str, consultation_name:
 				charge.billing_status = "Cancelled"
 		session.save()
 	detach_invoice_from_vetedge_sources(invoice_name, reason="consultation_cancelled")
-	run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))
+	try:
+		run_with_billing_core_sync_flag(lambda: delete_safe_draft_sales_invoice(invoice_name, consultation_name))
+	except frappe.PermissionError:
+		frappe.throw(
+			f"Draft invoice {invoice_name} could not be cleaned automatically. Please ask Accounts/Admin to review it.",
+			frappe.ValidationError,
+		)
+
+
+def delete_safe_draft_sales_invoice(invoice_name: str, consultation_name: str) -> None:
+	if not is_draft_invoice_safe_for_consultation_cleanup(invoice_name, consultation_name):
+		frappe.throw(
+			f"Draft invoice {invoice_name} could not be cleaned automatically. Please ask Accounts/Admin to review it.",
+			frappe.ValidationError,
+		)
+	# System-generated draft invoice cleanup for a VetEdge-cancelled consultation; submitted invoices are never mutated.
+	frappe.delete_doc("Sales Invoice", invoice_name, ignore_permissions=True)
 
 
 def get_billing_session_names_for_invoice(invoice_name: str, consultation_name: str | None = None) -> list[str]:
@@ -296,6 +321,7 @@ def get_consultation_billing_group_invoices(consultation_name: str) -> list[dict
 			{
 				"invoice": invoice_name,
 				"name": invoice_name,
+				"display_label": f"Invoice {invoice_name}",
 				"docstatus": cint(row.get("docstatus")),
 				"status": row.get("status"),
 				"payment_state": row.get("payment_state") or row.get("payment_status") or row.get("status"),
@@ -356,12 +382,14 @@ def get_group_payment_status(paid_amount: float, outstanding_amount: float, subm
 def add_invoice_blockers(blockers: list[dict], warnings: list[dict], invoices: list[dict], summary: dict) -> None:
 	for row in invoices:
 		docstatus = cint(row.get("docstatus"))
+		label = row.get("display_label") or f"Invoice {row.get('invoice')}"
 		if docstatus == 0:
 			warnings.append(
 				{
 					"type": "draft_invoice",
 					"invoice": row.get("invoice"),
-					"message": f"Draft invoice {row.get('invoice')} is linked and should be cleaned up through Billing Core if cancellation proceeds.",
+					"display_label": label,
+					"message": f"{label} is a draft invoice and will be cleaned up if cancellation proceeds.",
 				}
 			)
 			continue
@@ -372,7 +400,8 @@ def add_invoice_blockers(blockers: list[dict], warnings: list[dict], invoices: l
 				{
 					"type": "paid_invoice",
 					"invoice": row.get("invoice"),
-					"message": f"Invoice {row.get('invoice')} has payment recorded and needs a financial resolution before cancellation.",
+					"display_label": label,
+					"message": f"{label} has payment recorded and needs a financial resolution before cancellation.",
 				}
 			)
 		else:
@@ -380,7 +409,8 @@ def add_invoice_blockers(blockers: list[dict], warnings: list[dict], invoices: l
 				{
 					"type": "submitted_invoice",
 					"invoice": row.get("invoice"),
-					"message": f"Submitted invoice {row.get('invoice')} exists and must be handled by accounts/admin before cancellation.",
+					"display_label": label,
+					"message": f"{label} is submitted and must be handled by accounts/admin before cancellation.",
 				}
 			)
 
@@ -405,13 +435,15 @@ def add_lab_order_blockers(blockers: list[dict], warnings: list[dict], rows: lis
 	for row in rows:
 		if row.get("status") in {"Cancelled"} or cint(row.get("docstatus")) == 2:
 			continue
+		label = get_linked_document_display_label("Veterinary Lab Order", row)
 		target = blockers if row.get("status") in LAB_FINAL_STATUSES or cint(row.get("docstatus")) == 1 else warnings
 		target.append(
 			{
 				"type": "linked_lab_order",
 				"document": row.get("name"),
+				"display_label": label,
 				"status": row.get("status"),
-				"message": f"Linked lab order {row.get('name')} is {row.get('status') or 'active'} and must be resolved before cancellation.",
+				"message": f"{label} is {row.get('status') or 'active'} and must be resolved before cancellation.",
 			}
 		)
 
@@ -420,7 +452,7 @@ def get_linked_vaccinations(consultation_name: str) -> list[dict]:
 	return get_linked_docs(
 		"Veterinary Vaccination Record",
 		{"linked_consultation": consultation_name},
-		["name", "status", "docstatus", "linked_invoice", "sales_invoice", "stock_entry"],
+		["name", "status", "docstatus", "vaccine", "vaccine_name", "linked_invoice", "sales_invoice", "stock_entry"],
 	)
 
 
@@ -428,13 +460,15 @@ def add_vaccination_blockers(blockers: list[dict], warnings: list[dict], rows: l
 	for row in rows:
 		if row.get("status") in {"Cancelled"} or cint(row.get("docstatus")) == 2:
 			continue
+		label = get_linked_document_display_label("Veterinary Vaccination Record", row)
 		target = blockers if row.get("status") in VACCINATION_FINAL_STATUSES or cint(row.get("docstatus")) == 1 else warnings
 		target.append(
 			{
 				"type": "linked_vaccination",
 				"document": row.get("name"),
+				"display_label": label,
 				"status": row.get("status"),
-				"message": f"Linked vaccination {row.get('name')} is {row.get('status') or 'active'} and must be resolved before cancellation.",
+				"message": f"{label} is {row.get('status') or 'active'} and must be resolved before cancellation.",
 			}
 		)
 
@@ -453,9 +487,67 @@ def get_linked_planned_treatments(consultation) -> list[dict]:
 				"source_doctype": row.get("source_doctype"),
 				"source_document": row.get("source_document"),
 				"source_detail_name": row.get("source_detail_name"),
+				"display_label": get_planned_treatment_display_label(row),
 			}
 		)
 	return rows
+
+
+def get_planned_treatment_display_label(row) -> str:
+	source_type = row.get("source_type")
+	source_document = row.get("source_document")
+	source_detail = row.get("source_detail_name")
+	description = row.get("description")
+	item = row.get("item") or row.get("item_code")
+
+	if source_type == "Consultation" or normalize_label_key(source_detail) in {"default consultation fee", "consultation fee"}:
+		return "Consultation Fee"
+	if source_type == "Registration" or normalize_label_key(source_detail) == "registration fee":
+		return "Registration Fee"
+	if source_type == "Lab Order":
+		return f"Lab Order: {source_document or get_best_text(description, item, source_detail, row.get('name'))}"
+	if source_type == "Vaccination":
+		return f"Vaccination: {get_best_text(description, item, source_detail, source_document)}"
+	if source_type:
+		return f"{source_type}: {get_best_text(description, item, source_detail, source_document)}"
+	if item or description:
+		return f"Treatment: {get_best_text(description, item)}"
+	return "Treatment"
+
+
+def get_linked_document_display_label(doctype: str, row: dict) -> str:
+	name = row.get("name") or row.get("document")
+	if doctype == "Veterinary Lab Order":
+		return f"Lab Order: {name}"
+	if doctype == "Veterinary Vaccination Record":
+		vaccine = row.get("vaccine") or row.get("vaccine_name")
+		return f"Vaccination: {vaccine or name}"
+	if doctype == "Veterinary Hospitalisation":
+		return f"Hospitalisation {name}"
+	return f"{doctype} {name}"
+
+
+def get_best_text(*values) -> str:
+	for value in values:
+		if value:
+			return humanize_cancellation_label(value)
+	return ""
+
+
+def humanize_cancellation_label(value) -> str:
+	text = str(value or "").strip()
+	if not text:
+		return ""
+	normalized = normalize_label_key(text)
+	if normalized in {"consultation fee", "default consultation fee", "default_consultation_fee"}:
+		return "Consultation Fee"
+	if normalized in {"registration fee", "default registration fee", "registration_fee"}:
+		return "Registration Fee"
+	return text.replace("_", " ").replace("-", " ").title() if text.lower() == text or "_" in text else text
+
+
+def normalize_label_key(value) -> str:
+	return str(value or "").strip().replace("_", " ").replace("-", " ").lower()
 
 
 def add_planned_treatment_warnings(warnings: list[dict], rows: list[dict]) -> None:
@@ -464,14 +556,16 @@ def add_planned_treatment_warnings(warnings: list[dict], rows: list[dict]) -> No
 		source_document = row.get("source_document")
 		if not source_type and not source_document:
 			continue
+		label = row.get("display_label") or get_planned_treatment_display_label(row)
 		warnings.append(
 			{
 				"type": "source_linked_planned_treatment",
 				"document": row.get("name"),
+				"display_label": label,
 				"source_type": source_type,
 				"source_document": source_document,
 				"message": (
-					f"Planned treatment row {row.get('name') or row.get('item') or ''} is linked to "
+					f"{label} is linked to "
 					f"{source_type or 'a source document'} {source_document or ''} and will not be silently removed."
 				).strip(),
 			}
@@ -490,13 +584,15 @@ def add_hospitalisation_blockers(blockers: list[dict], warnings: list[dict], row
 	for row in rows:
 		if row.get("status") in {"Cancelled", "Discharged"} or cint(row.get("docstatus")) == 2:
 			continue
+		label = get_linked_document_display_label("Veterinary Hospitalisation", row)
 		target = blockers if row.get("status") in HOSPITALISATION_ACTIVE_STATUSES or cint(row.get("docstatus")) == 1 else warnings
 		target.append(
 			{
 				"type": "linked_hospitalisation",
 				"document": row.get("name"),
+				"display_label": label,
 				"status": row.get("status"),
-				"message": f"Linked hospitalisation {row.get('name')} is {row.get('status') or 'active'} and must be resolved before cancellation.",
+				"message": f"{label} is {row.get('status') or 'active'} and must be resolved before cancellation.",
 			}
 		)
 
@@ -517,13 +613,15 @@ def add_stock_entry_blockers(blockers: list[dict], warnings: list[dict], rows: l
 	for row in rows:
 		if cint(row.get("docstatus")) == 2:
 			continue
+		label = f"Stock Entry {row.get('name')}"
 		target = blockers if cint(row.get("docstatus")) == 1 else warnings
 		target.append(
 			{
 				"type": "linked_stock_entry",
 				"document": row.get("name"),
+				"display_label": label,
 				"docstatus": cint(row.get("docstatus")),
-				"message": f"Linked Stock Entry {row.get('name')} must be handled by stock/accounts before cancellation.",
+				"message": f"{label} must be handled by stock/accounts before cancellation.",
 			}
 		)
 

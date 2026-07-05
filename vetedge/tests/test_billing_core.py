@@ -590,6 +590,35 @@ class TestBillingCore(TestCase):
 		self.assertEqual(source_links[0].value, "SINV-SUB")
 		self.assertTrue(any(row.get("preserved") for row in detached if row.get("doctype") == "Consultation Invoice Reference"))
 
+	def test_draft_consultation_invoice_reference_detaches_through_parent_doc(self):
+		child_row = frappe._dict(
+			name="CIR-DRAFT",
+			parent="VCON-001",
+			parenttype="Veterinary Consultation",
+			parentfield="consultation_invoices",
+		)
+		consultation = frappe._dict(
+			name="VCON-001",
+			consultation_invoices=[
+				frappe._dict(name="CIR-DRAFT", sales_invoice="SINV-DRAFT"),
+				frappe._dict(name="CIR-OTHER", sales_invoice="SINV-OTHER"),
+			],
+		)
+		consultation.set = lambda fieldname, rows: consultation.__setitem__(fieldname, rows)
+		consultation.save = Mock()
+
+		with (
+			patch.object(billing_core.frappe, "get_doc", return_value=consultation),
+			patch.object(billing_core, "run_with_billing_core_sync_flag", side_effect=lambda callback: callback()),
+			patch.object(billing_core.frappe, "delete_doc") as delete_doc,
+		):
+			detached = billing_core.detach_consultation_invoice_reference_from_parent(child_row, "SINV-DRAFT", "sales_invoice")
+
+		self.assertEqual([row.sales_invoice for row in consultation.consultation_invoices], ["SINV-OTHER"])
+		consultation.save.assert_called_once()
+		delete_doc.assert_not_called()
+		self.assertEqual(detached[0]["parent"], "VCON-001")
+
 	def test_submitted_unpaid_invoice_cancellation_detaches_consultation_link_before_cancel(self):
 		key = "Veterinary Hospitalisation:VHOS-001:Hospitalisation:ACT-1"
 		charge = frappe._dict({**charge_payload(key, "MED-ITEM", 50), "source_doctype": "Veterinary Hospitalisation", "source_name": "VHOS-001", "invoice": "SINV-SUB", "billing_status": "Cancelled"})
@@ -3368,6 +3397,35 @@ class billing_core_context:
 				if name == self.linked_invoice.name:
 					return self.linked_invoice
 				return self.created_invoice
+			if doctype == "Veterinary Consultation":
+				consultation = frappe._dict(
+					name=name,
+					consultation_invoices=[
+						frappe._dict({"name": link.name, link.get("field"): link.get("value")})
+						for link in self.source_links
+						if link.get("doctype") == "Consultation Invoice Reference"
+						and link.get("parent") == name
+						and not link.get("deleted")
+					],
+				)
+
+				def set_child_table(fieldname, rows):
+					if fieldname != "consultation_invoices":
+						consultation[fieldname] = rows
+						return
+					kept_names = {row.get("name") for row in rows}
+					for link in self.source_links:
+						if (
+							link.get("doctype") == "Consultation Invoice Reference"
+							and link.get("parent") == name
+							and link.get("name") not in kept_names
+						):
+							link.deleted = True
+					consultation.consultation_invoices = rows
+
+				consultation.set = set_child_table
+				consultation.save = Mock()
+				return consultation
 			return frappe._dict(name=name)
 
 		def get_value(doctype, name, fieldname=None, **kwargs):

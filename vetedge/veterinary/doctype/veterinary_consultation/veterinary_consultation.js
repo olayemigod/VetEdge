@@ -1380,7 +1380,7 @@ function render_cancellation_blockers(blockers) {
 		return "";
 	}
 	return render_cancellation_card_section(__("Blockers"), blockers.map((row) => ({
-		title: row.document || row.invoice || row.type,
+		title: row.display_label || row.document || row.invoice || row.type,
 		meta: row.status || row.type,
 		message: row.message,
 	})));
@@ -1391,7 +1391,7 @@ function render_cancellation_warnings(warnings) {
 		return "";
 	}
 	return render_cancellation_card_section(__("Warnings"), warnings.map((row) => ({
-		title: row.document || row.invoice || row.source_document || row.type,
+		title: row.display_label || row.document || row.invoice || row.source_document || row.type,
 		meta: row.status || row.type,
 		message: row.message,
 	})));
@@ -1445,7 +1445,7 @@ function render_cancellation_dependency_sections(preflight) {
 		.map(([title, rows, nameField]) => render_cancellation_card_section(
 			title,
 			rows.map((row) => ({
-				title: row[nameField] || row.document || row.source_document || row.item || row.type,
+				title: row.display_label || row[nameField] || row.document || row.source_document || row.item || row.type,
 				meta: row.status || row.payment_status || row.billing_status || row.docstatus || row.source_type,
 				message: row.message || row.description || row.source_document || "",
 			}))
@@ -1546,13 +1546,21 @@ function perform_safe_consultation_cancellation(frm) {
 		callback(result) {
 			const message = result.message || {};
 			const cleaned = message.cleaned_draft_invoices || [];
+			const skipped = message.skipped_draft_invoices || [];
+			const preservedPatientOutstanding = message.preserved_patient_outstanding_invoices || [];
 			const sessions = message.closed_billing_sessions || [];
 			const details = [];
 			if (cleaned.length) {
 				details.push(`${__("Draft invoices cleaned")}: ${cleaned.map(escape_consultation_history_html).join(", ")}`);
 			}
+			if (skipped.length) {
+				details.push(`${__("Draft invoices skipped")}: ${skipped.map((row) => escape_consultation_history_html(row.invoice || row.name || row.reason || "")).filter(Boolean).join(", ")}`);
+			}
 			if (sessions.length) {
 				details.push(`${__("Billing sessions closed")}: ${sessions.map(escape_consultation_history_html).join(", ")}`);
+			}
+			if (preservedPatientOutstanding.length) {
+				details.push(`${__("Other patient invoices preserved")}: ${preservedPatientOutstanding.map(escape_consultation_history_html).join(", ")}`);
 			}
 			frappe.show_alert({
 				message: details.length ? details.join(" | ") : __("Consultation cancelled"),
