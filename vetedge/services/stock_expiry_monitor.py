@@ -296,6 +296,9 @@ def _query_batch_stock_rows(filters) -> list[dict]:
 	if filters.get("item_group"):
 		conditions.append("i.item_group = %(item_group)s")
 		values["item_group"] = filters.get("item_group")
+	if filters.get("item"):
+		conditions.append("b.item = %(item)s")
+		values["item"] = filters.get("item")
 	if filters.get("branch"):
 		warehouse = get_branch_dispensary_warehouse(filters.get("branch"), filters.get("company"), required=False)
 		if warehouse:
