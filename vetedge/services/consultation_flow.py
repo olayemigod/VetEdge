@@ -135,6 +135,8 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 def validate_paid_consultation_cancellation(doc, previous=None) -> None:
 	if doc.status != "Cancelled":
 		return
+	if getattr(getattr(frappe, "flags", None), "vetedge_retain_payment_cancellation", False):
+		return
 
 	previous_status = getattr(previous, "status", None) if previous else None
 	if previous_status == "Cancelled":

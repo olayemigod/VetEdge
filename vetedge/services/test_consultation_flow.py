@@ -1137,6 +1137,20 @@ class TestConsultationFlow(TestCase):
 				validate_consultation(doc)
 		preflight.assert_called_once_with("VCON-001")
 
+	def test_retain_payment_cancellation_flag_skips_standard_cancel_preflight(self):
+		doc = frappe._dict(status="Cancelled", name="VCON-001")
+		previous = frappe._dict(status="Ready for Treatment")
+
+		with (
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled") as preflight,
+			patch("vetedge.services.consultation_flow.frappe.flags", frappe._dict(vetedge_retain_payment_cancellation=True)),
+		):
+			from vetedge.services.consultation_flow import validate_paid_consultation_cancellation
+
+			validate_paid_consultation_cancellation(doc, previous)
+
+		preflight.assert_not_called()
+
 	def test_linked_appointment_must_belong_to_selected_patient(self):
 		doc = frappe._dict(
 			name="VCON-001",

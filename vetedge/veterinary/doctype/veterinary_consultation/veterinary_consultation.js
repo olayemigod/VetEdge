@@ -1323,6 +1323,9 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 		const label = $(this).text();
 		show_consultation_resolution_decision_dialog(frm, dialog, action, label);
 	});
+	dialog.fields_dict.preflight_html.$wrapper.find("[data-retain-payment-cancel]").on("click", function () {
+		show_retain_payment_cancellation_confirmation(frm, dialog);
+	});
 	dialog.show();
 }
 
@@ -1473,6 +1476,8 @@ function render_existing_cancellation_resolution(resolution) {
 	if (!resolution) {
 		return "";
 	}
+	const canRetainPaymentCancel = resolution.resolution_action_key === "retain_payment_clinical_cancel_only"
+		&& ["Pending Review", "Approved"].includes(resolution.resolution_status);
 	return `
 		<div class="ve-cancel-section">
 			<h4>${__("Recorded Resolution Decision")}</h4>
@@ -1482,6 +1487,13 @@ function render_existing_cancellation_resolution(resolution) {
 				<div class="ve-cancel-meta">${__("Selected By")}: ${escape_consultation_history_html(resolution.selected_by || "")}</div>
 				<div class="ve-cancel-meta">${__("Selected On")}: ${escape_consultation_history_html(resolution.selected_on || "")}</div>
 				${resolution.reason ? `<div class="ve-cancel-meta">${__("Reason")}: ${escape_consultation_history_html(resolution.reason)}</div>` : ""}
+				${canRetainPaymentCancel ? `
+					<div class="mt-3">
+						<button class="btn btn-danger btn-sm" type="button" data-retain-payment-cancel="1">
+							${__("Cancel Clinical Record and Retain Payment")}
+						</button>
+					</div>
+				` : ""}
 			</div>
 		</div>
 	`;
@@ -1593,6 +1605,34 @@ function render_consultation_resolution_guidance(action, label) {
 		<p><strong>${escape_consultation_history_html(label || action)}</strong></p>
 		<p>${escape_consultation_history_html(guidance[action] || __("Resolve the listed blockers before cancellation."))}</p>
 	`;
+}
+
+function show_retain_payment_cancellation_confirmation(frm, preflightDialog) {
+	frappe.confirm(
+		__("This will cancel the clinical consultation only. Submitted invoices and payments will remain unchanged."),
+		() => {
+			frappe.call({
+				method: "vetedge.services.consultation_cancellation.retain_payment_and_cancel_consultation",
+				args: {
+					consultation_name: frm.doc.name,
+				},
+				freeze: true,
+				freeze_message: __("Cancelling clinical consultation..."),
+				callback(result) {
+					if (preflightDialog) {
+						preflightDialog.hide();
+					}
+					const message = result.message?.message || __("Clinical consultation cancelled. Payment was retained. No accounting reversal was created.");
+					frappe.msgprint({
+						title: __("Clinical Consultation Cancelled"),
+						indicator: "green",
+						message,
+					});
+					frm.reload_doc();
+				},
+			});
+		}
+	);
 }
 
 function perform_safe_consultation_cancellation(frm) {

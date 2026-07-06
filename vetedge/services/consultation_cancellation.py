@@ -43,6 +43,7 @@ RESOLUTION_RECORDER_ROLES = {
 	"Accounts User",
 	"Accounts Manager",
 }
+RETAIN_PAYMENT_EXECUTOR_ROLES = RESOLUTION_RECORDER_ROLES
 
 
 @frappe.whitelist()
@@ -101,6 +102,14 @@ def record_consultation_cancellation_resolution(
 	)
 
 
+@frappe.whitelist()
+def retain_payment_and_cancel_consultation(consultation_name: str, reason: str | None = None) -> dict:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	validate_user_can_execute_retain_payment_cancellation(frappe.session.user)
+	return execute_retain_payment_consultation_cancellation(consultation_name, reason=reason)
+
+
 def execute_consultation_cancellation(consultation_name: str, reason: str | None = None) -> dict:
 	preflight = validate_consultation_can_be_cancelled(consultation_name)
 	cleanup_result = cleanup_safe_draft_dependencies(consultation_name, preflight)
@@ -109,7 +118,7 @@ def execute_consultation_cancellation(consultation_name: str, reason: str | None
 	consultation.status = "Cancelled"
 	if reason:
 		set_cancellation_reason_if_supported(consultation, reason)
-	consultation.save()
+	run_with_retain_payment_cancellation_flag(consultation.save)
 
 	return {
 		"status": consultation.status,
@@ -126,6 +135,48 @@ def execute_consultation_cancellation(consultation_name: str, reason: str | None
 		],
 		"message": "Consultation cancelled after safe draft cleanup.",
 	}
+
+
+def execute_retain_payment_consultation_cancellation(consultation_name: str, reason: str | None = None) -> dict:
+	preflight = build_consultation_cancellation_preflight(consultation_name)
+	resolution = get_valid_retain_payment_resolution_doc(consultation_name)
+	validate_retain_payment_cancellation_allowed(preflight, resolution)
+
+	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
+	consultation.status = "Cancelled"
+	if reason:
+		set_cancellation_reason_if_supported(consultation, reason)
+	consultation.save()
+
+	resolution.resolution_status = "Completed"
+	if frappe.get_meta(CANCELLATION_RESOLUTION_DOCTYPE).has_field("notes"):
+		existing_notes = (resolution.get("notes") or "").strip()
+		retain_note = "Payment retained. No refund, credit note, Payment Entry, Stock Entry, or Sales Invoice reversal was created."
+		resolution.notes = "\n".join([note for note in (existing_notes, retain_note) if note])
+	resolution.save()
+
+	return {
+		"consultation": consultation.name,
+		"status": consultation.status,
+		"resolution": serialize_cancellation_resolution(resolution),
+		"invoices_preserved": [
+			row.get("invoice") or row.get("name")
+			for row in preflight.get("linked_invoices") or []
+			if row.get("invoice") or row.get("name")
+		],
+		"payments_preserved": True,
+		"warnings": preflight.get("warnings") or [],
+		"message": "Clinical consultation cancelled. Payment was retained. No accounting reversal was created.",
+	}
+
+
+def run_with_retain_payment_cancellation_flag(callback):
+	previous = getattr(frappe.flags, "vetedge_retain_payment_cancellation", False)
+	frappe.flags.vetedge_retain_payment_cancellation = True
+	try:
+		return callback()
+	finally:
+		frappe.flags.vetedge_retain_payment_cancellation = previous
 
 
 def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
@@ -793,6 +844,47 @@ def record_cancellation_resolution_decision(
 	return serialize_cancellation_resolution(doc)
 
 
+def get_valid_retain_payment_resolution_doc(consultation_name: str):
+	resolution = get_open_cancellation_resolution_doc(consultation_name)
+	if not resolution:
+		frappe.throw(
+			"Record a Retain Payment / Clinical Cancellation Only resolution before cancelling this paid consultation.",
+			frappe.ValidationError,
+		)
+	if resolution.get("resolution_action_key") != "retain_payment_clinical_cancel_only":
+		frappe.throw(
+			"Only a Retain Payment / Clinical Cancellation Only resolution can use retained-payment cancellation.",
+			frappe.ValidationError,
+		)
+	if resolution.get("resolution_status") not in {"Pending Review", "Approved"}:
+		frappe.throw(
+			"Retained-payment cancellation requires a Pending Review or Approved resolution decision.",
+			frappe.ValidationError,
+		)
+	return resolution
+
+
+def validate_retain_payment_cancellation_allowed(preflight: dict, resolution) -> None:
+	if preflight.get("can_cancel"):
+		frappe.throw(
+			"Use normal safe cancellation for consultations without submitted or paid billing blockers.",
+			frappe.ValidationError,
+		)
+	blocker_types = {row.get("type") for row in preflight.get("blockers") or []}
+	if not blocker_types.intersection({"paid_invoice", "submitted_invoice"}):
+		frappe.throw(
+			"Retained-payment cancellation is only available for consultations blocked by submitted or paid billing.",
+			frappe.ValidationError,
+		)
+	summary = preflight.get("billing_group_summary") or {}
+	if cint(summary.get("submitted_invoice_count")) <= 0:
+		frappe.throw("A submitted consultation invoice is required before retaining payment.", frappe.ValidationError)
+	if flt(summary.get("paid_amount")) <= 0:
+		frappe.throw("Payment must exist before using retained-payment cancellation.", frappe.ValidationError)
+	if resolution.get("consultation") != preflight.get("consultation"):
+		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
+
+
 def populate_cancellation_resolution_doc(
 	doc,
 	consultation,
@@ -954,6 +1046,18 @@ def user_can_record_cancellation_resolution(user: str) -> bool:
 	if not get_roles:
 		return False
 	return bool(set(get_roles(user)) & RESOLUTION_RECORDER_ROLES)
+
+
+def validate_user_can_execute_retain_payment_cancellation(user: str) -> None:
+	if not user_can_execute_retain_payment_cancellation(user):
+		frappe.throw("You do not have permission to cancel a consultation while retaining payment.", frappe.PermissionError)
+
+
+def user_can_execute_retain_payment_cancellation(user: str) -> bool:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles:
+		return False
+	return bool(set(get_roles(user)) & RETAIN_PAYMENT_EXECUTOR_ROLES)
 
 
 def safe_doctype_exists(doctype: str) -> bool:
