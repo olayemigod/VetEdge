@@ -1610,6 +1610,14 @@ function get_manual_accounting_resolution_guidance(resolution) {
 	}[resolution?.resolution_action_key] || __("Record accounting evidence before completing this resolution.");
 }
 
+function get_manual_accounting_status_outcome_guidance(resolution) {
+	return {
+		refund_required: __("Choose Cancel only if this refund means the consultation/service will not continue."),
+		issue_customer_credit: __("Choose Cancel only if this credit replaces a refund for a cancelled consultation."),
+		admin_accounting_correction: __("Admin corrections do not change consultation status in this phase."),
+	}[resolution?.resolution_action_key] || __("Accounting completion does not change consultation status unless explicitly selected and allowed.");
+}
+
 function render_cancellation_patient_outstanding_context(rows) {
 	if (!rows.length) {
 		return "";
@@ -1843,6 +1851,7 @@ function show_reschedule_resolution_dialog(frm, preflightDialog, resolutionName)
 
 function show_manual_accounting_resolution_completion_dialog(frm, preflightDialog, resolution, resolutionName, label) {
 	const requiresAmount = ["refund_required", "issue_customer_credit"].includes(resolution?.resolution_action_key);
+	const canCancelAfterFinancialResolution = ["refund_required", "issue_customer_credit"].includes(resolution?.resolution_action_key);
 	const dialog = new frappe.ui.Dialog({
 		title: label || __("Mark Accounting Resolution Completed"),
 		fields: [
@@ -1852,6 +1861,7 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 				options: `
 					<p>${escape_consultation_history_html(get_manual_accounting_resolution_guidance(resolution))}</p>
 					<p class="text-muted">${__("This records audit evidence only. VetEdge will not create refunds, Credit Notes, Payment Entries, accounting reversals, or apply credit to a rescheduled consultation.")}</p>
+					<p class="text-muted">${escape_consultation_history_html(get_manual_accounting_status_outcome_guidance(resolution))}</p>
 				`,
 			},
 			{
@@ -1893,6 +1903,22 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 				label: __("External/manual reference approved by System Manager or Accounts Manager"),
 			},
 			{
+				fieldtype: "Select",
+				fieldname: "status_outcome",
+				label: __("After recording this accounting resolution, what should happen to the consultation?"),
+				options: canCancelAfterFinancialResolution
+					? [
+						"No Status Change",
+						"Cancel Consultation After Financial Resolution",
+					].join("\n")
+					: "No Status Change",
+				default: "No Status Change",
+				reqd: 1,
+				description: canCancelAfterFinancialResolution
+					? __("Choose Cancel only when the refund or credit means this consultation/service will not continue.")
+					: __("Admin corrections do not change consultation status in this phase."),
+			},
+			{
 				fieldtype: "Small Text",
 				fieldname: "completion_note",
 				label: __("Completion Note"),
@@ -1914,6 +1940,7 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 					resolution_amount: values.resolution_amount,
 					resolution_date: values.resolution_date,
 					external_reference: values.external_reference,
+					status_outcome: values.status_outcome,
 				},
 				freeze: true,
 				freeze_message: __("Recording accounting evidence..."),

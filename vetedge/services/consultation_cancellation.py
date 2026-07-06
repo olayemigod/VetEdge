@@ -58,6 +58,14 @@ MANUAL_ACCOUNTING_REFERENCE_DOCTYPES = {
 	"admin_accounting_correction": {"Journal Entry", "Sales Invoice", "Payment Entry", "Stock Entry"},
 }
 EXTERNAL_ACCOUNTING_REFERENCE_ROLES = {"System Manager", "Accounts Manager"}
+STATUS_OUTCOME_NO_CHANGE = "no_status_change"
+STATUS_OUTCOME_CANCEL_AFTER_FINANCIAL_RESOLUTION = "cancel_consultation_after_financial_resolution"
+STATUS_OUTCOME_LABELS = {
+	STATUS_OUTCOME_NO_CHANGE: "No Status Change",
+	STATUS_OUTCOME_CANCEL_AFTER_FINANCIAL_RESOLUTION: "Cancel Consultation After Financial Resolution",
+}
+STATUS_OUTCOME_KEYS = {label: key for key, label in STATUS_OUTCOME_LABELS.items()}
+FINANCIAL_RESOLUTION_CANCEL_STATUS_ACTIONS = {"refund_required", "issue_customer_credit"}
 
 
 @frappe.whitelist()
@@ -153,6 +161,7 @@ def complete_consultation_cancellation_resolution_manually(
 	resolution_amount: float | str | None = None,
 	resolution_date: str | None = None,
 	external_reference: bool | str | int = False,
+	status_outcome: str | None = STATUS_OUTCOME_NO_CHANGE,
 ) -> dict:
 	require_internal_user()
 	validate_user_can_complete_manual_accounting_resolution(frappe.session.user)
@@ -168,6 +177,7 @@ def complete_consultation_cancellation_resolution_manually(
 		resolution_amount=resolution_amount,
 		resolution_date=resolution_date,
 		external_reference=external_reference,
+		status_outcome=status_outcome,
 	)
 
 
@@ -329,6 +339,7 @@ def complete_manual_accounting_resolution(
 	resolution_amount: float | str | None = None,
 	resolution_date: str | None = None,
 	external_reference: bool | str | int = False,
+	status_outcome: str | None = STATUS_OUTCOME_NO_CHANGE,
 ) -> dict:
 	evidence = validate_manual_accounting_resolution_completion(
 		resolution,
@@ -338,6 +349,11 @@ def complete_manual_accounting_resolution(
 		resolution_amount=resolution_amount,
 		resolution_date=resolution_date,
 		external_reference=external_reference,
+		status_outcome=status_outcome,
+	)
+	consultation_status_before, consultation_status_after = apply_financial_resolution_status_outcome(
+		resolution,
+		evidence["status_outcome"],
 	)
 
 	note_lines = [
@@ -354,6 +370,7 @@ def complete_manual_accounting_resolution(
 		note_lines.append(f"Resolution amount: {evidence['resolution_amount']}.")
 	if evidence["resolution_date"]:
 		note_lines.append(f"Resolution date: {evidence['resolution_date']}.")
+	note_lines.append(f"Status outcome: {STATUS_OUTCOME_LABELS[evidence['status_outcome']]}.")
 	note_lines.append(
 		"Acknowledgement only. VetEdge did not create or mutate Credit Notes, Payment Entries, Sales Invoices, Stock Entries, refunds, credits, accounting reversals, or payment allocations."
 	)
@@ -365,16 +382,19 @@ def complete_manual_accounting_resolution(
 	return {
 		"status": "success",
 		"consultation": resolution.get("consultation"),
-		"consultation_status": frappe.db.get_value("Veterinary Consultation", resolution.get("consultation"), "status"),
+		"consultation_status": consultation_status_after,
+		"consultation_status_before": consultation_status_before,
+		"consultation_status_after": consultation_status_after,
 		"resolution": serialize_cancellation_resolution(resolution),
 		"resolution_status": resolution.resolution_status,
+		"status_outcome": evidence["status_outcome"],
 		"accounting_reference_doctype": evidence["accounting_reference_doctype"],
 		"accounting_reference_name": evidence["accounting_reference_name"],
 		"resolution_amount": evidence["resolution_amount"],
 		"resolution_date": evidence["resolution_date"],
 		"external_reference": evidence["external_reference"],
 		"accounting_documents_preserved": True,
-		"message": "Accounting resolution evidence recorded. Consultation status and submitted accounting documents were unchanged.",
+		"message": build_manual_accounting_resolution_completion_message(evidence["status_outcome"]),
 	}
 
 
@@ -387,6 +407,40 @@ def run_with_retain_payment_cancellation_flag(callback):
 		return callback()
 	finally:
 		frappe.flags.vetedge_retain_payment_cancellation = previous
+
+
+def run_with_financial_resolution_cancellation_flag(callback):
+	if not getattr(frappe, "flags", None):
+		frappe.flags = frappe._dict()
+	previous = getattr(frappe.flags, "vetedge_financial_resolution_cancellation", False)
+	frappe.flags.vetedge_financial_resolution_cancellation = True
+	try:
+		return callback()
+	finally:
+		frappe.flags.vetedge_financial_resolution_cancellation = previous
+
+
+def apply_financial_resolution_status_outcome(resolution, status_outcome: str) -> tuple[str | None, str | None]:
+	consultation_name = resolution.get("consultation")
+	consultation_status_before = frappe.db.get_value("Veterinary Consultation", consultation_name, "status")
+	if status_outcome == STATUS_OUTCOME_NO_CHANGE:
+		return consultation_status_before, consultation_status_before
+
+	consultation = frappe.get_doc("Veterinary Consultation", consultation_name)
+	if consultation.status == "Cancelled":
+		frappe.throw("Consultation is already Cancelled.", frappe.ValidationError)
+	consultation.status = "Cancelled"
+	run_with_financial_resolution_cancellation_flag(consultation.save)
+	return consultation_status_before, consultation.status
+
+
+def build_manual_accounting_resolution_completion_message(status_outcome: str) -> str:
+	if status_outcome == STATUS_OUTCOME_CANCEL_AFTER_FINANCIAL_RESOLUTION:
+		return (
+			"Accounting resolution evidence recorded. Consultation was cancelled after financial resolution. "
+			"Submitted accounting documents were unchanged."
+		)
+	return "Accounting resolution evidence recorded. Consultation status and submitted accounting documents were unchanged."
 
 
 def build_consultation_cancellation_preflight(consultation_name: str) -> dict:
@@ -1141,6 +1195,7 @@ def validate_manual_accounting_resolution_completion(
 	resolution_amount: float | str | None = None,
 	resolution_date: str | None = None,
 	external_reference: bool | str | int = False,
+	status_outcome: str | None = STATUS_OUTCOME_NO_CHANGE,
 ) -> dict:
 	action_key = resolution.get("resolution_action_key")
 	if action_key not in MANUAL_ACCOUNTING_RESOLUTION_ACTIONS:
@@ -1157,6 +1212,8 @@ def validate_manual_accounting_resolution_completion(
 	accounting_reference_name = (accounting_reference_name or "").strip()
 	if not resolution_date:
 		frappe.throw("Resolution date is required before marking this accounting resolution completed.", frappe.ValidationError)
+	status_outcome = normalize_status_outcome(status_outcome)
+	validate_manual_accounting_resolution_status_outcome(action_key, status_outcome)
 	if action_key in {"refund_required", "issue_customer_credit"} and flt(resolution_amount) <= 0:
 		frappe.throw("Resolution amount must be greater than zero for refund or customer credit resolutions.", frappe.ValidationError)
 	if external_reference:
@@ -1176,7 +1233,40 @@ def validate_manual_accounting_resolution_completion(
 		"resolution_amount": flt(resolution_amount),
 		"resolution_date": resolution_date,
 		"external_reference": external_reference,
+		"status_outcome": status_outcome,
 	}
+
+
+def normalize_status_outcome(status_outcome: str | None) -> str:
+	if not status_outcome:
+		return STATUS_OUTCOME_NO_CHANGE
+	status_outcome = str(status_outcome).strip()
+	if status_outcome in STATUS_OUTCOME_LABELS:
+		return status_outcome
+	if status_outcome in STATUS_OUTCOME_KEYS:
+		return STATUS_OUTCOME_KEYS[status_outcome]
+	frappe.throw("Invalid consultation status outcome for this accounting resolution.", frappe.ValidationError)
+
+
+def normalize_status_outcome_for_response(status_outcome: str | None) -> str:
+	if not status_outcome:
+		return STATUS_OUTCOME_NO_CHANGE
+	status_outcome = str(status_outcome).strip()
+	if status_outcome in STATUS_OUTCOME_LABELS:
+		return status_outcome
+	return STATUS_OUTCOME_KEYS.get(status_outcome, status_outcome)
+
+
+def validate_manual_accounting_resolution_status_outcome(action_key: str, status_outcome: str) -> None:
+	if status_outcome == STATUS_OUTCOME_NO_CHANGE:
+		return
+	if status_outcome != STATUS_OUTCOME_CANCEL_AFTER_FINANCIAL_RESOLUTION:
+		frappe.throw("Invalid consultation status outcome for this accounting resolution.", frappe.ValidationError)
+	if action_key not in FINANCIAL_RESOLUTION_CANCEL_STATUS_ACTIONS:
+		frappe.throw(
+			"Only refund or customer credit resolutions can cancel the consultation after financial resolution.",
+			frappe.ValidationError,
+		)
 
 
 def validate_manual_accounting_reference_doctype(action_key: str, doctype: str) -> None:
@@ -1205,6 +1295,7 @@ def set_resolution_completion_fields(resolution, evidence: dict, completion_note
 		"resolution_amount": evidence.get("resolution_amount"),
 		"resolution_date": evidence.get("resolution_date"),
 		"external_reference": cint(evidence.get("external_reference")),
+		"status_outcome": STATUS_OUTCOME_LABELS[evidence.get("status_outcome") or STATUS_OUTCOME_NO_CHANGE],
 		"completion_note": (completion_note or "").strip(),
 		"completed_by": frappe.session.user,
 		"completed_on": now_datetime(),
@@ -1372,6 +1463,7 @@ def serialize_cancellation_resolution(doc) -> dict:
 		"resolution_amount": flt(doc.get("resolution_amount")),
 		"resolution_date": doc.get("resolution_date"),
 		"external_reference": bool(cint(doc.get("external_reference"))),
+		"status_outcome": normalize_status_outcome_for_response(doc.get("status_outcome")),
 		"completion_note": doc.get("completion_note"),
 		"completed_by": doc.get("completed_by"),
 		"completed_on": doc.get("completed_on"),

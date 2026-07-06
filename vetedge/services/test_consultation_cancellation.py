@@ -635,12 +635,16 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(resolution.accounting_reference_name, "PE-REFUND-001")
 		self.assertEqual(resolution.resolution_amount, 11000)
 		self.assertEqual(resolution.resolution_date, "2026-07-06")
+		self.assertEqual(resolution.status_outcome, "No Status Change")
 		self.assertEqual(resolution.completion_note, "Refund processed manually by accounts.")
 		self.assertEqual(resolution.completed_by, "accounts@example.com")
 		self.assertEqual(resolution.completed_on, "2026-07-06 12:00:00")
 		resolution.save.assert_called_once()
 		self.assertEqual(result["consultation_status"], "Ready for Treatment")
 		self.assertEqual(result["resolution_status"], "Completed")
+		self.assertEqual(result["status_outcome"], "no_status_change")
+		self.assertEqual(result["consultation_status_before"], "Ready for Treatment")
+		self.assertEqual(result["consultation_status_after"], "Ready for Treatment")
 		self.assertEqual(result["accounting_reference_doctype"], "Payment Entry")
 		self.assertEqual(result["accounting_reference_name"], "PE-REFUND-001")
 		self.assertEqual(result["resolution_amount"], 11000)
@@ -671,7 +675,75 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(resolution.accounting_reference_doctype, "Sales Invoice")
 		self.assertEqual(resolution.accounting_reference_name, "ACC-SINV-RETURN-001")
 		self.assertEqual(resolution.resolution_amount, 8000)
+		self.assertEqual(resolution.status_outcome, "No Status Change")
 		self.assertEqual(result["consultation_status"], "Awaiting Payment")
+
+	def test_approved_refund_resolution_can_cancel_consultation_after_financial_resolution(self):
+		resolution = self.build_manual_accounting_resolution("refund_required", status="Approved")
+		consultation = frappe._dict(name="VCON-001", status="Ready for Treatment")
+		consultation.save = Mock()
+		meta = Mock()
+		meta.has_field.return_value = True
+		with (
+			patch.object(consultation_cancellation.frappe, "session", frappe._dict(user="accounts@example.com")),
+			patch.object(consultation_cancellation, "now_datetime", return_value="2026-07-06 12:00:00"),
+			patch.object(consultation_cancellation.frappe.db, "get_value", return_value="Ready for Treatment"),
+			patch.object(consultation_cancellation.frappe.db, "exists", return_value=True),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=consultation),
+			patch.object(consultation_cancellation.frappe, "get_meta", return_value=meta),
+			patch.object(consultation_cancellation, "run_with_financial_resolution_cancellation_flag") as run_with_flag,
+		):
+			run_with_flag.side_effect = lambda callback: callback()
+			result = consultation_cancellation.complete_manual_accounting_resolution(
+				resolution,
+				completion_note="Refund completed and service cancelled.",
+				accounting_reference_doctype="Payment Entry",
+				accounting_reference_name="PE-REFUND-001",
+				resolution_amount=11000,
+				resolution_date="2026-07-06",
+				status_outcome="cancel_consultation_after_financial_resolution",
+			)
+
+		run_with_flag.assert_called_once_with(consultation.save)
+		consultation.save.assert_called_once()
+		self.assertEqual(consultation.status, "Cancelled")
+		self.assertEqual(resolution.resolution_status, "Completed")
+		self.assertEqual(resolution.status_outcome, "Cancel Consultation After Financial Resolution")
+		self.assertEqual(result["consultation_status_before"], "Ready for Treatment")
+		self.assertEqual(result["consultation_status_after"], "Cancelled")
+		self.assertEqual(result["consultation_status"], "Cancelled")
+		self.assertEqual(result["status_outcome"], "cancel_consultation_after_financial_resolution")
+
+	def test_approved_credit_resolution_can_cancel_consultation_after_financial_resolution(self):
+		resolution = self.build_manual_accounting_resolution("issue_customer_credit", status="Approved")
+		consultation = frappe._dict(name="VCON-001", status="Awaiting Payment")
+		consultation.save = Mock()
+		meta = Mock()
+		meta.has_field.return_value = True
+		with (
+			patch.object(consultation_cancellation.frappe, "session", frappe._dict(user="accounts@example.com")),
+			patch.object(consultation_cancellation, "now_datetime", return_value="2026-07-06 12:00:00"),
+			patch.object(consultation_cancellation.frappe.db, "get_value", return_value="Awaiting Payment"),
+			patch.object(consultation_cancellation.frappe.db, "exists", return_value=True),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=consultation),
+			patch.object(consultation_cancellation.frappe, "get_meta", return_value=meta),
+			patch.object(consultation_cancellation, "run_with_financial_resolution_cancellation_flag") as run_with_flag,
+		):
+			run_with_flag.side_effect = lambda callback: callback()
+			result = consultation_cancellation.complete_manual_accounting_resolution(
+				resolution,
+				completion_note="Credit issued because service was cancelled.",
+				accounting_reference_doctype="Sales Invoice",
+				accounting_reference_name="ACC-SINV-RETURN-001",
+				resolution_amount=8000,
+				resolution_date="2026-07-06",
+				status_outcome="Cancel Consultation After Financial Resolution",
+			)
+
+		self.assertEqual(consultation.status, "Cancelled")
+		self.assertEqual(resolution.resolution_status, "Completed")
+		self.assertEqual(result["consultation_status_after"], "Cancelled")
+		self.assertEqual(result["status_outcome"], "cancel_consultation_after_financial_resolution")
 
 	def test_approved_admin_correction_resolution_can_be_manually_completed(self):
 		resolution = self.build_manual_accounting_resolution("admin_accounting_correction", status="Approved")
@@ -696,6 +768,42 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("JE-001", resolution.notes)
 		self.assertEqual(resolution.accounting_reference_doctype, "Journal Entry")
 		self.assertEqual(resolution.accounting_reference_name, "JE-001")
+		self.assertEqual(resolution.status_outcome, "No Status Change")
+
+	def test_admin_accounting_correction_cannot_cancel_consultation_after_financial_resolution(self):
+		resolution = self.build_manual_accounting_resolution("admin_accounting_correction", status="Approved")
+		with self.assertRaises(frappe.ValidationError):
+			consultation_cancellation.complete_manual_accounting_resolution(
+				resolution,
+				completion_note="Correction done.",
+				accounting_reference_doctype="Journal Entry",
+				accounting_reference_name="JE-001",
+				resolution_date="2026-07-06",
+				status_outcome="cancel_consultation_after_financial_resolution",
+			)
+
+	def test_already_cancelled_consultation_cannot_be_cancelled_again_after_financial_resolution(self):
+		resolution = self.build_manual_accounting_resolution("refund_required", status="Approved")
+		consultation = frappe._dict(name="VCON-001", status="Cancelled")
+		consultation.save = Mock()
+		with (
+			patch.object(consultation_cancellation.frappe.db, "get_value", return_value="Cancelled"),
+			patch.object(consultation_cancellation.frappe.db, "exists", return_value=True),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=consultation),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.complete_manual_accounting_resolution(
+					resolution,
+					completion_note="Refund completed.",
+					accounting_reference_doctype="Payment Entry",
+					accounting_reference_name="PE-REFUND-001",
+					resolution_amount=11000,
+					resolution_date="2026-07-06",
+					status_outcome="cancel_consultation_after_financial_resolution",
+				)
+
+		consultation.save.assert_not_called()
+		resolution.save.assert_not_called()
 
 	def test_approved_refund_resolution_cannot_complete_with_note_only(self):
 		resolution = self.build_manual_accounting_resolution("refund_required", status="Approved")
@@ -979,5 +1087,9 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("resolution_amount", script)
 		self.assertIn("resolution_date", script)
 		self.assertIn("external_reference", script)
+		self.assertIn("status_outcome", script)
+		self.assertIn("Cancel Consultation After Financial Resolution", script)
+		self.assertIn("Choose Cancel only if this refund means the consultation/service will not continue", script)
+		self.assertIn("Admin corrections do not change consultation status in this phase", script)
 		self.assertIn("VetEdge will not create refunds, Credit Notes, Payment Entries, accounting reversals, or apply credit to a rescheduled consultation", script)
 		self.assertNotIn("Apply Credit to Rescheduled Consultation", script)

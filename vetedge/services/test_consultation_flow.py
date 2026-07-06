@@ -22,6 +22,7 @@ from vetedge.services.consultation_flow import (
 	validate_linked_appointment,
 	validate_completion_requirements,
 	validate_service_branch_access,
+	validate_consultation_status,
 	validate_consultation_status_transition,
 )
 from vetedge.veterinary.doctype.veterinary_consultation.veterinary_consultation import (
@@ -1148,6 +1149,19 @@ class TestConsultationFlow(TestCase):
 			from vetedge.services.consultation_flow import validate_paid_consultation_cancellation
 
 			validate_paid_consultation_cancellation(doc, previous)
+
+		preflight.assert_not_called()
+
+	def test_financial_resolution_cancellation_flag_allows_cancelled_status_save(self):
+		doc = frappe._dict(status="Cancelled", name="VCON-001")
+		previous = frappe._dict(status="Completed")
+		doc.get_doc_before_save = lambda: previous
+
+		with (
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled") as preflight,
+			patch("vetedge.services.consultation_flow.frappe.flags", frappe._dict(vetedge_financial_resolution_cancellation=True)),
+		):
+			validate_consultation_status(doc)
 
 		preflight.assert_not_called()
 

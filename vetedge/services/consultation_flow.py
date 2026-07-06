@@ -111,14 +111,20 @@ def validate_consultation_status(doc) -> None:
 		frappe.throw(f"Invalid consultation status: {doc.status}", frappe.ValidationError)
 
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
-	if previous and previous.status in {"Completed", "Cancelled"} and doc.status != previous.status:
+	if (
+		previous
+		and previous.status in {"Completed", "Cancelled"}
+		and doc.status != previous.status
+		and not is_internal_financial_resolution_cancel_status_change(doc)
+	):
 		frappe.throw(
 			f"Consultation status cannot be changed after it is {previous.status}.",
 			frappe.ValidationError,
 		)
 
 	if previous and previous.status != doc.status:
-		validate_consultation_status_transition(previous.status, doc.status)
+		if not is_internal_financial_resolution_cancel_status_change(doc):
+			validate_consultation_status_transition(previous.status, doc.status)
 
 	validate_paid_consultation_cancellation(doc, previous)
 
@@ -135,7 +141,7 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 def validate_paid_consultation_cancellation(doc, previous=None) -> None:
 	if doc.status != "Cancelled":
 		return
-	if getattr(getattr(frappe, "flags", None), "vetedge_retain_payment_cancellation", False):
+	if is_internal_cancellation_status_change():
 		return
 
 	previous_status = getattr(previous, "status", None) if previous else None
@@ -145,6 +151,21 @@ def validate_paid_consultation_cancellation(doc, previous=None) -> None:
 		return
 
 	validate_consultation_can_be_cancelled(doc.name)
+
+
+def is_internal_cancellation_status_change() -> bool:
+	flags = getattr(frappe, "flags", None)
+	return bool(
+		getattr(flags, "vetedge_retain_payment_cancellation", False)
+		or getattr(flags, "vetedge_financial_resolution_cancellation", False)
+	)
+
+
+def is_internal_financial_resolution_cancel_status_change(doc) -> bool:
+	return bool(
+		getattr(doc, "status", None) == "Cancelled"
+		and getattr(getattr(frappe, "flags", None), "vetedge_financial_resolution_cancellation", False)
+	)
 
 
 def consultation_scope_is_locked(status: str | None) -> bool:
