@@ -135,10 +135,10 @@ Access should be verified in Role Permission Manager if a live site differs.
 - `training_assets/screenshots/doctor-reports-list.png`
 - `training_assets/screenshots/vaccination-dashboard.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Role Access Matrix](role_access_matrix.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Role Access Matrix](training-module:role-access)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

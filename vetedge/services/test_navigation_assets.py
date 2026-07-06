@@ -109,6 +109,7 @@ class TestNavigationAssets(TestCase):
 			[
 				"Executive Dashboard",
 				"Dashboards",
+				"Training Centre",
 				"Veterinary Records",
 				"Hospitalisation",
 				"Pet Grooming",
@@ -195,6 +196,18 @@ class TestNavigationAssets(TestCase):
 		self.assertIn("Training Centre", links)
 		self.assertEqual(links["Training Centre"]["link_to"], "veterinary-training-centre")
 		self.assertEqual(links["Training Centre"]["link_type"], "Page")
+		self.assertIn("Training Centre", [item.get("label") for item in items if not item.get("child")])
+		labels = [item.get("label") for item in items]
+		training_section_index = next(
+			index for index, item in enumerate(items)
+			if item.get("label") == "Training Centre" and item.get("type") == "Section Break"
+		)
+		training_link_index = next(
+			index for index, item in enumerate(items)
+			if item.get("label") == "Training Centre" and item.get("type") == "Link"
+		)
+		self.assertGreater(training_link_index, training_section_index)
+		self.assertLess(training_link_index, labels.index("Veterinary Records"))
 
 	def test_no_duplicate_dashboard_top_level_sections(self):
 		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]

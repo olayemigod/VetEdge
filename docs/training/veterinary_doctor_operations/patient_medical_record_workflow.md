@@ -92,10 +92,10 @@ Expected outcome: The doctor confirms the correct patient and avoids wrong-patie
 - `training_assets/screenshots/patient-record-opened.png`
 - `training_assets/screenshots/medical-history-timeline.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Glossary](glossary.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Consultation Workflow](training-module:consultation)
+- [Glossary](training-module:glossary)

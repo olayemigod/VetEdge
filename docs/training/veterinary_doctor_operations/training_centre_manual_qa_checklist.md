@@ -7,9 +7,13 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 ## Access and Navigation
 
 - [ ] Open Desk and confirm the Veterinary workspace/sidebar shows `Training Centre`.
+- [ ] Confirm `Training Centre` appears as a standalone sidebar/workspace section.
+- [ ] Confirm `Training Centre` is not inside `Veterinary Records`.
 - [ ] Click `Training Centre` and confirm the page opens at `/app/veterinary-training-centre`.
 - [ ] Confirm the page title is `Veterinary Training Centre`.
 - [ ] Confirm the page explains module-by-module learning in user-friendly wording.
+- [ ] Open `/app/veterinary-training-centre?module=consultation` directly and confirm the Consultation module opens.
+- [ ] Open an invalid module URL and confirm the page shows a friendly message and returns to the module list.
 
 ## Role Visibility
 
@@ -31,8 +35,11 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 ## Guide Reader
 
 - [ ] Open every module from the list.
+- [ ] Confirm opening a module updates the URL to `/app/veterinary-training-centre?module=<module_id>`.
 - [ ] Confirm `Read Guide` renders the Markdown guide.
+- [ ] Click related-guide links and confirm they open inside the Training Centre rather than raw Markdown files.
 - [ ] Confirm Mermaid workflow diagrams render as visual diagrams where present.
+- [ ] Confirm the browser loads Mermaid from the local VetEdge asset path, not from a public CDN.
 - [ ] Confirm invalid Mermaid diagrams leave the source visible with a friendly note instead of breaking the guide.
 - [ ] Confirm headings, tables, checklists, code blocks, and links are readable.
 - [ ] Confirm non-Mermaid code blocks still display as normal code blocks.
@@ -69,6 +76,7 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 - [ ] Narrow the browser window and confirm cards, tabs, and guide content remain readable.
 - [ ] Confirm long tables and code blocks scroll instead of breaking the layout.
 - [ ] Confirm image placeholders do not overlap text.
+- [ ] Temporarily test a sequence diagram or state diagram in a safe local documentation branch, then remove the temporary content before release unless approved.
 
 ## Data Safety
 
@@ -80,8 +88,11 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 ## Sign-Off
 
 - [ ] Training Centre opens from the Veterinary workspace/sidebar.
+- [ ] Training Centre appears as a standalone section, not under Veterinary Records.
 - [ ] Doctor Operations modules are visible to the intended roles.
 - [ ] All modules open and render.
+- [ ] Mermaid diagrams still render visually.
+- [ ] Video placeholders still work.
 - [ ] Video placeholders are clear.
 - [ ] Screenshot placeholders are safe.
 - [ ] No business records were changed.

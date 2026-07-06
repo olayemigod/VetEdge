@@ -14,6 +14,8 @@ class VetEdgeTrainingCentre {
 		this.page = page;
 		this.modules = [];
 		this.currentModule = null;
+		this.mermaidAssetPath = "/assets/vetedge/js/lib/mermaid.min.js";
+		this.mermaidLoadPromise = null;
 		this.body = $(`
 			<div class="vetedge-training-centre">
 				<div class="vtc-toolbar">
@@ -54,6 +56,10 @@ class VetEdgeTrainingCentre {
 		this.add_styles();
 		this.body.on("input", ".vtc-search", () => this.render_list());
 		this.body.on("click", ".vtc-open", (event) => this.open_module($(event.currentTarget).data("module")));
+		this.body.on("click", "a[data-training-module]", (event) => {
+			event.preventDefault();
+			this.open_module($(event.currentTarget).data("training-module"));
+		});
 		this.body.on("click", ".vtc-back", () => this.show_list());
 		this.body.on("click", ".vtc-tab", (event) => this.show_tab($(event.currentTarget).data("tab")));
 		this.load_modules();
@@ -66,12 +72,27 @@ class VetEdgeTrainingCentre {
 			freeze_message: __("Loading training modules..."),
 			callback: (result) => {
 				this.modules = result.message || [];
-				this.render_list();
+				this.open_requested_module_or_list();
 			},
 			error: () => {
 				this.body.find(".vtc-status").text(__("Unable to load training modules."));
 			},
 		});
+	}
+
+	open_requested_module_or_list() {
+		const moduleId = this.get_requested_module_id();
+		if (!moduleId) {
+			this.render_list();
+			return;
+		}
+		if (!this.is_visible_module(moduleId)) {
+			this.render_list();
+			this.body.find(".vtc-status").removeClass("hidden").text(__("That training module is not available for your role."));
+			this.update_training_url("");
+			return;
+		}
+		this.open_module(moduleId, { updateUrl: false });
 	}
 
 	render_list() {
@@ -108,7 +129,17 @@ class VetEdgeTrainingCentre {
 		`;
 	}
 
-	open_module(moduleId) {
+	open_module(moduleId, options = {}) {
+		moduleId = String(moduleId || "").trim();
+		if (!this.is_visible_module(moduleId)) {
+			this.render_list();
+			this.body.find(".vtc-status").removeClass("hidden").text(__("That training module is not available for your role."));
+			this.update_training_url("");
+			return;
+		}
+		if (options.updateUrl !== false) {
+			this.update_training_url(moduleId);
+		}
 		frappe.call({
 			method: "vetedge.services.training_centre.get_training_module_content",
 			args: { module_id: moduleId },
@@ -175,7 +206,27 @@ class VetEdgeTrainingCentre {
 	}
 
 	show_list() {
+		this.update_training_url("");
 		this.render_list();
+	}
+
+	is_visible_module(moduleId) {
+		return this.modules.some((module) => module.module_id === moduleId);
+	}
+
+	get_requested_module_id() {
+		const params = new URLSearchParams(window.location.search || "");
+		return (params.get("module") || "").trim();
+	}
+
+	update_training_url(moduleId) {
+		const path = moduleId
+			? `/app/veterinary-training-centre?module=${encodeURIComponent(moduleId)}`
+			: "/app/veterinary-training-centre";
+		if (window.location.pathname + window.location.search === path) {
+			return;
+		}
+		window.history.pushState({}, "", path);
 	}
 
 	show_tab(tab) {
@@ -195,6 +246,8 @@ class VetEdgeTrainingCentre {
 		if (!blocks.length) {
 			return;
 		}
+
+		await this.load_mermaid_asset();
 
 		if (window.mermaid) {
 			this.initialize_mermaid();
@@ -221,8 +274,12 @@ class VetEdgeTrainingCentre {
 					continue;
 				} catch (error) {
 					console.warn("Could not render Mermaid diagram", error);
+					const fallback = this.render_simple_mermaid_flowchart(source);
+					if (fallback) {
+						pre.replaceWith(fallback);
+						continue;
+					}
 					this.show_mermaid_fallback_note(pre);
-					continue;
 				}
 			}
 
@@ -233,6 +290,35 @@ class VetEdgeTrainingCentre {
 				this.show_mermaid_fallback_note(pre);
 			}
 		}
+	}
+
+	load_mermaid_asset() {
+		if (window.mermaid) {
+			return Promise.resolve(window.mermaid);
+		}
+		if (this.mermaidLoadPromise) {
+			return this.mermaidLoadPromise;
+		}
+
+		this.mermaidLoadPromise = new Promise((resolve) => {
+			const existing = document.querySelector(`script[src="${this.mermaidAssetPath}"]`);
+			if (existing) {
+				existing.addEventListener("load", () => resolve(window.mermaid || null), { once: true });
+				existing.addEventListener("error", () => resolve(null), { once: true });
+				return;
+			}
+
+			const script = document.createElement("script");
+			script.src = this.mermaidAssetPath;
+			script.async = true;
+			script.onload = () => resolve(window.mermaid || null);
+			script.onerror = () => {
+				console.warn("Mermaid library could not be loaded from the local VetEdge asset.");
+				resolve(null);
+			};
+			document.head.appendChild(script);
+		});
+		return this.mermaidLoadPromise;
 	}
 
 	initialize_mermaid() {
@@ -464,7 +550,35 @@ class VetEdgeTrainingCentre {
 	inline(text) {
 		return this.escape(text)
 			.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => `<img class="vtc-guide-image" src="${this.escape_attr(src)}" alt="${this.escape_attr(alt)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'text-muted small', textContent: '${__("Screenshot pending or unavailable")}' }))">`)
-			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => `<a href="${this.escape_attr(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`)
+			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => this.render_link(label, href))
+			.replace(/`([^`]+)`/g, "<code>$1</code>")
+			.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+	}
+
+	render_link(label, href) {
+		const converted = this.convert_training_href(href);
+		const safeLabel = this.inline_text(label);
+		if (converted.moduleId) {
+			return `<a href="${this.escape_attr(converted.href)}" data-training-module="${this.escape_attr(converted.moduleId)}">${safeLabel}</a>`;
+		}
+		return `<a href="${this.escape_attr(converted.href)}" target="_blank" rel="noopener noreferrer">${safeLabel}</a>`;
+	}
+
+	convert_training_href(href) {
+		href = String(href || "").trim();
+		const match = href.match(/^training-module:([A-Za-z0-9_-]+)(#[A-Za-z0-9_.:-]+)?$/);
+		if (!match || !this.is_visible_module(match[1])) {
+			return { href, moduleId: "" };
+		}
+		const hash = match[2] || "";
+		return {
+			href: `/app/veterinary-training-centre?module=${encodeURIComponent(match[1])}${hash}`,
+			moduleId: match[1],
+		};
+	}
+
+	inline_text(text) {
+		return this.escape(text)
 			.replace(/`([^`]+)`/g, "<code>$1</code>")
 			.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 	}

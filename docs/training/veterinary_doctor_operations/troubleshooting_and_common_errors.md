@@ -140,14 +140,14 @@ Expected outcome: The doctor pauses, escalates to Front Desk or Accounts, and do
 - `training_assets/screenshots/grooming-service-record.png`
 - `training_assets/screenshots/boarding-service-record.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Role Access Matrix](role_access_matrix.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Hospitalisation Workflow](hospitalisation_workflow.md)
-- [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
-- [Grooming Service Handoff Workflow](grooming_workflow.md)
-- [Boarding Service Handoff Workflow](boarding_workflow.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Role Access Matrix](training-module:role-access)
+- [Consultation Workflow](training-module:consultation)
+- [Hospitalisation Workflow](training-module:hospitalisation)
+- [Veterinary Masters Awareness Reference](training-module:veterinary-masters)
+- [Grooming Service Handoff Workflow](training-module:grooming-handoff)
+- [Boarding Service Handoff Workflow](training-module:boarding-handoff)

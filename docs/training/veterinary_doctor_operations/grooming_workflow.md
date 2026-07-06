@@ -109,11 +109,11 @@ Expected outcome: The doctor protects patient safety without taking over the gro
 - `training_assets/screenshots/grooming-service-record.png`
 - `training_assets/screenshots/grooming-health-note-handoff.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Patient Medical Record Workflow](training-module:patient-record)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

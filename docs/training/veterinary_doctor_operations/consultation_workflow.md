@@ -134,11 +134,11 @@ Expected outcome: The doctor completes clinical documentation, uses supporting w
 - `training_assets/screenshots/billing-payment-modal.png`
 - `training_assets/screenshots/lab-order-dialog.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Lab Order Workflow](lab_order_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Hospitalisation Workflow](hospitalisation_workflow.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Lab Order Workflow](training-module:lab-order)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Hospitalisation Workflow](training-module:hospitalisation)

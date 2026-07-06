@@ -55,6 +55,38 @@ class TestTrainingCentre(TestCase):
 		with patch("vetedge.services.training_centre.frappe.throw", side_effect=frappe.DoesNotExistError):
 			self.assertRaises(frappe.DoesNotExistError, training_centre.get_module_by_id, "not-a-module")
 
+	def test_markdown_link_target_maps_to_module_id(self):
+		self.assertEqual(
+			training_centre.get_training_module_link_target("consultation_workflow.md"),
+			"training-module:consultation",
+		)
+		self.assertEqual(
+			training_centre.get_training_module_link_target("./lab_order_workflow.md#practice"),
+			"training-module:lab-order#practice",
+		)
+		self.assertEqual(
+			training_centre.get_training_module_link_target("docs/training/veterinary_doctor_operations/hospitalisation_workflow.md"),
+			"training-module:hospitalisation",
+		)
+
+	def test_markdown_link_target_rejects_unapproved_paths(self):
+		self.assertEqual(training_centre.get_training_module_link_target("../README.md"), "")
+		self.assertEqual(training_centre.get_training_module_link_target("other_folder/consultation_workflow.md"), "")
+		self.assertEqual(training_centre.get_training_module_link_target("https://example.com/consultation_workflow.md"), "")
+		self.assertEqual(training_centre.get_training_module_link_target("not_in_manifest.md"), "")
+		self.assertEqual(training_centre.get_training_module_link_target("training_modules.json"), "")
+
+	def test_markdown_links_are_rewritten_without_image_rewrites(self):
+		markdown = (
+			"See [Consultation](consultation_workflow.md) and "
+			"![Screenshot](training_assets/screenshots/example.png)."
+		)
+
+		rewritten = training_centre.rewrite_training_markdown_links(markdown)
+
+		self.assertIn("[Consultation](training-module:consultation)", rewritten)
+		self.assertIn("![Screenshot](training_assets/screenshots/example.png)", rewritten)
+
 	def test_markdown_path_must_stay_inside_training_folder(self):
 		module = {
 			"markdown_path": "docs/training/veterinary_doctor_operations/../../README.md",

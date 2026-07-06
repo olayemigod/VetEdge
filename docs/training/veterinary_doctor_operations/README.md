@@ -6,27 +6,27 @@ The same Markdown guides are available inside Desk through the Veterinary Traini
 
 Start with the main manual:
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
 
 Use the module guides when a trainer or doctor needs more detail for a specific workflow:
 
-- [Role Access Matrix](role_access_matrix.md)
-- [Doctor Daily Workflow](doctor_daily_workflow.md)
-- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
-- [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Lab Order Workflow](lab_order_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Hospitalisation Workflow](hospitalisation_workflow.md)
-- [Grooming Service Handoff Workflow](grooming_workflow.md)
-- [Boarding Service Handoff Workflow](boarding_workflow.md)
-- [Notifications and Action Centre Workflow](notifications_and_action_centre_workflow.md)
-- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
-- [Glossary](glossary.md)
-- [Screenshot Manifest](screenshot_manifest.md)
+- [Role Access Matrix](training-module:role-access)
+- [Doctor Daily Workflow](training-module:daily-workflow)
+- [Patient Medical Record Workflow](training-module:patient-record)
+- [Veterinary Masters Awareness Reference](training-module:veterinary-masters)
+- [Consultation Workflow](training-module:consultation)
+- [Lab Order Workflow](training-module:lab-order)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Hospitalisation Workflow](training-module:hospitalisation)
+- [Grooming Service Handoff Workflow](training-module:grooming-handoff)
+- [Boarding Service Handoff Workflow](training-module:boarding-handoff)
+- [Notifications and Action Centre Workflow](training-module:notifications)
+- [Reports and Dashboards Workflow](training-module:reports-dashboards)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)
+- [Glossary](training-module:glossary)
+- [Screenshot Manifest](training-module:screenshot-manifest)
 - [Training Module Manifest](training_modules.json)
-- [Training Centre Manual QA Checklist](training_centre_manual_qa_checklist.md)
+- Training Centre Manual QA Checklist: `training_centre_manual_qa_checklist.md`
 
 ## How to Use This Pack
 
@@ -42,18 +42,21 @@ Use the module guides when a trainer or doctor needs more detail for a specific 
 
 - Desk page: `Veterinary Training Centre`
 - Workspace label: `Training Centre`
-- User-facing location: `Veterinary` -> `Training Centre`
+- User-facing location: `Veterinary` -> standalone `Training Centre` sidebar section
 - Standard Frappe route: `/app/veterinary-training-centre`
+- Module deep-link format: `/app/veterinary-training-centre?module=<module_id>`
 - Module source: [training_modules.json](training_modules.json)
 - Guide source: Markdown files in this folder
 - Video source: optional `youtube_url` per module in [training_modules.json](training_modules.json)
-- Manual QA checklist: [training_centre_manual_qa_checklist.md](training_centre_manual_qa_checklist.md)
+- Manual QA checklist: `training_centre_manual_qa_checklist.md`
 
 Markdown remains the source of truth for training guide content. The Desk page reads the approved module list and renders the Markdown guide files; it does not copy the manuals into database records.
 
+Related-guide links inside the Training Centre open Desk training modules, not raw Markdown files. Use `training-module:<module_id>` links in Markdown when adding new internal training references.
+
 For now, videos are placeholders. Add YouTube videos later module by module by updating the `youtube_url`, `video_title`, and `video_status` fields in [training_modules.json](training_modules.json). Use only approved YouTube links. Screenshots remain pending until manually captured and reviewed.
 
-Mermaid workflow blocks are rendered visually inside the Training Centre. If a vetted local Mermaid bundle is added later, the page can use it through `window.mermaid`; until then, the Training Centre includes a safe fallback renderer for the simple `flowchart` diagrams used in these guides. Invalid diagrams keep their source visible with a friendly note instead of breaking the guide.
+Mermaid workflow blocks are rendered visually inside the Training Centre using the local Mermaid bundle at `/assets/vetedge/js/lib/mermaid.min.js`. The bundled asset comes from the official `mermaid` npm package and is tracked with its source and license notes in `vetedge/public/js/lib/`. If Mermaid is unavailable or a diagram cannot be rendered, the Training Centre falls back to its simple safe flowchart renderer where possible. Invalid diagrams keep their source visible with a friendly note instead of breaking the guide.
 
 ## Training Safety Rules
 
@@ -68,7 +71,7 @@ Mermaid workflow blocks are rendered visually inside the Training Centre. If a v
 
 ## Screenshot Status
 
-Screenshots are currently placeholders. See [screenshot_manifest.md](screenshot_manifest.md) for filename, route, purpose, role required, capture instructions, and status.
+Screenshots are currently placeholders. See [screenshot_manifest.md](training-module:screenshot-manifest) for filename, route, purpose, role required, capture instructions, and status.
 
 ## Folder Scope
 

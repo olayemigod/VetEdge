@@ -32,7 +32,7 @@ Doctors usually need:
 
 Some sites may use the `Veterinary Doctor` starter bundle. Live access must be verified in Role Permission Manager if it differs from this manual.
 
-See [Role Access Matrix](role_access_matrix.md) for the trainer-friendly access guide.
+See [Role Access Matrix](training-module:role-access) for the trainer-friendly access guide.
 
 ## Learning Objectives
 
@@ -222,7 +222,7 @@ Task:
 
 Expected outcome: The doctor uses approved master values and escalates missing values instead of creating duplicates.
 
-Detailed guide: [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
+Detailed guide: [Veterinary Masters Awareness Reference](training-module:veterinary-masters)
 
 ![Pending screenshot: Veterinary master selection example](training_assets/screenshots/veterinary-master-selection-example.png)
 
@@ -447,7 +447,7 @@ Task:
 
 Expected outcome: The doctor protects patient safety without taking over the grooming workflow.
 
-Detailed guide: [Grooming Service Handoff Workflow](grooming_workflow.md)
+Detailed guide: [Grooming Service Handoff Workflow](training-module:grooming-handoff)
 
 ![Pending screenshot: Grooming health note or handoff area](training_assets/screenshots/grooming-health-note-handoff.png)
 
@@ -489,7 +489,7 @@ Task:
 
 Expected outcome: The doctor recognises medical risk and escalates clinical care correctly.
 
-Detailed guide: [Boarding Service Handoff Workflow](boarding_workflow.md)
+Detailed guide: [Boarding Service Handoff Workflow](training-module:boarding-handoff)
 
 ![Pending screenshot: Boarding health and vaccination review area](training_assets/screenshots/boarding-health-vaccination-review.png)
 
@@ -603,7 +603,7 @@ flowchart TD
 - Ask Admin or Branch Manager to verify role or branch access.
 - Do not bypass accounting, stock, branch, payment, or permission controls.
 
-See [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md) for the full trainer reference.
+See [Troubleshooting and Common Errors](training-module:troubleshooting) for the full trainer reference.
 
 ## Handoff Guide
 
@@ -671,7 +671,7 @@ The trainer should confirm the doctor can:
 
 ## Screenshot Placeholders
 
-Screenshots are listed and tracked in [Screenshot Manifest](screenshot_manifest.md). Current placeholders include:
+Screenshots are listed and tracked in [Screenshot Manifest](training-module:screenshot-manifest). Current placeholders include:
 
 - `training_assets/screenshots/doctor-dashboard-overview.png`
 - `training_assets/screenshots/appointment-queue-overview.png`
@@ -694,18 +694,18 @@ Screenshots are listed and tracked in [Screenshot Manifest](screenshot_manifest.
 
 ## Appendix: Detailed Module Guides
 
-- [Role Access Matrix](role_access_matrix.md)
-- [Doctor Daily Workflow](doctor_daily_workflow.md)
-- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
-- [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Lab Order Workflow](lab_order_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Hospitalisation Workflow](hospitalisation_workflow.md)
-- [Grooming Service Handoff Workflow](grooming_workflow.md)
-- [Boarding Service Handoff Workflow](boarding_workflow.md)
-- [Notifications and Action Centre Workflow](notifications_and_action_centre_workflow.md)
-- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
-- [Glossary](glossary.md)
-- [Screenshot Manifest](screenshot_manifest.md)
+- [Role Access Matrix](training-module:role-access)
+- [Doctor Daily Workflow](training-module:daily-workflow)
+- [Patient Medical Record Workflow](training-module:patient-record)
+- [Veterinary Masters Awareness Reference](training-module:veterinary-masters)
+- [Consultation Workflow](training-module:consultation)
+- [Lab Order Workflow](training-module:lab-order)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Hospitalisation Workflow](training-module:hospitalisation)
+- [Grooming Service Handoff Workflow](training-module:grooming-handoff)
+- [Boarding Service Handoff Workflow](training-module:boarding-handoff)
+- [Notifications and Action Centre Workflow](training-module:notifications)
+- [Reports and Dashboards Workflow](training-module:reports-dashboards)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)
+- [Glossary](training-module:glossary)
+- [Screenshot Manifest](training-module:screenshot-manifest)

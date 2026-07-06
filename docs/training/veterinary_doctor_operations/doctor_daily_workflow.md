@@ -126,13 +126,13 @@ Expected outcome: The doctor can organise the day without bypassing branch, bill
 - `training_assets/screenshots/veterinary-notification-badge.png`
 - `training_assets/screenshots/doctor-reports-list.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Grooming Service Handoff Workflow](grooming_workflow.md)
-- [Boarding Service Handoff Workflow](boarding_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Patient Medical Record Workflow](training-module:patient-record)
+- [Consultation Workflow](training-module:consultation)
+- [Grooming Service Handoff Workflow](training-module:grooming-handoff)
+- [Boarding Service Handoff Workflow](training-module:boarding-handoff)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

@@ -109,10 +109,10 @@ Expected outcome: The doctor can request lab work and complete the result-review
 - `training_assets/screenshots/lab-order-dialog.png`
 - `training_assets/screenshots/lab-order-summary.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Consultation Workflow](training-module:consultation)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

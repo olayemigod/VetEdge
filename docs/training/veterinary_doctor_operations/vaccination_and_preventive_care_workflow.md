@@ -108,10 +108,10 @@ Expected outcome: The doctor records preventive care correctly and uses the righ
 - `training_assets/screenshots/vaccination-entry.png`
 - `training_assets/screenshots/vaccination-dashboard.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Consultation Workflow](training-module:consultation)
+- [Reports and Dashboards Workflow](training-module:reports-dashboards)

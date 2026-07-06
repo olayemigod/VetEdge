@@ -114,12 +114,12 @@ Expected outcome: The doctor recognises medical risk, avoids treating boarding a
 - `training_assets/screenshots/boarding-health-vaccination-review.png`
 - `training_assets/screenshots/boarding-medical-alert-owner-instruction.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Hospitalisation Workflow](hospitalisation_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Patient Medical Record Workflow](training-module:patient-record)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Hospitalisation Workflow](training-module:hospitalisation)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

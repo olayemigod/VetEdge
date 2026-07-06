@@ -154,10 +154,10 @@ Expected outcome: The trainer does not guess permissions and escalates with the 
 - `training_assets/screenshots/doctor-reports-list.png`
 - `training_assets/screenshots/doctor-dashboard-overview.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Reports and Dashboards Workflow](training-module:reports-dashboards)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

@@ -111,12 +111,12 @@ Expected outcome: The doctor uses approved values and escalates missing values i
 
 - `training_assets/screenshots/veterinary-master-selection-example.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Lab Order Workflow](lab_order_workflow.md)
-- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Consultation Workflow](training-module:consultation)
+- [Lab Order Workflow](training-module:lab-order)
+- [Vaccination and Preventive Care Workflow](training-module:vaccination)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

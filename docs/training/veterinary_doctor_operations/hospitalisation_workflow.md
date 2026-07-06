@@ -118,10 +118,10 @@ Expected outcome: The doctor can manage inpatient workflow and explain each requ
 - `training_assets/screenshots/hospitalisation-activity-log.png`
 - `training_assets/screenshots/discharge-readiness-checklist.png`
 
-See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+See [Screenshot Manifest](training-module:screenshot-manifest) for capture instructions.
 
 ## Related Guides
 
-- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
-- [Consultation Workflow](consultation_workflow.md)
-- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Consultation Workflow](training-module:consultation)
+- [Troubleshooting and Common Errors](training-module:troubleshooting)

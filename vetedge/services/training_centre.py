@@ -94,6 +94,19 @@ def get_visible_training_modules(user: str | None = None) -> list[dict]:
 	]
 
 
+def get_training_module_link_map() -> dict[str, str]:
+	link_map = {}
+	for module in load_training_manifest():
+		markdown_path = Path(module.get("markdown_path") or "")
+		if markdown_path.is_absolute() or ".." in markdown_path.parts or markdown_path.suffix.lower() != ".md":
+			continue
+		module_id = module["module_id"]
+		link_map[markdown_path.as_posix()] = module_id
+		link_map[markdown_path.name] = module_id
+		link_map[f"./{markdown_path.name}"] = module_id
+	return link_map
+
+
 def public_module_payload(module: dict) -> dict:
 	return {
 		"module_id": module["module_id"],
@@ -143,6 +156,51 @@ def read_training_markdown(module: dict) -> str:
 	if not path.exists():
 		_training_error(f"Training guide file was not found: {path.name}", frappe.DoesNotExistError)
 	return path.read_text(encoding="utf-8")
+
+
+def rewrite_training_markdown_links(markdown: str) -> str:
+	link_map = get_training_module_link_map()
+
+	def replace_link(match: re.Match) -> str:
+		label = match.group("label")
+		target = match.group("target").strip()
+		replacement = get_training_module_link_target(target, link_map)
+		if not replacement:
+			return match.group(0)
+		return f"[{label}]({replacement})"
+
+	return re.sub(r"(?<!!)\[(?P<label>[^\]]+)\]\((?P<target>[^)]+)\)", replace_link, markdown or "")
+
+
+def get_training_module_link_target(target: str, link_map: dict[str, str] | None = None) -> str:
+	target = (target or "").strip()
+	if not target or target.startswith("#"):
+		return ""
+	if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
+		return ""
+
+	link_map = link_map or get_training_module_link_map()
+	path_part, hash_part = (target.split("#", 1) + [""])[:2]
+	path_part = path_part.strip()
+	if not path_part:
+		return ""
+
+	target_path = Path(path_part)
+	if target_path.is_absolute() or ".." in target_path.parts or target_path.suffix.lower() != ".md":
+		return ""
+
+	path_text = target_path.as_posix()
+	candidates = [path_text]
+	if "/" not in path_part and "\\" not in path_part:
+		candidates.append(target_path.name)
+	if path_part.startswith("./"):
+		candidates.append(f"./{target_path.name}")
+	module_id = next((link_map[candidate] for candidate in candidates if candidate in link_map), "")
+	if not module_id:
+		return ""
+
+	anchor = f"#{hash_part.strip()}" if hash_part.strip() else ""
+	return f"training-module:{module_id}{anchor}"
 
 
 def get_video_display_status(url: str | None, video_status: str | None = None) -> str:
@@ -225,9 +283,10 @@ def get_training_module_content(module_id: str) -> dict:
 		_training_error("You are not permitted to view this training module.", frappe.PermissionError)
 
 	markdown = read_training_markdown(module)
+	rendered_markdown = rewrite_training_markdown_links(markdown)
 	return {
 		"module": public_module_payload(module),
-		"markdown": markdown,
-		"practice_exercise": extract_practice_exercise(markdown),
+		"markdown": rendered_markdown,
+		"practice_exercise": extract_practice_exercise(rendered_markdown),
 		"screenshots": extract_screenshot_references(markdown),
 	}

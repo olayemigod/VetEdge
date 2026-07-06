@@ -1,0 +1,14 @@
+Mermaid browser bundle vendored for the VetEdge Veterinary Training Centre.
+
+Source package:
+- npm package: mermaid
+- version: 11.16.0
+- tarball: https://registry.npmjs.org/mermaid/-/mermaid-11.16.0.tgz
+- upstream repository: https://github.com/mermaid-js/mermaid
+- license: MIT
+
+Bundled file:
+- mermaid.min.js copied from package/dist/mermaid.min.js
+- mermaid.LICENSE.txt copied from package/LICENSE
+
+Do not replace this file with an unverified CDN download. Update it from the official npm package and keep the license file with the bundle.
