@@ -16,6 +16,7 @@ ADMIN_TRAINING_ROLES = {"System Manager", "VetEdge Administrator", "Branch Manag
 DOCTOR_TRAINING_ROLES = {"VetEdge Doctor", "Veterinary Doctor"}
 ALLOWED_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com"}
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,}$")
+VIDEO_STATUSES = {"Not Recorded", "Recorded", "Published", "Needs Review"}
 
 
 def _training_error(message: str, exc=frappe.ValidationError):
@@ -31,15 +32,15 @@ def get_user_training_roles(user: str | None = None) -> set[str]:
 
 def load_training_manifest() -> list[dict]:
 	if not TRAINING_MODULES_PATH.exists():
-		_training_error("Training module manifest was not found.")
+		_training_error("Training module setup was not found.")
 
 	try:
 		raw_modules = json.loads(TRAINING_MODULES_PATH.read_text(encoding="utf-8"))
 	except json.JSONDecodeError:
-		_training_error("Training module manifest is not valid JSON.")
+		_training_error("Training module setup is not valid JSON.")
 
 	if not isinstance(raw_modules, list):
-		_training_error("Training module manifest must contain a list of modules.")
+		_training_error("Training module setup must contain a list of modules.")
 
 	modules = [normalize_manifest_row(row) for row in raw_modules]
 	return sorted(modules, key=lambda row: (int(row.get("order") or 0), row.get("title") or ""))
@@ -47,26 +48,32 @@ def load_training_manifest() -> list[dict]:
 
 def normalize_manifest_row(row: dict) -> dict:
 	if not isinstance(row, dict):
-		_training_error("Training module manifest contains an invalid row.")
+		_training_error("Training module setup contains an invalid row.")
 
-	required = ("module_id", "title", "role_group", "markdown_path", "status", "order")
+	required = ("module_id", "title", "role_group", "markdown_path", "short_description", "youtube_url", "video_title", "video_status", "status", "order")
 	for fieldname in required:
-		if row.get(fieldname) in (None, ""):
-			_training_error(f"Training module manifest row is missing {fieldname}.")
+		if row.get(fieldname) is None:
+			_training_error(f"Training module setup row is missing {fieldname}.")
+
+	video_status = str(row.get("video_status") or "").strip()
+	if video_status not in VIDEO_STATUSES:
+		_training_error("Training video status needs review.")
 
 	module = {
 		"module_id": str(row["module_id"]).strip(),
 		"title": str(row["title"]).strip(),
 		"role_group": str(row["role_group"]).strip(),
-		"description": str(row.get("description") or "").strip(),
+		"short_description": str(row.get("short_description") or row.get("description") or "").strip(),
 		"markdown_path": str(row["markdown_path"]).strip(),
 		"youtube_url": str(row.get("youtube_url") or "").strip(),
+		"video_title": str(row.get("video_title") or "").strip(),
+		"video_status": video_status,
 		"status": str(row["status"]).strip(),
 		"order": int(row.get("order") or 0),
 	}
 	module["has_video"] = bool(get_safe_youtube_embed_url(module["youtube_url"]))
 	module["video_embed_url"] = get_safe_youtube_embed_url(module["youtube_url"])
-	module["video_status"] = get_video_status(module["youtube_url"])
+	module["video_display_status"] = get_video_display_status(module["youtube_url"], module["video_status"])
 	return module
 
 
@@ -92,11 +99,13 @@ def public_module_payload(module: dict) -> dict:
 		"module_id": module["module_id"],
 		"title": module["title"],
 		"role_group": module["role_group"],
-		"description": module.get("description") or "",
+		"short_description": module.get("short_description") or "",
 		"status": module["status"],
 		"order": module["order"],
 		"has_video": module.get("has_video", False),
-		"video_status": module.get("video_status") or "Video coming soon",
+		"video_title": module.get("video_title") or "",
+		"video_status": module.get("video_status") or "Not Recorded",
+		"video_display_status": module.get("video_display_status") or "Video coming soon",
 		"video_embed_url": module.get("video_embed_url") or "",
 	}
 
@@ -136,11 +145,11 @@ def read_training_markdown(module: dict) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def get_video_status(url: str | None) -> str:
+def get_video_display_status(url: str | None, video_status: str | None = None) -> str:
 	if not url:
 		return "Video coming soon"
 	if get_safe_youtube_embed_url(url):
-		return "Video available"
+		return "Video available" if video_status != "Needs Review" else "Video link needs review"
 	return "Video link needs review"
 
 

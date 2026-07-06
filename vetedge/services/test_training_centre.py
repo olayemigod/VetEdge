@@ -37,6 +37,19 @@ class TestTrainingCentre(TestCase):
 		self.assertGreaterEqual(len(modules), 10)
 		self.assertEqual(modules[0]["module_id"], "doctor-overview")
 		self.assertTrue(all(module["status"] == "Published" for module in modules))
+		self.assertTrue(all(module["short_description"] for module in modules))
+		self.assertTrue(all(module["video_title"] for module in modules))
+		self.assertTrue(all(module["video_status"] == "Not Recorded" for module in modules if not module["youtube_url"]))
+
+	def test_public_payload_uses_training_friendly_metadata(self):
+		module = training_centre.load_training_manifest()[0]
+		payload = training_centre.public_module_payload(module)
+
+		self.assertIn("short_description", payload)
+		self.assertIn("video_title", payload)
+		self.assertIn("video_status", payload)
+		self.assertIn("video_display_status", payload)
+		self.assertNotIn("markdown_path", payload)
 
 	def test_invalid_module_id_is_rejected(self):
 		with patch("vetedge.services.training_centre.frappe.throw", side_effect=frappe.DoesNotExistError):
@@ -83,5 +96,23 @@ class TestTrainingCentre(TestCase):
 		self.assertEqual(training_centre.get_safe_youtube_embed_url("https://example.com/video"), "")
 
 	def test_empty_youtube_url_reports_placeholder(self):
-		self.assertEqual(training_centre.get_video_status(""), "Video coming soon")
-		self.assertEqual(training_centre.get_video_status("https://example.com/video"), "Video link needs review")
+		self.assertEqual(training_centre.get_video_display_status("", "Not Recorded"), "Video coming soon")
+		self.assertEqual(training_centre.get_video_display_status("https://example.com/video", "Needs Review"), "Video link needs review")
+		self.assertEqual(training_centre.get_video_display_status("https://youtu.be/dQw4w9WgXcQ", "Published"), "Video available")
+
+	def test_invalid_video_status_is_rejected(self):
+		row = {
+			"module_id": "bad-video-status",
+			"title": "Bad Video Status",
+			"role_group": "Doctor Operations",
+			"short_description": "Invalid row used only by this test.",
+			"markdown_path": "docs/training/veterinary_doctor_operations/glossary.md",
+			"youtube_url": "",
+			"video_title": "Bad Video Status",
+			"video_status": "Draft",
+			"status": "Published",
+			"order": 99,
+		}
+
+		with patch("vetedge.services.training_centre.frappe.throw", side_effect=frappe.ValidationError):
+			self.assertRaises(frappe.ValidationError, training_centre.normalize_manifest_row, row)

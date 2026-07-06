@@ -1,6 +1,6 @@
 # Veterinary Doctor Training Documentation Pack
 
-This folder contains the doctor-facing VetEdge training documentation pack. It is written for practical clinic use: onboarding new veterinary doctors, running live staff training, supporting client handover, displaying content in a future Training Centre, and preparing for future PDF export.
+This folder contains the doctor-facing VetEdge training documentation pack. It is written for practical clinic use: onboarding new veterinary doctors, running live staff training, supporting client handover, displaying content in the Veterinary Training Centre, and preparing for future PDF export.
 
 The same Markdown guides are available inside Desk through the Veterinary Training Centre page. Markdown remains the source of truth; the Desk page reads the module manifest and renders the approved guide files without copying them into database records.
 
@@ -26,6 +26,7 @@ Use the module guides when a trainer or doctor needs more detail for a specific 
 - [Glossary](glossary.md)
 - [Screenshot Manifest](screenshot_manifest.md)
 - [Training Module Manifest](training_modules.json)
+- [Training Centre Manual QA Checklist](training_centre_manual_qa_checklist.md)
 
 ## How to Use This Pack
 
@@ -35,16 +36,24 @@ Use the module guides when a trainer or doctor needs more detail for a specific 
 4. Use the checklist and assessment sections before allowing independent doctor use.
 5. Use the screenshot manifest to track which images are captured or still pending.
 6. In Desk, open `Training Centre` from the Veterinary workspace/sidebar to read the same modules.
+7. Use the manual QA checklist before handing the Training Centre to clinic trainers or doctors.
 
 ## Desk Training Centre
 
 - Desk page: `Veterinary Training Centre`
 - Workspace label: `Training Centre`
+- User-facing location: `Veterinary` -> `Training Centre`
+- Standard Frappe route: `/app/veterinary-training-centre`
 - Module source: [training_modules.json](training_modules.json)
 - Guide source: Markdown files in this folder
-- Video source: optional `youtube_url` per module in `training_modules.json`
+- Video source: optional `youtube_url` per module in [training_modules.json](training_modules.json)
+- Manual QA checklist: [training_centre_manual_qa_checklist.md](training_centre_manual_qa_checklist.md)
 
-For now, videos are placeholders. Add a YouTube URL later in the manifest when a module video is ready. Screenshots remain pending until manually captured and reviewed.
+Markdown remains the source of truth for training guide content. The Desk page reads the approved module list and renders the Markdown guide files; it does not copy the manuals into database records.
+
+For now, videos are placeholders. Add YouTube videos later module by module by updating the `youtube_url`, `video_title`, and `video_status` fields in [training_modules.json](training_modules.json). Use only approved YouTube links. Screenshots remain pending until manually captured and reviewed.
+
+Mermaid workflow blocks are rendered visually inside the Training Centre. If a vetted local Mermaid bundle is added later, the page can use it through `window.mermaid`; until then, the Training Centre includes a safe fallback renderer for the simple `flowchart` diagrams used in these guides. Invalid diagrams keep their source visible with a friendly note instead of breaking the guide.
 
 ## Training Safety Rules
 

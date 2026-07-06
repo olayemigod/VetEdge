@@ -19,7 +19,7 @@ class VetEdgeTrainingCentre {
 				<div class="vtc-toolbar">
 					<div>
 						<h3>${__("Training Centre")}</h3>
-						<p class="text-muted">${__("Read Veterinary training guides module by module. Videos can be added later.")}</p>
+						<p class="text-muted">${__("Open each Veterinary training module, read the guide, review screenshot references, and use the practice exercises. Videos can be added later.")}</p>
 					</div>
 					<div class="vtc-search-wrap">
 						<input class="form-control vtc-search" placeholder="${__("Search modules")}">
@@ -77,7 +77,7 @@ class VetEdgeTrainingCentre {
 	render_list() {
 		const query = (this.body.find(".vtc-search").val() || "").toLowerCase().trim();
 		const modules = this.modules.filter((module) => {
-			const haystack = `${module.title || ""} ${module.description || ""} ${module.role_group || ""}`.toLowerCase();
+			const haystack = `${module.title || ""} ${module.short_description || module.description || ""} ${module.role_group || ""}`.toLowerCase();
 			return !query || haystack.includes(query);
 		});
 
@@ -92,12 +92,13 @@ class VetEdgeTrainingCentre {
 	module_card(module) {
 		const videoLabel = module.has_video ? __("Watch Video") : __("Video coming soon");
 		const disabled = module.has_video ? "" : "disabled";
+		const description = module.short_description || module.description || __("No description provided.");
 		return `
 			<div class="frappe-card vtc-card">
 				<div>
-					<div class="vtc-card-meta">${this.escape(module.role_group)} · ${this.escape(module.status)}</div>
+					<div class="vtc-card-meta">${this.escape(module.role_group)} &middot; ${this.escape(module.status)}</div>
 					<h4>${this.escape(module.title)}</h4>
-					<p class="text-muted">${this.escape(module.description || __("No description provided."))}</p>
+					<p class="text-muted">${this.escape(description)}</p>
 				</div>
 				<div class="vtc-card-actions">
 					<button class="btn btn-primary btn-sm vtc-open" data-module="${this.escape_attr(module.module_id)}">${__("Read Guide")}</button>
@@ -123,15 +124,19 @@ class VetEdgeTrainingCentre {
 		this.body.find(".vtc-toolbar, .vtc-list, .vtc-status").addClass("hidden");
 		this.body.find(".vtc-reader").removeClass("hidden");
 		this.body.find(".vtc-reader-title").text(module.title || __("Training Module"));
-		this.body.find(".vtc-reader-meta").text(`${module.role_group || ""} · ${module.status || ""}`);
-		this.body.find(".vtc-guide").html(this.render_markdown(payload.markdown || ""));
+		this.body.find(".vtc-reader-meta").text(`${module.role_group || ""} - ${module.status || ""}`);
+		const guide = this.body.find(".vtc-guide");
+		guide.html(this.render_markdown(payload.markdown || ""));
+		this.render_mermaid_blocks(guide.get(0));
 		this.render_video(module);
 		this.render_screenshots(payload.screenshots || []);
-		this.body.find(".vtc-practice").html(
+		const practice = this.body.find(".vtc-practice");
+		practice.html(
 			payload.practice_exercise
 				? this.render_markdown(payload.practice_exercise)
 				: `<div class="frappe-card p-4 text-muted">${__("No practice exercise section was found in this guide.")}</div>`
 		);
+		this.render_mermaid_blocks(practice.get(0));
 		this.show_tab("guide");
 	}
 
@@ -139,15 +144,15 @@ class VetEdgeTrainingCentre {
 		if (module.video_embed_url) {
 			this.body.find(".vtc-video").html(`
 				<div class="vtc-video-frame">
-					<iframe src="${this.escape_attr(module.video_embed_url)}" title="${this.escape_attr(module.title || __("Training video"))}" allowfullscreen loading="lazy"></iframe>
+					<iframe src="${this.escape_attr(module.video_embed_url)}" title="${this.escape_attr(module.video_title || module.title || __("Training video"))}" allowfullscreen loading="lazy"></iframe>
 				</div>
 			`);
 			return;
 		}
 		this.body.find(".vtc-video").html(`
 			<div class="frappe-card p-4">
-				<h4>${this.escape(module.video_status || __("Video coming soon"))}</h4>
-				<p class="text-muted mb-0">${__("A YouTube training video can be linked later in the module manifest.")}</p>
+				<h4>${this.escape(module.video_display_status || __("Video coming soon"))}</h4>
+				<p class="text-muted mb-0">${__("This module is ready for a future YouTube training video. Add the video URL later in the training module setup.")}</p>
 			</div>
 		`);
 	}
@@ -178,6 +183,192 @@ class VetEdgeTrainingCentre {
 		this.body.find(`.vtc-tab[data-tab="${tab}"]`).removeClass("btn-default").addClass("btn-primary");
 		this.body.find(".vtc-panel").addClass("hidden");
 		this.body.find(`.vtc-${tab}`).removeClass("hidden");
+	}
+
+	async render_mermaid_blocks(container) {
+		if (!container) {
+			return;
+		}
+		const blocks = container.querySelectorAll(
+			'pre code.language-mermaid, pre code.lang-mermaid, pre code[class*="mermaid"]'
+		);
+		if (!blocks.length) {
+			return;
+		}
+
+		if (window.mermaid) {
+			this.initialize_mermaid();
+		} else {
+			console.warn("Mermaid is not available. Using the Training Centre flowchart renderer where possible.");
+		}
+
+		for (let i = 0; i < blocks.length; i++) {
+			const code = blocks[i];
+			const pre = code.closest("pre");
+			const source = (code.textContent || "").trim();
+			if (!pre || !source) {
+				continue;
+			}
+
+			if (window.mermaid) {
+				const wrapper = document.createElement("div");
+				wrapper.className = "vetedge-training-mermaid";
+				const diagramId = `vetedge-training-mermaid-${Date.now()}-${i}`;
+				try {
+					const result = await window.mermaid.render(diagramId, source);
+					wrapper.innerHTML = result.svg || result;
+					pre.replaceWith(wrapper);
+					continue;
+				} catch (error) {
+					console.warn("Could not render Mermaid diagram", error);
+					this.show_mermaid_fallback_note(pre);
+					continue;
+				}
+			}
+
+			const fallback = this.render_simple_mermaid_flowchart(source);
+			if (fallback) {
+				pre.replaceWith(fallback);
+			} else {
+				this.show_mermaid_fallback_note(pre);
+			}
+		}
+	}
+
+	initialize_mermaid() {
+		if (this.mermaidInitialized) {
+			return;
+		}
+		window.mermaid.initialize({
+			startOnLoad: false,
+			securityLevel: "strict",
+			theme: "default",
+			flowchart: {
+				htmlLabels: false,
+				useMaxWidth: true,
+			},
+		});
+		this.mermaidInitialized = true;
+	}
+
+	show_mermaid_fallback_note(pre) {
+		if (!pre || pre.classList.contains("vetedge-mermaid-render-error")) {
+			return;
+		}
+		pre.classList.add("vetedge-mermaid-render-error");
+		const note = document.createElement("div");
+		note.className = "text-muted small vtc-mermaid-note";
+		note.textContent = __("Diagram could not be rendered. Showing diagram source instead.");
+		pre.parentNode.insertBefore(note, pre);
+	}
+
+	render_simple_mermaid_flowchart(source) {
+		const lines = source.split("\n").map((line) => line.trim()).filter(Boolean);
+		const first = lines[0] || "";
+		const match = first.match(/^(flowchart|graph)\s+(TD|TB|BT|LR|RL)\s*$/i);
+		if (!match) {
+			return null;
+		}
+
+		const direction = match[2].toUpperCase();
+		const nodes = new Map();
+		const edges = [];
+		const nodePattern = /([A-Za-z0-9_]+)(?:\[([^\]]+)\]|\{([^}]+)\})?/g;
+		const addNode = (id, label, shape) => {
+			if (!id) {
+				return;
+			}
+			const cleanLabel = (label || nodes.get(id)?.label || id).trim();
+			const existing = nodes.get(id);
+			nodes.set(id, {
+				id,
+				label: cleanLabel,
+				shape: shape || existing?.shape || "box",
+			});
+		};
+
+		lines.slice(1).forEach((line) => {
+			if (line.startsWith("%%")) {
+				return;
+			}
+			const parts = line.split(/-->|---/).map((part) => part.replace(/^\|[^|]*\|/, "").trim()).filter(Boolean);
+			if (parts.length < 2) {
+				return;
+			}
+			const parsedParts = parts.map((part) => {
+				const matches = [...part.matchAll(nodePattern)];
+				const node = matches[matches.length - 1];
+				if (!node) {
+					return null;
+				}
+				const shape = node[3] ? "decision" : "box";
+				addNode(node[1], node[2] || node[3], shape);
+				return node[1];
+			}).filter(Boolean);
+
+			for (let idx = 0; idx < parsedParts.length - 1; idx++) {
+				edges.push([parsedParts[idx], parsedParts[idx + 1]]);
+			}
+		});
+
+		if (!nodes.size || !edges.length) {
+			return null;
+		}
+
+		const wrapper = document.createElement("div");
+		wrapper.className = `vetedge-training-mermaid vtc-simple-flowchart vtc-flow-${direction}`;
+
+		const ordered = this.order_flowchart_nodes(nodes, edges);
+		ordered.forEach((node, index) => {
+			const nodeEl = document.createElement("div");
+			nodeEl.className = `vtc-flow-node ${node.shape === "decision" ? "vtc-flow-decision" : ""}`;
+			nodeEl.textContent = node.label;
+			wrapper.appendChild(nodeEl);
+
+			if (index < ordered.length - 1) {
+				const arrow = document.createElement("div");
+				arrow.className = "vtc-flow-arrow";
+				arrow.textContent = direction === "LR" || direction === "RL" ? "→" : "↓";
+				wrapper.appendChild(arrow);
+			}
+		});
+		return wrapper;
+	}
+
+	order_flowchart_nodes(nodes, edges) {
+		const indegree = new Map([...nodes.keys()].map((id) => [id, 0]));
+		const outgoing = new Map([...nodes.keys()].map((id) => [id, []]));
+		edges.forEach(([from, to]) => {
+			if (!nodes.has(from) || !nodes.has(to)) {
+				return;
+			}
+			indegree.set(to, (indegree.get(to) || 0) + 1);
+			outgoing.get(from).push(to);
+		});
+
+		const queue = [...nodes.keys()].filter((id) => !indegree.get(id));
+		const seen = new Set();
+		const ordered = [];
+		while (queue.length) {
+			const id = queue.shift();
+			if (seen.has(id)) {
+				continue;
+			}
+			seen.add(id);
+			ordered.push(nodes.get(id));
+			(outgoing.get(id) || []).forEach((next) => {
+				indegree.set(next, indegree.get(next) - 1);
+				if (indegree.get(next) <= 0) {
+					queue.push(next);
+				}
+			});
+		}
+		nodes.forEach((node, id) => {
+			if (!seen.has(id)) {
+				ordered.push(node);
+			}
+		});
+		return ordered;
 	}
 
 	render_markdown(markdown) {
@@ -247,7 +438,7 @@ class VetEdgeTrainingCentre {
 		}
 		const bullet = line.match(/^-\s+(.+)$/);
 		if (bullet) {
-			return `<div class="vtc-bullet">• ${this.inline(bullet[1])}</div>`;
+			return `<div class="vtc-bullet">&bull; ${this.inline(bullet[1])}</div>`;
 		}
 		const numbered = line.match(/^\d+\.\s+(.+)$/);
 		if (numbered) {
@@ -313,6 +504,15 @@ class VetEdgeTrainingCentre {
 			.vtc-markdown blockquote { border-left: 3px solid var(--primary); padding: 8px 12px; background: var(--fg-color); color: var(--text-muted); }
 			.vtc-bullet, .vtc-numbered, .vtc-check { margin: 4px 0; }
 			.vtc-guide-image { max-width: 100%; border: 1px solid var(--border-color); border-radius: 6px; margin: 8px 0; }
+			.vetedge-training-mermaid { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #d1d8dd); border-radius: 8px; padding: 16px; margin: 16px 0; overflow-x: auto; }
+			.vetedge-training-mermaid svg { max-width: 100%; height: auto; }
+			.vtc-simple-flowchart { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+			.vtc-flow-LR, .vtc-flow-RL { flex-direction: row; align-items: stretch; }
+			.vtc-flow-node { display: flex; align-items: center; justify-content: center; min-width: 180px; max-width: 260px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border-color, #d1d8dd); border-radius: 6px; background: var(--fg-color, #f8f8f8); color: var(--text-color, #1f272e); text-align: center; line-height: 1.35; }
+			.vtc-flow-decision { border-radius: 999px; background: var(--control-bg, #fff); }
+			.vtc-flow-arrow { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 18px; min-width: 24px; }
+			.vtc-mermaid-note { margin: 8px 0; }
+			.vetedge-mermaid-render-error { border-color: var(--orange-300, #f4b860); }
 			.vtc-video-frame { position: relative; padding-top: 56.25%; background: #000; border-radius: 8px; overflow: hidden; }
 			.vtc-video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 			.vtc-screenshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
