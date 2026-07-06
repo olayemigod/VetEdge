@@ -44,6 +44,9 @@ RESOLUTION_RECORDER_ROLES = {
 	"Accounts Manager",
 }
 RETAIN_PAYMENT_EXECUTOR_ROLES = RESOLUTION_RECORDER_ROLES
+RESCHEDULE_EXECUTOR_ROLES = RESOLUTION_RECORDER_ROLES | {
+	"VetEdge Front Desk",
+}
 
 
 @frappe.whitelist()
@@ -108,6 +111,26 @@ def retain_payment_and_cancel_consultation(consultation_name: str, reason: str |
 	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
 	validate_user_can_execute_retain_payment_cancellation(frappe.session.user)
 	return execute_retain_payment_consultation_cancellation(consultation_name, reason=reason)
+
+
+@frappe.whitelist()
+def execute_consultation_reschedule_resolution(
+	consultation_name: str,
+	resolution_name: str | None = None,
+	appointment_datetime: str | None = None,
+	reason: str | None = None,
+	create_new_consultation: bool = False,
+) -> dict:
+	require_internal_user()
+	can_access_consultation(frappe.session.user, consultation_name, raise_exception=True)
+	validate_user_can_execute_reschedule_cancellation_resolution(frappe.session.user)
+	return execute_reschedule_consultation_resolution(
+		consultation_name,
+		resolution_name=resolution_name,
+		appointment_datetime=appointment_datetime,
+		reason=reason,
+		create_new_consultation=create_new_consultation,
+	)
 
 
 @frappe.whitelist()
@@ -201,6 +224,62 @@ def execute_retain_payment_consultation_cancellation(consultation_name: str, rea
 		"payments_preserved": True,
 		"warnings": preflight.get("warnings") or [],
 		"message": "Clinical consultation cancelled. Payment was retained. No accounting reversal was created.",
+	}
+
+
+def execute_reschedule_consultation_resolution(
+	consultation_name: str,
+	resolution_name: str | None = None,
+	appointment_datetime: str | None = None,
+	reason: str | None = None,
+	create_new_consultation: bool = False,
+) -> dict:
+	if create_new_consultation:
+		frappe.throw(
+			"Automatic new consultation creation is not supported for reschedule cancellation resolution yet.",
+			frappe.ValidationError,
+		)
+	if not appointment_datetime:
+		frappe.throw("Appointment date/time is required to complete reschedule resolution.", frappe.ValidationError)
+
+	preflight = build_consultation_cancellation_preflight(consultation_name)
+	resolution = get_valid_reschedule_resolution_doc(consultation_name, resolution_name=resolution_name)
+	validate_reschedule_resolution_allowed(preflight, resolution)
+
+	from vetedge.services.appointment_flow import create_follow_up_from_consultation
+
+	appointment = create_follow_up_from_consultation(
+		consultation_name,
+		appointment_datetime=appointment_datetime,
+		notes=build_reschedule_appointment_notes(resolution, reason),
+	)
+	appointment_name = appointment.get("name") if isinstance(appointment, dict) else appointment
+
+	resolution.linked_new_appointment = appointment_name
+	resolution.resolution_status = "Completed"
+	append_resolution_note(
+		resolution,
+		"Reschedule recorded. Submitted invoices, payments, stock entries, and billing history from the original consultation remain unchanged.",
+	)
+	if reason:
+		append_resolution_note(resolution, reason)
+	resolution.save()
+
+	return {
+		"status": "success",
+		"consultation": consultation_name,
+		"consultation_status": frappe.db.get_value("Veterinary Consultation", consultation_name, "status"),
+		"resolution": serialize_cancellation_resolution(resolution),
+		"resolution_status": resolution.resolution_status,
+		"linked_new_appointment": appointment_name,
+		"linked_new_consultation": resolution.get("linked_new_consultation"),
+		"invoices_preserved": [
+			row.get("invoice") or row.get("name")
+			for row in preflight.get("linked_invoices") or []
+			if row.get("invoice") or row.get("name")
+		],
+		"payments_preserved": True,
+		"message": "Consultation rescheduled. Original invoices and payments were preserved.",
 	}
 
 
@@ -900,6 +979,28 @@ def get_valid_retain_payment_resolution_doc(consultation_name: str):
 	return resolution
 
 
+def get_valid_reschedule_resolution_doc(consultation_name: str, resolution_name: str | None = None):
+	resolution = frappe.get_doc(CANCELLATION_RESOLUTION_DOCTYPE, resolution_name) if resolution_name else get_open_cancellation_resolution_doc(consultation_name)
+	if not resolution:
+		frappe.throw(
+			"Record a Reschedule Consultation resolution before completing reschedule.",
+			frappe.ValidationError,
+		)
+	if resolution.get("consultation") != consultation_name:
+		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
+	if resolution.get("resolution_action_key") != "reschedule_consultation":
+		frappe.throw(
+			"Only a Reschedule Consultation resolution can complete rescheduling.",
+			frappe.ValidationError,
+		)
+	if resolution.get("resolution_status") != "Approved":
+		frappe.throw(
+			"Reschedule consultation requires an Approved resolution decision.",
+			frappe.ValidationError,
+		)
+	return resolution
+
+
 def validate_retain_payment_cancellation_allowed(preflight: dict, resolution) -> None:
 	if preflight.get("can_cancel"):
 		frappe.throw(
@@ -919,6 +1020,34 @@ def validate_retain_payment_cancellation_allowed(preflight: dict, resolution) ->
 		frappe.throw("Payment must exist before using retained-payment cancellation.", frappe.ValidationError)
 	if resolution.get("consultation") != preflight.get("consultation"):
 		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
+
+
+def validate_reschedule_resolution_allowed(preflight: dict, resolution) -> None:
+	if preflight.get("can_cancel"):
+		frappe.throw(
+			"Use normal safe cancellation for consultations without submitted or paid billing blockers.",
+			frappe.ValidationError,
+		)
+	blocker_types = {row.get("type") for row in preflight.get("blockers") or []}
+	if not blocker_types.intersection({"paid_invoice", "submitted_invoice"}):
+		frappe.throw(
+			"Reschedule resolution is only available for consultations blocked by submitted or paid billing.",
+			frappe.ValidationError,
+		)
+	if resolution.get("consultation") != preflight.get("consultation"):
+		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
+
+
+def build_reschedule_appointment_notes(resolution, reason: str | None = None) -> str:
+	parts = [
+		f"Rescheduled from consultation {resolution.get('consultation')}.",
+		"Original submitted invoices and payments remain unchanged.",
+	]
+	if reason:
+		parts.append(reason)
+	elif resolution.get("reason"):
+		parts.append(resolution.get("reason"))
+	return "\n".join(parts)
 
 
 def populate_cancellation_resolution_doc(
@@ -1113,6 +1242,18 @@ def user_can_approve_cancellation_resolution(user: str) -> bool:
 	if not get_roles:
 		return False
 	return bool(set(get_roles(user)) & RETAIN_PAYMENT_EXECUTOR_ROLES)
+
+
+def validate_user_can_execute_reschedule_cancellation_resolution(user: str) -> None:
+	if not user_can_execute_reschedule_cancellation_resolution(user):
+		frappe.throw("You do not have permission to execute consultation reschedule resolutions.", frappe.PermissionError)
+
+
+def user_can_execute_reschedule_cancellation_resolution(user: str) -> bool:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles:
+		return False
+	return bool(set(get_roles(user)) & RESCHEDULE_EXECUTOR_ROLES)
 
 
 def safe_doctype_exists(doctype: str) -> bool:

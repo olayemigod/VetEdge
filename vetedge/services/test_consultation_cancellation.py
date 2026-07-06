@@ -369,6 +369,21 @@ class TestConsultationCancellationPreflight(TestCase):
 		resolution.save = Mock()
 		return resolution
 
+	def build_reschedule_resolution(self, status="Pending Review"):
+		resolution = frappe._dict(
+			name="VCCR-RESCHEDULE",
+			consultation="VCON-001",
+			resolution_action_key="reschedule_consultation",
+			resolution_action="Reschedule consultation",
+			resolution_status=status,
+			reason="Owner requested a new visit.",
+			notes="Resolution decision only.",
+			linked_new_appointment=None,
+			linked_new_consultation=None,
+		)
+		resolution.save = Mock()
+		return resolution
+
 	def test_paid_consultation_without_resolution_cannot_retain_payment_cancel(self):
 		with (
 			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
@@ -515,6 +530,71 @@ class TestConsultationCancellationPreflight(TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				consultation_cancellation.get_valid_retain_payment_resolution_doc("VCON-001")
 
+	def test_pending_review_reschedule_resolution_cannot_execute(self):
+		resolution = self.build_reschedule_resolution(status="Pending Review")
+		with patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.get_valid_reschedule_resolution_doc("VCON-001")
+
+	def test_retain_payment_resolution_cannot_use_reschedule_execution(self):
+		resolution = self.build_retain_payment_resolution(status="Approved")
+		with patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.get_valid_reschedule_resolution_doc("VCON-001")
+
+	def test_approved_reschedule_resolution_creates_linked_appointment(self):
+		resolution = self.build_reschedule_resolution(status="Approved")
+		meta = Mock()
+		meta.has_field.return_value = True
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution),
+			patch.object(consultation_cancellation.frappe, "get_meta", return_value=meta),
+			patch.object(consultation_cancellation.frappe.db, "get_value", return_value="Ready for Treatment"),
+			patch(
+				"vetedge.services.appointment_flow.create_follow_up_from_consultation",
+				return_value={"name": "VAPT-RESCHEDULE-001", "appointment_title": "Buddy follow up"},
+			) as create_follow_up,
+		):
+			result = consultation_cancellation.execute_reschedule_consultation_resolution(
+				"VCON-001",
+				appointment_datetime="2026-07-15 09:00:00",
+				reason="Owner requested a later appointment.",
+			)
+
+		create_follow_up.assert_called_once()
+		self.assertEqual(create_follow_up.call_args.args[0], "VCON-001")
+		self.assertEqual(create_follow_up.call_args.kwargs["appointment_datetime"], "2026-07-15 09:00:00")
+		self.assertIn("Original submitted invoices and payments remain unchanged", create_follow_up.call_args.kwargs["notes"])
+		self.assertEqual(resolution.linked_new_appointment, "VAPT-RESCHEDULE-001")
+		self.assertIsNone(resolution.linked_new_consultation)
+		self.assertEqual(resolution.resolution_status, "Completed")
+		resolution.save.assert_called_once()
+		self.assertEqual(result["status"], "success")
+		self.assertEqual(result["consultation_status"], "Ready for Treatment")
+		self.assertEqual(result["resolution_status"], "Completed")
+		self.assertEqual(result["linked_new_appointment"], "VAPT-RESCHEDULE-001")
+		self.assertEqual(result["invoices_preserved"], ["ACC-SINV-PAID"])
+		self.assertTrue(result["payments_preserved"])
+		self.assertIn("Original invoices and payments were preserved", result["message"])
+
+	def test_reschedule_execution_does_not_support_new_consultation_creation_yet(self):
+		with self.assertRaises(frappe.ValidationError):
+			consultation_cancellation.execute_reschedule_consultation_resolution(
+				"VCON-001",
+				appointment_datetime="2026-07-15 09:00:00",
+				create_new_consultation=True,
+			)
+
+	def test_unauthorized_user_cannot_execute_reschedule_resolution(self):
+		with patch.object(consultation_cancellation.frappe, "get_roles", return_value=["VetEdge Doctor"]):
+			with self.assertRaises(frappe.PermissionError):
+				consultation_cancellation.validate_user_can_execute_reschedule_cancellation_resolution("doctor@example.com")
+
+	def test_front_desk_can_execute_reschedule_resolution(self):
+		with patch.object(consultation_cancellation.frappe, "get_roles", return_value=["VetEdge Front Desk"]):
+			consultation_cancellation.validate_user_can_execute_reschedule_cancellation_resolution("frontdesk@example.com")
+
 	def test_partly_paid_billing_group_blocks_and_preserves_multiple_invoice_rows(self):
 		preflight = self.build_preflight(
 			invoices=[
@@ -641,3 +721,6 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("Cancel Clinical Record and Retain Payment", script)
 		self.assertIn("vetedge.services.consultation_cancellation.retain_payment_and_cancel_consultation", script)
 		self.assertIn("Submitted invoices and payments will remain unchanged", script)
+		self.assertIn("Create Reschedule Appointment", script)
+		self.assertIn("vetedge.services.consultation_cancellation.execute_consultation_reschedule_resolution", script)
+		self.assertIn("Original submitted invoices and payments remain unchanged", script)

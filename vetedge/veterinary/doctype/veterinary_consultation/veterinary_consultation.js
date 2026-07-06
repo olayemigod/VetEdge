@@ -1336,6 +1336,10 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 		const resolution = $(this).attr("data-approve-cancellation-resolution");
 		show_cancellation_resolution_approval_dialog(frm, dialog, resolution);
 	});
+	dialog.fields_dict.preflight_html.$wrapper.find("[data-execute-reschedule-resolution]").on("click", function () {
+		const resolution = $(this).attr("data-execute-reschedule-resolution");
+		show_reschedule_resolution_dialog(frm, dialog, resolution);
+	});
 	dialog.show();
 }
 
@@ -1489,15 +1493,22 @@ function render_existing_cancellation_resolution(resolution) {
 	const canRetainPaymentCancel = resolution.resolution_action_key === "retain_payment_clinical_cancel_only"
 		&& resolution.resolution_status === "Approved"
 		&& user_can_manage_consultation_cancellation_resolution();
+	const canExecuteReschedule = resolution.resolution_action_key === "reschedule_consultation"
+		&& resolution.resolution_status === "Approved"
+		&& user_can_execute_consultation_reschedule_resolution();
 	const canApprove = ["Draft", "Pending Review"].includes(resolution.resolution_status)
 		&& user_can_manage_consultation_cancellation_resolution();
 	const statusGuidance = {
 		"Pending Review": __("Resolution pending approval."),
-		Approved: __("Resolution approved. Authorized users may execute the retained-payment clinical cancellation."),
+		Approved: __("Resolution approved. Authorized users may execute the approved next step."),
 		Completed: __("Resolution completed."),
 		Rejected: __("Resolution rejected."),
 		Draft: __("Resolution draft."),
 	}[resolution.resolution_status] || "";
+	const linkedTargets = [
+		resolution.linked_new_appointment ? `${__("New Appointment")}: ${resolution.linked_new_appointment}` : "",
+		resolution.linked_new_consultation ? `${__("New Consultation")}: ${resolution.linked_new_consultation}` : "",
+	].filter(Boolean);
 	return `
 		<div class="ve-cancel-section">
 			<h4>${__("Recorded Resolution Decision")}</h4>
@@ -1508,6 +1519,7 @@ function render_existing_cancellation_resolution(resolution) {
 				<div class="ve-cancel-meta">${__("Selected By")}: ${escape_consultation_history_html(resolution.selected_by || "")}</div>
 				<div class="ve-cancel-meta">${__("Selected On")}: ${escape_consultation_history_html(resolution.selected_on || "")}</div>
 				${resolution.reason ? `<div class="ve-cancel-meta">${__("Reason")}: ${escape_consultation_history_html(resolution.reason)}</div>` : ""}
+				${linkedTargets.length ? `<div class="ve-cancel-meta">${linkedTargets.map(escape_consultation_history_html).join(" | ")}</div>` : ""}
 				${canApprove ? `
 					<div class="mt-3">
 						<button class="btn btn-default btn-sm" type="button" data-approve-cancellation-resolution="${escape_consultation_history_html(resolution.name)}">
@@ -1519,6 +1531,13 @@ function render_existing_cancellation_resolution(resolution) {
 					<div class="mt-3">
 						<button class="btn btn-danger btn-sm" type="button" data-retain-payment-cancel="1">
 							${__("Cancel Clinical Record and Retain Payment")}
+						</button>
+					</div>
+				` : ""}
+				${canExecuteReschedule ? `
+					<div class="mt-3">
+						<button class="btn btn-primary btn-sm" type="button" data-execute-reschedule-resolution="${escape_consultation_history_html(resolution.name)}">
+							${__("Create Reschedule Appointment")}
 						</button>
 					</div>
 				` : ""}
@@ -1537,6 +1556,21 @@ function user_can_manage_consultation_cancellation_resolution() {
 		"VetEdge Accounts/Cashier",
 		"Accounts User",
 		"Accounts Manager",
+	];
+	return roles.some((role) => frappe.user.has_role(role));
+}
+
+function user_can_execute_consultation_reschedule_resolution() {
+	const roles = [
+		"System Manager",
+		"VetEdge Administrator",
+		"Branch Manager",
+		"VetEdge Branch Manager",
+		"Accounts/Cashier",
+		"VetEdge Accounts/Cashier",
+		"Accounts User",
+		"Accounts Manager",
+		"VetEdge Front Desk",
 	];
 	return roles.some((role) => frappe.user.has_role(role));
 }
@@ -1718,6 +1752,58 @@ function show_retain_payment_cancellation_confirmation(frm, preflightDialog) {
 			});
 		}
 	);
+}
+
+function show_reschedule_resolution_dialog(frm, preflightDialog, resolutionName) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Create Reschedule Appointment"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "guidance",
+				options: `<p>${__("This creates a new appointment linked to the approved reschedule resolution. Original submitted invoices and payments remain unchanged and are not transferred.")}</p>`,
+			},
+			{
+				fieldtype: "Datetime",
+				fieldname: "appointment_datetime",
+				label: __("New Appointment Date/Time"),
+				reqd: 1,
+			},
+			{
+				fieldtype: "Small Text",
+				fieldname: "reason",
+				label: __("Reschedule Note"),
+			},
+		],
+		primary_action_label: __("Create Reschedule Appointment"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.consultation_cancellation.execute_consultation_reschedule_resolution",
+				args: {
+					consultation_name: frm.doc.name,
+					resolution_name: resolutionName,
+					appointment_datetime: values.appointment_datetime,
+					reason: values.reason,
+				},
+				freeze: true,
+				freeze_message: __("Creating reschedule appointment..."),
+				callback(result) {
+					dialog.hide();
+					if (preflightDialog) {
+						preflightDialog.hide();
+					}
+					const message = result.message || {};
+					frappe.msgprint({
+						title: __("Consultation Rescheduled"),
+						indicator: "green",
+						message: `${escape_consultation_history_html(message.message || __("Consultation rescheduled. Original invoices and payments were preserved."))}<br>${__("New Appointment")}: ${escape_consultation_history_html(message.linked_new_appointment || "")}`,
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	dialog.show();
 }
 
 function perform_safe_consultation_cancellation(frm) {
