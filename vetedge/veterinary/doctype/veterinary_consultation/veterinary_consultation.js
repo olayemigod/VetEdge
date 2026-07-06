@@ -1604,10 +1604,10 @@ function get_manual_accounting_resolution_completion_label(resolution) {
 
 function get_manual_accounting_resolution_guidance(resolution) {
 	return {
-		refund_required: __("Accounts should process the refund manually in ERPNext. Record the reference after completion."),
-		issue_customer_credit: __("Accounts should create or apply customer credit manually. Record the reference after completion."),
-		admin_accounting_correction: __("Accounts/Admin should perform the required accounting correction manually. Record the reference after completion."),
-	}[resolution?.resolution_action_key] || __("Record the external/manual accounting resolution reference after completion.");
+		refund_required: __("Record refund accounting evidence before completing this resolution."),
+		issue_customer_credit: __("Record credit accounting evidence before completing this resolution."),
+		admin_accounting_correction: __("Record accounting correction evidence before completing this resolution."),
+	}[resolution?.resolution_action_key] || __("Record accounting evidence before completing this resolution.");
 }
 
 function render_cancellation_patient_outstanding_context(rows) {
@@ -1842,6 +1842,7 @@ function show_reschedule_resolution_dialog(frm, preflightDialog, resolutionName)
 }
 
 function show_manual_accounting_resolution_completion_dialog(frm, preflightDialog, resolution, resolutionName, label) {
+	const requiresAmount = ["refund_required", "issue_customer_credit"].includes(resolution?.resolution_action_key);
 	const dialog = new frappe.ui.Dialog({
 		title: label || __("Mark Accounting Resolution Completed"),
 		fields: [
@@ -1850,8 +1851,46 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 				fieldname: "guidance",
 				options: `
 					<p>${escape_consultation_history_html(get_manual_accounting_resolution_guidance(resolution))}</p>
-					<p class="text-muted">${__("This records acknowledgement only. VetEdge will not create refunds, Credit Notes, Payment Entries, accounting reversals, or apply credit to a rescheduled consultation.")}</p>
+					<p class="text-muted">${__("This records audit evidence only. VetEdge will not create refunds, Credit Notes, Payment Entries, accounting reversals, or apply credit to a rescheduled consultation.")}</p>
 				`,
+			},
+			{
+				fieldtype: "Select",
+				fieldname: "accounting_reference_doctype",
+				label: __("Accounting Reference Type"),
+				options: [
+					"Payment Entry",
+					"Journal Entry",
+					"Sales Invoice",
+					"Stock Entry",
+					"External Reference",
+				].join("\n"),
+				reqd: 1,
+			},
+			{
+				fieldtype: "Data",
+				fieldname: "accounting_reference_name",
+				label: __("Accounting Reference"),
+				reqd: 1,
+			},
+			{
+				fieldtype: "Currency",
+				fieldname: "resolution_amount",
+				label: resolution?.resolution_action_key === "issue_customer_credit" ? __("Credit Amount") : __("Refund Amount"),
+				reqd: requiresAmount ? 1 : 0,
+				hidden: requiresAmount ? 0 : 1,
+			},
+			{
+				fieldtype: "Date",
+				fieldname: "resolution_date",
+				label: __("Resolution Date"),
+				default: frappe.datetime.get_today(),
+				reqd: 1,
+			},
+			{
+				fieldtype: "Check",
+				fieldname: "external_reference",
+				label: __("External/manual reference approved by System Manager or Accounts Manager"),
 			},
 			{
 				fieldtype: "Small Text",
@@ -1859,24 +1898,25 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 				label: __("Completion Note"),
 				reqd: 1,
 			},
-			{
-				fieldtype: "Data",
-				fieldname: "reference_document",
-				label: __("Manual Reference"),
-				description: __("Optional: Credit Note, Payment Entry, Journal Entry, approval, or internal reference."),
-			},
 		],
 		primary_action_label: __("Mark Completed"),
 		primary_action(values) {
+			if (requiresAmount && flt(values.resolution_amount) <= 0) {
+				frappe.throw(__("Resolution amount must be greater than zero."));
+			}
 			frappe.call({
 				method: "vetedge.services.consultation_cancellation.complete_consultation_cancellation_resolution_manually",
 				args: {
 					resolution_name: resolutionName,
 					completion_note: values.completion_note,
-					reference_document: values.reference_document,
+					accounting_reference_doctype: values.accounting_reference_doctype,
+					accounting_reference_name: values.accounting_reference_name,
+					resolution_amount: values.resolution_amount,
+					resolution_date: values.resolution_date,
+					external_reference: values.external_reference,
 				},
 				freeze: true,
-				freeze_message: __("Recording manual accounting resolution..."),
+				freeze_message: __("Recording accounting evidence..."),
 				callback(result) {
 					dialog.hide();
 					if (preflightDialog) {
@@ -1885,7 +1925,7 @@ function show_manual_accounting_resolution_completion_dialog(frm, preflightDialo
 					frappe.msgprint({
 						title: __("Accounting Resolution Completed"),
 						indicator: "green",
-						message: result.message?.message || __("Manual accounting resolution recorded. Consultation status and submitted accounting documents were unchanged."),
+						message: result.message?.message || __("Accounting resolution evidence recorded. Consultation status and submitted accounting documents were unchanged."),
 					});
 					frm.reload_doc();
 				},

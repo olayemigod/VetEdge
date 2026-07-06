@@ -52,6 +52,12 @@ MANUAL_ACCOUNTING_RESOLUTION_ACTIONS = {
 	"issue_customer_credit",
 	"admin_accounting_correction",
 }
+MANUAL_ACCOUNTING_REFERENCE_DOCTYPES = {
+	"refund_required": {"Payment Entry", "Journal Entry", "Sales Invoice"},
+	"issue_customer_credit": {"Sales Invoice", "Journal Entry", "Payment Entry"},
+	"admin_accounting_correction": {"Journal Entry", "Sales Invoice", "Payment Entry", "Stock Entry"},
+}
+EXTERNAL_ACCOUNTING_REFERENCE_ROLES = {"System Manager", "Accounts Manager"}
 
 
 @frappe.whitelist()
@@ -142,7 +148,11 @@ def execute_consultation_reschedule_resolution(
 def complete_consultation_cancellation_resolution_manually(
 	resolution_name: str,
 	completion_note: str | None = None,
-	reference_document: str | None = None,
+	accounting_reference_doctype: str | None = None,
+	accounting_reference_name: str | None = None,
+	resolution_amount: float | str | None = None,
+	resolution_date: str | None = None,
+	external_reference: bool | str | int = False,
 ) -> dict:
 	require_internal_user()
 	validate_user_can_complete_manual_accounting_resolution(frappe.session.user)
@@ -153,7 +163,11 @@ def complete_consultation_cancellation_resolution_manually(
 	return complete_manual_accounting_resolution(
 		resolution,
 		completion_note=completion_note,
-		reference_document=reference_document,
+		accounting_reference_doctype=accounting_reference_doctype,
+		accounting_reference_name=accounting_reference_name,
+		resolution_amount=resolution_amount,
+		resolution_date=resolution_date,
+		external_reference=external_reference,
 	)
 
 
@@ -310,20 +324,41 @@ def execute_reschedule_consultation_resolution(
 def complete_manual_accounting_resolution(
 	resolution,
 	completion_note: str | None = None,
-	reference_document: str | None = None,
+	accounting_reference_doctype: str | None = None,
+	accounting_reference_name: str | None = None,
+	resolution_amount: float | str | None = None,
+	resolution_date: str | None = None,
+	external_reference: bool | str | int = False,
 ) -> dict:
-	validate_manual_accounting_resolution_completion(resolution, completion_note)
+	evidence = validate_manual_accounting_resolution_completion(
+		resolution,
+		completion_note=completion_note,
+		accounting_reference_doctype=accounting_reference_doctype,
+		accounting_reference_name=accounting_reference_name,
+		resolution_amount=resolution_amount,
+		resolution_date=resolution_date,
+		external_reference=external_reference,
+	)
 
 	note_lines = [
-		f"Manual accounting resolution completed by {frappe.session.user} on {now_datetime()}.",
+		f"Manual accounting resolution completed by {frappe.session.user} on {now_datetime()} with accounting evidence.",
 		completion_note.strip(),
 	]
-	if reference_document:
-		note_lines.append(f"Manual reference: {reference_document.strip()}.")
+	if evidence["accounting_reference_doctype"] and evidence["accounting_reference_name"]:
+		note_lines.append(
+			f"Accounting reference: {evidence['accounting_reference_doctype']} {evidence['accounting_reference_name']}."
+		)
+	if evidence["external_reference"]:
+		note_lines.append("Reference was accepted as an external/manual accounting reference by an authorized manager.")
+	if evidence["resolution_amount"]:
+		note_lines.append(f"Resolution amount: {evidence['resolution_amount']}.")
+	if evidence["resolution_date"]:
+		note_lines.append(f"Resolution date: {evidence['resolution_date']}.")
 	note_lines.append(
-		"Acknowledgement only. VetEdge did not create or mutate Credit Notes, Payment Entries, Sales Invoices, Stock Entries, refunds, or payment allocations."
+		"Acknowledgement only. VetEdge did not create or mutate Credit Notes, Payment Entries, Sales Invoices, Stock Entries, refunds, credits, accounting reversals, or payment allocations."
 	)
 	append_resolution_note(resolution, "\n".join(note_lines))
+	set_resolution_completion_fields(resolution, evidence, completion_note)
 	resolution.resolution_status = "Completed"
 	resolution.save()
 
@@ -333,9 +368,13 @@ def complete_manual_accounting_resolution(
 		"consultation_status": frappe.db.get_value("Veterinary Consultation", resolution.get("consultation"), "status"),
 		"resolution": serialize_cancellation_resolution(resolution),
 		"resolution_status": resolution.resolution_status,
-		"reference_document": reference_document,
+		"accounting_reference_doctype": evidence["accounting_reference_doctype"],
+		"accounting_reference_name": evidence["accounting_reference_name"],
+		"resolution_amount": evidence["resolution_amount"],
+		"resolution_date": evidence["resolution_date"],
+		"external_reference": evidence["external_reference"],
 		"accounting_documents_preserved": True,
-		"message": "Manual accounting resolution recorded. Consultation status and submitted accounting documents were unchanged.",
+		"message": "Accounting resolution evidence recorded. Consultation status and submitted accounting documents were unchanged.",
 	}
 
 
@@ -1094,8 +1133,17 @@ def validate_reschedule_resolution_allowed(preflight: dict, resolution) -> None:
 		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
 
 
-def validate_manual_accounting_resolution_completion(resolution, completion_note: str | None) -> None:
-	if resolution.get("resolution_action_key") not in MANUAL_ACCOUNTING_RESOLUTION_ACTIONS:
+def validate_manual_accounting_resolution_completion(
+	resolution,
+	completion_note: str | None,
+	accounting_reference_doctype: str | None = None,
+	accounting_reference_name: str | None = None,
+	resolution_amount: float | str | None = None,
+	resolution_date: str | None = None,
+	external_reference: bool | str | int = False,
+) -> dict:
+	action_key = resolution.get("resolution_action_key")
+	if action_key not in MANUAL_ACCOUNTING_RESOLUTION_ACTIONS:
 		frappe.throw(
 			"Only refund, customer credit, or admin accounting correction resolutions can be manually completed by this action.",
 			frappe.ValidationError,
@@ -1104,6 +1152,66 @@ def validate_manual_accounting_resolution_completion(resolution, completion_note
 		frappe.throw("Only Approved accounting resolution decisions can be marked completed.", frappe.ValidationError)
 	if not completion_note or not completion_note.strip():
 		frappe.throw("Completion note is required before marking this accounting resolution completed.", frappe.ValidationError)
+	external_reference = bool(cint(external_reference))
+	accounting_reference_doctype = (accounting_reference_doctype or "").strip()
+	accounting_reference_name = (accounting_reference_name or "").strip()
+	if not resolution_date:
+		frappe.throw("Resolution date is required before marking this accounting resolution completed.", frappe.ValidationError)
+	if action_key in {"refund_required", "issue_customer_credit"} and flt(resolution_amount) <= 0:
+		frappe.throw("Resolution amount must be greater than zero for refund or customer credit resolutions.", frappe.ValidationError)
+	if external_reference:
+		validate_user_can_use_external_accounting_reference(frappe.session.user)
+		if not accounting_reference_name:
+			frappe.throw("External reference name is required before marking this accounting resolution completed.", frappe.ValidationError)
+		if not accounting_reference_doctype:
+			accounting_reference_doctype = "External Reference"
+	else:
+		if not accounting_reference_doctype or not accounting_reference_name:
+			frappe.throw("Accounting reference type and name are required before marking this accounting resolution completed.", frappe.ValidationError)
+		validate_manual_accounting_reference_doctype(action_key, accounting_reference_doctype)
+		validate_accounting_reference_exists(accounting_reference_doctype, accounting_reference_name)
+	return {
+		"accounting_reference_doctype": accounting_reference_doctype,
+		"accounting_reference_name": accounting_reference_name,
+		"resolution_amount": flt(resolution_amount),
+		"resolution_date": resolution_date,
+		"external_reference": external_reference,
+	}
+
+
+def validate_manual_accounting_reference_doctype(action_key: str, doctype: str) -> None:
+	allowed_doctypes = MANUAL_ACCOUNTING_REFERENCE_DOCTYPES.get(action_key) or set()
+	if doctype not in allowed_doctypes:
+		frappe.throw(
+			f"{doctype} is not an accepted accounting evidence type for this cancellation resolution.",
+			frappe.ValidationError,
+		)
+
+
+def validate_accounting_reference_exists(doctype: str, name: str) -> None:
+	try:
+		exists = frappe.db.exists(doctype, name)
+	except Exception:
+		exists = None
+	if not exists:
+		frappe.throw(f"Accounting reference {doctype} {name} was not found.", frappe.ValidationError)
+
+
+def set_resolution_completion_fields(resolution, evidence: dict, completion_note: str | None) -> None:
+	meta = frappe.get_meta(CANCELLATION_RESOLUTION_DOCTYPE)
+	field_values = {
+		"accounting_reference_doctype": evidence.get("accounting_reference_doctype"),
+		"accounting_reference_name": evidence.get("accounting_reference_name"),
+		"resolution_amount": evidence.get("resolution_amount"),
+		"resolution_date": evidence.get("resolution_date"),
+		"external_reference": cint(evidence.get("external_reference")),
+		"completion_note": (completion_note or "").strip(),
+		"completed_by": frappe.session.user,
+		"completed_on": now_datetime(),
+	}
+	for fieldname, value in field_values.items():
+		if meta.has_field(fieldname):
+			setattr(resolution, fieldname, value)
 
 
 def build_reschedule_appointment_notes(resolution, reason: str | None = None) -> str:
@@ -1259,6 +1367,14 @@ def serialize_cancellation_resolution(doc) -> dict:
 		"approved_on": doc.get("approved_on"),
 		"linked_new_consultation": doc.get("linked_new_consultation"),
 		"linked_new_appointment": doc.get("linked_new_appointment"),
+		"accounting_reference_doctype": doc.get("accounting_reference_doctype"),
+		"accounting_reference_name": doc.get("accounting_reference_name"),
+		"resolution_amount": flt(doc.get("resolution_amount")),
+		"resolution_date": doc.get("resolution_date"),
+		"external_reference": bool(cint(doc.get("external_reference"))),
+		"completion_note": doc.get("completion_note"),
+		"completed_by": doc.get("completed_by"),
+		"completed_on": doc.get("completed_on"),
 		"billing_group_paid_amount": flt(doc.get("billing_group_paid_amount")),
 		"billing_group_outstanding_amount": flt(doc.get("billing_group_outstanding_amount")),
 		"related_invoices": parse_json_field(doc.get("related_invoices")),
@@ -1334,6 +1450,15 @@ def user_can_complete_manual_accounting_resolution(user: str) -> bool:
 	if not get_roles:
 		return False
 	return bool(set(get_roles(user)) & RETAIN_PAYMENT_EXECUTOR_ROLES)
+
+
+def validate_user_can_use_external_accounting_reference(user: str) -> None:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles or not (set(get_roles(user)) & EXTERNAL_ACCOUNTING_REFERENCE_ROLES):
+		frappe.throw(
+			"Only System Manager or Accounts Manager can complete a cancellation accounting resolution with an external reference.",
+			frappe.PermissionError,
+		)
 
 
 def safe_doctype_exists(doctype: str) -> bool:
