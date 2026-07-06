@@ -1340,6 +1340,11 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 		const resolution = $(this).attr("data-execute-reschedule-resolution");
 		show_reschedule_resolution_dialog(frm, dialog, resolution);
 	});
+	dialog.fields_dict.preflight_html.$wrapper.find("[data-complete-manual-accounting-resolution]").on("click", function () {
+		const resolution = $(this).attr("data-complete-manual-accounting-resolution");
+		const label = $(this).attr("data-completion-label");
+		show_manual_accounting_resolution_completion_dialog(frm, dialog, preflight.existing_resolution, resolution, label);
+	});
 	dialog.show();
 }
 
@@ -1496,6 +1501,10 @@ function render_existing_cancellation_resolution(resolution) {
 	const canExecuteReschedule = resolution.resolution_action_key === "reschedule_consultation"
 		&& resolution.resolution_status === "Approved"
 		&& user_can_execute_consultation_reschedule_resolution();
+	const manualCompletionLabel = get_manual_accounting_resolution_completion_label(resolution);
+	const canCompleteManualAccountingResolution = Boolean(manualCompletionLabel)
+		&& resolution.resolution_status === "Approved"
+		&& user_can_manage_consultation_cancellation_resolution();
 	const canApprove = ["Draft", "Pending Review"].includes(resolution.resolution_status)
 		&& user_can_manage_consultation_cancellation_resolution();
 	const statusGuidance = {
@@ -1541,6 +1550,13 @@ function render_existing_cancellation_resolution(resolution) {
 						</button>
 					</div>
 				` : ""}
+				${canCompleteManualAccountingResolution ? `
+					<div class="mt-3">
+						<button class="btn btn-primary btn-sm" type="button" data-complete-manual-accounting-resolution="${escape_consultation_history_html(resolution.name)}" data-completion-label="${escape_consultation_history_html(manualCompletionLabel)}">
+							${escape_consultation_history_html(manualCompletionLabel)}
+						</button>
+					</div>
+				` : ""}
 			</div>
 		</div>
 	`;
@@ -1573,6 +1589,25 @@ function user_can_execute_consultation_reschedule_resolution() {
 		"VetEdge Front Desk",
 	];
 	return roles.some((role) => frappe.user.has_role(role));
+}
+
+function get_manual_accounting_resolution_completion_label(resolution) {
+	if (!resolution) {
+		return null;
+	}
+	return {
+		refund_required: __("Mark Refund Resolution Completed"),
+		issue_customer_credit: __("Mark Credit Resolution Completed"),
+		admin_accounting_correction: __("Mark Admin Correction Completed"),
+	}[resolution.resolution_action_key] || null;
+}
+
+function get_manual_accounting_resolution_guidance(resolution) {
+	return {
+		refund_required: __("Accounts should process the refund manually in ERPNext. Record the reference after completion."),
+		issue_customer_credit: __("Accounts should create or apply customer credit manually. Record the reference after completion."),
+		admin_accounting_correction: __("Accounts/Admin should perform the required accounting correction manually. Record the reference after completion."),
+	}[resolution?.resolution_action_key] || __("Record the external/manual accounting resolution reference after completion.");
 }
 
 function render_cancellation_patient_outstanding_context(rows) {
@@ -1797,6 +1832,60 @@ function show_reschedule_resolution_dialog(frm, preflightDialog, resolutionName)
 						title: __("Consultation Rescheduled"),
 						indicator: "green",
 						message: `${escape_consultation_history_html(message.message || __("Consultation rescheduled. Original invoices and payments were preserved."))}<br>${__("New Appointment")}: ${escape_consultation_history_html(message.linked_new_appointment || "")}`,
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	dialog.show();
+}
+
+function show_manual_accounting_resolution_completion_dialog(frm, preflightDialog, resolution, resolutionName, label) {
+	const dialog = new frappe.ui.Dialog({
+		title: label || __("Mark Accounting Resolution Completed"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "guidance",
+				options: `
+					<p>${escape_consultation_history_html(get_manual_accounting_resolution_guidance(resolution))}</p>
+					<p class="text-muted">${__("This records acknowledgement only. VetEdge will not create refunds, Credit Notes, Payment Entries, accounting reversals, or apply credit to a rescheduled consultation.")}</p>
+				`,
+			},
+			{
+				fieldtype: "Small Text",
+				fieldname: "completion_note",
+				label: __("Completion Note"),
+				reqd: 1,
+			},
+			{
+				fieldtype: "Data",
+				fieldname: "reference_document",
+				label: __("Manual Reference"),
+				description: __("Optional: Credit Note, Payment Entry, Journal Entry, approval, or internal reference."),
+			},
+		],
+		primary_action_label: __("Mark Completed"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.consultation_cancellation.complete_consultation_cancellation_resolution_manually",
+				args: {
+					resolution_name: resolutionName,
+					completion_note: values.completion_note,
+					reference_document: values.reference_document,
+				},
+				freeze: true,
+				freeze_message: __("Recording manual accounting resolution..."),
+				callback(result) {
+					dialog.hide();
+					if (preflightDialog) {
+						preflightDialog.hide();
+					}
+					frappe.msgprint({
+						title: __("Accounting Resolution Completed"),
+						indicator: "green",
+						message: result.message?.message || __("Manual accounting resolution recorded. Consultation status and submitted accounting documents were unchanged."),
 					});
 					frm.reload_doc();
 				},

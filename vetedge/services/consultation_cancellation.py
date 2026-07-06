@@ -47,6 +47,11 @@ RETAIN_PAYMENT_EXECUTOR_ROLES = RESOLUTION_RECORDER_ROLES
 RESCHEDULE_EXECUTOR_ROLES = RESOLUTION_RECORDER_ROLES | {
 	"VetEdge Front Desk",
 }
+MANUAL_ACCOUNTING_RESOLUTION_ACTIONS = {
+	"refund_required",
+	"issue_customer_credit",
+	"admin_accounting_correction",
+}
 
 
 @frappe.whitelist()
@@ -130,6 +135,25 @@ def execute_consultation_reschedule_resolution(
 		appointment_datetime=appointment_datetime,
 		reason=reason,
 		create_new_consultation=create_new_consultation,
+	)
+
+
+@frappe.whitelist()
+def complete_consultation_cancellation_resolution_manually(
+	resolution_name: str,
+	completion_note: str | None = None,
+	reference_document: str | None = None,
+) -> dict:
+	require_internal_user()
+	validate_user_can_complete_manual_accounting_resolution(frappe.session.user)
+	if not safe_doctype_exists(CANCELLATION_RESOLUTION_DOCTYPE):
+		frappe.throw("Cancellation resolution records are not installed. Please run migrate.", frappe.ValidationError)
+	resolution = frappe.get_doc(CANCELLATION_RESOLUTION_DOCTYPE, resolution_name)
+	can_access_consultation(frappe.session.user, resolution.consultation, raise_exception=True)
+	return complete_manual_accounting_resolution(
+		resolution,
+		completion_note=completion_note,
+		reference_document=reference_document,
 	)
 
 
@@ -280,6 +304,38 @@ def execute_reschedule_consultation_resolution(
 		],
 		"payments_preserved": True,
 		"message": "Consultation rescheduled. Original invoices and payments were preserved.",
+	}
+
+
+def complete_manual_accounting_resolution(
+	resolution,
+	completion_note: str | None = None,
+	reference_document: str | None = None,
+) -> dict:
+	validate_manual_accounting_resolution_completion(resolution, completion_note)
+
+	note_lines = [
+		f"Manual accounting resolution completed by {frappe.session.user} on {now_datetime()}.",
+		completion_note.strip(),
+	]
+	if reference_document:
+		note_lines.append(f"Manual reference: {reference_document.strip()}.")
+	note_lines.append(
+		"Acknowledgement only. VetEdge did not create or mutate Credit Notes, Payment Entries, Sales Invoices, Stock Entries, refunds, or payment allocations."
+	)
+	append_resolution_note(resolution, "\n".join(note_lines))
+	resolution.resolution_status = "Completed"
+	resolution.save()
+
+	return {
+		"status": "success",
+		"consultation": resolution.get("consultation"),
+		"consultation_status": frappe.db.get_value("Veterinary Consultation", resolution.get("consultation"), "status"),
+		"resolution": serialize_cancellation_resolution(resolution),
+		"resolution_status": resolution.resolution_status,
+		"reference_document": reference_document,
+		"accounting_documents_preserved": True,
+		"message": "Manual accounting resolution recorded. Consultation status and submitted accounting documents were unchanged.",
 	}
 
 
@@ -1038,6 +1094,18 @@ def validate_reschedule_resolution_allowed(preflight: dict, resolution) -> None:
 		frappe.throw("Cancellation resolution does not belong to this consultation.", frappe.ValidationError)
 
 
+def validate_manual_accounting_resolution_completion(resolution, completion_note: str | None) -> None:
+	if resolution.get("resolution_action_key") not in MANUAL_ACCOUNTING_RESOLUTION_ACTIONS:
+		frappe.throw(
+			"Only refund, customer credit, or admin accounting correction resolutions can be manually completed by this action.",
+			frappe.ValidationError,
+		)
+	if resolution.get("resolution_status") != "Approved":
+		frappe.throw("Only Approved accounting resolution decisions can be marked completed.", frappe.ValidationError)
+	if not completion_note or not completion_note.strip():
+		frappe.throw("Completion note is required before marking this accounting resolution completed.", frappe.ValidationError)
+
+
 def build_reschedule_appointment_notes(resolution, reason: str | None = None) -> str:
 	parts = [
 		f"Rescheduled from consultation {resolution.get('consultation')}.",
@@ -1254,6 +1322,18 @@ def user_can_execute_reschedule_cancellation_resolution(user: str) -> bool:
 	if not get_roles:
 		return False
 	return bool(set(get_roles(user)) & RESCHEDULE_EXECUTOR_ROLES)
+
+
+def validate_user_can_complete_manual_accounting_resolution(user: str) -> None:
+	if not user_can_complete_manual_accounting_resolution(user):
+		frappe.throw("You do not have permission to complete manual accounting resolution decisions.", frappe.PermissionError)
+
+
+def user_can_complete_manual_accounting_resolution(user: str) -> bool:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles:
+		return False
+	return bool(set(get_roles(user)) & RETAIN_PAYMENT_EXECUTOR_ROLES)
 
 
 def safe_doctype_exists(doctype: str) -> bool:
