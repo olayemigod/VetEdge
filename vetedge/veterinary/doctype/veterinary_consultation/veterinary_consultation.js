@@ -1326,6 +1326,10 @@ function show_consultation_cancellation_dialog(frm, preflight) {
 	dialog.fields_dict.preflight_html.$wrapper.find("[data-retain-payment-cancel]").on("click", function () {
 		show_retain_payment_cancellation_confirmation(frm, dialog);
 	});
+	dialog.fields_dict.preflight_html.$wrapper.find("[data-approve-cancellation-resolution]").on("click", function () {
+		const resolution = $(this).attr("data-approve-cancellation-resolution");
+		show_cancellation_resolution_approval_dialog(frm, dialog, resolution);
+	});
 	dialog.show();
 }
 
@@ -1460,7 +1464,7 @@ function render_cancellation_resolution_actions(options, canCancel) {
 	return `
 		<div class="ve-cancel-section">
 			<h4>${__("Financial Resolution Options")}</h4>
-			<p class="text-muted">${__("Submitted accounting documents are not changed automatically. Select an option below to record the intended resolution path.")}</p>
+			<p class="text-muted">${__("Submitted accounting documents are not changed automatically. Recording a resolution request does not cancel this consultation.")}</p>
 			<div class="ve-cancel-actions">
 				${options.map((option) => `
 					<button class="btn btn-default btn-sm" type="button" data-resolution-action="${escape_consultation_history_html(option.value)}">
@@ -1477,16 +1481,34 @@ function render_existing_cancellation_resolution(resolution) {
 		return "";
 	}
 	const canRetainPaymentCancel = resolution.resolution_action_key === "retain_payment_clinical_cancel_only"
-		&& ["Pending Review", "Approved"].includes(resolution.resolution_status);
+		&& resolution.resolution_status === "Approved"
+		&& user_can_manage_consultation_cancellation_resolution();
+	const canApprove = ["Draft", "Pending Review"].includes(resolution.resolution_status)
+		&& user_can_manage_consultation_cancellation_resolution();
+	const statusGuidance = {
+		"Pending Review": __("Resolution pending approval."),
+		Approved: __("Resolution approved. Authorized users may execute the retained-payment clinical cancellation."),
+		Completed: __("Resolution completed."),
+		Rejected: __("Resolution rejected."),
+		Draft: __("Resolution draft."),
+	}[resolution.resolution_status] || "";
 	return `
 		<div class="ve-cancel-section">
 			<h4>${__("Recorded Resolution Decision")}</h4>
 			<div class="ve-cancel-card">
 				<div class="ve-cancel-card-title">${escape_consultation_history_html(resolution.resolution_action || resolution.resolution_action_key || "")}</div>
 				<div class="ve-cancel-meta">${__("Status")}: ${escape_consultation_history_html(resolution.resolution_status || "")}</div>
+				${statusGuidance ? `<div class="ve-cancel-meta">${escape_consultation_history_html(statusGuidance)}</div>` : ""}
 				<div class="ve-cancel-meta">${__("Selected By")}: ${escape_consultation_history_html(resolution.selected_by || "")}</div>
 				<div class="ve-cancel-meta">${__("Selected On")}: ${escape_consultation_history_html(resolution.selected_on || "")}</div>
 				${resolution.reason ? `<div class="ve-cancel-meta">${__("Reason")}: ${escape_consultation_history_html(resolution.reason)}</div>` : ""}
+				${canApprove ? `
+					<div class="mt-3">
+						<button class="btn btn-default btn-sm" type="button" data-approve-cancellation-resolution="${escape_consultation_history_html(resolution.name)}">
+							${__("Approve Resolution")}
+						</button>
+					</div>
+				` : ""}
 				${canRetainPaymentCancel ? `
 					<div class="mt-3">
 						<button class="btn btn-danger btn-sm" type="button" data-retain-payment-cancel="1">
@@ -1497,6 +1519,20 @@ function render_existing_cancellation_resolution(resolution) {
 			</div>
 		</div>
 	`;
+}
+
+function user_can_manage_consultation_cancellation_resolution() {
+	const roles = [
+		"System Manager",
+		"VetEdge Administrator",
+		"Branch Manager",
+		"VetEdge Branch Manager",
+		"Accounts/Cashier",
+		"VetEdge Accounts/Cashier",
+		"Accounts User",
+		"Accounts Manager",
+	];
+	return roles.some((role) => frappe.user.has_role(role));
 }
 
 function render_cancellation_patient_outstanding_context(rows) {
@@ -1549,7 +1585,7 @@ function render_cancellation_card_section(title, rows) {
 
 function show_consultation_resolution_decision_dialog(frm, preflightDialog, action, label) {
 	const dialog = new frappe.ui.Dialog({
-		title: __("Record Cancellation Resolution"),
+		title: __("Record Resolution Request"),
 		fields: [
 			{
 				fieldtype: "HTML",
@@ -1563,7 +1599,7 @@ function show_consultation_resolution_decision_dialog(frm, preflightDialog, acti
 				reqd: 1,
 			},
 		],
-		primary_action_label: __("Record Decision"),
+		primary_action_label: __("Record Resolution Request"),
 		primary_action(values) {
 			frappe.call({
 				method: "vetedge.services.consultation_cancellation.record_consultation_cancellation_resolution",
@@ -1580,9 +1616,9 @@ function show_consultation_resolution_decision_dialog(frm, preflightDialog, acti
 						preflightDialog.hide();
 					}
 					frappe.msgprint({
-						title: __("Resolution Decision Recorded"),
+						title: __("Resolution Request Recorded"),
 						indicator: "green",
-						message: __("Resolution decision recorded. Accounting action has not yet been performed."),
+						message: __("Resolution request recorded for approval. The consultation was not cancelled and accounting documents were not changed."),
 					});
 					frm.reload_doc();
 				},
@@ -1605,6 +1641,49 @@ function render_consultation_resolution_guidance(action, label) {
 		<p><strong>${escape_consultation_history_html(label || action)}</strong></p>
 		<p>${escape_consultation_history_html(guidance[action] || __("Resolve the listed blockers before cancellation."))}</p>
 	`;
+}
+
+function show_cancellation_resolution_approval_dialog(frm, preflightDialog, resolutionName) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Approve Cancellation Resolution"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "guidance",
+				options: `<p>${__("Approval authorizes the next step but does not cancel this consultation or change accounting documents.")}</p>`,
+			},
+			{
+				fieldtype: "Small Text",
+				fieldname: "note",
+				label: __("Approval Note"),
+			},
+		],
+		primary_action_label: __("Approve"),
+		primary_action(values) {
+			frappe.call({
+				method: "vetedge.services.consultation_cancellation.approve_consultation_cancellation_resolution",
+				args: {
+					resolution_name: resolutionName,
+					note: values.note,
+				},
+				freeze: true,
+				freeze_message: __("Approving cancellation resolution..."),
+				callback() {
+					dialog.hide();
+					if (preflightDialog) {
+						preflightDialog.hide();
+					}
+					frappe.msgprint({
+						title: __("Cancellation Resolution Approved"),
+						indicator: "green",
+						message: __("Resolution approved. The consultation was not cancelled. Retained-payment clinical cancellation can now be executed by an authorized user."),
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	dialog.show();
 }
 
 function show_retain_payment_cancellation_confirmation(frm, preflightDialog) {

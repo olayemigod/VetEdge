@@ -315,6 +315,7 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(decision.customer, "CUST-001")
 		self.assertEqual(decision.resolution_action_key, "refund_required")
 		self.assertEqual(decision.resolution_action, "Refund required")
+		self.assertEqual(decision.resolution_status, "Pending Review")
 		self.assertEqual(decision.reason, "Owner requested refund review.")
 		self.assertEqual(decision.billing_group_paid_amount, 11000)
 		self.assertEqual(result["resolution_action_key"], "refund_required")
@@ -386,10 +387,19 @@ class TestConsultationCancellationPreflight(TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				consultation_cancellation.execute_retain_payment_consultation_cancellation("VCON-001")
 
-	def test_retain_payment_resolution_can_clinically_cancel_by_authorized_user(self):
+	def test_pending_review_retain_payment_resolution_cannot_clinically_cancel(self):
+		resolution = self.build_retain_payment_resolution(status="Pending Review")
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.execute_retain_payment_consultation_cancellation("VCON-001")
+
+	def test_approved_retain_payment_resolution_can_clinically_cancel_by_authorized_user(self):
 		consultation = frappe._dict(name="VCON-001", status="Ready for Treatment")
 		consultation.save = Mock()
-		resolution = self.build_retain_payment_resolution()
+		resolution = self.build_retain_payment_resolution(status="Approved")
 		meta = Mock()
 		meta.has_field.return_value = True
 		with (
@@ -406,16 +416,55 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertEqual(resolution.resolution_status, "Completed")
 		resolution.save.assert_called_once()
 		delete_doc.assert_not_called()
-		self.assertEqual(result["status"], "Cancelled")
+		self.assertEqual(result["status"], "success")
+		self.assertEqual(result["consultation_status"], "Cancelled")
 		self.assertEqual(result["resolution"]["resolution_status"], "Completed")
+		self.assertEqual(result["resolution_status"], "Completed")
 		self.assertEqual(result["invoices_preserved"], ["ACC-SINV-PAID"])
 		self.assertTrue(result["payments_preserved"])
 		self.assertIn("No accounting reversal", result["message"])
 
+	def test_retain_payment_cancellation_uses_internal_cancel_flag_for_consultation_save(self):
+		consultation = frappe._dict(name="VCON-001", status="Ready for Treatment")
+		consultation.save = Mock()
+		resolution = self.build_retain_payment_resolution(status="Approved")
+		meta = Mock()
+		meta.has_field.return_value = True
+		with (
+			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=self.build_paid_resolution_preflight()),
+			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=consultation),
+			patch.object(consultation_cancellation.frappe, "get_meta", return_value=meta),
+			patch.object(consultation_cancellation, "run_with_retain_payment_cancellation_flag") as run_with_flag,
+		):
+			run_with_flag.side_effect = lambda callback: callback()
+			consultation_cancellation.execute_retain_payment_consultation_cancellation("VCON-001")
+
+		run_with_flag.assert_called_once_with(consultation.save)
+		consultation.save.assert_called_once()
+
+	def test_normal_safe_cancellation_does_not_use_retain_payment_flag(self):
+		doc = frappe._dict(name="VCON-001", status="In Progress")
+		doc.save = Mock()
+		with (
+			patch.object(consultation_cancellation, "validate_consultation_can_be_cancelled", return_value={"can_cancel": True, "warnings": []}),
+			patch.object(
+				consultation_cancellation,
+				"cleanup_safe_draft_dependencies",
+				return_value={"cleaned_draft_invoices": [], "skipped_draft_invoices": [], "closed_billing_sessions": [], "preserved_references": []},
+			),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=doc),
+			patch.object(consultation_cancellation, "run_with_retain_payment_cancellation_flag") as run_with_flag,
+		):
+			consultation_cancellation.execute_consultation_cancellation("VCON-001")
+
+		run_with_flag.assert_not_called()
+		doc.save.assert_called_once()
+
 	def test_retain_payment_requires_payment_evidence(self):
 		preflight = self.build_paid_resolution_preflight()
 		preflight["billing_group_summary"] = {"paid_amount": 0, "outstanding_amount": 11000, "submitted_invoice_count": 1}
-		resolution = self.build_retain_payment_resolution()
+		resolution = self.build_retain_payment_resolution(status="Approved")
 		with (
 			patch.object(consultation_cancellation, "build_consultation_cancellation_preflight", return_value=preflight),
 			patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution),
@@ -427,6 +476,44 @@ class TestConsultationCancellationPreflight(TestCase):
 		with patch.object(consultation_cancellation.frappe, "get_roles", return_value=["VetEdge Doctor"]):
 			with self.assertRaises(frappe.PermissionError):
 				consultation_cancellation.validate_user_can_execute_retain_payment_cancellation("doctor@example.com")
+
+	def test_accounts_user_can_approve_cancellation_resolution(self):
+		resolution = self.build_retain_payment_resolution(status="Pending Review")
+		meta = Mock()
+		meta.has_field.return_value = True
+		with (
+			patch.object(consultation_cancellation, "require_internal_user"),
+			patch.object(consultation_cancellation, "validate_user_can_approve_cancellation_resolution"),
+			patch.object(consultation_cancellation, "safe_doctype_exists", return_value=True),
+			patch.object(consultation_cancellation.frappe, "get_doc", return_value=resolution),
+			patch.object(consultation_cancellation, "can_access_consultation"),
+			patch.object(consultation_cancellation.frappe, "get_meta", return_value=meta),
+			patch.object(consultation_cancellation.frappe, "session", frappe._dict(user="accounts@example.com")),
+			patch.object(consultation_cancellation, "now_datetime", return_value="2026-07-06 10:00:00"),
+		):
+			result = consultation_cancellation.update_consultation_cancellation_resolution_status(
+				"VCCR-001",
+				"Approved",
+				note="Approved by accounts.",
+			)
+
+		self.assertEqual(resolution.resolution_status, "Approved")
+		self.assertEqual(resolution.approved_by, "accounts@example.com")
+		self.assertTrue(resolution.approved_on)
+		self.assertIn("Approved by accounts.", resolution.notes)
+		resolution.save.assert_called_once()
+		self.assertEqual(result["resolution_status"], "Approved")
+
+	def test_doctor_cannot_approve_cancellation_resolution(self):
+		with patch.object(consultation_cancellation.frappe, "get_roles", return_value=["VetEdge Doctor"]):
+			with self.assertRaises(frappe.PermissionError):
+				consultation_cancellation.validate_user_can_approve_cancellation_resolution("doctor@example.com")
+
+	def test_rejected_retain_payment_resolution_cannot_execute(self):
+		resolution = self.build_retain_payment_resolution(status="Rejected")
+		with patch.object(consultation_cancellation, "get_open_cancellation_resolution_doc", return_value=resolution):
+			with self.assertRaises(frappe.ValidationError):
+				consultation_cancellation.get_valid_retain_payment_resolution_doc("VCON-001")
 
 	def test_partly_paid_billing_group_blocks_and_preserves_multiple_invoice_rows(self):
 		preflight = self.build_preflight(
@@ -544,7 +631,13 @@ class TestConsultationCancellationPreflight(TestCase):
 		self.assertIn("vetedge.services.consultation_cancellation.cancel_consultation_safely", script)
 		self.assertIn("Recorded Resolution Decision", script)
 		self.assertIn("vetedge.services.consultation_cancellation.record_consultation_cancellation_resolution", script)
-		self.assertIn("Resolution decision recorded. Accounting action has not yet been performed.", script)
+		self.assertIn("Record Resolution Request", script)
+		self.assertIn("Resolution request recorded for approval", script)
+		self.assertIn("Recording a resolution request does not cancel this consultation", script)
+		self.assertIn("Resolution pending approval.", script)
+		self.assertIn("vetedge.services.consultation_cancellation.approve_consultation_cancellation_resolution", script)
+		self.assertIn("Approve Resolution", script)
+		self.assertIn("Approval authorizes the next step but does not cancel this consultation", script)
 		self.assertIn("Cancel Clinical Record and Retain Payment", script)
 		self.assertIn("vetedge.services.consultation_cancellation.retain_payment_and_cancel_consultation", script)
 		self.assertIn("Submitted invoices and payments will remain unchanged", script)

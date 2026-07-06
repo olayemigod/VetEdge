@@ -110,6 +110,38 @@ def retain_payment_and_cancel_consultation(consultation_name: str, reason: str |
 	return execute_retain_payment_consultation_cancellation(consultation_name, reason=reason)
 
 
+@frappe.whitelist()
+def approve_consultation_cancellation_resolution(resolution_name: str, note: str | None = None) -> dict:
+	return update_consultation_cancellation_resolution_status(resolution_name, "Approved", note=note)
+
+
+@frappe.whitelist()
+def update_consultation_cancellation_resolution_status(resolution_name: str, status: str, note: str | None = None) -> dict:
+	require_internal_user()
+	validate_user_can_approve_cancellation_resolution(frappe.session.user)
+	if status not in {"Approved", "Rejected"}:
+		frappe.throw("Only Approved or Rejected status updates are allowed from this action.", frappe.ValidationError)
+	if not safe_doctype_exists(CANCELLATION_RESOLUTION_DOCTYPE):
+		frappe.throw("Cancellation resolution records are not installed. Please run migrate.", frappe.ValidationError)
+
+	resolution = frappe.get_doc(CANCELLATION_RESOLUTION_DOCTYPE, resolution_name)
+	can_access_consultation(frappe.session.user, resolution.consultation, raise_exception=True)
+	if resolution.resolution_status in {"Approved", "Completed"}:
+		frappe.throw("Approved or completed cancellation resolutions cannot be changed by this action.", frappe.ValidationError)
+	if resolution.resolution_status == "Rejected":
+		frappe.throw("Rejected cancellation resolutions cannot be changed by this action.", frappe.ValidationError)
+	if resolution.resolution_status not in {"Draft", "Pending Review"}:
+		frappe.throw("Only Draft or Pending Review cancellation resolutions can be approved or rejected.", frappe.ValidationError)
+
+	resolution.resolution_status = status
+	if status == "Approved":
+		resolution.approved_by = frappe.session.user
+		resolution.approved_on = now_datetime()
+	append_resolution_note(resolution, note or f"Resolution {status.lower()} by {frappe.session.user}.")
+	resolution.save()
+	return serialize_cancellation_resolution(resolution)
+
+
 def execute_consultation_cancellation(consultation_name: str, reason: str | None = None) -> dict:
 	preflight = validate_consultation_can_be_cancelled(consultation_name)
 	cleanup_result = cleanup_safe_draft_dependencies(consultation_name, preflight)
@@ -118,7 +150,7 @@ def execute_consultation_cancellation(consultation_name: str, reason: str | None
 	consultation.status = "Cancelled"
 	if reason:
 		set_cancellation_reason_if_supported(consultation, reason)
-	run_with_retain_payment_cancellation_flag(consultation.save)
+	consultation.save()
 
 	return {
 		"status": consultation.status,
@@ -146,7 +178,7 @@ def execute_retain_payment_consultation_cancellation(consultation_name: str, rea
 	consultation.status = "Cancelled"
 	if reason:
 		set_cancellation_reason_if_supported(consultation, reason)
-	consultation.save()
+	run_with_retain_payment_cancellation_flag(consultation.save)
 
 	resolution.resolution_status = "Completed"
 	if frappe.get_meta(CANCELLATION_RESOLUTION_DOCTYPE).has_field("notes"):
@@ -156,9 +188,11 @@ def execute_retain_payment_consultation_cancellation(consultation_name: str, rea
 	resolution.save()
 
 	return {
+		"status": "success",
 		"consultation": consultation.name,
-		"status": consultation.status,
+		"consultation_status": consultation.status,
 		"resolution": serialize_cancellation_resolution(resolution),
+		"resolution_status": resolution.resolution_status,
 		"invoices_preserved": [
 			row.get("invoice") or row.get("name")
 			for row in preflight.get("linked_invoices") or []
@@ -171,6 +205,8 @@ def execute_retain_payment_consultation_cancellation(consultation_name: str, rea
 
 
 def run_with_retain_payment_cancellation_flag(callback):
+	if not getattr(frappe, "flags", None):
+		frappe.flags = frappe._dict()
 	previous = getattr(frappe.flags, "vetedge_retain_payment_cancellation", False)
 	frappe.flags.vetedge_retain_payment_cancellation = True
 	try:
@@ -856,9 +892,9 @@ def get_valid_retain_payment_resolution_doc(consultation_name: str):
 			"Only a Retain Payment / Clinical Cancellation Only resolution can use retained-payment cancellation.",
 			frappe.ValidationError,
 		)
-	if resolution.get("resolution_status") not in {"Pending Review", "Approved"}:
+	if resolution.get("resolution_status") != "Approved":
 		frappe.throw(
-			"Retained-payment cancellation requires a Pending Review or Approved resolution decision.",
+			"Retained-payment cancellation requires an Approved resolution decision.",
 			frappe.ValidationError,
 		)
 	return resolution
@@ -912,6 +948,13 @@ def populate_cancellation_resolution_doc(
 	doc.billing_group_outstanding_amount = flt(summary.get("outstanding_amount"))
 	doc.related_invoices = json.dumps(build_resolution_invoice_snapshot(preflight.get("linked_invoices") or []), default=str)
 	doc.notes = "Resolution decision only. No refund, credit note, Payment Entry, Stock Entry, or Sales Invoice reversal was created."
+
+
+def append_resolution_note(resolution, note: str | None) -> None:
+	if not note or not frappe.get_meta(CANCELLATION_RESOLUTION_DOCTYPE).has_field("notes"):
+		return
+	existing_notes = (resolution.get("notes") or "").strip()
+	resolution.notes = "\n".join([value for value in (existing_notes, note.strip()) if value])
 
 
 def build_resolution_invoice_snapshot(invoices: list[dict]) -> list[dict]:
@@ -1054,6 +1097,18 @@ def validate_user_can_execute_retain_payment_cancellation(user: str) -> None:
 
 
 def user_can_execute_retain_payment_cancellation(user: str) -> bool:
+	get_roles = getattr(frappe, "get_roles", None)
+	if not get_roles:
+		return False
+	return bool(set(get_roles(user)) & RETAIN_PAYMENT_EXECUTOR_ROLES)
+
+
+def validate_user_can_approve_cancellation_resolution(user: str) -> None:
+	if not user_can_approve_cancellation_resolution(user):
+		frappe.throw("You do not have permission to approve consultation cancellation resolutions.", frappe.PermissionError)
+
+
+def user_can_approve_cancellation_resolution(user: str) -> bool:
 	get_roles = getattr(frappe, "get_roles", None)
 	if not get_roles:
 		return False
