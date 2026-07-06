@@ -554,6 +554,27 @@ class TestBillingModal(TestCase):
 		self.assertIn('frm.add_custom_button(__("Billing / Payment"), async () => {', js)
 		self.assertLess(js.index("await frm.save();"), js.index("window.vetedgeBillingModal.open(frm)"))
 
+	def test_completed_consultation_keeps_history_actions_visible(self):
+		js = get_app_file("vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js").read_text()
+
+		billing_fn = js.split("function add_billing_actions(frm) {", 1)[1].split(
+			"function add_lab_actions(frm) {", 1
+		)[0]
+		lab_fn = js.split("function add_lab_actions(frm) {", 1)[1].split(
+			"function show_consultation_lab_orders_dialog", 1
+		)[0]
+		vaccination_fn = js.split("function add_vaccination_actions(frm) {", 1)[1].split(
+			"function show_vaccination_dialog", 1
+		)[0]
+
+		self.assertIn('frm.doc.status !== "Cancelled"', billing_fn)
+		self.assertIn('frm.doc.status === "Cancelled"', lab_fn)
+		self.assertIn('frm.add_custom_button(__("View Lab Orders")', lab_fn)
+		self.assertLess(lab_fn.index('frm.doc.status === "Cancelled"'), lab_fn.index('frm.add_custom_button(__("View Lab Orders")'))
+		self.assertIn("if (!consultationScopeIsLocked(frm))", vaccination_fn)
+		self.assertIn('frm.add_custom_button(__("View Vaccinations")', vaccination_fn)
+		self.assertLess(vaccination_fn.index("if (!consultationScopeIsLocked(frm))"), vaccination_fn.index('frm.add_custom_button(__("View Vaccinations")'))
+
 	def test_submit_modal_invoice_submits_draft_invoice(self):
 		source = frappe._dict(
 			doctype="Veterinary Consultation",

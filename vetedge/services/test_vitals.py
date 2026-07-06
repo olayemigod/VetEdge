@@ -136,13 +136,15 @@ class TestVitals(TestCase):
 		):
 			self.assertRaises(frappe.ValidationError, validate_vital_signs, doc)
 
-	def test_latest_vitals_uses_consultation_before_patient_fallback(self):
+	def test_latest_vitals_uses_current_consultation_only(self):
 		rows_by_filters = {
 			(("consultation", "VCON-001"),): [],
 			(("patient", "VP-001"),): [frappe._dict(name="VVS-001", patient="VP-001")],
 		}
+		queried_filters = []
 
 		def get_list(doctype, filters=None, **kwargs):
+			queried_filters.append(filters)
 			return rows_by_filters.get(tuple(sorted((filters or {}).items())), [])
 
 		frappe_stub = make_frappe_stub(
@@ -156,7 +158,8 @@ class TestVitals(TestCase):
 		):
 			vitals = get_latest_vitals_for_consultation("VCON-001")
 
-		self.assertEqual(vitals.name, "VVS-001")
+		self.assertIsNone(vitals)
+		self.assertEqual(queried_filters, [{"consultation": "VCON-001"}])
 
 	def test_create_vitals_blocks_when_feature_disabled(self):
 		with (

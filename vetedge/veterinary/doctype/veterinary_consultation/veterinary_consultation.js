@@ -55,9 +55,11 @@ frappe.ui.form.on("Veterinary Consultation", {
 				console.error("Failed to initialize vaccination actions", error);
 			}
 
-			frm.add_custom_button(__("New Vitals"), () => {
-				show_vitals_entry_dialog(frm);
-			}, __("Clinical"));
+			if (!consultationIsClosed(frm)) {
+				frm.add_custom_button(__("New Vitals"), () => {
+					show_vitals_entry_dialog(frm);
+				}, __("Clinical"));
+			}
 
 			frm.add_custom_button(__("Latest Vitals"), () => {
 				show_latest_vitals_dialog(frm);
@@ -512,6 +514,10 @@ function consultationScopeIsLocked(frm) {
 	return ["Ready for Treatment", "Completed", "Cancelled"].includes(frm.doc.status);
 }
 
+function consultationIsClosed(frm) {
+	return ["Completed", "Cancelled"].includes(frm.doc.status);
+}
+
 function configure_planned_treatments_grid(frm) {
 	const grid = frm.get_field("planned_treatments")?.grid;
 	if (!grid) {
@@ -689,7 +695,7 @@ function add_hospitalisation_actions(frm) {
 }
 
 function add_billing_actions(frm) {
-	if (!["Completed", "Cancelled"].includes(frm.doc.status)) {
+	if (frm.doc.status !== "Cancelled") {
 		frm.add_custom_button(__("Billing / Payment"), async () => {
 			if (frm.is_dirty()) {
 				await frm.save();
@@ -704,7 +710,7 @@ function add_billing_actions(frm) {
 }
 
 function add_lab_actions(frm) {
-	if (["Completed", "Cancelled"].includes(frm.doc.status)) {
+	if (frm.doc.status === "Cancelled") {
 		return;
 	}
 
@@ -1914,7 +1920,7 @@ function show_latest_vitals_dialog(frm) {
 		callback(result) {
 			const vitals = result.message;
 			if (!vitals?.name) {
-				frappe.msgprint(__("No vitals found for this consultation or patient."));
+				frappe.msgprint(__("No vitals found for this consultation."));
 				return;
 			}
 
@@ -2002,9 +2008,11 @@ function show_latest_vitals_dialog(frm) {
 }
 
 function add_vaccination_actions(frm) {
-	frm.add_custom_button(__("New Vaccination"), () => {
-		show_vaccination_dialog(frm);
-	}, __("Clinical"));
+	if (!consultationScopeIsLocked(frm)) {
+		frm.add_custom_button(__("New Vaccination"), () => {
+			show_vaccination_dialog(frm);
+		}, __("Clinical"));
+	}
 
 	frm.add_custom_button(__("View Vaccinations"), () => {
 		show_vaccination_history(frm);
