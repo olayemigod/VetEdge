@@ -111,6 +111,15 @@ class TestLabWorkflow(TestCase):
 		self.assertIn("result_attachment", script)
 		self.assertIn("requires_document_upload", script)
 
+	def test_lab_order_final_status_keeps_billing_payment_visible(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary/doctype/veterinary_lab_order/veterinary_lab_order.js"
+		script = script_path.read_text()
+
+		self.assertIn('frm.add_custom_button(__("Billing / Payment")', script)
+		self.assertNotIn('!frm.is_new() && frm.doc.status !== "Cancelled"', script)
+		self.assertIn('["Reviewed", "Completed", "Cancelled"].includes(frm.doc.status)', script)
+		self.assertIn('["Completed", "Cancelled"].includes(frm.doc.status)', script)
+
 	def test_create_lab_order_invoice_creates_invoice_when_none_exists(self):
 		order = make_lab_order()
 		created_invoice = make_sales_invoice("SINV-001", docstatus=0)

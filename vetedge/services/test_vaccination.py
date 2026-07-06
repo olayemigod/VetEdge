@@ -269,6 +269,23 @@ class VaccinationWorkflowTests(TestCase):
 		self.assertNotIn("collapsible", section)
 		self.assertNotIn("collapsible_depends_on", section)
 
+	def test_vaccination_final_status_keeps_shared_billing_payment_visible(self):
+		script_path = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_vaccination_record"
+			/ "veterinary_vaccination_record.js"
+		)
+		script = script_path.read_text()
+
+		self.assertIn('frm.add_custom_button(__("Billing / Payment")', script)
+		self.assertNotIn('if (frm.is_new() || frm.doc.status === "Cancelled")', script)
+		self.assertIn("if (frm.is_new())", script)
+		self.assertIn('["Draft", "Awaiting Payment", "Pending Administration"].includes(frm.doc.status)', script)
+		self.assertIn('__("Administer Vaccination")', script)
+		self.assertIn('__("View Invoice")', script)
+
 	def test_vaccination_billing_defaults_fall_back_to_item_price(self):
 		with patch.object(
 			vaccination,

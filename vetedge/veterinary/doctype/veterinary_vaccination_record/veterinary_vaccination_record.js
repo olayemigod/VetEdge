@@ -65,19 +65,19 @@ function set_billing_field_state(frm) {
 }
 
 function add_workflow_actions(frm) {
-	if (frm.is_new() || frm.doc.status === "Cancelled") {
+	if (frm.is_new()) {
 		return;
 	}
 
-	if (["Draft", "Awaiting Payment", "Pending Administration"].includes(frm.doc.status)) {
-		frm.add_custom_button(__("Billing / Payment"), () => {
-			if (window.vetedgeBillingModal?.open) {
-				window.vetedgeBillingModal.open(frm);
-				return;
-			}
-			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
-		}, __("Billing"));
+	frm.add_custom_button(__("Billing / Payment"), () => {
+		if (window.vetedgeBillingModal?.open) {
+			window.vetedgeBillingModal.open(frm);
+			return;
+		}
+		frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
+	}, __("Billing"));
 
+	if (["Draft", "Awaiting Payment", "Pending Administration"].includes(frm.doc.status)) {
 		frm.add_custom_button(__("Administer Vaccination"), () => {
 			frappe.call({
 				method: "vetedge.services.vaccination.administer_vaccination",
