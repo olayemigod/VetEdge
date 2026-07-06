@@ -131,6 +131,43 @@ class TestDispensaryFlow(TestCase):
 		):
 			self.assertRaises(frappe.ValidationError, confirm_dispensary_issue, "VCON-001")
 
+	def test_completed_consultation_preserves_submitted_dispensary_stock_reference(self):
+		doc = make_consultation()
+		doc.status = "Completed"
+		doc.dispensary_status = DISPENSARY_CONFIRMED
+		doc.dispensary_stock_entry = "STE-0001"
+		doc.set(
+			"dispensed_treatments",
+			[
+				frappe._dict(
+					item="MED-001",
+					dispensed_qty=2,
+					stock_posted=1,
+					stock_entry_reference="STE-0001",
+					selected_batch="BATCH-001",
+				)
+			],
+		)
+
+		with (
+			patch("vetedge.services.dispensary.require_internal_user"),
+			patch("vetedge.services.dispensary.can_dispense"),
+			patch("vetedge.services.dispensary.frappe.get_doc", return_value=doc),
+			patch("vetedge.services.dispensary.frappe.session", SimpleNamespace(user="dispensary@example.com")),
+			patch("vetedge.services.dispensary.get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
+			patch("vetedge.services.dispensary.create_material_issue_stock_entry") as create_stock,
+			patch("vetedge.services.dispensary.frappe.throw", side_effect=frappe.ValidationError),
+		):
+			self.assertRaises(frappe.ValidationError, confirm_dispensary_issue, "VCON-001")
+
+		self.assertEqual(doc.status, "Completed")
+		self.assertEqual(doc.dispensary_status, DISPENSARY_CONFIRMED)
+		self.assertEqual(doc.dispensary_stock_entry, "STE-0001")
+		self.assertEqual(doc.dispensed_treatments[0].stock_entry_reference, "STE-0001")
+		self.assertEqual(doc.dispensed_treatments[0].stock_posted, 1)
+		self.assertEqual(doc.dispensed_treatments[0].selected_batch, "BATCH-001")
+		create_stock.assert_not_called()
+
 	def test_insufficient_stock_blocks_confirmation(self):
 		doc = make_consultation()
 

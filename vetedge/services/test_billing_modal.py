@@ -519,6 +519,80 @@ class TestBillingModal(TestCase):
 		self.assertEqual(state["linked_invoice_count"], 1)
 		self.assertEqual(state["linked_invoices"], ["ACC-SINV-CURRENT"])
 
+	def test_final_status_sources_return_invoice_history_without_creating_invoices(self):
+		final_sources = (
+			("Veterinary Lab Order", "VLAB-COMPLETE", "Completed"),
+			("Veterinary Lab Order", "VLAB-CANCELLED", "Cancelled"),
+			("Veterinary Vaccination Record", "VVAC-ADMIN", "Administered"),
+			("Veterinary Vaccination Record", "VVAC-CANCELLED", "Cancelled"),
+			("Pet Grooming Session", "PGS-COMPLETE", "Completed"),
+			("Pet Grooming Session", "PGS-CANCELLED", "Cancelled"),
+			("Pet Boarding Booking", "PBB-CHECKED-OUT", "Checked Out"),
+			("Pet Boarding Booking", "PBB-CANCELLED", "Cancelled"),
+			("Veterinary Hospitalisation", "VHOS-DISCHARGED", "Discharged"),
+		)
+
+		for source_doctype, source_name, status in final_sources:
+			with self.subTest(source_doctype=source_doctype, status=status):
+				owner_field = "customer" if source_doctype == "Veterinary Hospitalisation" else "primary_owner"
+				invoice_field = "sales_invoice" if source_doctype == "Veterinary Hospitalisation" else "linked_invoice"
+				source = frappe._dict(
+					doctype=source_doctype,
+					name=source_name,
+					status=status,
+					patient="VP-001",
+					service_branch="Main",
+					company="VetEdge Co",
+					**{owner_field: "CUST-001", invoice_field: "SINV-FINAL"},
+				)
+				invoice_summary = {
+					"name": "SINV-FINAL",
+					"docstatus": 1,
+					"is_submitted": True,
+					"grand_total": 12000,
+					"paid_amount": 5000,
+					"outstanding_amount": 7000,
+					"payment_status": "Partly Paid",
+				}
+				history = [
+					{
+						"name": "SINV-FINAL",
+						"invoice": "SINV-FINAL",
+						"docstatus": 1,
+						"grand_total": 12000,
+						"paid_amount": 5000,
+						"outstanding_amount": 7000,
+						"payment_state": "Partly Paid",
+						"source_doctype": source_doctype,
+						"source_name": source_name,
+					}
+				]
+
+				with (
+					patch.object(billing_modal, "require_internal_user"),
+					patch.object(billing_modal.frappe, "get_doc", return_value=source),
+					patch.object(billing_modal, "assert_can_read_source"),
+					patch.object(billing_modal, "get_linked_invoice_name", return_value="SINV-FINAL"),
+					patch.object(billing_modal, "get_invoice_summary", return_value=invoice_summary) as get_invoice,
+					patch.object(billing_modal, "get_payment_modes", return_value=[]),
+					patch.object(billing_modal, "get_billing_session_summary_for_source", return_value=None),
+					patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=history),
+					patch.object(billing_modal, "get_patient_outstanding_context_for_modal", return_value=[]),
+					patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value={"can_proceed": True, "message": "Payment gate passed."}),
+				):
+					state = billing_modal.get_billing_modal_state(source_doctype, source_name)
+
+				self.assertEqual(state["source"]["status"], status)
+				self.assertEqual(state["source"]["name"], source_name)
+				self.assertEqual([row["name"] for row in state["invoice_history"]], ["SINV-FINAL"])
+				self.assertEqual(state["linked_invoice_count"], 1)
+				self.assertEqual(state["linked_invoices"], ["SINV-FINAL"])
+				self.assertEqual(state["total_amount"], 12000)
+				self.assertEqual(state["paid_amount"], 5000)
+				self.assertEqual(state["outstanding_amount"], 7000)
+				self.assertTrue(state["actions"]["can_record_payment"])
+				get_invoice.assert_called_once_with("SINV-FINAL")
+
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
 
