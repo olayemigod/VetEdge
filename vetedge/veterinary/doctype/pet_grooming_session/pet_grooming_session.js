@@ -55,15 +55,13 @@ function toggleTerminalGroomingSessionReadOnly(frm) {
 }
 
 function addGroomingSessionActions(frm) {
-	if (["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)) {
-		frm.add_custom_button(__("Billing / Payment"), () => {
-			if (window.vetedgeBillingModal?.open) {
-				window.vetedgeBillingModal.open(frm);
-				return;
-			}
-			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
-		}, __("Billing"));
-	}
+	frm.add_custom_button(__("Billing / Payment"), () => {
+		if (window.vetedgeBillingModal?.open) {
+			window.vetedgeBillingModal.open(frm);
+			return;
+		}
+		frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
+	}, __("Billing"));
 
 	if (["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)) {
 		frm.add_custom_button(__("Start Grooming"), () => transitionGroomingSession(frm, "In Progress"), __("Workflow"));
@@ -75,15 +73,6 @@ function addGroomingSessionActions(frm) {
 		frm.add_custom_button(__("Cancel Session"), () => transitionGroomingSession(frm, "Cancelled"), __("Workflow"));
 	}
 
-	if (frm.doc.linked_invoice && !["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)) {
-		frm.add_custom_button(__("Billing / Payment"), () => {
-			if (window.vetedgeBillingModal?.open) {
-				window.vetedgeBillingModal.open(frm);
-				return;
-			}
-			frappe.msgprint(__("Billing modal helper is not available. Please refresh the page."));
-		}, __("Billing"));
-	}
 }
 
 function transitionGroomingSession(frm, status) {

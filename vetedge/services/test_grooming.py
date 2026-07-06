@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -39,6 +40,14 @@ class GroomingWorkflowStatusTestCase(unittest.TestCase):
 		previous = SimpleNamespace(status="In Progress")
 		with patch.object(grooming.frappe, "get_all", return_value=[{"name": "PGS-0001"}]):
 			grooming.validate_grooming_appointment_completion(doc, previous)
+
+	def test_grooming_session_final_status_keeps_shared_billing_payment_visible(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "pet_grooming_session" / "pet_grooming_session.js"
+		script = script_path.read_text()
+
+		self.assertIn('frm.add_custom_button(__("Billing / Payment")', script)
+		self.assertNotIn('frm.doc.linked_invoice && !["Draft", "Awaiting Payment", "Pending Grooming"].includes(frm.doc.status)', script)
+		self.assertIn('if (!["Completed", "Cancelled"].includes(frm.doc.status))', script)
 
 
 if __name__ == "__main__":
