@@ -1,29 +1,29 @@
-# Hospitalisation Workflow
+# Hospitalisation Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to admit a patient, record hospitalisation activities, manage billing/stock handoffs, check discharge readiness, and discharge safely.
+Train veterinary doctors to admit a patient for Hospitalisation, record inpatient care, coordinate billing and stock handoffs, check discharge readiness, and discharge safely.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors managing inpatient clinical care.
+After this module, the doctor should be able to:
 
-## Before you start
+- Create or open a Veterinary Hospitalisation record.
+- Confirm admission details and care location.
+- Record inpatient clinical activities.
+- Mark billable and stock-affecting activities correctly.
+- Understand daily charges, charge sheets, stock posting, and payment gate messages at a practical level.
+- Run discharge readiness and resolve handoffs before discharge.
 
-- Confirm hospitalisation is enabled in Veterinary Settings.
-- Confirm patient, owner, service branch, attending veterinarian, and admission reason.
-- Confirm care location if location tracking is used.
-- Review payment gate and discharge readiness before final discharge.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 stateDiagram-v2
     [*] --> Draft
     Draft --> Admitted: Admit
-    Admitted --> UnderCare: Ongoing activities
-    UnderCare --> ReadyForDischarge: Ready for discharge
-    ReadyForDischarge --> Discharged: Discharge passes checks
+    Admitted --> UnderCare: Record activities
+    UnderCare --> ReadyForDischarge: Clinically ready
+    ReadyForDischarge --> Discharged: Readiness checks pass
     Draft --> Cancelled
     Admitted --> Cancelled
     UnderCare --> Cancelled
@@ -31,118 +31,97 @@ stateDiagram-v2
     Cancelled --> [*]
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. From a consultation, click `Admit for Hospitalisation`, or create/open `Hospitalisations`.
-2. Confirm patient, owner, service branch, company, linked consultation, attending veterinarian, admitted by, admission reason, and care level.
-3. Assign a care location if location tracking is used. Available actions include viewing available locations, assigning location, and releasing location.
-4. Click `Admit` if the record is still in Draft.
-5. During care, use the Clinical buttons to add activity rows:
-   - Vitals
-   - Medication
-   - Vaccination
-   - Fluid Therapy
-   - Feeding
-   - Nursing Note
-   - Wound Care
-   - Lab
-   - Procedure
-   - Oxygen / Nebulisation
-   - Owner Update
-   - Other Activity
-6. Mark billable activities when they should be added to the charge sheet.
-7. Mark stock-affecting activities when stock should be posted.
-8. Use `Build Charge Sheet` to prepare charges.
-9. Use `Generate Daily Charges` for configured inpatient daily charges.
-10. Use `Sync Charges to Invoice` to connect charge items to Sales Invoice.
-11. Use `Post Stock Usage` to preview and post stock-affecting activities.
-12. Open `Billing / Payment` to review invoice/payment state.
-13. Click `Check Payment Gate` when payment status needs to be refreshed.
-14. Before discharge, click `Check Discharge Readiness`.
-15. If readiness is blocked, resolve pending stock, billing, or charge issues first.
-16. Click `Discharge`, enter condition at discharge, discharge summary, instructions, and follow-up notes.
+1. From a consultation, click Admit for Hospitalisation, or create/open Hospitalisations.
+2. Confirm patient, owner, service Branch, company, linked consultation, attending veterinarian, admitted by, admission reason, and care level.
+3. Assign a care location if location tracking is used.
+4. Admit the patient.
+5. During care, add activity rows for vitals, medication, vaccination, fluid therapy, feeding, nursing notes, wound care, lab, procedure, oxygen/nebulisation, owner update, or other activities.
+6. Mark activities as billable when they should be charged.
+7. Mark activities as stock-affecting when stock should be consumed.
+8. Build the charge sheet where required.
+9. Generate daily charges where configured.
+10. Sync charges to Sales Invoice through the supported workflow.
+11. Post stock usage only through the supported stock process.
+12. Review Billing / Payment status.
+13. Run Check Payment Gate when payment status needs refresh.
+14. Before discharge, run Check Discharge Readiness.
+15. Resolve blocked items with Accounts, Pharmacy, Dispensary, stock team, Nurse, or Admin as appropriate.
+16. Discharge only after readiness checks pass and discharge notes are complete.
 
-## Hospitalisation statuses
+## Trainer Notes
 
-| Status | Meaning |
+> Trainer Note: Hospitalisation is a team workflow. Doctors own clinical decisions and discharge instructions; nurses support ongoing care; Accounts handles invoice/payment issues; Pharmacy or Dispensary handles stock issues.
+
+> Trainer Note: A discharge block is not a nuisance message. It protects patient care, billing accuracy, and stock accuracy.
+
+## Practice Exercise
+
+Scenario: A dehydrated dog needs inpatient fluids and monitoring.
+
+Task:
+
+1. Admit the patient for Hospitalisation.
+2. Assign a care location if used.
+3. Add vitals and fluid therapy activities.
+4. Mark the correct billing and stock options.
+5. Explain how daily charges are generated.
+6. Run through the discharge readiness checklist.
+
+Expected outcome: The doctor can manage inpatient workflow and explain each required handoff before discharge.
+
+## Hospitalisation Status Guide
+
+| Status | Practical meaning |
 |---|---|
-| Draft | Admission record exists but patient is not admitted yet. |
+| Draft | Admission record exists but patient is not admitted. |
 | Admitted | Patient is admitted. |
 | Under Care | Patient is actively receiving inpatient care. |
-| Ready for Discharge | Patient is clinically ready, pending operational checks. |
+| Ready for Discharge | Patient is clinically ready, pending checks. |
 | Discharged | Hospitalisation is complete. |
 | Cancelled | Admission was cancelled. |
 
-## Activity and billing behavior
-
-| Activity setting | Meaning |
-|---|---|
-| Billable | Activity should become a pending charge. |
-| Billing Status: Pending Charge | Activity needs charge-sheet/invoice sync. |
-| Stock Affecting | Activity may consume stock. |
-| Stock Status: Pending | Stock posting is required. |
-| Stock Status: Posted | Stock has been posted through Stock Entry. |
-
-## Payment gate behavior
-
-| Gate | Meaning |
-|---|---|
-| Full Payment Required | Hospitalisation may be blocked until full payment. |
-| Partial Payment Gate | Partial payment or configured rule may allow progress. |
-| No Payment Gate | Payment does not block care, but billing still matters. |
-
-## Important notes
-
-- Discharge can be blocked by pending stock activities, billing, invoice, unpaid/partly paid state, or other readiness checks.
-- Stock shortage or missing warehouse must be resolved before stock posting can complete.
-- Doctors should not bypass Sales Invoice or Payment Entry.
-- Owner updates should be recorded as activity rows when clinically relevant.
-
-## Common mistakes
+## Common Mistakes
 
 | Mistake | Better approach |
 |---|---|
 | Recording medication without stock context | Mark stock-affecting when stock should be consumed. |
-| Discharging before posting stock | Run discharge readiness and post stock usage. |
-| Forgetting daily charges | Generate daily charges before final billing. |
+| Discharging before posting required stock | Run discharge readiness and resolve stock items. |
+| Forgetting daily charges | Generate daily charges before final billing where configured. |
 | Ignoring care location release | Release location when patient leaves if location tracking is used. |
-
-## What happens next
-
-- Accounts resolves invoice/payment items.
-- Pharmacy/stock resolves stock posting issues.
-- Front Desk schedules follow-up if required.
-- Nursing team continues activities until discharge.
-
-## Related records
-
-- Veterinary Hospitalisation
-- Veterinary Hospitalisation Activity
-- Veterinary Hospitalisation Charge Item
-- Veterinary Care Location
-- Veterinary Consultation
-- Veterinary Vital Signs
-- Veterinary Lab Order
-- Veterinary Vaccination Record
-- Sales Invoice
-- Stock Entry
+| Manually adjusting submitted invoices | Ask Accounts to handle invoice corrections. |
 
 ## Troubleshooting
 
-See `troubleshooting_and_common_errors.md` for missing warehouse, stock shortage, discharge blocking, and payment gate issues.
+| Problem | What the doctor should do |
+|---|---|
+| Cannot admit patient | Check required fields, settings, role, and Branch access. |
+| Stock shortage appears | Ask Pharmacy, Dispensary, or stock team to resolve. |
+| Missing warehouse appears | Ask Admin or stock team to configure the Branch warehouse. |
+| Discharge is blocked | Read readiness details and resolve stock, billing, payment, or missing discharge notes. |
+| Payment gate blocks discharge | Ask Front Desk or Accounts to resolve payment. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshots:
+| Handoff | Responsible role |
+|---|---|
+| Clinical admission and discharge decision | Doctor |
+| Ongoing vitals, medication support, nursing notes | Nurse |
+| Stock issue, batch, warehouse, and stock posting support | Pharmacy, Dispensary, or stock team |
+| Invoice, payment, submitted invoice correction | Accounts or Cashier |
+| Follow-up appointment | Front Desk |
 
-- `hospitalisation-record-opened.png`
-- `hospitalisation-activity-log.png`
-- `discharge-readiness-checklist.png`
+## Related Screenshots
 
-## Source files inspected
+- `training_assets/screenshots/hospitalisation-record-opened.png`
+- `training_assets/screenshots/hospitalisation-activity-log.png`
+- `training_assets/screenshots/discharge-readiness-checklist.png`
 
-- `vetedge/services/hospitalisation.py`
-- `vetedge/veterinary/doctype/veterinary_hospitalisation/veterinary_hospitalisation.json`
-- `vetedge/veterinary/doctype/veterinary_hospitalisation/veterinary_hospitalisation.js`
-- `vetedge/veterinary/doctype/veterinary_hospitalisation_activity/veterinary_hospitalisation_activity.json`
-- `vetedge/veterinary/page/veterinary_hospitalisation_dashboard/veterinary_hospitalisation_dashboard.json`
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+
+## Related Guides
+
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Consultation Workflow](consultation_workflow.md)
+- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)

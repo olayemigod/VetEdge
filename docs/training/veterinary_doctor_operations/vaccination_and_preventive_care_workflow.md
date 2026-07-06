@@ -1,118 +1,117 @@
-# Vaccination And Preventive Care Workflow
+# Vaccination and Preventive Care Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to record vaccinations, review due or overdue vaccinations, and understand preventive care handoffs.
+Train veterinary doctors to record vaccination decisions, review preventive care status, handle due or overdue vaccinations, and hand off scheduling or payment work correctly.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors responsible for vaccination decisions and clinical preventive care review.
+After this module, the doctor should be able to:
 
-## Before you start
+- Confirm patient, owner, vaccine, Branch, and species suitability.
+- Record vaccination dose, route, notes, and next due date.
+- Understand payment-before-administration messages.
+- Review due, overdue, and upcoming preventive care.
+- Hand off owner contact and scheduling to Front Desk.
+- Hand off payment issues to Accounts or Cashier.
 
-- Confirm vaccination is enabled in Veterinary Settings.
-- Confirm the patient, owner, vaccine, service branch, and species applicability.
-- Check whether payment is required before administration.
-- Confirm stock/batch details when stock posting is used.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 flowchart TD
-    A[Open consultation or vaccination record] --> B[Confirm patient and vaccine]
-    B --> C{Vaccination enabled?}
-    C -->|No| D[Ask Admin to enable settings]
-    C -->|Yes| E[Record dose, route, notes, due date]
-    E --> F{Payment before administration required?}
-    F -->|Yes and unpaid| G[Ask Front Desk/Accounts to resolve]
-    F -->|No or cleared| H[Administer vaccination]
-    G --> H
-    H --> I[Review next due date]
-    I --> J{Follow-up appointment created?}
-    J -->|Yes| K[Confirm appointment]
-    J -->|No| L[Ask Front Desk to schedule if needed]
+    A[Open Consultation or Vaccination Record] --> B[Confirm Patient and Vaccine]
+    B --> C{Vaccination Enabled?}
+    C -->|No| D[Ask Admin to Review Settings]
+    C -->|Yes| E[Record Dose, Route, Date, Notes]
+    E --> F[Set or Confirm Next Due Date]
+    F --> G{Payment Before Administration Required?}
+    G -->|Blocked| H[Ask Front Desk / Accounts to Resolve]
+    G -->|Clear| I[Administer Vaccination]
+    H --> I
+    I --> J[Review Due or Overdue Status]
+    J --> K[Ask Front Desk to Schedule Follow-up if Needed]
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. Open the consultation and click `New Vaccination`, or open `Vaccination Records`.
-2. Confirm the patient and primary owner.
-3. Select the vaccine.
-4. Enter dose, route, administered date/time, notes, and next due date.
-5. If the vaccine has default next due days, the system can populate the next due date.
-6. If payment enforcement is active and the record is awaiting payment, do not administer until billing is resolved or an authorized override is applied.
-7. Click `Administer Vaccination` when clinically and operationally ready.
-8. Confirm linked invoice and stock entry references if generated.
-9. Review due/overdue vaccinations from Vaccination Dashboard or Vaccination Report.
-10. For due/overdue vaccines, confirm with Front Desk whether the owner should be contacted or an appointment should be scheduled.
+1. Open the consultation and click New Vaccination, or open Vaccination Records.
+2. Confirm patient, primary owner, vaccine, service Branch, and species suitability.
+3. Enter dose, route, administered date/time, notes, and next due date.
+4. If the vaccine has default next-due timing, confirm the populated date is clinically correct.
+5. If payment enforcement is active and the record is awaiting payment, do not administer until payment is resolved or an authorised workflow allows progress.
+6. Click Administer Vaccination when clinically and operationally ready.
+7. Confirm linked invoice and stock references if they are visible.
+8. Review due, overdue, and upcoming vaccinations from the Vaccination Dashboard or Vaccination Report.
+9. Ask Front Desk to contact the owner or schedule an appointment when preventive care follow-up is needed.
 
-## Vaccination status guide
+## Trainer Notes
 
-| Status | Meaning |
+> Trainer Note: Doctors make the clinical vaccination decision. Front Desk coordinates scheduling and owner communication. Accounts handles payment blocks.
+
+> Trainer Note: Use the words "due", "overdue", and "upcoming" carefully so doctors understand the difference between a clinical priority and a scheduling task.
+
+## Practice Exercise
+
+Scenario: A puppy is due for a booster vaccination.
+
+Task:
+
+1. Open the patient record.
+2. Review vaccination history.
+3. Create or open the vaccination record.
+4. Confirm vaccine, dose, route, and next due date.
+5. Explain what happens if payment is required before administration.
+6. Explain what Front Desk should do after the next due date is set.
+
+Expected outcome: The doctor records preventive care correctly and uses the right handoff for payment and scheduling.
+
+## Vaccination Status Guide
+
+| Status | Practical meaning |
 |---|---|
-| Draft | Vaccination record exists but is not ready/administered. |
+| Draft | Vaccination record exists but is not ready or administered. |
 | Awaiting Payment | Payment must be resolved if payment-before-administration is enforced. |
 | Pending Administration | Record is ready for administration. |
 | Administered | Vaccine has been administered. |
 | Cancelled | Vaccination record is cancelled. |
 
-## Doctor responsibility vs Front Desk responsibility
-
-| Area | Doctor | Front Desk |
-|---|---|---|
-| Clinical decision to vaccinate | Owns | Supports scheduling |
-| Vaccine choice and route | Owns | Does not decide clinically |
-| Due/overdue interpretation | Owns clinical priority | Contacts owner and books appointment |
-| Payment collection | Reviews status only unless enabled | Usually owns with Accounts |
-| Follow-up appointment | Requests need | Schedules/confirms where appropriate |
-
-## Important notes
-
-- Vaccination can be created from consultation.
-- Hospitalisation activities support vaccination activity logging when inpatient care is active.
-- Vaccination records can link to invoice and stock entry.
-- The system can classify due state as Due, Overdue, or Upcoming based on next due date.
-- Doctors and nurses can administer vaccines; Front Desk may create drafts.
-
-## Common mistakes
+## Common Mistakes
 
 | Mistake | Better approach |
 |---|---|
-| Administering despite payment block | Resolve payment or authorized override first. |
-| Missing next due date | Confirm default or manually enter due date. |
-| Wrong species vaccine | Check vaccine applicability. |
-| Missing batch when stock requires it | Confirm batch/expiry with pharmacy or stock team. |
-
-## What happens next
-
-- Due/overdue reminders may generate notifications.
-- Follow-up vaccination appointment may be created depending on workflow.
-- Billing and stock references remain linked for audit.
-
-## Related records
-
-- Veterinary Vaccination Record
-- Veterinary Vaccine
-- Veterinary Consultation
-- Veterinary Appointment
-- Sales Invoice
-- Stock Entry
+| Administering despite payment block | Resolve payment or authorised workflow first. |
+| Missing next due date | Confirm default or enter the due date manually. |
+| Choosing a vaccine unsuitable for species | Check vaccine suitability before administration. |
+| Missing stock or batch detail when required | Confirm with Pharmacy, Dispensary, or stock team. |
 
 ## Troubleshooting
 
-See `troubleshooting_and_common_errors.md` for feature disabled, payment gate, stock shortage, and permission messages.
+| Problem | What the doctor should do |
+|---|---|
+| Vaccination feature is disabled | Ask Admin to review Veterinary Settings. |
+| Cannot administer vaccination | Check payment, status, role, and Branch access; involve Admin or Accounts. |
+| Due list seems wrong | Check filters, patient, vaccine, and next due date. |
+| Stock or batch issue appears | Ask Pharmacy, Dispensary, or stock team to review. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshots:
+| Handoff | Responsible role |
+|---|---|
+| Clinical decision to vaccinate | Doctor |
+| Owner contact and appointment booking | Front Desk |
+| Payment collection or invoice issue | Accounts or Cashier |
+| Stock, batch, and expiry support | Pharmacy, Dispensary, or stock team |
+| Administration support where allowed | Nurse |
 
-- `vaccination-entry.png`
-- `vaccination-dashboard.png`
+## Related Screenshots
 
-## Source files inspected
+- `training_assets/screenshots/vaccination-entry.png`
+- `training_assets/screenshots/vaccination-dashboard.png`
 
-- `vetedge/services/vaccination.py`
-- `vetedge/services/vaccination_notifications.py`
-- `vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.json`
-- `vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.js`
-- `vetedge/veterinary/page/vetedge_vaccination_dashboard/vetedge_vaccination_dashboard.json`
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+
+## Related Guides
+
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Consultation Workflow](consultation_workflow.md)
+- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)

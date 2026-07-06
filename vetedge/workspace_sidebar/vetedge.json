@@ -307,8 +307,21 @@
    "icon": "list-tree",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Appointment Queue",
-   "link_to": "veterinary-appointment-queue",
+  "label": "Appointment Queue",
+  "link_to": "veterinary-appointment-queue",
+  "link_type": "Page",
+  "show_arrow": 0,
+  "type": "Link"
+ },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "display_depends_on": "eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || frappe.user.has_role('VetEdge Doctor') || frappe.user.has_role('Branch Manager')",
+   "icon": "school",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Training Centre",
+   "link_to": "veterinary-training-centre",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link"

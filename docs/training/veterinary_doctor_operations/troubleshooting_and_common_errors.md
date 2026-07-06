@@ -1,115 +1,153 @@
-# Troubleshooting And Common Errors
+# Troubleshooting and Common Errors Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide when something blocks normal doctor work.
+Train doctors and trainers to respond safely when VetEdge blocks an action, shows a warning, or displays an error.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors and supervisors supporting doctors during daily operations.
+After this module, the doctor should be able to:
 
-## Before you start
+- Read and report the exact message shown by the system.
+- Identify whether an issue is clinical, permission, branch, billing, stock, or settings related.
+- Contact the correct team without bypassing controls.
+- Provide useful escalation details.
+- Protect submitted invoices and accounting accuracy.
 
-- Read the exact message on screen.
-- Confirm the patient, branch, record status, and your role.
-- Do not bypass billing, stock, or permission checks.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 flowchart TD
-    A[Error or blocked action] --> B[Read message]
-    B --> C{Permission or branch?}
-    C -->|Yes| D[Contact Admin/Branch Manager]
-    C -->|No| E{Billing/payment?}
-    E -->|Yes| F[Contact Front Desk/Accounts]
-    E -->|No| G{Stock/warehouse?}
-    G -->|Yes| H[Contact Pharmacy/Stock team]
-    G -->|No| I{Clinical workflow status?}
-    I -->|Yes| J[Open source record and correct status/data]
-    I -->|No| K[Escalate with screenshot and record ID]
+    A[Error or Blocked Action] --> B[Read Exact Message]
+    B --> C[Note Record Type and ID]
+    C --> D{Permission or Branch?}
+    D -->|Yes| E[Contact Admin or Branch Manager]
+    D -->|No| F{Billing or Payment?}
+    F -->|Yes| G[Contact Front Desk / Accounts]
+    F -->|No| H{Stock or Warehouse?}
+    H -->|Yes| I[Contact Pharmacy / Dispensary / Stock Team]
+    H -->|No| J{Missing Field or Status?}
+    J -->|Yes| K[Correct Safe Details and Save]
+    J -->|No| L[Escalate with Screenshot and Record ID]
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. Read the exact error or blocking message.
+1. Stop and read the exact message.
 2. Note the record type and record ID.
-3. Confirm whether the issue is permission, branch access, billing, stock, workflow status, or feature settings.
-4. Try only the safe action suggested by the message, such as saving the record or selecting a missing field.
-5. Do not bypass accounting, stock, payment, or permission controls.
+3. Check whether the issue mentions permission, Branch, payment, invoice, stock, warehouse, feature settings, missing fields, or record status.
+4. Take only safe actions suggested by the message, such as saving the record or selecting a required field.
+5. Do not bypass accounting, payment, stock, branch, or permission controls.
 6. Contact the correct team using the table below.
-7. Include a screenshot, page URL, record ID, and the action you attempted.
+7. Include screenshot, page route, record ID, patient, Branch, and the action attempted.
 
-## Common issues
+## Trainer Notes
+
+> Trainer Note: Ask trainees to read the error aloud. Many support issues are resolved faster when the exact message is captured.
+
+> Trainer Note: Reinforce that submitted invoices are protected. Doctors should not manually alter submitted invoices or mark invoices paid.
+
+## Practice Exercise
+
+Scenario: A doctor tries to complete a consultation and sees a payment gate message.
+
+Task:
+
+1. Read the message.
+2. Identify whether it is a billing/payment issue.
+3. Note the consultation ID and invoice ID if visible.
+4. Explain which team should resolve it.
+5. Continue only after the correct team resolves the block.
+
+Expected outcome: The doctor pauses, escalates to Front Desk or Accounts, and does not bypass the payment gate.
+
+## Common Issues
 
 | Problem | Likely reason | What the doctor should do | Who to contact |
 |---|---|---|---|
-| Cannot see Veterinary workspace | Missing `VetEdge Doctor`/Desk access or workspace hidden by role | Confirm login and ask for role bundle check | Admin |
-| Cannot open patient | Branch restriction, missing permission, or wrong patient ID | Confirm patient ID and branch | Admin/Branch Manager |
-| Cannot start consultation | Appointment not checked in/confirmed, missing patient, missing branch, or permission issue | Ask Front Desk to check appointment status and patient registration | Front Desk/Admin |
-| Consultation asks to save before lab order | Consultation has unsaved changes or is new | Save consultation, then create lab order | Doctor |
-| Payment gate blocks completion | Full/partial payment gate requires invoice/payment action | Ask Front Desk/Accounts to resolve invoice/payment | Front Desk/Accounts |
-| Billing / Payment button missing | Billing feature disabled, record is new, or permission/action unavailable | Save record and ask Admin to verify settings | Admin/Accounts |
-| Lab order cannot be edited | Lab order is Reviewed or Cancelled | Do not edit; follow correction process | Lab/Admin |
-| `Select at least one lab test` | Lab order dialog submitted without tests | Select at least one active test | Doctor |
-| Invoice already submitted | ERPNext submitted invoice cannot be edited directly | Ask Accounts about correction/cancellation/replacement | Accounts |
-| Cancelled invoice replacement needed | Linked invoice is cancelled | Use billing modal if available or ask Accounts to regenerate/sync | Accounts |
-| Vaccination feature disabled | Veterinary Settings disabled vaccination | Do not create workaround records | Admin |
-| Cannot administer vaccine | Payment enforcement, missing doctor/nurse role, branch restriction, or invalid status | Resolve payment/status/branch issue | Admin/Accounts |
-| Stock shortage during hospitalisation | Item quantity unavailable | Do not post stock; ask stock team to replenish or correct item/warehouse | Pharmacy/Stock |
-| Missing warehouse | Branch dispensary warehouse is not configured | Stop stock posting and report branch/record | Pharmacy/Admin |
-| Cannot discharge patient | Pending stock, pending charges/invoice, unpaid/partly paid gate, or missing discharge details | Run Check Discharge Readiness and resolve listed items | Accounts/Stock/Admin |
-| Notification count not clearing | Notification still has `Unread` status | Mark Read/Done/Dismissed as appropriate | Doctor/Admin |
-| Report shows no data | Filters too narrow, branch restriction, or no matching records | Check date/status/branch filters | Admin if still blocked |
-| Permission denied | Role or branch access does not allow action | Capture record ID and message | Admin/Branch Manager |
-| Feature disabled in settings | Veterinary Settings flag is off | Do not work around it in another record | Admin |
+| Cannot see Veterinary workspace | Missing doctor/desk access | Ask for role check | Admin |
+| Cannot open patient | Branch restriction, missing permission, or wrong patient | Confirm patient and Branch | Admin/Branch Manager |
+| Cannot start consultation | Appointment not ready, missing patient, missing Branch, or permission issue | Ask Front Desk to check appointment and registration | Front Desk/Admin |
+| Master value not available | Master list may not be configured or active | Do not create a duplicate casually; ask for master review | Admin/Branch Manager |
+| Wrong consultation/service type selected | Similar or duplicate master values | Correct only if safe; if billing/reporting is affected, ask for review | Admin/Accounts |
+| Save required before lab order | Consultation has unsaved changes | Save consultation, then create lab order | Doctor |
+| Payment gate blocks completion | Payment or invoice action is required | Ask payment team to resolve | Front Desk/Accounts |
+| Billing / Payment button missing | Feature, status, or access issue | Save record and ask for settings/access check | Admin/Accounts |
+| Lab order cannot be edited | Lab order is Reviewed or Cancelled | Follow correction process | Lab/Admin |
+| Select at least one lab test | No test selected | Select an active lab test | Doctor |
+| Invoice already submitted | Submitted invoice is protected | Ask Accounts to handle correction or replacement | Accounts |
+| Cancelled invoice replacement needed | Linked invoice was cancelled | Ask Accounts to regenerate or sync through supported flow | Accounts |
+| Vaccination feature disabled | Settings disabled vaccination | Do not create workaround records | Admin |
+| Cannot administer vaccine | Payment, status, role, or Branch issue | Resolve listed issue | Admin/Accounts |
+| Stock shortage during Hospitalisation | Item quantity unavailable | Do not post stock; ask stock team to review | Pharmacy/Stock |
+| Missing warehouse | Branch warehouse not configured | Stop stock posting and report Branch/record | Pharmacy/Admin |
+| Cannot discharge patient | Pending stock, charges, invoice, payment, or discharge details | Run readiness check and resolve listed items | Accounts/Stock/Admin |
+| Cannot access grooming record | Doctor role is not in verified grooming record permissions or live roles differ | Ask Front Desk/Grooming Staff for context; verify access only if required | Front Desk/Grooming Staff/Admin |
+| Grooming request has medical concern | Wound, parasite, infection, pain, anxiety, handling risk, or recent procedure may make grooming unsafe | Review patient record and recommend consultation if needed | Doctor/Front Desk/Grooming Staff |
+| Cannot access boarding record | Doctor role is not in verified boarding record permissions or live roles differ | Ask Front Desk/boarding staff for context; verify access only if required | Front Desk/Boarding Staff/Admin |
+| Boarding patient has overdue vaccination | Preventive care may be required by clinic policy before boarding | Review vaccination history and advise Front Desk/Pet Owner | Doctor/Front Desk |
+| Boarding patient develops health concern | Boarding issue may now require clinical care | Start consultation or Hospitalisation as appropriate | Doctor/Nurse/Front Desk |
+| Billing/payment issue on grooming or boarding | Service invoice or payment gate needs action | Do not alter submitted invoices; ask Accounts or Cashier to resolve | Front Desk/Accounts |
+| Notification count not clearing | Notification still active | Mark Read, Done, Dismissed, or Archive as appropriate | Doctor/Admin |
+| Report shows no data | Filters, Branch restriction, or no records | Check date/status/Branch filters | Admin if still blocked |
+| Permission denied | Role or Branch access blocks action | Capture details and escalate | Admin/Branch Manager |
+| Feature disabled | Veterinary Settings flag is off | Do not work around it | Admin |
 
-## Important notes
+## Common Mistakes
 
-- Always include the record ID when asking for help.
-- For billing issues, include the Sales Invoice ID if visible.
-- For stock issues, include the item, quantity, branch, warehouse, and hospitalisation ID.
-- For permission issues, include your login email, branch, and action attempted.
+| Mistake | Better approach |
+|---|---|
+| Clicking around without reading the message | Read and capture the exact message first. |
+| Asking the wrong team | Match issue type to the handoff table. |
+| Bypassing payment or invoice checks | Involve Front Desk or Accounts. |
+| Treating stock errors as clinical notes | Involve Pharmacy, Dispensary, or stock team. |
+| Treating grooming or boarding as clinical records | Use consultation or Hospitalisation when clinical care is required. |
+| Reporting "it does not work" without record ID | Include route, record ID, screenshot, and action attempted. |
 
-## What happens next
+## Escalation Details to Capture
 
-The correct team should resolve the root cause:
+- Doctor login/email.
+- Patient ID.
+- Record type and record ID.
+- Branch.
+- Page route.
+- Exact message.
+- Screenshot.
+- Action attempted.
+- Sales Invoice ID, if visible for billing issues.
+- Item, quantity, warehouse, and Hospitalisation ID for stock issues.
 
-- Admin resolves role, permission, settings, and branch assignment issues.
-- Front Desk resolves appointment, owner contact, scheduling, and check-in issues.
-- Accounts resolves invoice/payment issues.
-- Lab resolves sample and result-entry issues.
-- Pharmacy/Stock resolves warehouse, item, batch, and stock-posting issues.
+## Related Roles and Handoffs
 
-## Related records
+| Issue type | Responsible role |
+|---|---|
+| Registration, appointment, check-in | Front Desk |
+| Payment, invoice, submitted invoice correction | Accounts or Cashier |
+| Role or permission | Admin |
+| Branch restriction | Admin or Branch Manager |
+| Lab result correction | Lab Technician/Admin |
+| Stock shortage, warehouse, batch | Pharmacy, Dispensary, or stock team |
+| Clinical documentation | Doctor |
+| Grooming scheduling, service completion, and service notes | Front Desk or Grooming Staff |
+| Boarding booking, kennel assignment, and routine care records | Front Desk or boarding staff |
 
-- Veterinary Settings
-- Branch User Assignment
-- Veterinary Patient
-- Veterinary Appointment
-- Veterinary Consultation
-- Veterinary Lab Order
-- Veterinary Vaccination Record
-- Veterinary Hospitalisation
-- Sales Invoice
-- Payment Entry
-- Stock Entry
+## Related Screenshots
 
-## Screenshots / visual references
+- `training_assets/screenshots/billing-payment-modal.png`
+- `training_assets/screenshots/discharge-readiness-checklist.png`
+- `training_assets/screenshots/veterinary-notification-badge.png`
+- `training_assets/screenshots/veterinary-master-selection-example.png`
+- `training_assets/screenshots/grooming-service-record.png`
+- `training_assets/screenshots/boarding-service-record.png`
 
-When escalating, capture:
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
 
-- The full error message.
-- The page URL.
-- The record ID.
-- The relevant section of the form or modal.
+## Related Guides
 
-## Source files inspected
-
-- `vetedge/services/permissions.py`
-- `vetedge/services/lab.py`
-- `vetedge/services/vaccination.py`
-- `vetedge/services/hospitalisation.py`
-- `vetedge/services/billing_modal.py`
-- `vetedge/services/payment_service.py`
-- `vetedge/veterinary/doctype/veterinary_settings/veterinary_settings.json`
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Role Access Matrix](role_access_matrix.md)
+- [Consultation Workflow](consultation_workflow.md)
+- [Hospitalisation Workflow](hospitalisation_workflow.md)
+- [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
+- [Grooming Service Handoff Workflow](grooming_workflow.md)
+- [Boarding Service Handoff Workflow](boarding_workflow.md)

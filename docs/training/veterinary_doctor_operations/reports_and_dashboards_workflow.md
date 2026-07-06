@@ -1,72 +1,93 @@
-# Reports And Dashboards Workflow
+# Reports and Dashboards Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to understand reports and dashboards available to doctors.
+Train veterinary doctors to use reports and dashboards for daily clinical review, patient follow-up, lab review, vaccination monitoring, Hospitalisation oversight, and handover.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors reviewing their clinical workload, patient lists, planned treatments, lab activity, vaccination due items, and hospitalisation status.
+After this module, the doctor should be able to:
 
-## Before you start
+- Choose between a dashboard and a report.
+- Apply Branch, date, practitioner, and status filters.
+- Open the source record before acting.
+- Use doctor-accessible reports without bypassing permissions.
+- Understand which reports are for Accounts, managers, stock, or other teams.
 
-- Reports may be filtered by your assigned Branch.
-- Practitioner performance is locked to your own practitioner user unless you also have manager/admin access.
-- Financial and stock reports are generally not doctor reports unless another role grants access.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 flowchart TD
-    A[Open Veterinary workspace] --> B{Need live overview or list?}
-    B -->|Overview| C[Open dashboard]
-    B -->|List/detail| D[Open report]
-    C --> E[Apply branch/date filters]
+    A[Open Veterinary Workspace] --> B{Need Overview or Detail?}
+    B -->|Overview| C[Open Dashboard]
+    B -->|Detail| D[Open Report]
+    C --> E[Apply Branch, Date, Practitioner, or Status Filters]
     D --> E
-    E --> F[Review results]
-    F --> G{Clinical action needed?}
-    G -->|Yes| H[Open patient, consultation, lab, vaccine, or hospitalisation]
-    G -->|No| I[Use for monitoring/handover]
+    E --> F[Review Work Items]
+    F --> G{Clinical Action Needed?}
+    G -->|Yes| H[Open Source Record]
+    G -->|No| I[Use for Monitoring or Handover]
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
 1. Open the Veterinary workspace.
-2. For overview, open a doctor-accessible dashboard.
-3. For tabular review, open a doctor-accessible report.
-4. Apply Branch, date, practitioner, or status filters as available.
-5. Open the source record when the report shows a patient needing action.
-6. Do not use reports to bypass record permissions or payment rules.
+2. Use dashboards for live overviews.
+3. Use reports for filtered lists and detailed review.
+4. Apply Branch, date, practitioner, and status filters carefully.
+5. Open the source record before taking clinical action.
+6. Do not use reports to bypass record permissions, payment rules, or branch controls.
+7. Treat financial totals as context only; Accounts handles payment and invoice work.
 
-## Doctor-accessible dashboards
+## Trainer Notes
 
-| Dashboard | Route | Purpose | Common action |
-|---|---|---|---|
-| Clinical Dashboard | `vetedge-clinical-dashboard` | Clinical activity overview | Open consultations/patients needing attention. |
-| Lab Dashboard | `vetedge-lab-dashboard` | Lab order status overview | Follow up Result Entered or pending lab work. |
-| Vaccination Dashboard | `vetedge-vaccination-dashboard` | Vaccination due/overdue overview | Ask Front Desk to schedule or contact owners. |
-| Practitioner Performance Dashboard | `vetedge-practitioner-performance-dashboard` | Doctor performance/workload | Review own consultation activity. |
-| Hospitalisation Dashboard | `veterinary-hospitalisation-dashboard` | Active inpatient overview | Review pending actions/discharge readiness. |
+> Trainer Note: Demonstrate how the same patient may appear in a dashboard, a report, and a source record. The source record is where the doctor should act.
 
-## Doctor-accessible reports
+> Trainer Note: Explain that an empty report may mean filters are too narrow, not that there is no work.
 
-| Report | Where to find it | Purpose | Key filters | How to interpret | Common action |
-|---|---|---|---|---|---|
-| Consultation Register | Reports / Veterinary Records | Consultation list and status review | Branch, date, practitioner, status | Finds open, awaiting payment, completed, or cancelled consultations | Open consultation and update care. |
-| Planned Treatment | Reports | Planned treatment follow-up | Branch, date, status | Shows planned treatments needing attention | Coordinate with nurse/dispensary. |
-| Patient Register | Reports | Patient list | Branch, species/status | Finds registered patients | Open patient record. |
-| Practitioner Performance Report | Reports | Doctor activity/performance | Date, branch, practitioner | Doctors see self view unless manager/admin | Review workload and productivity. |
-| Lab Order Report | Reports | Lab status list | Branch, date, status | Finds requested, result entered, reviewed labs | Review results or follow up lab. |
-| Vaccination Report | Reports | Vaccination and due/overdue list | Branch, date, status | Identifies administered and upcoming vaccines | Schedule preventive care. |
-| Active Hospitalisations | Hospitalisation section | Current admitted patients | Branch/status | Shows active inpatients | Review rounds. |
-| Hospitalisation Charge Summary | Hospitalisation section | Hospitalisation charge context | Branch/date | Shows billing/charge state | Ask Accounts to resolve pending charges. |
-| Care Location Occupancy | Hospitalisation section | Location occupancy | Branch/location | Shows care location usage | Plan admissions/transfers. |
-| Hospitalisation Discharge Watch | Hospitalisation section | Discharge readiness watch | Branch/status | Identifies patients near discharge or blocked | Run readiness/discharge workflow. |
-| Pending Hospitalisation Actions | Hospitalisation section | Pending activity/action list | Branch/status | Shows incomplete inpatient actions | Complete or assign action. |
+## Practice Exercise
 
-## Reports not currently doctor-focused
+Scenario: The doctor wants to find lab results waiting for review and Hospitalisation patients nearing discharge.
 
-These exist but are not doctor-accessible in the discovered report role map unless another role grants access:
+Task:
+
+1. Open the Lab Dashboard or Lab Order Report.
+2. Filter for result-entered or pending-review work where available.
+3. Open one source lab order.
+4. Open Hospitalisation Dashboard or Hospitalisation Discharge Watch.
+5. Open one source Hospitalisation record.
+
+Expected outcome: The doctor uses reports and dashboards to find work, then completes action from the correct source record.
+
+## Doctor-Accessible Dashboards
+
+| Dashboard | Route | Training purpose |
+|---|---|---|
+| Clinical Dashboard | `/app/vetedge-clinical-dashboard` | Review clinical activity and open consultations or patients. |
+| Lab Dashboard | `/app/vetedge-lab-dashboard` | Review lab order status and pending results. |
+| Vaccination Dashboard | `/app/vetedge-vaccination-dashboard` | Review due, overdue, and upcoming preventive care. |
+| Practitioner Performance Dashboard | `/app/vetedge-practitioner-performance-dashboard` | Review doctor workload and activity. |
+| Hospitalisation Dashboard | `/app/veterinary-hospitalisation-dashboard` | Review active inpatient care and discharge readiness. |
+
+## Doctor-Accessible Reports
+
+| Report | Use |
+|---|---|
+| Consultation Register | Review consultation status and open records needing action. |
+| Planned Treatment | Review planned treatment follow-up and handoffs. |
+| Patient Register | Find registered patients. |
+| Practitioner Performance Report | Review doctor workload; doctors may be limited to self view. |
+| Lab Order Report | Find requested, result-entered, or reviewed lab orders. |
+| Vaccination Report | Review administered, due, overdue, and upcoming vaccines. |
+| Active Hospitalisations | Review current admitted patients. |
+| Hospitalisation Charge Summary | Review charge context and hand off billing issues. |
+| Care Location Occupancy | Review care location usage. |
+| Hospitalisation Discharge Watch | Identify discharge-ready or blocked patients. |
+| Pending Hospitalisation Actions | Find incomplete inpatient actions. |
+
+## Reports Not Normally Doctor-Focused
+
+These may exist but are not doctor-focused unless another role grants access:
 
 - Owner Register
 - Branch Performance Report
@@ -80,48 +101,44 @@ These exist but are not doctor-accessible in the discovered report role map unle
 - Kennel Availability Report
 - Grooming Report
 
-## Important notes
+Access should be verified in Role Permission Manager if a live site differs.
 
-- Report visibility is enforced server-side.
-- Branch filters may be defaulted based on your assigned branch.
-- Doctors should treat financial totals as context, not as permission to change accounting records.
-
-## Common mistakes
+## Common Mistakes
 
 | Mistake | Better approach |
 |---|---|
-| Assuming report shows all branches | Check branch filter and assignments. |
-| Expecting financial reports as doctor | Ask Accounts/Manager for financial review. |
-| Ignoring empty filters | Clear date/status filters or verify branch access. |
-
-## What happens next
-
-Use dashboards and reports to open the source record and complete the clinical action in the proper workflow.
-
-## Related records
-
-- Veterinary Consultation
-- Veterinary Patient
-- Veterinary Lab Order
-- Veterinary Vaccination Record
-- Veterinary Hospitalisation
-- Veterinary Appointment
+| Assuming a report shows all branches | Check Branch filter and assignment. |
+| Acting from a report without opening the source record | Open the patient, consultation, lab, vaccination, or Hospitalisation record. |
+| Expecting financial reports as a doctor | Ask Accounts or a manager for financial review. |
+| Ignoring date filters | Confirm the selected date range. |
 
 ## Troubleshooting
 
-If a report shows no data, confirm filters, branch access, role access, and whether records exist for the selected period.
+| Problem | What the doctor should do |
+|---|---|
+| Report shows no data | Check filters, Branch access, date range, and whether records exist. |
+| Dashboard does not open | Ask Admin to verify role and page access. |
+| Source record cannot be opened | Ask Admin or Branch Manager to verify permission and Branch access. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshots:
+| Handoff | Responsible role |
+|---|---|
+| Financial report review | Accounts or manager |
+| Stock and dispensary reports | Pharmacy, Dispensary, stock team, or manager |
+| Clinical source record action | Doctor |
+| Follow-up appointment after report review | Front Desk |
 
-- `doctor-dashboard-overview.png`
-- `doctor-reports-list.png`
-- `vaccination-dashboard.png`
+## Related Screenshots
 
-## Source files inspected
+- `training_assets/screenshots/doctor-dashboard-overview.png`
+- `training_assets/screenshots/doctor-reports-list.png`
+- `training_assets/screenshots/vaccination-dashboard.png`
 
-- `vetedge/services/report_visibility.py`
-- `vetedge/workspace_sidebar/vetedge.json`
-- `vetedge/veterinary/page/*/*.json`
-- `vetedge/veterinary/report/*/*.json`
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+
+## Related Guides
+
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Role Access Matrix](role_access_matrix.md)
+- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)

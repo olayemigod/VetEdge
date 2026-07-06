@@ -1,119 +1,113 @@
-# Notifications And Action Centre Workflow
+# Notifications and Action Centre Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to understand Veterinary notifications, what doctors may see, and how to respond without losing important clinical handoffs.
+Train veterinary doctors to use Veterinary notifications as clinical handoffs, not just messages.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors who receive clinical, lab, appointment, payment, vaccination, or hospitalisation alerts.
+After this module, the doctor should be able to:
 
-## Before you start
+- Find and open Veterinary notifications.
+- Understand unread, read, acknowledged, done, dismissed, and archived states.
+- Open the linked patient, consultation, lab order, vaccination, appointment, or Hospitalisation record.
+- Mark notifications done only after the work is complete.
+- Escalate payment, permission, and missing-record issues correctly.
 
-- Check both the normal desk notification bell and any Veterinary notification badge/feed available on the site.
-- Only mark a notification done when the clinical action is actually complete.
-- Dismiss notifications only when no action is needed.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 flowchart TD
-    A[Notification created] --> B[Unread]
-    B --> C{Doctor opens notification?}
-    C -->|Yes| D[Read]
-    C -->|No| B
-    D --> E{Action required?}
-    E -->|Yes, accepted| F[Acknowledged]
-    F --> G[Do clinical action]
-    G --> H[Done]
-    E -->|No| I[Dismissed]
-    H --> J[Archived if no longer needed]
-    I --> J
+    A[Notification Created] --> B[Unread]
+    B --> C[Doctor Opens Notification]
+    C --> D[Read]
+    D --> E{Action Required?}
+    E -->|Yes| F[Acknowledge]
+    F --> G[Open Linked Record]
+    G --> H[Complete Clinical Action]
+    H --> I[Mark Done]
+    E -->|No| J[Dismiss if Appropriate]
+    I --> K[Archive Old Completed Items if Needed]
+    J --> K
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. At the start of the day, check the notification bell and Veterinary notification count.
+1. At the start of the day, check the normal desk notification bell and any Veterinary notification badge or feed available on the site.
 2. Open unread notifications first.
-3. Review title, message, priority, reference record, and action link.
-4. Open the referenced record when the notification requires action.
-5. Mark as `Read` when you have reviewed the message.
-6. Mark as `Acknowledged` when you accept responsibility or confirm you are acting on it.
-7. Mark as `Done` only after the work is complete.
-8. Mark as `Dismissed` when the alert does not require action.
+3. Read the title, message, priority, reference record, and action link.
+4. Open the linked record when action is needed.
+5. Mark the notification Read when reviewed.
+6. Mark it Acknowledged when you accept responsibility or confirm you are acting on it.
+7. Mark it Done only after the clinical action is complete.
+8. Mark it Dismissed only when no action is needed.
 9. Archive old notifications only when they should leave the active feed.
 
-## Notification states
+## Trainer Notes
+
+> Trainer Note: Ask the trainee to explain the difference between Acknowledged and Done. Acknowledged means "I have seen this and will act"; Done means "the required action is finished."
+
+> Trainer Note: Payment alerts should not be dismissed if care is blocked. They should be handed to Front Desk or Accounts.
+
+## Practice Exercise
+
+Scenario: A lab result notification appears for a patient seen earlier today.
+
+Task:
+
+1. Open the notification.
+2. Open the linked lab order.
+3. Review the result.
+4. Decide whether the consultation needs an updated treatment plan.
+5. Mark the notification Done only after the review is complete.
+
+Expected outcome: The doctor uses notification state as a reliable clinical handoff signal.
+
+## Notification State Guide
 
 | State | Meaning | Doctor action |
 |---|---|---|
-| Unread | Not yet opened/reviewed | Open and review. |
-| Read | Reviewed but not necessarily acted on | Decide whether action is needed. |
-| Acknowledged | Doctor has accepted/recognized the task | Complete the action. |
+| Unread | Not yet reviewed | Open and review. |
+| Read | Reviewed but not necessarily acted on | Decide if action is needed. |
+| Acknowledged | Doctor accepts or recognises the task | Complete the action. |
 | Done | Required action is complete | No further action unless follow-up appears. |
-| Dismissed | No action needed | Use carefully. |
-| Archived | Removed from normal active feed | Use for old completed items. |
+| Dismissed | No action is needed | Use carefully. |
+| Archived | Removed from normal active feed | Use for old completed items if clinic policy allows. |
 
-## Notifications doctors may see
-
-| Notification area | Meaning | Typical response |
-|---|---|---|
-| Lab result entered | Lab result may require doctor review | Open lab order, review result, update consultation if needed. |
-| Clinical/lab/pharmacy alert | Cross-team handoff | Open linked record and act or acknowledge. |
-| Treatment or review alert | Patient needs clinical follow-up | Review patient and plan. |
-| Consultation awaiting payment | Payment gate may block next clinical step | Ask Front Desk/Accounts to resolve. |
-| Missed appointment | Patient did not attend | Decide if clinical follow-up is needed; Front Desk handles contact. |
-| Vaccination due/overdue | Preventive care is due | Review priority and ask Front Desk to schedule/contact. |
-| Hospitalisation activity/discharge alert | Inpatient action needed | Open hospitalisation and complete required action. |
-
-## Important notes
-
-- Notification items are per recipient user.
-- The unread count is based on `Unread` Veterinary Notification Items.
-- Doctors can update notification status for their own notifications.
-- Admins can manage broader notification configuration.
-
-## Common mistakes
+## Common Mistakes
 
 | Mistake | Better approach |
 |---|---|
-| Marking Done before doing the action | Use Acknowledged first, then Done after completion. |
-| Dismissing payment gate alerts | Ask Front Desk/Accounts to resolve if care is blocked. |
-| Ignoring high priority lab alerts | Review linked lab order promptly. |
-| Expecting count to clear after opening native bell only | Mark the Veterinary notification read/done where available. |
-
-## What happens next
-
-After acting on a notification, update the related clinical record so the next team member sees the current state.
-
-## Related records
-
-- Veterinary Notification Item
-- Notification Log
-- Veterinary Consultation
-- Veterinary Lab Order
-- Veterinary Vaccination Record
-- Veterinary Appointment
-- Veterinary Hospitalisation
+| Marking Done before completing work | Use Acknowledged first, then Done after completion. |
+| Dismissing payment gate alerts | Ask Front Desk or Accounts to resolve if care is blocked. |
+| Ignoring high-priority lab alerts | Open and review the linked lab order promptly. |
+| Expecting the count to clear after opening only the bell | Update the Veterinary notification state where available. |
 
 ## Troubleshooting
 
 | Problem | Likely reason | What the doctor should do |
 |---|---|---|
-| Notification count not clearing | Item is still Unread | Mark it Read, Done, Dismissed, or Archive if appropriate. |
-| Action link does not open | Permission or deleted/cancelled reference | Ask Admin to verify access. |
-| Too many old alerts | Feed includes old non-archived items | Archive completed old items if clinic policy allows. |
+| Notification count does not clear | Item is still Unread or active | Mark Read, Done, Dismissed, or Archive as appropriate. |
+| Action link does not open | Permission issue or missing/cancelled reference | Ask Admin to verify access and record status. |
+| Too many old alerts | Old items are not archived | Archive completed items if clinic policy allows. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshot:
+| Notification type | Typical handoff |
+|---|---|
+| Lab result entered | Doctor reviews; Lab Technician handled result entry. |
+| Consultation awaiting payment | Front Desk or Accounts resolves payment. |
+| Missed appointment | Front Desk contacts owner; doctor decides clinical priority. |
+| Vaccination due or overdue | Doctor reviews clinical priority; Front Desk schedules. |
+| Hospitalisation action | Doctor or Nurse completes clinical action. |
 
-- `veterinary-notification-badge.png`
+## Related Screenshots
 
-## Source files inspected
+- `training_assets/screenshots/veterinary-notification-badge.png`
 
-- `vetedge/services/notification_api.py`
-- `vetedge/services/notifications.py`
-- `vetedge/services/notification_events.py`
-- `vetedge/veterinary/doctype/veterinary_notification_item/veterinary_notification_item.json`
-- `vetedge/services/clinical_lab_pharmacy_notifications.py`
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+
+## Related Guides
+
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)

@@ -1,93 +1,66 @@
-# Veterinary Doctor Operations Training Pack
+# Veterinary Doctor Training Documentation Pack
 
-## Purpose
+This folder contains the doctor-facing VetEdge training documentation pack. It is written for practical clinic use: onboarding new veterinary doctors, running live staff training, supporting client handover, displaying content in a future Training Centre, and preparing for future PDF export.
 
-This pack trains veterinary doctors to use the Veterinary module during daily clinic work. It covers patient review, appointments, consultations, medical history, lab requests, vaccination, hospitalisation, notifications, reports, and billing visibility where doctors can see or act on it.
+The same Markdown guides are available inside Desk through the Veterinary Training Centre page. Markdown remains the source of truth; the Desk page reads the module manifest and renders the approved guide files without copying them into database records.
 
-## Who should use this
+Start with the main manual:
 
-Use this pack if your login includes the `VetEdge Doctor` role or the starter role bundle named `Veterinary Doctor`.
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
 
-## Before you start
+Use the module guides when a trainer or doctor needs more detail for a specific workflow:
 
-- Confirm you can open the Veterinary workspace from the desk sidebar.
-- Confirm your clinic administrator has assigned you to the correct Branch if branch restrictions are enabled.
-- Use existing patient and appointment records during training. Do not create duplicate patients for practice unless your administrator provides a training site or demo data.
-- If a billing or payment message appears, follow the message and involve Front Desk or Accounts when required.
+- [Role Access Matrix](role_access_matrix.md)
+- [Doctor Daily Workflow](doctor_daily_workflow.md)
+- [Patient Medical Record Workflow](patient_medical_record_workflow.md)
+- [Veterinary Masters Awareness Reference](veterinary_masters_reference.md)
+- [Consultation Workflow](consultation_workflow.md)
+- [Lab Order Workflow](lab_order_workflow.md)
+- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
+- [Hospitalisation Workflow](hospitalisation_workflow.md)
+- [Grooming Service Handoff Workflow](grooming_workflow.md)
+- [Boarding Service Handoff Workflow](boarding_workflow.md)
+- [Notifications and Action Centre Workflow](notifications_and_action_centre_workflow.md)
+- [Reports and Dashboards Workflow](reports_and_dashboards_workflow.md)
+- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
+- [Glossary](glossary.md)
+- [Screenshot Manifest](screenshot_manifest.md)
+- [Training Module Manifest](training_modules.json)
 
-## Summary process diagram
+## How to Use This Pack
 
-```mermaid
-flowchart TD
-    A[Login] --> B[Open Veterinary workspace]
-    B --> C[Review appointments and notifications]
-    C --> D[Open patient or consultation]
-    D --> E[Review medical history]
-    E --> F[Record findings and treatment plan]
-    F --> G{Need supporting workflow?}
-    G -->|Lab| H[Create or review lab order]
-    G -->|Vaccination| I[Record vaccination]
-    G -->|Hospitalisation| J[Admit or manage hospitalisation]
-    G -->|No| K[Review billing status]
-    H --> K
-    I --> K
-    J --> K
-    K --> L[Complete care step]
-    L --> M[Schedule follow-up or hand off]
-    M --> N[Review reports and dashboards]
-```
+1. Open the main training manual and use it as the live training agenda.
+2. Open each module guide when trainees need a deeper walkthrough.
+3. Use the practical exercises during supervised practice.
+4. Use the checklist and assessment sections before allowing independent doctor use.
+5. Use the screenshot manifest to track which images are captured or still pending.
+6. In Desk, open `Training Centre` from the Veterinary workspace/sidebar to read the same modules.
 
-## Recommended training order
+## Desk Training Centre
 
-1. `doctor_daily_workflow.md`
-2. `patient_medical_record_workflow.md`
-3. `consultation_workflow.md`
-4. `lab_order_workflow.md`
-5. `vaccination_and_preventive_care_workflow.md`
-6. `hospitalisation_workflow.md`
-7. `notifications_and_action_centre_workflow.md`
-8. `reports_and_dashboards_workflow.md`
-9. `troubleshooting_and_common_errors.md`
+- Desk page: `Veterinary Training Centre`
+- Workspace label: `Training Centre`
+- Module source: [training_modules.json](training_modules.json)
+- Guide source: Markdown files in this folder
+- Video source: optional `youtube_url` per module in `training_modules.json`
 
-## Documents
+For now, videos are placeholders. Add a YouTube URL later in the manifest when a module video is ready. Screenshots remain pending until manually captured and reviewed.
 
-- `role_access_matrix.md` explains doctor-accessible roles, records, reports, dashboards, and restrictions.
-- `doctor_daily_workflow.md` gives the full-day operating routine.
-- `consultation_workflow.md` covers clinical capture, treatment planning, lab/vaccination actions, billing visibility, and follow-up.
-- `patient_medical_record_workflow.md` covers patient lookup and history review.
-- `lab_order_workflow.md` covers lab request and result review flow.
-- `vaccination_and_preventive_care_workflow.md` covers vaccination and due/overdue review.
-- `hospitalisation_workflow.md` covers admission, activities, stock, billing gate, and discharge.
-- `notifications_and_action_centre_workflow.md` covers Veterinary notification states and responses.
-- `reports_and_dashboards_workflow.md` covers doctor-accessible reports and dashboards.
-- `troubleshooting_and_common_errors.md` gives quick resolution guidance.
-- `screenshot_manifest.md` lists every screenshot target and capture status.
+## Training Safety Rules
 
-## Screenshot status summary
+- Use existing safe demo or training records where available.
+- Do not create duplicate patient records during training.
+- Do not manually alter submitted invoices.
+- Do not bypass payment, permission, branch, or stock messages.
+- Treat grooming and boarding as non-clinical service workflows unless the clinic explicitly grants additional role access.
+- If billing or payment blocks a workflow, involve Front Desk or Accounts.
+- If stock or warehouse messages appear, involve Pharmacy, Dispensary, or the stock team.
+- If access differs on the live site, verify the user's roles in Role Permission Manager.
 
-Screenshots are pending. No safe authenticated browser session or confirmed demo data was available during documentation generation. Each pending screenshot has exact capture instructions in `screenshot_manifest.md`.
+## Screenshot Status
 
-## Known limitations
+Screenshots are currently placeholders. See [screenshot_manifest.md](screenshot_manifest.md) for filename, route, purpose, role required, capture instructions, and status.
 
-- Exact user-specific branch visibility depends on live Branch User Assignment records.
-- Sales Invoice submit and payment collection depend on ERPNext permissions and Veterinary Settings. Doctors can see invoice-related information through the configured workspace and modal, but payment collection is only available when enabled.
-- Pet boarding and grooming are visible in the repository but are not documented here as doctor workflows unless they intersect with clinical hospitalisation.
-- Owner mobile/portal expansion is outside this doctor operations pack.
+## Folder Scope
 
-## Source files inspected
-
-- `vetedge/services/permissions.py`
-- `vetedge/services/role_bundles.py`
-- `vetedge/services/report_visibility.py`
-- `vetedge/workspace_sidebar/vetedge.json`
-- `vetedge/veterinary/doctype/*/*.json`
-- `vetedge/veterinary/page/*/*.json`
-- `vetedge/veterinary/report/*/*.json`
-- `vetedge/services/consultation_flow.py`
-- `vetedge/services/lab.py`
-- `vetedge/services/vaccination.py`
-- `vetedge/services/hospitalisation.py`
-- `vetedge/services/notification_api.py`
-- `vetedge/services/notifications.py`
-- `vetedge/services/billing_modal.py`
-- `vetedge/services/payment_service.py`
+This folder is documentation only. It does not change DocTypes, permissions, business logic, reports, dashboards, fixtures, patches, hooks, migrations, or live data.

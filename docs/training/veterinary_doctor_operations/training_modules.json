@@ -1,0 +1,162 @@
+[
+  {
+    "module_id": "doctor-overview",
+    "title": "Veterinary Doctor Training Manual",
+    "role_group": "Doctor Operations",
+    "description": "Main doctor-facing training manual and learning path.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/veterinary_doctor_training_manual.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 1
+  },
+  {
+    "module_id": "daily-workflow",
+    "title": "Doctor Daily Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Daily clinic routine from queue review to handoff.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/doctor_daily_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 2
+  },
+  {
+    "module_id": "patient-record",
+    "title": "Patient Medical Record Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Patient lookup, history review, and duplicate prevention.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/patient_medical_record_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 3
+  },
+  {
+    "module_id": "veterinary-masters",
+    "title": "Veterinary Masters Awareness",
+    "role_group": "Doctor Operations",
+    "description": "Doctor-friendly reference for master values used in workflows.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/veterinary_masters_reference.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 4
+  },
+  {
+    "module_id": "consultation",
+    "title": "Consultation Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Clinical documentation, treatment planning, payment awareness, and follow-up.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/consultation_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 5
+  },
+  {
+    "module_id": "lab-order",
+    "title": "Lab Order Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Requesting lab tests and reviewing results.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/lab_order_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 6
+  },
+  {
+    "module_id": "vaccination",
+    "title": "Vaccination and Preventive Care Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Vaccination records, due dates, payment checks, and preventive care handoffs.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/vaccination_and_preventive_care_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 7
+  },
+  {
+    "module_id": "hospitalisation",
+    "title": "Hospitalisation Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Admission, inpatient activity, charge/stock handoffs, and discharge readiness.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/hospitalisation_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 8
+  },
+  {
+    "module_id": "grooming-handoff",
+    "title": "Grooming Service Handoff",
+    "role_group": "Doctor Operations",
+    "description": "Doctor-relevant medical-safety handoff for non-clinical grooming services.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/grooming_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 9
+  },
+  {
+    "module_id": "boarding-handoff",
+    "title": "Boarding Service Handoff",
+    "role_group": "Doctor Operations",
+    "description": "Medical clearance and escalation guidance for non-clinical boarding services.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/boarding_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 10
+  },
+  {
+    "module_id": "notifications",
+    "title": "Notifications and Action Centre Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Clinical notification states, action ownership, and safe completion.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/notifications_and_action_centre_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 11
+  },
+  {
+    "module_id": "reports-dashboards",
+    "title": "Reports and Dashboards Workflow",
+    "role_group": "Doctor Operations",
+    "description": "Doctor-accessible dashboards, reports, filters, and source-record review.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/reports_and_dashboards_workflow.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 12
+  },
+  {
+    "module_id": "role-access",
+    "title": "Role Access Matrix",
+    "role_group": "Doctor Operations",
+    "description": "Trainer-friendly role access and handoff reference.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/role_access_matrix.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 13
+  },
+  {
+    "module_id": "troubleshooting",
+    "title": "Troubleshooting and Common Errors",
+    "role_group": "Doctor Operations",
+    "description": "Safe responses to common messages, blocks, and handoffs.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/troubleshooting_and_common_errors.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 14
+  },
+  {
+    "module_id": "glossary",
+    "title": "Glossary",
+    "role_group": "Doctor Operations",
+    "description": "Common terms used in doctor training.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/glossary.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 15
+  },
+  {
+    "module_id": "screenshot-manifest",
+    "title": "Screenshot Manifest",
+    "role_group": "Doctor Operations",
+    "description": "Screenshot placeholders, capture instructions, and pending/captured status.",
+    "markdown_path": "docs/training/veterinary_doctor_operations/screenshot_manifest.md",
+    "youtube_url": "",
+    "status": "Published",
+    "order": 16
+  }
+]

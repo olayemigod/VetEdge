@@ -176,6 +176,26 @@ class TestNavigationAssets(TestCase):
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_to"], "veterinary-hospitalisation-dashboard")
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_type"], "Page")
 
+	def test_training_centre_page_and_sidebar_link_exist(self):
+		page_root = VETERINARY_ROOT / "page" / "veterinary_training_centre"
+		page_json = json.loads((page_root / "veterinary_training_centre.json").read_text())
+		page_js = (page_root / "veterinary_training_centre.js").read_text()
+		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]
+		links = {
+			item.get("label"): item
+			for item in items
+			if item.get("type") == "Link"
+		}
+
+		self.assertEqual(page_json["name"], "veterinary-training-centre")
+		self.assertEqual(page_json["page_name"], "veterinary-training-centre")
+		self.assertEqual(page_json["title"], "Veterinary Training Centre")
+		self.assertIn("vetedge.services.training_centre.get_training_modules", page_js)
+		self.assertIn("vetedge.services.training_centre.get_training_module_content", page_js)
+		self.assertIn("Training Centre", links)
+		self.assertEqual(links["Training Centre"]["link_to"], "veterinary-training-centre")
+		self.assertEqual(links["Training Centre"]["link_type"], "Page")
+
 	def test_no_duplicate_dashboard_top_level_sections(self):
 		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]
 		top_level = [item.get("label") for item in items if not item.get("child")]

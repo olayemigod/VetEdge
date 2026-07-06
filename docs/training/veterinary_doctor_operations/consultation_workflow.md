@@ -1,137 +1,144 @@
-# Consultation Workflow
+# Consultation Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to run a consultation from appointment handoff through clinical capture, lab/vaccination requests, treatment planning, billing status review, completion, and follow-up.
+Train veterinary doctors to complete a Veterinary Consultation from patient handoff through clinical documentation, treatment planning, supporting workflows, billing/payment awareness, and follow-up.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors handling outpatient or clinical consultations.
+After this module, the doctor should be able to:
 
-## Before you start
+- Open or start a consultation from the correct patient or appointment.
+- Record complaint, history, examination, assessment, diagnosis, treatment plan, and follow-up.
+- Use Veterinary Vital Signs as separate records.
+- Create lab, vaccination, or Hospitalisation records when needed.
+- Read payment gate messages and hand off billing issues correctly.
+- Complete the consultation without bypassing accounting controls.
 
-- Confirm the patient and owner.
-- Confirm the appointment is ready for consultation when starting from an appointment.
-- Save the consultation before creating lab orders or relying on linked follow-up details.
-- Check payment gate messages before completing care when billing enforcement is active.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 flowchart TD
-    A[Open Appointment or Consultation] --> B[Confirm patient, owner, branch, practitioner]
-    B --> C[Select consultation type]
-    C --> D[Record complaint and history]
-    D --> E[Record examination and assessment]
-    E --> F[Add diagnosis]
-    F --> G[Add treatment plan and planned treatments]
-    G --> H{Need lab or vaccination?}
-    H -->|Lab| I[Create Lab Order]
-    H -->|Vaccination| J[Create Vaccination Record]
-    H -->|No| K[Review billing/payment]
+    A[Open Appointment or Patient Record] --> B[Start or Open Consultation]
+    B --> C[Confirm Patient, Owner, Branch, Practitioner]
+    C --> D[Review Medical History]
+    D --> E[Record Complaint and Assessment]
+    E --> F[Add Diagnosis and Treatment Plan]
+    F --> G{Lab, Vaccination, or Hospitalisation Needed?}
+    G -->|Lab| H[Create Lab Order]
+    G -->|Vaccination| I[Record Vaccination]
+    G -->|Hospitalisation| J[Admit Patient]
+    G -->|No| K[Review Billing / Payment Gate]
+    H --> K
     I --> K
     J --> K
-    K --> L{Payment gate status}
-    L -->|Full or partial gate blocks| M[Ask Front Desk/Accounts to resolve]
-    L -->|Allowed or no gate| N[Complete or continue consultation]
+    K --> L{Gate Blocks Workflow?}
+    L -->|Yes| M[Ask Front Desk / Accounts to Resolve]
+    L -->|No| N[Complete Consultation]
     M --> N
-    N --> O[Create follow-up appointment if needed]
+    N --> O[Schedule Follow-up if Needed]
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. Open the consultation from `Consultations`, the appointment, the appointment queue, or the patient record.
-2. Confirm `Patient`, `Primary Owner`, `Service Branch`, `Consulting Practitioner User`, and linked appointment.
-3. Select `Consultation Type` when available.
-4. Record `Presenting Complaint`.
-5. Add symptoms in the Symptoms table where appropriate.
-6. Record examination notes and assessment notes.
-7. Add diagnoses in the Diagnoses table. Diagnosis and treatment capture are doctor-controlled actions.
-8. Add planned treatments in `Planned Treatments`.
-9. Write a clear `Treatment Plan Summary`.
-10. Add `Follow Up Date` if review is needed.
-11. Use `New Vitals` to record fresh vitals as a separate record.
-12. Use `Latest Vitals` to review recent vitals.
-13. Use `View Medical History` before final decisions if prior context is needed.
-14. Use `New Lab Order` when diagnostic testing is required.
-15. Use `New Vaccination` when vaccination is clinically appropriate and the vaccination feature is enabled.
-16. Use `Admit for Hospitalisation` when inpatient care is required and hospitalisation is enabled.
-17. Use `Billing / Payment` to review invoice, payment status, pending charges, or permitted payment actions.
-18. Move the consultation status according to the clinic workflow.
-19. Use `Create Follow-up Appointment` when follow-up is needed.
+1. Open the consultation from the appointment, queue, patient record, or consultation list.
+2. Confirm Patient, Primary Owner, Service Branch, Consulting Practitioner User, and linked appointment.
+3. Select Consultation Type when available.
+4. Review Medical History and latest Veterinary Vital Signs before final decisions.
+5. Record Presenting Complaint and relevant history.
+6. Add symptoms where the form provides structured rows.
+7. Record examination notes and assessment notes.
+8. Add diagnosis using the diagnosis section where available.
+9. Add planned treatments and a clear Treatment Plan Summary.
+10. Add Follow Up Date if review is needed.
+11. Use New Vitals when fresh vitals are needed.
+12. Use New Lab Order, New Vaccination, or Admit for Hospitalisation only when clinically required.
+13. Open Billing / Payment to review invoice, payment status, pending charges, or permitted payment actions.
+14. If payment blocks the workflow, pause and ask Front Desk or Accounts to resolve it.
+15. Complete the consultation only when documentation and next actions are clear.
+16. Create a follow-up appointment where needed.
 
-## Consultation status guide
+## Trainer Notes
 
-| Status | Meaning |
+> Trainer Note: Ask the trainee to explain what belongs in structured fields and what belongs in free-text notes. Structured diagnosis, planned treatments, vitals, lab orders, and vaccination records help downstream teams.
+
+> Trainer Note: Submitted invoices are protected for accounting accuracy. Doctors may view status and messages, but Accounts handles invoice correction and payment settlement.
+
+## Practice Exercise
+
+Scenario: A cat presents with poor appetite and weight loss.
+
+Task:
+
+1. Open the patient and current consultation.
+2. Review Medical History and latest vitals.
+3. Record complaint, assessment, diagnosis, and treatment plan.
+4. Create a lab order if clinically required.
+5. Review Billing / Payment status.
+6. Add a follow-up date.
+
+Expected outcome: The doctor completes clinical documentation, uses supporting workflows correctly, and does not bypass payment or invoice controls.
+
+## Consultation Status Guide
+
+| Status | Practical meaning |
 |---|---|
-| Draft | Consultation exists but clinical work is not underway or not saved as active. |
+| Draft | Consultation exists but clinical work may not be active yet. |
 | In Progress | Doctor is actively handling the consultation. |
-| Awaiting Payment | Billing/payment gate needs attention. |
-| Pending Dispensary | Treatment items need dispensary fulfillment. |
-| Ready for Treatment | Payment/dispensary requirements allow treatment to proceed. |
+| Awaiting Payment | Billing or payment gate needs attention. |
+| Pending Dispensary | Treatment items need dispensary fulfilment. |
+| Ready for Treatment | Payment or dispensary requirements allow treatment to proceed. |
 | Completed | Consultation is finished. |
 | Cancelled | Consultation was cancelled. |
 
-## Payment gate meaning
+## Payment Gate Guidance
 
-| Gate | What it means for the doctor | Action |
+| Message type | What it means | Doctor action |
 |---|---|---|
-| Full Payment Required | Care or completion may be blocked until the invoice is fully paid. | Ask Front Desk/Accounts to collect or resolve payment. |
-| Partial Payment Gate | The system may allow progress after partial payment or configured threshold. | Read the payment gate message and involve Accounts if blocked. |
-| No Payment Gate | Payment does not block consultation progress. | Continue care, but still keep billing accurate. |
+| Full Payment Required | Workflow may be blocked until full payment is made. | Ask Front Desk or Accounts to resolve. |
+| Partial Payment Gate | A partial payment rule may apply. | Read the message and involve Accounts if blocked. |
+| No Payment Gate | Payment does not block the step. | Continue care while keeping billing accurate. |
 
-## Important notes
+## Common Mistakes
 
-- Doctors must not manually mark invoices paid.
-- If the linked invoice is already submitted, the billing modal may show that it cannot be changed directly. Accounts may need to handle corrections or cancellation/replacement.
-- If consultation billing is disabled in settings, billing actions may not appear.
-- If hospitalisation is disabled in settings, `Admit for Hospitalisation` may not appear.
-
-## Common mistakes
-
-| Mistake | What to do instead |
+| Mistake | Better approach |
 |---|---|
-| Creating a lab order before saving changes | Save the consultation first. |
-| Completing despite a blocking payment gate | Resolve with Front Desk/Accounts first. |
-| Using free text only for diagnosis | Use the diagnosis table where possible. |
-| Recording treatment without item context | Use planned treatment rows for clear dispensary handoff. |
-
-## What happens next
-
-- Lab orders move to lab staff for sample/result work.
-- Vaccination records may create billing and stock references.
-- Planned treatments may move to dispensary.
-- Follow-up appointments appear in appointments.
-- Billing remains tied to Sales Invoice and Payment Entry.
-
-## Related records
-
-- Veterinary Appointment
-- Veterinary Patient
-- Veterinary Consultation
-- Veterinary Vital Signs
-- Veterinary Lab Order
-- Veterinary Vaccination Record
-- Veterinary Hospitalisation
-- Sales Invoice
+| Creating a lab order before saving consultation changes | Save first, then create the lab order. |
+| Completing despite a blocking payment gate | Resolve through Front Desk or Accounts first. |
+| Recording treatment only as free text | Use planned treatment rows where available. |
+| Recording vitals only in notes | Use Veterinary Vital Signs. |
 
 ## Troubleshooting
 
-See `troubleshooting_and_common_errors.md` for dirty-save warnings, payment gates, invoice errors, and permission denied messages.
+| Problem | What the doctor should do |
+|---|---|
+| New Lab Order button asks you to save | Save the consultation and try again. |
+| Billing / Payment button is missing | Save the record and ask Admin to verify settings or access. |
+| Invoice already submitted | Ask Accounts to handle correction or replacement. |
+| Hospitalisation action is unavailable | Ask Admin to verify settings and role access. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshots:
+| Handoff | Responsible role |
+|---|---|
+| Appointment readiness and follow-up booking | Front Desk |
+| Payment gate and invoice settlement | Front Desk, Accounts, or Cashier |
+| Lab sample and result entry | Lab Technician |
+| Medication fulfilment | Pharmacy or Dispensary |
+| Vitals and treatment support | Nurse |
 
-- `consultation-assessment-section.png`
-- `consultation-treatment-plan.png`
-- `billing-payment-modal.png`
-- `lab-order-dialog.png`
+## Related Screenshots
 
-## Source files inspected
+- `training_assets/screenshots/consultation-assessment-section.png`
+- `training_assets/screenshots/consultation-treatment-plan.png`
+- `training_assets/screenshots/billing-payment-modal.png`
+- `training_assets/screenshots/lab-order-dialog.png`
 
-- `vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.json`
-- `vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js`
-- `vetedge/services/consultation_flow.py`
-- `vetedge/services/billing_modal.py`
-- `vetedge/veterinary/doctype/veterinary_settings/veterinary_settings.json`
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
+
+## Related Guides
+
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Lab Order Workflow](lab_order_workflow.md)
+- [Vaccination and Preventive Care Workflow](vaccination_and_preventive_care_workflow.md)
+- [Hospitalisation Workflow](hospitalisation_workflow.md)

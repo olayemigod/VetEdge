@@ -1,51 +1,71 @@
-# Lab Order Workflow
+# Lab Order Training Guide
 
-## Purpose
+## Module Purpose
 
-Use this guide to request lab tests from a consultation, review lab order status, and act on results.
+Train veterinary doctors to request lab tests from a consultation, follow lab order status, review results, and update the care plan.
 
-## Who should use this
+## Learning Objectives
 
-Veterinary doctors who request diagnostics or review completed lab results.
+After this module, the doctor should be able to:
 
-## Before you start
+- Create a lab order from a saved consultation.
+- Select clinically necessary lab tests.
+- Understand the Lab Technician handoff.
+- Review entered results.
+- Update assessment, diagnosis, treatment plan, follow-up, or Hospitalisation decisions after results.
+- Avoid editing reviewed results incorrectly.
 
-- Confirm the consultation is saved.
-- Confirm the patient and branch are correct.
-- Select only clinically necessary active lab tests.
-- Do not edit reviewed lab results.
-
-## Summary process diagram
+## Summary Process Diagram
 
 ```mermaid
 sequenceDiagram
     participant Doctor
     participant Consultation
     participant LabOrder as Lab Order
-    participant Lab as Lab Staff
-    participant Billing as Billing/Invoice
+    participant Lab as Lab Technician
+    participant Accounts
     Doctor->>Consultation: Open saved consultation
-    Doctor->>LabOrder: Create lab order with selected tests
-    LabOrder->>Billing: Create or sync invoice when used
+    Doctor->>LabOrder: Request selected lab tests
+    LabOrder->>Accounts: Link or sync billing where configured
     Lab->>LabOrder: Collect sample and enter results
     Doctor->>LabOrder: Review result
-    Doctor->>Consultation: Update assessment/treatment plan
+    Doctor->>Consultation: Update assessment and treatment plan
 ```
 
-## Step-by-step guide
+## Step-by-Step Training Guide
 
-1. Open the saved consultation.
-2. Click `New Lab Order`.
-3. Select one or more lab tests from the picker.
-4. Add sample notes if needed.
-5. Submit the dialog to create the lab order.
-6. Use `View Lab Orders` from the consultation to review linked orders.
-7. Open the lab order to check status, requested date, requested by, service branch, lab tests, and linked invoice.
-8. Lab staff normally moves the order through sample collection, in-progress work, and result entry.
-9. When results are entered, review the lab order.
-10. If results change the clinical plan, return to the consultation and update assessment, diagnosis, and treatment plan.
+1. Open the saved Veterinary Consultation.
+2. Click New Lab Order.
+3. Select one or more clinically necessary active lab tests.
+4. Add sample notes if useful.
+5. Submit the lab order request.
+6. Use View Lab Orders from the consultation to review linked orders.
+7. Open the lab order and check status, requested date, requested by, service Branch, tests, and linked invoice if visible.
+8. Allow Lab Technician or lab staff to collect samples, process tests, and enter results.
+9. Review the lab order after results are entered.
+10. Return to the consultation and update assessment, diagnosis, treatment plan, follow-up, or Hospitalisation plan if results change care.
 
-## Lab order status guide
+## Trainer Notes
+
+> Trainer Note: Make the handoff clear. The doctor requests and reviews; the Lab Technician usually processes samples and enters results.
+
+> Trainer Note: Reviewed lab results should not be edited casually. If a result is wrong, follow the clinic correction process.
+
+## Practice Exercise
+
+Scenario: A dog with vomiting and dehydration needs diagnostic testing.
+
+Task:
+
+1. Open a saved consultation.
+2. Create a lab order.
+3. Select the required tests.
+4. Open the lab order summary.
+5. Explain what the doctor does after results are entered.
+
+Expected outcome: The doctor can request lab work and complete the result-review handoff.
+
+## Lab Order Status Guide
 
 | Status | Meaning |
 |---|---|
@@ -54,80 +74,45 @@ sequenceDiagram
 | Sample Collected | Sample has been collected. |
 | In Progress | Lab work is underway. |
 | Result Entered | Results have been entered and need review. |
-| Reviewed | Doctor review is complete; results become read-only. |
+| Reviewed | Doctor review is complete. |
 | Cancelled | Lab order is cancelled. |
 
-## Invoice behavior
-
-- Lab orders can link to Sales Invoice through the billing flow.
-- If billing sessions are enabled, lab billing may sync into a billing session.
-- If an invoice is already submitted, it cannot simply be edited from the modal.
-- If a previous invoice is cancelled, the billing workflow may create or use a replacement invoice depending on configuration.
-
-## Important notes
-
-- Doctors can request lab tests and review lab results.
-- Lab technicians can enter lab results.
-- Reviewed lab results are read-only and cannot be edited.
-- The order must include at least one lab test unless cancelled.
-- The consultation must belong to the selected patient.
-
-## Common mistakes
+## Common Mistakes
 
 | Mistake | Better approach |
 |---|---|
 | Creating lab order before saving consultation | Save consultation first. |
-| Selecting duplicate tests | Select each test once. |
-| Editing reviewed results | Ask Lab/Admin for correction process; do not overwrite reviewed results. |
-| Ignoring invoice status | Review billing modal or ask Accounts if billing is blocked. |
-
-## What happens next
-
-After results are available, the doctor updates the clinical assessment, diagnosis, treatment plan, planned treatments, follow-up, or hospitalisation plan as needed.
-
-## Related records
-
-- Veterinary Consultation
-- Veterinary Lab Order
-- Veterinary Lab Test
-- Veterinary Lab Order Item
-- Sales Invoice
+| Selecting duplicate or unnecessary tests | Select only clinically necessary tests. |
+| Editing reviewed results | Follow correction process through Lab/Admin. |
+| Ignoring invoice status | Ask Accounts if billing is blocked. |
 
 ## Troubleshooting
 
 | Problem | Likely reason | What the doctor should do |
 |---|---|---|
-| `Select at least one lab test` | No test was selected | Select at least one active lab test. |
-| Cannot create lab order | Missing doctor role, branch access, disabled platform access, or unsaved/invalid consultation | Save consultation and ask Admin to verify role/branch access. |
-| Lab result cannot be edited | Status is Reviewed | Follow clinic correction process. |
-| Invoice already submitted | ERPNext submitted invoices are locked | Ask Accounts to handle correction or replacement. |
+| Select at least one lab test | No test was selected | Select at least one active lab test. |
+| Cannot create lab order | Unsaved consultation, missing role, branch issue, or disabled access | Save and ask Admin to verify access if needed. |
+| Result cannot be edited | Status is Reviewed | Follow correction process. |
+| Invoice already submitted | ERPNext submitted invoice is locked | Ask Accounts to handle correction or replacement. |
 
-## Screenshots / visual references
+## Related Roles and Handoffs
 
-Pending screenshots:
+| Handoff | Responsible role |
+|---|---|
+| Test request and result review | Doctor |
+| Sample collection, test processing, result entry | Lab Technician |
+| Invoice/payment issues | Accounts or Cashier |
+| Treatment update after result | Doctor |
 
-- `lab-order-dialog.png`
-- `lab-order-summary.png`
+## Related Screenshots
 
-UI callout:
+- `training_assets/screenshots/lab-order-dialog.png`
+- `training_assets/screenshots/lab-order-summary.png`
 
-```text
-+--------------------------------------------------+
-| Lab Order                                        |
-+--------------------------------------------------+
-| 1. Patient and owner                             |
-| 2. Status                                        |
-| 3. Consultation link                             |
-| 4. Lab tests requested                           |
-| 5. Result status                                 |
-| 6. Linked invoice                                |
-| 7. Doctor reviewed by/on                         |
-+--------------------------------------------------+
-```
+See [Screenshot Manifest](screenshot_manifest.md) for capture instructions.
 
-## Source files inspected
+## Related Guides
 
-- `vetedge/services/lab.py`
-- `vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.json`
-- `vetedge/veterinary/doctype/veterinary_lab_order_item/veterinary_lab_order_item.json`
-- `vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js`
+- [Veterinary Doctor Training Manual](veterinary_doctor_training_manual.md)
+- [Consultation Workflow](consultation_workflow.md)
+- [Troubleshooting and Common Errors](troubleshooting_and_common_errors.md)
