@@ -94,3 +94,38 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			self.assertIn("last_updated", summary)
 		except frappe.PermissionError:
 			pass
+
+	def test_frontend_uses_layout_components_and_identity(self):
+		"""Verify VetEdge Stock Expiry Monitor Vue component uses shell, page layouts, and product identity."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		vue_path = os.path.join(
+			vetedge_path, "vetedge", "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+		)
+		self.assertTrue(os.path.exists(vue_path))
+		with open(vue_path, "r") as f:
+			content = f.read()
+
+		self.assertIn("EdgeAppShell", content)
+		self.assertIn("EdgePageLayout", content)
+		self.assertIn("EdgeFilterBar", content)
+		self.assertIn('product="vetedge"', content)
+		self.assertIn('data-edge-product="vetedge"', content)
+
+		# Ensure required shell components resolution does not fallback to 'div'
+		self.assertIn("const EdgeAppShell = getRequiredComponent('EdgeAppShell');", content)
+		self.assertIn("const EdgePageLayout = getRequiredComponent('EdgePageLayout');", content)
+		self.assertIn("const EdgeFilterBar = getRequiredComponent('EdgeFilterBar');", content)
+
+	def test_loader_loads_css_bundles(self):
+		"""Verify page loader loads edgeui.bundle.css and vetedge_stock_expiry_monitor.bundle.css."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		js_path = os.path.join(
+			vetedge_path, "veterinary", "page", "stock_expiry_monitor", "stock_expiry_monitor.js"
+		)
+		self.assertTrue(os.path.exists(js_path))
+		with open(js_path, "r") as f:
+			content = f.read()
+
+		self.assertIn("edgeui.bundle.css", content)
+		self.assertIn("vetedge_stock_expiry_monitor.bundle.css", content)
+
