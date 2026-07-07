@@ -61,6 +61,19 @@ DOCTOR_WRITABLE_MASTER_DOCTYPES = (
 	"veterinary_vaccine/veterinary_vaccine.json",
 )
 
+FINAL_STATUS_HISTORY_DOCTYPES = (
+	"veterinary_consultation/veterinary_consultation.json",
+	"veterinary_lab_order/veterinary_lab_order.json",
+	"veterinary_vaccination_record/veterinary_vaccination_record.json",
+	"veterinary_hospitalisation/veterinary_hospitalisation.json",
+	"pet_grooming_session/pet_grooming_session.json",
+	"pet_boarding_booking/pet_boarding_booking.json",
+	"pet_boarding_stay/pet_boarding_stay.json",
+	"veterinary_appointment/veterinary_appointment.json",
+)
+
+OPERATIONAL_ACCOUNTING_UNSAFE_FLAGS = ("submit", "cancel", "amend")
+
 
 class TestPermissionMatrix(TestCase):
 	def test_protected_clinical_doctypes_do_not_use_generic_desk_user(self):
@@ -96,3 +109,61 @@ class TestPermissionMatrix(TestCase):
 		self.assertNotIn("Cashier", roles)
 		self.assertNotIn("Veterinarian", roles)
 		self.assertNotIn("Vet Nurse", roles)
+
+	def test_cancellation_resolution_keeps_clinical_roles_read_only(self):
+		data = json.loads(
+			(ROOT / "veterinary_consultation_cancellation_resolution/veterinary_consultation_cancellation_resolution.json").read_text()
+		)
+		permissions = {row["role"]: row for row in data.get("permissions", [])}
+
+		for role in ("VetEdge Doctor", "VetEdge Front Desk"):
+			with self.subTest(role=role):
+				self.assertEqual(permissions[role].get("read"), 1)
+				self.assertNotEqual(permissions[role].get("write"), 1)
+				self.assertNotEqual(permissions[role].get("create"), 1)
+				self.assertNotEqual(permissions[role].get("delete"), 1)
+
+		for role in ("System Manager", "VetEdge Administrator", "Branch Manager", "Accounts/Cashier", "Accounts User"):
+			with self.subTest(role=role):
+				self.assertEqual(permissions[role].get("read"), 1)
+				self.assertEqual(permissions[role].get("write"), 1)
+				self.assertEqual(permissions[role].get("create"), 1)
+
+	def test_cancellation_resolution_does_not_expose_submit_or_cancel(self):
+		data = json.loads(
+			(ROOT / "veterinary_consultation_cancellation_resolution/veterinary_consultation_cancellation_resolution.json").read_text()
+		)
+		for row in data.get("permissions", []):
+			with self.subTest(role=row["role"]):
+				for flag in OPERATIONAL_ACCOUNTING_UNSAFE_FLAGS:
+					self.assertNotEqual(row.get(flag), 1)
+
+	def test_veterinary_settings_write_is_admin_only(self):
+		data = json.loads((ROOT / "veterinary_settings/veterinary_settings.json").read_text())
+		write_roles = {row["role"] for row in data.get("permissions", []) if row.get("write")}
+		read_roles = {row["role"] for row in data.get("permissions", []) if row.get("read")}
+
+		self.assertLessEqual(write_roles, {"System Manager", "VetEdge Administrator"})
+		self.assertIn("VetEdge Doctor", read_roles)
+
+	def test_final_status_history_doctypes_do_not_grant_submit_cancel_or_amend(self):
+		for relative_path in FINAL_STATUS_HISTORY_DOCTYPES:
+			data = json.loads((ROOT / relative_path).read_text())
+			for row in data.get("permissions", []):
+				with self.subTest(doctype=relative_path, role=row["role"]):
+					for flag in OPERATIONAL_ACCOUNTING_UNSAFE_FLAGS:
+						self.assertNotEqual(row.get(flag), 1)
+
+	def test_billing_session_accounts_roles_cannot_submit_or_cancel(self):
+		data = json.loads((ROOT / "veterinary_billing_session/veterinary_billing_session.json").read_text())
+		permissions = {row["role"]: row for row in data.get("permissions", [])}
+
+		self.assertEqual(permissions["Accounts/Cashier"].get("read"), 1)
+		self.assertEqual(permissions["Accounts/Cashier"].get("write"), 1)
+		self.assertEqual(permissions["Accounts/Cashier"].get("create"), 1)
+		self.assertEqual(permissions["Accounts User"].get("read"), 1)
+		self.assertNotEqual(permissions["Accounts User"].get("write"), 1)
+		for role in ("Accounts/Cashier", "Accounts User"):
+			with self.subTest(role=role):
+				for flag in OPERATIONAL_ACCOUNTING_UNSAFE_FLAGS:
+					self.assertNotEqual(permissions[role].get(flag), 1)
