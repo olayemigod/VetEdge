@@ -580,6 +580,167 @@ Missing QA scenarios from the live inventory:
 
 Safety confirmation: the helper performed read-only DocType queries and wrote JSON only under `/tmp`; it did not create QA records, invoices, payments, stock entries, appointments, consultations, cancellation resolutions, or mutate submitted accounting/stock documents. Remaining manual QA step: create or identify the missing scenarios through normal Desk workflows before operational sign-off.
 
+### Phase 10G Missing QA Scenario Preparation Plan
+
+Phase 10G is a Desk/manual preparation plan for the 22 missing scenarios reported by the Phase 10F.1 inventory. Do not create records by script. Prepare records only on `vetedge.local` or staging using normal VetEdge and ERPNext workflows.
+
+#### Missing Scenario Summary
+
+- Cancellation resolution examples: retain-payment Pending Review/Approved/Completed, reschedule Completed with linked appointment, refund and customer-credit Approved/Completed variants, and admin correction Completed with evidence.
+- Dispensary/stock examples: consultation with posted dispensary Stock Entry reference.
+- Cancelled lab/vaccination examples: Cancelled Lab Order with invoice history, Cancelled Vaccination with invoice history, and vaccination linked to consultation.
+- Cancelled grooming/boarding examples: Cancelled Grooming Session with invoice history, Cancelled Boarding Booking with invoice history, and Boarding with charges.
+- Hospitalisation examples: Cancelled Hospitalisation with preserved history and Hospitalisation with stock/material issue reference.
+- Appointment final-status examples: Completed Appointment linked to consultation and No-show Appointment preserving links/notes.
+- Accounting evidence examples: Sales Invoice, Payment Entry, Journal Entry, return invoice/credit note, or external accounting reference evidence used only through normal ERPNext/test-site workflow.
+
+#### Scenario Preparation Table
+
+| Scenario Group | Missing Scenario | Why Needed | How To Prepare In Desk | Required Role | Expected Result | Safety Notes | Record Name After Creation | Status |
+|---|---|---|---|---|---|---|---|---|
+| Cancellation resolution | Retain-payment Pending Review | Confirms request state is visible but not executable | Open paid/partly paid consultation, click Cancel Consultation, select Retain Payment, enter reason, record request only | Accounts/Cashier, Branch Manager, VetEdge Administrator | Resolution `Pending Review`; consultation unchanged | Do not approve or execute this example |  |  |
+| Cancellation resolution | Retain-payment Approved | Confirms approval gating | Start from separate Pending Review retain-payment decision and approve with authorized user | Accounts Manager, Branch Manager, VetEdge Administrator | Resolution `Approved`; consultation unchanged | Do not click execute on this example |  |  |
+| Cancellation resolution | Retain-payment Completed | Confirms clinical cancel with retained payment | Start from approved retain-payment decision, execute `Cancel Clinical Record and Retain Payment` | Accounts Manager, Branch Manager, VetEdge Administrator | Consultation `Cancelled`; resolution `Completed`; invoices/payments unchanged | Do not refund, credit, or mutate accounting docs |  |  |
+| Cancellation resolution | Reschedule Completed with linked appointment | Confirms reschedule link workflow | Record and approve Reschedule Consultation, then create reschedule appointment from dialog | Front Desk or authorized admin/accounts role | Resolution `Completed`; linked new appointment set; old consultation unchanged | Do not transfer payment or invoice value |  |  |
+| Cancellation resolution | Refund Required Approved with accounting evidence | Confirms approved refund evidence state | Record Refund Required, approve, enter/verify accounting evidence but keep example before completion if possible | Accounts Manager / Accounts User | Resolution `Approved`; evidence available for completion test | Use normal ERPNext evidence only; do not create by script |  |  |
+| Cancellation resolution | Refund Required Completed with No Status Change | Tests financial completion without clinical cancellation | Complete approved refund resolution with valid evidence and choose Keep consultation unchanged | Accounts Manager / Accounts User | Resolution `Completed`; consultation unchanged | Do not auto-create refund docs through VetEdge |  |  |
+| Cancellation resolution | Refund Required Completed with Cancel outcome | Tests financial completion plus clinical cancellation | Complete approved refund resolution with valid evidence and choose Cancel Consultation After Financial Resolution | Accounts Manager / Accounts User | Resolution `Completed`; consultation `Cancelled`; accounting docs unchanged | Use only test/staging accounting evidence |  |  |
+| Cancellation resolution | Issue Customer Credit Approved with accounting evidence | Confirms credit approval/evidence state | Record Issue Customer Credit, approve, identify evidence, leave uncompleted if possible | Accounts Manager / Accounts User | Resolution `Approved`; consultation unchanged | Do not apply credit to rescheduled consultation |  |  |
+| Cancellation resolution | Issue Customer Credit Completed with No Status Change | Tests credit completion without clinical cancellation | Complete approved credit decision with evidence and No Status Change | Accounts Manager / Accounts User | Resolution `Completed`; consultation unchanged | Do not auto-allocate credit |  |  |
+| Cancellation resolution | Issue Customer Credit Completed with Cancel outcome | Tests credit completion plus clinical cancellation | Complete approved credit decision with evidence and Cancel outcome | Accounts Manager / Accounts User | Resolution `Completed`; consultation `Cancelled`; invoices/payments unchanged | No payment transfer or automatic allocation |  |  |
+| Cancellation resolution | Admin Accounting Correction Completed with evidence | Tests admin correction acknowledgement | Record admin correction, approve, complete with correction evidence/reference | Accounts Manager, VetEdge Administrator, System Manager | Resolution `Completed`; consultation unchanged | Admin correction cannot use cancel outcome in this phase |  |  |
+| Dispensary / stock | Consultation with posted dispensary Stock Entry reference | Tests stock reference visibility and immutability | Use normal consultation treatment/dispensary flow, select stock Item/Batch/Warehouse, confirm issue through VetEdge | Stock/Dispensary User | Submitted Stock Entry linked on dispensed child row | Do not repost or edit submitted Stock Entry manually |  |  |
+| Lab | Cancelled Lab Order with invoice history | Tests final-status billing/history visibility | Create lab order, create Billing / Payment history, cancel through normal lab workflow | Doctor/Lab User plus Accounts/Cashier | Lab Order `Cancelled`; Billing / Payment and invoice history visible | Do not delete or detach invoice links |  |  |
+| Vaccination | Cancelled Vaccination with invoice history | Tests final-status billing/history visibility | Create vaccination, create Billing / Payment history, cancel through normal workflow | Doctor/Vaccination staff plus Accounts/Cashier | Vaccination `Cancelled`; invoice history visible | Preserve vaccine/billing context |  |  |
+| Vaccination | Vaccination linked to consultation | Tests consultation-scoped vaccine history | Create vaccination from consultation action | Doctor / Vaccination staff | Vaccination has consultation link | Use normal consultation flow only |  |  |
+| Grooming | Cancelled Grooming Session with invoice history | Tests final-status service billing visibility | Create grooming session, create billing history, cancel through normal workflow | Grooming User / Branch Manager | Session `Cancelled`; Billing / Payment visible | Do not submit/cancel accounting docs manually |  |  |
+| Boarding | Cancelled Boarding Booking with invoice history | Tests final-status booking billing visibility | Create booking, create billing history, cancel through normal workflow | Front Desk / Boarding User / Branch Manager | Booking `Cancelled`; invoice history visible | Preserve charges/history |  |  |
+| Boarding | Boarding with charges | Tests charge/history visibility | Create boarding booking/stay and add charges through normal boarding workflow | Boarding User / Branch Manager | Boarding charges visible and billable | Do not hand-edit submitted invoices |  |  |
+| Hospitalisation | Cancelled Hospitalisation with preserved history | Tests cancelled final history | Admit/create hospitalisation, add charges/activities, cancel through normal workflow | Doctor / Branch Manager | Hospitalisation `Cancelled`; charge/activity links preserved | Do not delete child rows |  |  |
+| Hospitalisation | Hospitalisation with stock/material issue reference | Tests hospitalisation stock visibility | Use controlled hospitalisation stock/material issue flow | Doctor/Nurse/Stock User | Stock/material reference visible; submitted Stock Entry unchanged | Do not edit submitted Stock Entry |  |  |
+| Appointment | Completed Appointment linked to consultation | Tests appointment/consultation link preservation | Create appointment, check in/start consultation, complete appointment through normal workflow | Front Desk / Doctor | Appointment `Completed`; consultation link visible | Do not unlink consultation |  |  |
+| Appointment | No-show Appointment preserving links/notes | Tests no-show final status history | Create appointment, add notes/reason, mark No Show through normal workflow | Front Desk / Branch Manager | Appointment `No Show`; patient/owner/notes preserved | Do not delete linked service records |  |  |
+
+#### Desk Preparation Guidance
+
+Cancellation resolution scenarios:
+
+- Start from separate paid or partly paid consultations so each status example can remain available for QA.
+- Use `Cancel Consultation` to record the resolution request.
+- Approve only with authorized Accounts/Admin/Branch roles.
+- Complete only where accounting evidence exists and the scenario requires completion.
+- Do not create artificial accounting documents unless this is a local/staging site and the document is created through normal ERPNext workflow.
+- Record every consultation, resolution, invoice, payment, and evidence reference in the QA register.
+
+Dispensary / stock scenario:
+
+- Use the normal consultation/dispensary workflow.
+- Select a valid stock Item, Batch, and Warehouse.
+- Post stock only through the controlled VetEdge flow.
+- Confirm the Stock Entry is submitted and the consultation child row keeps the Stock Entry reference.
+- Do not repost, cancel, amend, or manually edit the submitted Stock Entry.
+
+Lab and vaccination scenarios:
+
+- Create records through the normal consultation or standalone service flow.
+- Create invoice/billing history through `Billing / Payment`.
+- Cancel records only through the normal workflow.
+- Confirm `Billing / Payment`, invoice history, vaccine/lab context, and consultation links remain visible after cancellation.
+
+Grooming and boarding scenarios:
+
+- Use normal grooming/boarding workflows.
+- Create billing history before cancelling when the scenario requires invoice history.
+- For boarding charges, add charges through the supported boarding charge workflow.
+- Confirm history buttons remain visible and unsafe final-status actions remain blocked.
+
+Hospitalisation scenarios:
+
+- Admit or create hospitalisation through the normal hospitalisation flow.
+- Add charge/activity rows and care/location history where applicable.
+- Post stock/material issue only through the controlled hospitalisation stock workflow.
+- Cancel/discharge through normal workflow and confirm billing, stock, charge, activity, and location history remain visible.
+
+Appointment scenarios:
+
+- Create appointments through the scheduler.
+- For completed linked appointment, check in/start consultation and complete through the normal flow.
+- For no-show, add notes/reason and mark No Show through the normal appointment workflow.
+- For reschedule-created appointment, use the cancellation resolution reschedule flow and record the linked appointment name.
+
+Accounting evidence examples:
+
+- Use existing test/staging Sales Invoice, Payment Entry, Journal Entry, return invoice/credit note, or external evidence where appropriate.
+- If evidence must be created, create it only through normal ERPNext workflow on local/staging.
+- Submitted accounting documents must remain unchanged after being referenced as evidence.
+
+#### Role Assignment for Preparation
+
+- VetEdge Administrator: overall setup, settings visibility, emergency supervision.
+- Branch Manager: branch approvals, operational supervision, hospitalisation/grooming/boarding oversight.
+- Doctor: consultation, clinical notes, lab/vaccination requests, hospitalisation clinical flow.
+- Front Desk: appointment creation, check-in, reschedule appointment creation, boarding/grooming scheduling where applicable.
+- Accounts/Cashier / Accounts User: Billing / Payment, invoice/payment evidence, normal payment actions.
+- Accounts Manager: refund/credit/admin correction approval and external evidence exception where allowed.
+- Lab User: lab result/history preparation.
+- Grooming/Boarding User: service progress, cancellation/completion scenarios.
+- Stock/Dispensary User: controlled stock issue and Stock Entry reference preparation.
+
+#### Safety Rules
+
+- Prepare only on `vetedge.local` or staging.
+- Do not run on production.
+- Do not mutate submitted Sales Invoices, Payment Entries, Stock Entries, or Stock Ledger Entries manually.
+- Do not create records by script.
+- Use normal Desk workflows only.
+- Do not use old patient outstanding invoices as current-service billing truth.
+- Record all document names in the QA register.
+- Rerun the read-only inventory after preparation and compare found/missing counts.
+
+#### Rerun Inventory Command
+
+```bash
+cd /home/olayemigod/frappe-bench
+env/bin/python apps/vetedge/tools/vetedge_qa_data_inventory.py \
+  --site vetedge.local \
+  --include-counts \
+  --include-samples \
+  --output /tmp/vetedge_qa_data_inventory.json
+
+python3 -m json.tool /tmp/vetedge_qa_data_inventory.json > /tmp/vetedge_qa_data_inventory.pretty.json
+```
+
+#### Missing Scenario QA Record Register
+
+| Scenario | Required Status | Prepared Record Name | Linked Invoice | Linked Payment Entry | Linked Stock Entry | Prepared By | Date | Verified By | Pass/Fail | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Consultation with posted dispensary Stock Entry reference | Consultation with submitted Stock Entry child reference |  |  |  |  |  |  |  |  |  |
+| Retain-payment resolution Pending Review | Resolution Pending Review |  |  |  |  |  |  |  |  |  |
+| Retain-payment resolution Approved | Resolution Approved |  |  |  |  |  |  |  |  |  |
+| Retain-payment resolution Completed | Consultation Cancelled; resolution Completed |  |  |  |  |  |  |  |  |  |
+| Reschedule resolution with linked appointment | Resolution Completed with linked appointment |  |  |  |  |  |  |  |  |  |
+| Refund Required Approved with evidence | Resolution Approved with evidence available |  |  |  |  |  |  |  |  |  |
+| Refund Required Completed with No Status Change | Resolution Completed; consultation unchanged |  |  |  |  |  |  |  |  |  |
+| Refund Required Completed with Cancel outcome | Resolution Completed; consultation Cancelled |  |  |  |  |  |  |  |  |  |
+| Issue Customer Credit Approved with evidence | Resolution Approved with evidence available |  |  |  |  |  |  |  |  |  |
+| Issue Customer Credit Completed with No Status Change | Resolution Completed; consultation unchanged |  |  |  |  |  |  |  |  |  |
+| Issue Customer Credit Completed with Cancel outcome | Resolution Completed; consultation Cancelled |  |  |  |  |  |  |  |  |  |
+| Admin Accounting Correction Completed with evidence | Resolution Completed; consultation unchanged |  |  |  |  |  |  |  |  |  |
+| Cancelled Lab Order with invoice history | Lab Order Cancelled |  |  |  |  |  |  |  |  |  |
+| Cancelled Vaccination with invoice history | Vaccination Cancelled |  |  |  |  |  |  |  |  |  |
+| Vaccination linked to consultation | Vaccination has consultation link |  |  |  |  |  |  |  |  |  |
+| Cancelled Hospitalisation with preserved history | Hospitalisation Cancelled |  |  |  |  |  |  |  |  |  |
+| Hospitalisation with stock/material issue reference | Hospitalisation has stock reference |  |  |  |  |  |  |  |  |  |
+| Cancelled Grooming Session with invoice history | Grooming Session Cancelled |  |  |  |  |  |  |  |  |  |
+| Cancelled Boarding Booking with invoice history | Boarding Booking Cancelled |  |  |  |  |  |  |  |  |  |
+| Boarding with charges | Booking/stay has charges |  |  |  |  |  |  |  |  |  |
+| Completed Appointment linked to consultation | Appointment Completed with consultation link |  |  |  |  |  |  |  |  |  |
+| No-show Appointment preserving links/notes | Appointment No Show with notes/context |  |  |  |  |  |  |  |  |  |
+
+#### Completion Rule
+
+Phase 10G is complete when every missing scenario has either a prepared record name or a documented deferral reason, the read-only inventory has been rerun, missing count is reduced or explained, no data was created outside normal Desk workflow, and no submitted accounting or stock document was manually mutated.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
