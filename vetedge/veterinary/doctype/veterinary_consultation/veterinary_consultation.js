@@ -696,10 +696,7 @@ function add_hospitalisation_actions(frm) {
 
 function add_billing_actions(frm) {
 	if (frm.doc.status !== "Cancelled") {
-		frm.add_custom_button(__("Billing / Payment"), async () => {
-			if (frm.is_dirty()) {
-				await frm.save();
-			}
+		frm.add_custom_button(__("Billing / Payment"), () => {
 			if (window.vetedgeBillingModal?.open) {
 				window.vetedgeBillingModal.open(frm);
 				return;
@@ -1085,27 +1082,6 @@ function render_lab_order_summary(dialog, order) {
 			</div>
 		</div>
 	`);
-}
-
-function create_consultation_invoice(frm) {
-	frappe.call({
-		method: "vetedge.services.billing.create_consultation_invoice",
-		args: {
-			consultation: frm.doc.name,
-		},
-		freeze: true,
-		freeze_message: __("Creating invoice..."),
-		callback(result) {
-			if (!result.message?.invoice) {
-				return;
-			}
-			frappe.show_alert({
-				message: result.message.is_draft_update ? __("Invoice updated") : __("Invoice created"),
-				indicator: "green",
-			});
-			frm.reload_doc();
-		},
-	});
 }
 
 function getConsultationInvoices(frm) {

@@ -790,9 +790,14 @@ class TestBillingModal(TestCase):
 	def test_consultation_billing_modal_blocks_dirty_plan_rows_before_opening(self):
 		js = get_app_file("vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js").read_text()
 		modal_js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+		billing_fn = js.split("function add_billing_actions(frm) {", 1)[1].split(
+			"function add_lab_actions(frm) {", 1
+		)[0]
 
-		self.assertIn('frm.add_custom_button(__("Billing / Payment"), async () => {', js)
-		self.assertIn("window.vetedgeBillingModal.open(frm)", js)
+		self.assertIn('frm.add_custom_button(__("Billing / Payment"), () => {', billing_fn)
+		self.assertIn("window.vetedgeBillingModal.open(frm)", billing_fn)
+		self.assertNotIn("frm.save(", billing_fn)
+		self.assertNotIn("await frm.save();", billing_fn)
 		self.assertIn("frm.is_dirty()", modal_js)
 		self.assertIn("Please save or discard changes before opening billing and payment.", modal_js)
 		self.assertNotIn("await frm.save();", modal_js)
