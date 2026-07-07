@@ -320,6 +320,135 @@ VetEdge workflows depend on ERPNext/Core access to `Customer`, `Item`, `Item Pri
 - Manual Desk QA is still required with real users for workspace visibility, Link field search/filtering, branch/company user-permission behavior, and ERPNext Role Permission Manager assignments for support DocTypes.
 - Recommended next phase: live role-login QA using the Phase 10C checklist plus the Phase 10D role matrix, starting with Doctor, Front Desk, Accounts/Cashier, Branch Manager, Lab Technician, Grooming/Boarding user, and Dispensary/Stock user.
 
+### Phase 10E Live Role Login QA Checklist
+
+Use this checklist to verify real Desk behavior with actual users and ERPNext Role Permission Manager/User Permission assignments. This is operational QA only; failures should be logged as defects and fixed separately.
+
+#### Test Users to Prepare
+
+Create one test user for each role group where possible.
+
+| Role group | User email | Assigned roles | Company | Branch | Warehouses | Staff/doctor/lab profile | User Permissions configured | Test status |
+|---|---|---|---|---|---|---|---|---|
+| VetEdge Administrator |  |  |  |  |  |  |  |  |
+| Branch Manager |  |  |  |  |  |  |  |  |
+| VetEdge Doctor |  |  |  |  |  |  |  |  |
+| VetEdge Front Desk |  |  |  |  |  |  |  |  |
+| Lab Technician / Lab User |  |  |  |  |  |  |  |  |
+| Grooming User |  |  |  |  |  |  |  |  |
+| Boarding User |  |  |  |  |  |  |  |  |
+| Accounts/Cashier |  |  |  |  |  |  |  |  |
+| Accounts User |  |  |  |  |  |  |  |  |
+| Accounts Manager |  |  |  |  |  |  |  |  |
+| Stock User / Dispensary User |  |  |  |  |  |  |  |  |
+| Read-only / Auditor, if used |  |  |  |  |  |  |  |  |
+
+#### ERPNext Support DocType Permission Checklist
+
+Confirm Role Permission Manager and User Permissions allow required read/use access without granting unsafe accounting or stock powers.
+
+Support DocTypes to check: `Customer`, `Item`, `Item Price`, `UOM`, `Warehouse`, `Batch`, `Stock Entry`, `Stock Ledger Entry`, `Bin`, `Sales Invoice`, `Sales Invoice Item`, `Payment Entry`, `Payment Entry Reference`, `Mode of Payment`, `Account`, `Company`, `Branch`, `Price List`, `File`, `Communication`, and `Comment`.
+
+- Doctor: can read/use relevant Item, Batch, UOM, Warehouse, and stock availability context; cannot directly submit/cancel/amend Sales Invoice, Payment Entry, or unrestricted Stock Entry.
+- Front Desk: can use patient/owner/appointment/registration records and view billing status where intended; cannot approve/complete accounting resolution.
+- Lab User: can use lab orders/results plus patient/item context; cannot mutate unrelated accounting.
+- Grooming/Boarding User: can use service records plus patient/owner/service context; cannot submit/cancel accounting documents.
+- Accounts/Cashier: can complete intended billing/payment workflow actions; cannot edit clinical diagnosis or treatment notes.
+- Branch Manager: can supervise branch records, reports, and allowed approvals; branch/company restrictions still apply where configured.
+- Stock/Dispensary User: can use stock/dispensary context where intended; cannot mutate submitted Stock Entry or Stock Ledger Entry.
+
+#### Workspace and Page Access Checklist
+
+For each role, verify the VetEdge/Veterinary workspace opens, relevant shortcuts/cards are visible, irrelevant admin/platform controls are hidden, final-status records can still be opened, and reports are visible only where appropriate.
+
+- Doctor: Veterinary Patient, Consultation, Medical History, Lab Orders, Vaccination, Vitals, Item/Batch/Warehouse context; no Veterinary Settings write; no accounting completion actions.
+- Front Desk: owner/customer registration, patient registration, appointments, check-in, billing status; no accounting approval/completion; no clinical diagnosis edit.
+- Accounts/Cashier: Billing / Payment modal, Sales Invoice visibility, Payment Entry visibility/actions where allowed, accounting-resolution completion where authorized; no clinical edit authority.
+- Branch Manager: branch records, operational reports, cancellation approval where authorized, branch billing oversight.
+- Lab User: Lab Orders, Lab Results, patient/consultation context, lab item context; no unrelated accounting mutation.
+- Grooming/Boarding User: grooming/boarding records, patient/owner context, service billing visibility where intended; no accounting submit/cancel.
+- Stock/Dispensary User: dispensary/stock context, Item/Batch/Warehouse visibility, Stock Entry view where intended; no unsafe submitted Stock Entry mutation.
+
+#### Link Field Behavior Checklist
+
+For each role and workflow, confirm Link fields are filtered and usable.
+
+- Doctor field shows valid doctors only.
+- Patient field shows relevant patients.
+- Owner/Customer field shows the correct owner/customer.
+- Branch field respects assigned branch.
+- Warehouse field shows relevant warehouses.
+- Batch field shows batches relevant to item/warehouse where possible.
+- Item field shows valid service/stock items.
+- Lab Test field shows valid lab tests.
+- Vaccine Item/Batch fields show valid vaccine context.
+- Grooming/Boarding service fields show relevant service items.
+- Payment Mode shows valid modes only for accounts/cashier roles where applicable.
+- Dependent fields clear/refresh when parent field changes.
+- Backend rejects invalid branch/company/warehouse combinations.
+- No lazy all-record loading occurs where contextual filtering is required.
+
+#### Workflow QA by Role
+
+- Doctor: open assigned consultation, view patient/owner/history, add clinical notes where allowed, view Item/Batch/Warehouse stock context, create/request lab/vaccine/treatment where allowed, open final-status consultation history, and confirm accounting actions are hidden/blocked.
+- Front Desk: create appointment, check in patient, open billing status, create/update registration where allowed, confirm cancellation accounting buttons are hidden, and confirm diagnosis/treatment edits are blocked.
+- Accounts/Cashier: open Billing / Payment, view current Billing Group history, view Patient Outstanding Context separately, pay outstanding where allowed, approve/complete allowed accounting resolution, and confirm clinical edits are blocked.
+- Branch Manager: open branch reports, approve allowed cancellation resolutions, view branch billing/operational records, and confirm cross-branch records are restricted where applicable.
+- Lab User: open lab order, update/post result where allowed, view patient/consultation context, and confirm billing mutation is not available unless intended.
+- Grooming/Boarding User: open service records, complete service actions where allowed, view final-status history, confirm Billing / Payment visibility where allowed, and confirm unrelated accounting submit/cancel is blocked.
+- Stock/Dispensary User: view dispensary item rows, view Stock Entry references, post/confirm stock only through the intended controlled flow, and confirm submitted Stock Entry mutation is blocked.
+
+#### Cancellation and Financial Resolution Role QA
+
+- Doctor/front desk can read cancellation resolution but cannot create/write/delete/approve/complete accounting resolution.
+- Accounts/admin/branch roles can approve where intended.
+- Retain-payment execution requires an authorized role.
+- Refund/credit/admin correction completion requires an authorized accounting/admin role.
+- External reference exception is allowed only for System Manager or Accounts Manager.
+- Reschedule execution follows scheduling role policy.
+- Final consultation status outcome buttons follow role policy.
+
+#### Final-Status History Role QA
+
+For each relevant role, confirm final-status records preserve Billing / Payment visibility where appropriate, invoice history, payment status, lab/vaccination links, hospitalisation charges/stock references, grooming/boarding history, appointment links, dispensary Stock Entry references, and clinical notes/history.
+
+Final statuses to test: Completed Consultation, Cancelled Consultation, Completed/Cancelled Lab Order, Administered/Cancelled Vaccination, Discharged/Cancelled Hospitalisation, Completed/Cancelled Grooming Session, Checked Out/Cancelled Boarding Booking, Completed Boarding Stay, and Completed/Cancelled/No Show Appointment.
+
+#### Accounting and Stock Safety Sign-Off
+
+For each role, confirm unauthorized users cannot submit, cancel, or amend Sales Invoice; submit or cancel Payment Entry; silently reallocate Payment Entry; submit Stock Entry outside the controlled flow; cancel/amend submitted Stock Entry; change Stock Ledger Entry; or edit Veterinary Settings.
+
+Also confirm opening Billing / Payment does not mutate submitted documents, opening stock/history views does not repost stock, and final-status records do not create duplicate invoices or Stock Entries.
+
+#### Branch / Company Safety Checklist
+
+- Users see only assigned branch/company records where applicable.
+- Link fields respect branch/company context.
+- Warehouses are branch/company appropriate.
+- Billing / Payment does not pull invoices from another branch as current service truth.
+- Patient Outstanding Context is separate and clearly labelled.
+- Backend rejects invalid cross-branch operations where expected.
+
+#### Live QA Sign-Off Table
+
+| Role | Test User | Branch/Company | Workflow Tested | Expected Result | Actual Result | Pass/Fail | Issue Link/Fix Needed | Notes |
+|---|---|---|---|---|---|---|---|---|
+| VetEdge Administrator |  |  |  |  |  |  |  |  |
+| Branch Manager |  |  |  |  |  |  |  |  |
+| VetEdge Doctor |  |  |  |  |  |  |  |  |
+| VetEdge Front Desk |  |  |  |  |  |  |  |  |
+| Lab Technician / Lab User |  |  |  |  |  |  |  |  |
+| Grooming User |  |  |  |  |  |  |  |  |
+| Boarding User |  |  |  |  |  |  |  |  |
+| Accounts/Cashier |  |  |  |  |  |  |  |  |
+| Accounts User |  |  |  |  |  |  |  |  |
+| Accounts Manager |  |  |  |  |  |  |  |  |
+| Stock User / Dispensary User |  |  |  |  |  |  |  |  |
+
+#### Rollout Decision Rule
+
+VetEdge role/permission stabilization should not be considered operationally signed off until Doctor users can complete clinical workflow without support DocType permission errors; Front Desk can complete appointment/registration/check-in workflow; Accounts/Cashier can complete billing/payment workflow; Lab, Grooming, Boarding, and Stock/Dispensary users can complete service workflows; unauthorized accounting/stock actions remain blocked; branch/company restrictions are confirmed; and final-status history remains visible across roles.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
