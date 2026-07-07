@@ -2463,6 +2463,121 @@ class TestBillingCore(TestCase):
 		self.assertEqual(history[0]["relation_type"], "related_service")
 		self.assertEqual(history[0]["payment_state"], "Paid")
 
+	def test_billing_group_matrix_returns_only_explicit_current_service_invoices(self):
+		service_cases = (
+			("Veterinary Consultation", "VCON-MATRIX", "consultation-fee"),
+			("Veterinary Lab Order", "VLAB-MATRIX", "lab-test"),
+			("Veterinary Vaccination Record", "VVAC-MATRIX", "vaccine"),
+			("Veterinary Hospitalisation", "VHOS-MATRIX", "daily-care"),
+			("Pet Grooming Session", "PGS-MATRIX", "grooming"),
+			("Pet Boarding Booking", "PBB-MATRIX", "boarding"),
+		)
+
+		for source_doctype, source_name, key_prefix in service_cases:
+			with self.subTest(source_doctype=source_doctype):
+				submitted_invoice = f"SINV-{source_name}-SUB"
+				draft_invoice = f"SINV-{source_name}-DRAFT"
+				old_patient_invoice = f"SINV-{source_name}-OLD"
+				session = make_session(
+					name=f"VBS-{source_name}",
+					source_context_doctype=source_doctype,
+					source_context_name=source_name,
+					created_from_doctype=source_doctype,
+					created_from_name=source_name,
+					current_draft_invoice=draft_invoice,
+					latest_invoice=draft_invoice,
+					charges=[
+						frappe._dict(
+							{
+								**charge_payload(f"{source_doctype}:{source_name}:{key_prefix}-1", "ITEM-PAID", 100),
+								"source_doctype": source_doctype,
+								"source_name": source_name,
+								"invoice": submitted_invoice,
+								"billing_status": "Submitted Invoiced",
+							}
+						),
+						frappe._dict(
+							{
+								**charge_payload(f"{source_doctype}:{source_name}:{key_prefix}-2", "ITEM-DRAFT", 50),
+								"source_doctype": source_doctype,
+								"source_name": source_name,
+								"invoice": draft_invoice,
+								"billing_status": "Draft Invoiced",
+							}
+						),
+						frappe._dict(
+							{
+								**charge_payload(f"{source_doctype}:{source_name}:{key_prefix}-duplicate", "ITEM-PAID", 100),
+								"source_doctype": source_doctype,
+								"source_name": source_name,
+								"invoice": submitted_invoice,
+								"billing_status": "Submitted Invoiced",
+							}
+						),
+					],
+				)
+				invoices = {
+					submitted_invoice: make_invoice(submitted_invoice, docstatus=1, outstanding_amount=0),
+					draft_invoice: make_invoice(draft_invoice, docstatus=0, outstanding_amount=50),
+					old_patient_invoice: make_invoice(old_patient_invoice, docstatus=1, outstanding_amount=25),
+				}
+
+				with multi_invoice_billing_context(
+					session,
+					invoices,
+					{submitted_invoice: 100, draft_invoice: 0, old_patient_invoice: 75},
+				):
+					history = billing_core.get_billing_group_invoice_history(
+						source_doctype,
+						source_name,
+						sessions=[session],
+					)
+
+				self.assertEqual([row["name"] for row in history], [submitted_invoice, draft_invoice])
+				self.assertEqual(len({row["name"] for row in history}), 2)
+				self.assertNotIn(old_patient_invoice, [row["name"] for row in history])
+				self.assertEqual(history[0]["payment_state"], "Paid")
+				self.assertEqual(history[1]["payment_state"], "Draft")
+
+	def test_legacy_direct_link_matrix_uses_only_explicit_source_invoice_fields(self):
+		service_cases = (
+			("Veterinary Lab Order", "VLAB-LEGACY", "linked_invoice"),
+			("Veterinary Vaccination Record", "VVAC-LEGACY", "linked_invoice"),
+			("Veterinary Hospitalisation", "VHOS-LEGACY", "sales_invoice"),
+			("Pet Grooming Session", "PGS-LEGACY", "linked_invoice"),
+			("Pet Boarding Booking", "PBB-LEGACY", "linked_invoice"),
+		)
+
+		for source_doctype, source_name, invoice_field in service_cases:
+			with self.subTest(source_doctype=source_doctype):
+				current_invoice = f"SINV-{source_name}-CURRENT"
+				old_patient_invoice = f"SINV-{source_name}-OLD"
+				invoices = {
+					current_invoice: make_invoice(current_invoice, docstatus=1, outstanding_amount=0),
+					old_patient_invoice: make_invoice(old_patient_invoice, docstatus=1, outstanding_amount=80),
+				}
+
+				def get_value(doctype, name, fieldname=None, **kwargs):
+					if doctype == source_doctype and name == source_name and fieldname == invoice_field:
+						return current_invoice
+					if doctype == "Sales Invoice" and fieldname == "docstatus":
+						return invoices[name].docstatus
+					return None
+
+				with (
+					multi_invoice_billing_context(make_session(), invoices, {current_invoice: 100}),
+					patch.object(billing_core, "doctype_has_field", return_value=True),
+					patch.object(billing_core.frappe.db, "get_value", side_effect=get_value),
+				):
+					history = billing_core.get_billing_group_invoice_history(
+						source_doctype,
+						source_name,
+						include_related=False,
+					)
+
+				self.assertEqual([row["name"] for row in history], [current_invoice])
+				self.assertNotIn(old_patient_invoice, [row["name"] for row in history])
+
 	def test_consultation_invoice_references_are_merged_from_billing_group_history(self):
 		consultation = frappe._dict(
 			doctype="Veterinary Consultation",

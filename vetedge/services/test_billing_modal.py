@@ -521,6 +521,8 @@ class TestBillingModal(TestCase):
 
 	def test_final_status_sources_return_invoice_history_without_creating_invoices(self):
 		final_sources = (
+			("Veterinary Consultation", "VCON-COMPLETED", "Completed"),
+			("Veterinary Consultation", "VCON-CANCELLED", "Cancelled"),
 			("Veterinary Lab Order", "VLAB-COMPLETE", "Completed"),
 			("Veterinary Lab Order", "VLAB-CANCELLED", "Cancelled"),
 			("Veterinary Vaccination Record", "VVAC-ADMIN", "Administered"),
@@ -530,6 +532,7 @@ class TestBillingModal(TestCase):
 			("Pet Boarding Booking", "PBB-CHECKED-OUT", "Checked Out"),
 			("Pet Boarding Booking", "PBB-CANCELLED", "Cancelled"),
 			("Veterinary Hospitalisation", "VHOS-DISCHARGED", "Discharged"),
+			("Veterinary Hospitalisation", "VHOS-CANCELLED", "Cancelled"),
 		)
 
 		for source_doctype, source_name, status in final_sources:
@@ -592,6 +595,106 @@ class TestBillingModal(TestCase):
 				self.assertEqual(state["outstanding_amount"], 7000)
 				self.assertTrue(state["actions"]["can_record_payment"])
 				get_invoice.assert_called_once_with("SINV-FINAL")
+
+	def test_cross_service_modal_matrix_keeps_outstanding_context_separate_from_history(self):
+		source_cases = (
+			("Veterinary Consultation", "VCON-MATRIX", "Open"),
+			("Veterinary Lab Order", "VLAB-MATRIX", "Completed"),
+			("Veterinary Vaccination Record", "VVAC-MATRIX", "Administered"),
+			("Veterinary Hospitalisation", "VHOS-MATRIX", "Discharged"),
+			("Pet Grooming Session", "PGS-MATRIX", "Completed"),
+			("Pet Boarding Booking", "PBB-MATRIX", "Checked Out"),
+		)
+
+		for source_doctype, source_name, status in source_cases:
+			with self.subTest(source_doctype=source_doctype):
+				owner_field = "customer" if source_doctype == "Veterinary Hospitalisation" else "primary_owner"
+				invoice_field = "sales_invoice" if source_doctype == "Veterinary Hospitalisation" else "linked_invoice"
+				current_paid = f"SINV-{source_name}-PAID"
+				current_draft = f"SINV-{source_name}-DRAFT"
+				old_outstanding = f"SINV-{source_name}-OLD"
+				source = frappe._dict(
+					doctype=source_doctype,
+					name=source_name,
+					status=status,
+					patient="VP-001",
+					service_branch="Main",
+					company="VetEdge Co",
+					**{owner_field: "CUST-001", invoice_field: current_draft},
+				)
+				invoice_summary = {
+					"name": current_draft,
+					"docstatus": 0,
+					"is_draft": True,
+					"grand_total": 4000,
+					"paid_amount": 0,
+					"outstanding_amount": 4000,
+					"payment_status": "Draft",
+				}
+				history = [
+					{
+						"name": current_paid,
+						"invoice": current_paid,
+						"docstatus": 1,
+						"grand_total": 10000,
+						"paid_amount": 10000,
+						"outstanding_amount": 0,
+						"payment_state": "Paid",
+						"can_open_invoice": True,
+						"can_pay_outstanding": False,
+					},
+					{
+						"name": current_draft,
+						"invoice": current_draft,
+						"docstatus": 0,
+						"grand_total": 4000,
+						"paid_amount": 0,
+						"outstanding_amount": 4000,
+						"payment_state": "Draft",
+						"can_open_invoice": True,
+						"can_submit_invoice": True,
+					},
+				]
+				outstanding = [
+					{
+						"name": old_outstanding,
+						"invoice": old_outstanding,
+						"docstatus": 1,
+						"grand_total": 6000,
+						"paid_amount": 0,
+						"outstanding_amount": 6000,
+						"payment_state": "Unpaid",
+						"context_type": "patient_outstanding",
+						"informational_only": True,
+						"does_not_satisfy_current_gate": True,
+						"can_open_invoice": True,
+						"can_pay_outstanding": True,
+					}
+				]
+
+				with (
+					patch.object(billing_modal, "require_internal_user"),
+					patch.object(billing_modal.frappe, "get_doc", return_value=source),
+					patch.object(billing_modal, "assert_can_read_source"),
+					patch.object(billing_modal, "get_linked_invoice_name", return_value=current_draft),
+					patch.object(billing_modal, "get_invoice_summary", return_value=invoice_summary),
+					patch.object(billing_modal, "get_payment_modes", return_value=[]),
+					patch.object(billing_modal, "get_billing_session_summary_for_source", return_value=None),
+					patch.object(billing_modal, "get_billing_group_history_for_modal", return_value=history),
+					patch.object(billing_modal, "get_patient_outstanding_context_for_modal", return_value=outstanding),
+					patch.object(billing_modal, "get_billing_group_payment_gate_for_modal", return_value={"gate": "Partial Payment Gate", "can_proceed": True, "message": "Payment gate passed."}),
+				):
+					state = billing_modal.get_billing_modal_state(source_doctype, source_name)
+
+				self.assertEqual([row["name"] for row in state["invoice_history"]], [current_paid, current_draft])
+				self.assertEqual([row["name"] for row in state["patient_outstanding_context"]], [old_outstanding])
+				self.assertNotIn(old_outstanding, state["linked_invoices"])
+				self.assertEqual(state["linked_invoice_count"], 2)
+				self.assertEqual(state["total_amount"], 14000)
+				self.assertEqual(state["paid_amount"], 10000)
+				self.assertEqual(state["outstanding_amount"], 4000)
+				self.assertTrue(state["patient_outstanding_context"][0]["informational_only"])
+				self.assertTrue(state["patient_outstanding_context"][0]["does_not_satisfy_current_gate"])
 
 	def test_billing_modal_js_renders_session_payment_summary(self):
 		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
