@@ -449,6 +449,96 @@ Also confirm opening Billing / Payment does not mutate submitted documents, open
 
 VetEdge role/permission stabilization should not be considered operationally signed off until Doctor users can complete clinical workflow without support DocType permission errors; Front Desk can complete appointment/registration/check-in workflow; Accounts/Cashier can complete billing/payment workflow; Lab, Grooming, Boarding, and Stock/Dispensary users can complete service workflows; unauthorized accounting/stock actions remain blocked; branch/company restrictions are confirmed; and final-status history remains visible across roles.
 
+### Phase 10F Operational QA Data Pack
+
+Phase 10F defines the representative records needed for live Desk operational QA and adds a read-only inventory helper. The goal is to identify usable candidate records on `vetedge.local` or staging without creating, submitting, cancelling, deleting, or repairing business data.
+
+#### Data Pack Purpose
+
+Prepare candidate records for testing cancellation workflows, Billing Group behavior, final-status history visibility, role permissions, stock/dispensary references, and branch/company filtering. Candidate records from the helper are inventory suggestions only; the QA owner must still open and validate each record before using it for sign-off.
+
+#### Read-Only Helper
+
+Helper created: `tools/vetedge_qa_data_inventory.py`.
+
+Run from the bench root:
+
+```bash
+cd /home/olayemigod/frappe-bench
+env/bin/python apps/vetedge/tools/vetedge_qa_data_inventory.py \
+  --site vetedge.local \
+  --include-counts \
+  --include-samples \
+  --output /tmp/vetedge_qa_data_inventory.json
+```
+
+Safety limits:
+
+- Read-only inventory only.
+- No invoices, payments, stock entries, appointments, consultations, or clinical records are created.
+- No submitted Sales Invoice, Payment Entry, Stock Entry, or Stock Ledger Entry is changed.
+- Missing scenarios are reported as `missing`; the tool does not invent or backfill records.
+- Candidate records are labelled as QA candidates, not validated workflow truth.
+- No QA data generator was added in this phase.
+
+#### Required QA Scenario Groups
+
+| Group | Required candidate records |
+|---|---|
+| Consultation | active no invoice, active draft invoice, submitted unpaid invoice, partly paid invoice, fully paid invoice, completed with invoice history, cancelled with invoice history, multiple linked invoices, old patient outstanding separate from current service, posted dispensary Stock Entry reference |
+| Cancellation resolution | retain-payment Pending Review, retain-payment Approved, retain-payment Completed, reschedule with linked appointment, refund Approved with evidence, refund Completed no-status-change, refund Completed cancel outcome, credit Approved with evidence, credit Completed no-status-change, credit Completed cancel outcome, admin correction Completed with evidence |
+| Lab | completed with invoice history, cancelled with invoice history, linked to consultation, old patient outstanding separate from current billing group |
+| Vaccination | administered with invoice history, cancelled with invoice history, vaccine stock/batch/warehouse context, linked to consultation, old patient outstanding separate from current billing group |
+| Hospitalisation | active with charges, discharged with invoice history, cancelled with preserved charges/history, stock/material issue reference, care location/occupancy history, old patient outstanding separate from current billing group |
+| Grooming | completed session with invoice history, cancelled session with invoice history, appointment/session linked to patient/owner, old patient outstanding separate from current billing group |
+| Boarding | checked-out booking with invoice history, cancelled booking with invoice history, completed stay with care records, boarding with charges, old patient outstanding separate from current billing group |
+| Appointment | scheduled, completed linked to consultation, cancelled preserving links/notes, no-show preserving links/notes, reschedule-created appointment linked from cancellation resolution |
+| ERPNext support data | Customer/owner, Veterinary Patient, consultation/lab/vaccine/grooming/boarding/dispensary Items, Item Price, UOM, Warehouse, Batch, Mode of Payment, Account, Company, Branch, Price List, Stock Entry, Payment Entry, Sales Invoice, Journal Entry or other accounting evidence reference |
+| Test users | VetEdge Administrator, Branch Manager, Doctor, Front Desk, Accounts/Cashier, Accounts User, Accounts Manager, Lab User, Grooming User, Boarding User, Stock/Dispensary User |
+
+#### Actual QA Record Register
+
+| Scenario | Candidate Document | Status | Validated By | Notes |
+|---|---|---|---|---|
+| Active consultation with no invoice |  |  |  |  |
+| Active consultation with draft invoice |  |  |  |  |
+| Consultation with submitted unpaid invoice |  |  |  |  |
+| Consultation with submitted partly paid invoice |  |  |  |  |
+| Consultation with submitted fully paid invoice |  |  |  |  |
+| Completed consultation with invoice history |  |  |  |  |
+| Cancelled consultation with invoice history |  |  |  |  |
+| Consultation with multiple linked invoices |  |  |  |  |
+| Consultation with old patient outstanding separate from current service |  |  |  |  |
+| Consultation with posted dispensary Stock Entry reference |  |  |  |  |
+| Retain-payment resolution Pending Review |  |  |  |  |
+| Retain-payment resolution Approved |  |  |  |  |
+| Retain-payment resolution Completed |  |  |  |  |
+| Reschedule resolution with linked appointment |  |  |  |  |
+| Refund Required Approved with accounting evidence |  |  |  |  |
+| Refund Required Completed with No Status Change |  |  |  |  |
+| Refund Required Completed with Cancel outcome |  |  |  |  |
+| Issue Customer Credit Completed with No Status Change |  |  |  |  |
+| Issue Customer Credit Completed with Cancel outcome |  |  |  |  |
+| Admin Accounting Correction Completed with evidence |  |  |  |  |
+| Completed Lab Order with invoice history |  |  |  |  |
+| Cancelled Lab Order with invoice history |  |  |  |  |
+| Administered Vaccination with invoice history |  |  |  |  |
+| Cancelled Vaccination with invoice history |  |  |  |  |
+| Discharged Hospitalisation with invoice/stock history |  |  |  |  |
+| Completed Grooming Session with invoice history |  |  |  |  |
+| Checked-out Boarding Booking with invoice history |  |  |  |  |
+| Completed Boarding Stay with care records |  |  |  |  |
+| Completed Appointment linked to consultation |  |  |  |  |
+| No-show Appointment preserving links/notes |  |  |  |  |
+
+#### Remaining Manual Steps
+
+- Run the helper on the target QA site and save the JSON output with the rollout QA evidence.
+- Fill the Actual QA Record Register with selected document names.
+- Manually create missing records only through normal Desk workflows; do not use shortcuts that bypass ERPNext accounting or stock.
+- Use the Phase 10C and Phase 10E checklists to validate the selected records by role.
+- Recommended next phase: live Desk QA execution using the generated inventory plus real role logins.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
