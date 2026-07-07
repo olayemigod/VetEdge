@@ -217,6 +217,68 @@ class TestBillingModal(TestCase):
 		self.assertIn("state?.actions?.open_invoice_name", js)
 		self.assertNotIn("Open Full Invoice", js)
 
+	def test_billing_modal_js_uses_edgesuite_vetedge_modal_styling(self):
+		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+
+		self.assertIn('data-edge-product="vetedge"', js)
+		self.assertIn("ve-billing-edge-modal", js)
+		self.assertIn("VetEdge Billing", js)
+		self.assertIn("Source Summary", js)
+		self.assertIn("Warnings / Blockers", js)
+		self.assertIn("Line Items", js)
+		self.assertIn("renderLoadingState", js)
+		self.assertIn("renderEmptyState", js)
+		self.assertIn("renderErrorState", js)
+
+	def test_billing_modal_js_does_not_mutate_records_on_open_or_close(self):
+		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+		for forbidden in (
+			"frm.save(",
+			"frappe.client.insert",
+			"frappe.db.set_value",
+			"frappe.client.set_value",
+			"frappe.client.delete",
+			"delete_doc",
+		):
+			self.assertNotIn(forbidden, js)
+
+		self.assertIn("Please save or discard changes before opening billing and payment.", js)
+		self.assertIn("primary_action_label: __(\"Close\")", js)
+		self.assertIn("dialog.hide();", js)
+
+	def test_billing_modal_js_keeps_actions_backend_owned(self):
+		js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
+
+		self.assertIn("actions.can_create_or_update_invoice", js)
+		self.assertIn("actions.can_submit_invoice", js)
+		self.assertIn("actions.can_record_payment", js)
+		self.assertIn("actions.can_open_full_invoice", js)
+		self.assertIn("row.can_pay_outstanding || row.can_pay", js)
+		self.assertIn("row.can_submit_invoice", js)
+		self.assertNotIn("Partially Paid", js)
+		self.assertNotIn("window.EdgeUI", js)
+		self.assertNotIn("EdgeAppShell", js)
+		self.assertNotIn("EdgeStatusBadge", js)
+
+	def test_source_summary_includes_company_context(self):
+		config = billing_modal.get_billing_source_config("Veterinary Hospitalisation")
+		doc = frappe._dict(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			status="Under Care",
+			patient="VP-001",
+			customer="CUST-001",
+			service_branch="Main",
+			company="VetEdge Co",
+		)
+
+		with (
+			patch.object(billing_modal, "get_display_value", side_effect=lambda doctype, name, fieldname=None: name),
+		):
+			source = billing_modal.build_source_summary(doc, config)
+
+		self.assertEqual(source["company"], "VetEdge Co")
+
 	def test_billing_modal_totals_use_session_ledger_and_keep_current_invoice_separate(self):
 		invoice_summary = {
 			"name": "SINV-DRAFT",
@@ -725,11 +787,15 @@ class TestBillingModal(TestCase):
 				self.assertIn("vetedgeBillingModal", js)
 				self.assertIn("window.vetedgeBillingModal.open(frm)", js)
 
-	def test_consultation_billing_modal_saves_dirty_plan_rows_first(self):
+	def test_consultation_billing_modal_blocks_dirty_plan_rows_before_opening(self):
 		js = get_app_file("vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js").read_text()
+		modal_js = get_app_file("vetedge/public/js/billing_modal.js").read_text()
 
 		self.assertIn('frm.add_custom_button(__("Billing / Payment"), async () => {', js)
-		self.assertLess(js.index("await frm.save();"), js.index("window.vetedgeBillingModal.open(frm)"))
+		self.assertIn("window.vetedgeBillingModal.open(frm)", js)
+		self.assertIn("frm.is_dirty()", modal_js)
+		self.assertIn("Please save or discard changes before opening billing and payment.", modal_js)
+		self.assertNotIn("await frm.save();", modal_js)
 
 	def test_completed_consultation_keeps_history_actions_visible(self):
 		js = get_app_file("vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.js").read_text()

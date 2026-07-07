@@ -200,6 +200,7 @@ def build_source_summary(doc, config: BillingSourceConfig) -> dict:
 		"owner": owner,
 		"owner_name": get_display_value("Customer", owner, "customer_name"),
 		"service_branch": branch,
+		"company": doc.get("company"),
 	}
 
 
