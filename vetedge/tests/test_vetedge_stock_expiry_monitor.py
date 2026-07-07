@@ -4,6 +4,7 @@
 
 import os
 import json
+from collections import Counter
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -163,3 +164,40 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			for forbidden in ("frappe.db.set_value", "frappe.client.set_value", "frappe.client.insert", "frappe.client.delete", "save(", "submit(", "delete_doc"):
 				self.assertNotIn(forbidden, content)
 
+	def test_stock_expiry_monitor_is_discoverable_from_standard_navigation(self):
+		"""Verify Phase 2F navigation exposes the monitor with the standard label and route."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		workspace_path = os.path.join(
+			vetedge_path,
+			"veterinary",
+			"workspace",
+			"veterinary_financial_dashboard",
+			"veterinary_financial_dashboard.json",
+		)
+		sidebar_path = os.path.join(vetedge_path, "workspace_sidebar", "vetedge.json")
+		with open(workspace_path, "r") as f:
+			workspace = json.load(f)
+		with open(sidebar_path, "r") as f:
+			sidebar = json.load(f)
+
+		expected_groups = ["Dashboard", "Operations", "Records", "Reports", "Settings"]
+		workspace_groups = [row["label"] for row in workspace["links"] if row.get("type") == "Card Break"]
+		sidebar_groups = [row["label"] for row in sidebar["items"] if row.get("type") == "Section Break"]
+		self.assertEqual(workspace_groups, expected_groups)
+		self.assertEqual(sidebar_groups, expected_groups)
+
+		for rows in (workspace["links"], sidebar["items"]):
+			links = {
+				row["label"]: row
+				for row in rows
+				if row.get("type") == "Link"
+			}
+			self.assertIn("Stock Expiry Monitor", links)
+			self.assertEqual(links["Stock Expiry Monitor"]["link_type"], "Page")
+			self.assertEqual(links["Stock Expiry Monitor"]["link_to"], "stock-expiry-monitor")
+			counts = Counter(
+				(row.get("link_type"), row.get("link_to"))
+				for row in rows
+				if row.get("type") == "Link"
+			)
+			self.assertFalse([key for key, count in counts.items() if key[1] and count > 1])

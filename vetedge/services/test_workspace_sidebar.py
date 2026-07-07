@@ -55,21 +55,26 @@ class TestWorkspaceSidebar(TestCase):
 	def test_hospitalisation_navigation_is_grouped_in_dedicated_section(self):
 		items = _load_sidebar()["items"]
 		labels = [item.get("label") for item in items]
-		hospitalisation_index = labels.index("Hospitalisation")
-		grooming_index = labels.index("Pet Grooming")
+		operations_index = labels.index("Operations")
+		records_index = labels.index("Records")
+		reports_index = labels.index("Reports")
 
 		for label in (
 			"Hospitalisation Dashboard",
 			"Hospitalisations",
-			"Care Locations",
+		):
+			self.assertGreater(labels.index(label), operations_index)
+			self.assertLess(labels.index(label), records_index)
+		self.assertGreater(labels.index("Care Locations"), records_index)
+		self.assertLess(labels.index("Care Locations"), reports_index)
+		for label in (
 			"Active Hospitalisations",
 			"Hospitalisation Charge Summary",
 			"Care Location Occupancy",
 			"Hospitalisation Discharge Watch",
 			"Pending Hospitalisation Actions",
 		):
-			self.assertGreater(labels.index(label), hospitalisation_index)
-			self.assertLess(labels.index(label), grooming_index)
+			self.assertGreater(labels.index(label), reports_index)
 
 		link = _links_by_label(items)["Hospitalisations"]
 		self.assertEqual(link["link_to"], "Veterinary Hospitalisation")
@@ -82,8 +87,8 @@ class TestWorkspaceSidebar(TestCase):
 		labels = [item.get("label") for item in items]
 		links = _links_by_label(items)
 		self.assertIn("Hospitalisation Dashboard", links)
-		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Hospitalisation"))
-		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Pet Grooming"))
+		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Operations"))
+		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Records"))
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_to"], "veterinary-hospitalisation-dashboard")
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_type"], "Page")
 
@@ -105,8 +110,8 @@ class TestWorkspaceSidebar(TestCase):
 		labels = [item.get("label") for item in items]
 		item_index = labels.index("Notification Items")
 
-		self.assertGreater(item_index, labels.index("Veterinary Records"))
-		self.assertLess(item_index, labels.index("Hospitalisation"))
+		self.assertGreater(item_index, labels.index("Records"))
+		self.assertLess(item_index, labels.index("Reports"))
 
 		link = _links_by_label(items)["Notification Items"]
 		self.assertEqual(link["link_to"], "Veterinary Notification Item")
@@ -142,8 +147,7 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertEqual(len(matches), 1)
 		index, link = matches[0]
 		self.assertEqual(link["label"], "Consultation Types")
-		self.assertGreater(index, labels.index("Veterinary Masters"))
-		self.assertLess(index, labels.index("Reports"))
+		self.assertGreater(index, labels.index("Settings"))
 
 	def test_patient_link_is_only_under_vetedge_records(self):
 		items = _load_sidebar()["items"]
@@ -155,7 +159,8 @@ class TestWorkspaceSidebar(TestCase):
 		]
 
 		self.assertEqual(len(patient_indexes), 1)
-		self.assertGreater(patient_indexes[0], labels.index("Veterinary Records"))
+		self.assertGreater(patient_indexes[0], labels.index("Records"))
+		self.assertLess(patient_indexes[0], labels.index("Reports"))
 		self.assertEqual(items[patient_indexes[0]]["icon"], "users-round")
 
 	def test_notification_item_label_uses_vetedge_navigation_language(self):
@@ -170,7 +175,7 @@ class TestWorkspaceSidebar(TestCase):
 			if item.get("type") == "Section Break"
 		}
 
-		for label in ("Dashboards", "Veterinary Records", "Hospitalisation", "Pet Grooming", "Pet Boarding", "Veterinary Masters", "Reports", "Billing", "Setup"):
+		for label in ("Dashboard", "Operations", "Records", "Reports", "Settings"):
 			self.assertEqual(sections[label]["collapsible"], 1)
 			self.assertEqual(sections[label]["keep_closed"], 1)
 			self.assertEqual(sections[label]["show_arrow"], 0)
@@ -180,27 +185,18 @@ class TestWorkspaceSidebar(TestCase):
 		top_level = [item.get("label") for item in items if not item.get("child")]
 		sections = [item.get("label") for item in items if item.get("type") == "Section Break"]
 		expected_top_level = [
-			"Executive Dashboard",
-			"Dashboards",
-			"Veterinary Records",
-			"Hospitalisation",
-			"Pet Grooming",
-			"Pet Boarding",
-			"Veterinary Masters",
+			"Dashboard",
+			"Operations",
+			"Records",
 			"Reports",
-			"Billing",
-			"Setup",
+			"Settings",
 		]
 		expected_sections = [
-			"Dashboards",
-			"Veterinary Records",
-			"Hospitalisation",
-			"Pet Grooming",
-			"Pet Boarding",
-			"Veterinary Masters",
+			"Dashboard",
+			"Operations",
+			"Records",
 			"Reports",
-			"Billing",
-			"Setup"
+			"Settings",
 		]
 		self.assertEqual(top_level, expected_top_level)
 		self.assertEqual(sections, expected_sections)
@@ -245,11 +241,11 @@ class TestWorkspaceSidebar(TestCase):
 		report_index = labels.index("Reports")
 		stock_usage_index = labels.index("Stock Usage Summary")
 		expiry_index = labels.index("Stock Expiry Status")
-		billing_index = labels.index("Billing")
+		settings_index = labels.index("Settings")
 
 		self.assertGreater(expiry_index, report_index)
 		self.assertGreater(expiry_index, stock_usage_index)
-		self.assertLess(expiry_index, billing_index)
+		self.assertLess(expiry_index, settings_index)
 		link = _links_by_label(items)["Stock Expiry Status"]
 		self.assertEqual(link["link_to"], "Stock Expiry Status")
 		self.assertEqual(link["link_type"], "Report")
@@ -266,26 +262,28 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertNotIn("VetEdge Executive Dashboard", links)
 		self.assertEqual(links["Executive Dashboard"]["link_to"], "vetedge-executive-dashboard")
 
-		# 2. Records section label is "Veterinary Records"
-		self.assertIn("Veterinary Records", labels)
+		# 2. Records section uses the EdgeSuite standard group label
+		self.assertIn("Records", labels)
 		self.assertNotIn("VetEdge Records", labels)
+		self.assertNotIn("Veterinary Records", labels)
 
-		# 3. Masters section label is "Veterinary Masters"
-		self.assertIn("Veterinary Masters", labels)
+		# 3. Setup section uses the EdgeSuite standard group label
+		self.assertIn("Settings", labels)
 		self.assertNotIn("VetEdge Masters", labels)
+		self.assertNotIn("Veterinary Masters", labels)
 
 		# 4. Role Bundle label is "Role Bundle"
 		self.assertIn("Role Bundle", links)
 		self.assertNotIn("VetEdge Role Bundle", links)
 		self.assertEqual(links["Role Bundle"]["link_to"], "Veterinary Role Bundle")
 
-		# 5. Setup link labels do not start with "VetEdge " or "Veterinary "
-		setup_index = labels.index("Setup")
+		# 5. Settings link labels do not start with "VetEdge " or "Veterinary "
+		setup_index = labels.index("Settings")
 		for item in items[setup_index + 1:]:
 			if item.get("type") == "Link" and item.get("label"):
 				label = item.get("label")
-				self.assertFalse(label.startswith("VetEdge "), f"Label '{label}' under Setup starts with VetEdge")
-				self.assertFalse(label.startswith("Veterinary "), f"Label '{label}' under Setup starts with Veterinary")
+				self.assertFalse(label.startswith("VetEdge "), f"Label '{label}' under Settings starts with VetEdge")
+				self.assertFalse(label.startswith("Veterinary "), f"Label '{label}' under Settings starts with Veterinary")
 
 		# 6. "link_to" targets remain unchanged and valid
 		self.assertEqual(links["Settings"]["link_to"], "Veterinary Settings")
@@ -364,32 +362,22 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertNotIn("Stale Link", labels)
 		self.assertIn("Patients", labels)
 
-		# Test required section order exactly:
-		# Executive Dashboard, Dashboards, Veterinary Records, Hospitalisation, Pet Grooming, Pet Boarding, Veterinary Masters, Reports, Billing, Setup
+		# Test required EdgeSuite section order exactly.
 		top_level = [i.label for i in doc.items if not i.child]
 		sections = [i.label for i in doc.items if i.type == "Section Break"]
 		expected_top_level = [
-			"Executive Dashboard",
-			"Dashboards",
-			"Veterinary Records",
-			"Hospitalisation",
-			"Pet Grooming",
-			"Pet Boarding",
-			"Veterinary Masters",
+			"Dashboard",
+			"Operations",
+			"Records",
 			"Reports",
-			"Billing",
-			"Setup",
+			"Settings",
 		]
 		expected_sections = [
-			"Dashboards",
-			"Veterinary Records",
-			"Hospitalisation",
-			"Pet Grooming",
-			"Pet Boarding",
-			"Veterinary Masters",
+			"Dashboard",
+			"Operations",
+			"Records",
 			"Reports",
-			"Billing",
-			"Setup"
+			"Settings",
 		]
 		# Ensure no extra Platform Settings top-level section appears unless explicitly configured (it is hidden/removed in standard non-coreedge boot/sync)
 		self.assertNotIn("Platform Settings", sections)
@@ -399,21 +387,19 @@ class TestWorkspaceSidebar(TestCase):
 	def test_bootinfo_sidebar_keys_use_canonical_vetedge_sidebar(self):
 		import frappe.boot
 		from vetedge.coreedge_adapter import filter_bootinfo_for_coreedge_platform
+		from vetedge.install.dashboard import ensure_vetedge_workspace_sidebar
+
+		ensure_vetedge_workspace_sidebar()
 
 		bootinfo = frappe.boot.get_bootinfo()
 		filter_bootinfo_for_coreedge_platform(bootinfo)
 
 		expected_top_level = [
-			"Executive Dashboard",
-			"Dashboards",
-			"Veterinary Records",
-			"Hospitalisation",
-			"Pet Grooming",
-			"Pet Boarding",
-			"Veterinary Masters",
+			"Dashboard",
+			"Operations",
+			"Records",
 			"Reports",
-			"Billing",
-			"Setup",
+			"Settings",
 		]
 
 		for key in ("vetedge", "veterinary"):
@@ -430,5 +416,5 @@ class TestWorkspaceSidebar(TestCase):
 			self.assertEqual(len(patient_items), 1)
 			self.assertGreater(
 				[item.get("label") for item in items].index(patient_items[0]["label"]),
-				[item.get("label") for item in items].index("Veterinary Records"),
+				[item.get("label") for item in items].index("Records"),
 			)
