@@ -10,72 +10,58 @@ frappe.pages['stock-expiry-monitor'].on_page_load = function(wrapper) {
 frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 
-	// Track visit IDs offensively to ignore stale callbacks on navigate away
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visit_id = wrapper.current_visit_id;
 
-	// Cleanly unmount old vue instance
 	if (wrapper.vue_app) {
 		try {
 			wrapper.vue_app.unmount();
 		} catch (e) {
-			console.error("Error unmounting Stock Expiry Monitor Vue app:", e);
+			console.error('Error unmounting Stock Expiry Monitor Vue app:', e);
 		}
 		wrapper.vue_app = null;
 	}
 
 	$(page.body).empty();
 
-	// Show loading placeholder
 	const $loading = $('<div class="edge-preview-loading-placeholder p-6 text-center text-muted">' + __('Loading design system & stock expiry monitor assets...') + '</div>')
 		.appendTo(page.body);
 
-	// 1. Lazy load CoreEdge EdgeUI CSS first
-	frappe.require('edgeui.bundle.css', () => {
+	const showEdgeUILoadFailure = function(message, missing) {
+		$loading.remove();
+		const missingText = missing && missing.length ? '<div class="mt-2">' + __('Missing components: ') + missing.join(', ') + '</div>' : '';
+		$('<div class="alert alert-danger p-6 text-center"><strong>' + __('EdgeSuite UI failed to load') + '</strong><div>' + message + '</div>' + missingText + '</div>')
+			.appendTo(page.body);
+	};
+
+	frappe.require('edgeui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visit_id) return;
 
-		// 2. Lazy load CoreEdge EdgeUI JS second
-		frappe.require('edgeui.bundle.js', () => {
+		const edgeUI = window.EdgeUI || {};
+		const components = edgeUI.components || edgeUI;
+		const required = ['EdgeAppShell', 'EdgePageLayout', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeStatusBadge', 'EdgeLoadingState', 'EdgeEmptyState', 'EdgeErrorState'];
+		const missing = required.filter((name) => !components[name]);
+		if (missing.length) {
+			showEdgeUILoadFailure(__('Required EdgeSuite shell components could not be resolved.'), missing);
+			return;
+		}
+
+		frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
 			if (wrapper.current_visit_id !== visit_id) return;
 
-			if (!window.EdgeUI || !window.EdgeUI.createEdgeApp) {
-				$loading.remove();
-				$('<div class="alert alert-danger p-6 text-center">' + __('Failed to load EdgeSuite UI shared bundle or createEdgeApp helper.') + '</div>')
-					.appendTo(page.body);
+			$loading.remove();
+
+			if (!window.VetedgeStockExpiryMonitor || !window.mountVetedgeStockExpiryMonitor) {
+				showEdgeUILoadFailure(__('Failed to load Stock Expiry Monitor bundle.'), []);
 				return;
 			}
 
-			// 3. Lazy load VetEdge monitor CSS third
-			frappe.require('vetedge_stock_expiry_monitor.bundle.css', () => {
-				if (wrapper.current_visit_id !== visit_id) return;
-
-				// 4. Lazy load VetEdge monitor JS fourth
-				frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
-					if (wrapper.current_visit_id !== visit_id) return;
-
-					$loading.remove();
-
-					if (!window.VetedgeStockExpiryMonitor) {
-						$('<div class="alert alert-danger p-6 text-center">' + __('Failed to load Stock Expiry Monitor bundle.') + '</div>')
-							.appendTo(page.body);
-						return;
-					}
-
-					try {
-						const { createEdgeApp } = window.EdgeUI;
-						const DashboardComponent = window.VetedgeStockExpiryMonitor;
-
-						// Create mount container
-						const root = $('<div class="vetedge-expiry-monitor-root"></div>').appendTo(page.body);
-
-						// Bootstrap Vue app using CoreEdge helper
-						wrapper.vue_app = createEdgeApp(DashboardComponent, root[0]);
-					} catch (e) {
-						$('<div class="alert alert-danger p-6 text-center">' + __('Error mounting Stock Expiry Monitor: ') + e.message + '</div>')
-							.appendTo(page.body);
-					}
-				});
-			});
+			try {
+				const root = $('<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+				wrapper.vue_app = window.mountVetedgeStockExpiryMonitor(root[0]);
+			} catch (e) {
+				showEdgeUILoadFailure(__('Error mounting Stock Expiry Monitor: ') + e.message, []);
+			}
 		});
 	});
 };

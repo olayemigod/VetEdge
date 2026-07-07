@@ -96,36 +96,70 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			pass
 
 	def test_frontend_uses_layout_components_and_identity(self):
-		"""Verify VetEdge Stock Expiry Monitor Vue component uses shell, page layouts, and product identity."""
+		"""Verify VetEdge Stock Expiry Monitor uses the real EdgeSuite shell pattern."""
 		vetedge_path = frappe.get_app_path("vetedge")
 		vue_path = os.path.join(
-			vetedge_path, "vetedge", "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+			vetedge_path, "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
 		)
 		self.assertTrue(os.path.exists(vue_path))
 		with open(vue_path, "r") as f:
 			content = f.read()
 
-		self.assertIn("EdgeAppShell", content)
-		self.assertIn("EdgePageLayout", content)
-		self.assertIn("EdgeFilterBar", content)
+		for component in ("EdgeAppShell", "EdgePageLayout", "EdgeFilterBar", "EdgeStatCard", "EdgeStatusBadge"):
+			self.assertIn(component, content)
 		self.assertIn('product="vetedge"', content)
 		self.assertIn('data-edge-product="vetedge"', content)
+		self.assertIn("EdgeSuite UI failed to load", content)
+		self.assertIn("missingComponents", content)
+		self.assertIn("requiredEdgeUIComponents", content)
+		self.assertNotIn("return 'div'", content)
+		self.assertNotIn("getComponent", content)
 
-		# Ensure required shell components resolution does not fallback to 'div'
-		self.assertIn("const EdgeAppShell = getRequiredComponent('EdgeAppShell');", content)
-		self.assertIn("const EdgePageLayout = getRequiredComponent('EdgePageLayout');", content)
-		self.assertIn("const EdgeFilterBar = getRequiredComponent('EdgeFilterBar');", content)
+	def test_filter_and_summary_labels_exist(self):
+		"""Verify visible filters and summary cards remain in the normal render flow."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		vue_path = os.path.join(
+			vetedge_path, "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+		)
+		with open(vue_path, "r") as f:
+			content = f.read()
 
-	def test_loader_loads_css_bundles(self):
-		"""Verify page loader loads edgeui.bundle.css and vetedge_stock_expiry_monitor.bundle.css."""
+		self.assertIn("edge-filter-grid", content)
+		self.assertIn("edge-stat-grid", content)
+		self.assertIn("edge-table-card", content)
+		for label in ("Warehouse", "Item Group", "Expiry Window", "Days Threshold", "Item Code", "Apply / Refresh"):
+			self.assertIn(label, content)
+		for label in ("Expired Batches", "Expiring Soon", "Affected Total Qty", "Affected Warehouses", "Highest Risk Items", "Last Recalculated"):
+			self.assertIn(label, content)
+
+	def test_loader_uses_product_bundle_mount_function(self):
+		"""Verify page loader avoids raw CSS requires and mounts with the VetEdge bundle runtime."""
 		vetedge_path = frappe.get_app_path("vetedge")
 		js_path = os.path.join(
 			vetedge_path, "veterinary", "page", "stock_expiry_monitor", "stock_expiry_monitor.js"
 		)
-		self.assertTrue(os.path.exists(js_path))
 		with open(js_path, "r") as f:
 			content = f.read()
 
-		self.assertIn("edgeui.bundle.css", content)
-		self.assertIn("vetedge_stock_expiry_monitor.bundle.css", content)
+		self.assertIn("frappe.require('edgeui.bundle.js'", content)
+		self.assertIn("vetedge_stock_expiry_monitor.bundle.js", content)
+		self.assertIn("mountVetedgeStockExpiryMonitor", content)
+		self.assertIn("EdgeSuite UI failed to load", content)
+		self.assertIn('data-edge-product="vetedge"', content)
+		self.assertNotIn("edgeui.bundle.css", content)
+		self.assertNotIn("vetedge_stock_expiry_monitor.bundle.css", content)
+		self.assertNotIn("createEdgeApp", content)
+
+	def test_no_stock_mutation_logic_introduced_in_frontend(self):
+		"""Verify the monitor frontend remains read-only for stock records."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		for rel in (
+			("public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"),
+			("veterinary", "page", "stock_expiry_monitor", "stock_expiry_monitor.js"),
+		):
+			path = os.path.join(vetedge_path, *rel)
+			with open(path, "r") as f:
+				content = f.read()
+			for forbidden in ("frappe.db.set_value", "frappe.client.set_value", "frappe.client.insert", "frappe.client.delete", "save(", "submit(", "delete_doc"):
+				self.assertNotIn(forbidden, content)
 

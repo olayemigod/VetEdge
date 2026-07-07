@@ -1,10 +1,13 @@
 <template>
   <div v-if="!edgeUIValid" class="p-6 text-center" style="border: 1px solid var(--edge-danger, #ff4d4f); border-radius: 8px; background-color: var(--edge-surface, #ffffff); margin: 20px;">
     <div style="color: var(--edge-danger, #ff4d4f); font-weight: bold; font-size: 1.2rem; margin-bottom: 12px;">
-      EdgeSuite UI Layout Components Resolution Failed
+      EdgeSuite UI failed to load
     </div>
     <div style="color: var(--edge-text-muted, #8c8c8c); margin-bottom: 20px; font-size: 14px;">
-      Required layout components (EdgeAppShell, EdgePageLayout, EdgeFilterBar) could not be resolved from window.EdgeUI.
+      Required EdgeSuite shell components could not be resolved from window.EdgeUI.components.
+    </div>
+    <div v-if="missingComponents.length" style="color: var(--edge-text, #172033); margin-bottom: 20px; font-size: 13px;">
+      Missing components: {{ missingComponents.join(', ') }}
     </div>
     <button @click="fetchData" style="padding: 8px 16px; background-color: var(--edge-primary, #1890ff); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
       Retry Loading Monitor
@@ -34,46 +37,48 @@
 
       <!-- EdgeFilterBar in default slot body flow -->
       <EdgeFilterBar title="Filter Records">
-        <div class="filter-group">
-          <label class="filter-label">Warehouse</label>
-          <select v-model="filters.warehouse" class="filter-select" :disabled="metadataLoading" @change="fetchData">
+        <div class="edge-filter-grid">
+        <div class="edge-field filter-group">
+          <label class="edge-field-label filter-label">Warehouse</label>
+          <select v-model="filters.warehouse" class="edge-select filter-select" :disabled="metadataLoading" @change="fetchData">
             <option value="">All Warehouses</option>
             <option v-for="w in warehouses" :key="w" :value="w">{{ w }}</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label class="filter-label">Item Group</label>
-          <select v-model="filters.item_group" class="filter-select" :disabled="metadataLoading" @change="fetchData">
+        <div class="edge-field filter-group">
+          <label class="edge-field-label filter-label">Item Group</label>
+          <select v-model="filters.item_group" class="edge-select filter-select" :disabled="metadataLoading" @change="fetchData">
             <option value="">All Item Groups</option>
             <option v-for="g in itemGroups" :key="g" :value="g">{{ g }}</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label class="filter-label">Expiry Window</label>
-          <select v-model="filters.expiry_window" class="filter-select" :disabled="metadataLoading" @change="fetchData">
+        <div class="edge-field filter-group">
+          <label class="edge-field-label filter-label">Expiry Window</label>
+          <select v-model="filters.expiry_window" class="edge-select filter-select" :disabled="metadataLoading" @change="fetchData">
             <option value="all">All Inventory</option>
             <option value="expired">Expired Batches</option>
             <option value="expiring soon">Expiring Soon</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label class="filter-label">Days Threshold</label>
-          <select v-model="filters.days_threshold" class="filter-select" :disabled="metadataLoading" @change="fetchData">
+        <div class="edge-field filter-group">
+          <label class="edge-field-label filter-label">Days Threshold</label>
+          <select v-model="filters.days_threshold" class="edge-select filter-select" :disabled="metadataLoading" @change="fetchData">
             <option :value="30">30 Days</option>
             <option :value="60">60 Days</option>
             <option :value="90">90 Days</option>
             <option :value="180">180 Days</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label class="filter-label">Item Code</label>
-          <input type="text" v-model="filters.item" placeholder="Enter Item Code" class="filter-input" :disabled="metadataLoading" @change="fetchData" />
+        <div class="edge-field filter-group">
+          <label class="edge-field-label filter-label">Item Code</label>
+          <input type="text" v-model="filters.item" placeholder="Enter Item Code" class="edge-input filter-input" :disabled="metadataLoading" @change="fetchData" />
         </div>
-        <div class="filter-group filter-action-group">
-          <label class="filter-label" style="visibility: hidden;">Action</label>
-          <button class="filter-btn primary" :disabled="metadataLoading || loading" @click="fetchData">
+        <div class="edge-field filter-group filter-action-group">
+          <label class="edge-field-label filter-label" style="visibility: hidden;">Action</label>
+          <button class="edge-primary-button filter-btn primary" :disabled="metadataLoading || loading" @click="fetchData">
             Apply / Refresh
           </button>
+        </div>
         </div>
       </EdgeFilterBar>
 
@@ -92,7 +97,7 @@
 
       <div v-else>
         <!-- Summary stats grid -->
-        <div class="summary-stats-grid">
+        <div class="edge-stat-grid summary-stats-grid">
           <EdgeStatCard 
             label="Expired Batches" 
             :value="summary.expired_items || 0" 
@@ -132,9 +137,9 @@
         </div>
 
         <!-- Main Data Table -->
-        <div v-if="rows.length > 0" class="table-container-card">
+        <div v-if="rows.length > 0" class="edge-table-card table-container-card">
           <div class="table-responsive">
-            <table class="dashboard-table">
+            <table class="edge-dashboard-table dashboard-table">
               <thead>
                 <tr>
                   <th>Item Code</th>
@@ -216,30 +221,18 @@
 </template>
 
 <script>
-// Safely consume CoreEdge EdgeUI elements from the global window namespace
-const getRequiredComponent = (name) => {
-  if (typeof window === 'undefined') return null;
-  const edgeUI = window.EdgeUI || {};
-  const componentsSrc = edgeUI.components || edgeUI;
-  return componentsSrc[name] || null;
-};
+// Product bundles import CoreEdge EdgeUI component sources so they render with this bundle's Vue runtime.
+import EdgeAppShell from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeAppShell.vue';
+import EdgePageLayout from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgePageLayout.vue';
+import EdgePageHeader from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgePageHeader.vue';
+import EdgeFilterBar from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeFilterBar.vue';
+import EdgeStatCard from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeStatCard.vue';
+import EdgeStatusBadge from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeStatusBadge.vue';
+import EdgeEmptyState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeEmptyState.vue';
+import EdgeLoadingState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeLoadingState.vue';
+import EdgeErrorState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeErrorState.vue';
 
-const getComponent = (name) => {
-  if (typeof window === 'undefined') return 'div';
-  const edgeUI = window.EdgeUI || {};
-  const componentsSrc = edgeUI.components || edgeUI;
-  return componentsSrc[name] || 'div';
-};
-
-const EdgeAppShell = getRequiredComponent('EdgeAppShell');
-const EdgePageLayout = getRequiredComponent('EdgePageLayout');
-const EdgeFilterBar = getRequiredComponent('EdgeFilterBar');
-const EdgePageHeader = getComponent('EdgePageHeader');
-const EdgeStatCard = getComponent('EdgeStatCard');
-const EdgeStatusBadge = getComponent('EdgeStatusBadge');
-const EdgeEmptyState = getComponent('EdgeEmptyState');
-const EdgeLoadingState = getComponent('EdgeLoadingState');
-const EdgeErrorState = getComponent('EdgeErrorState');
+const requiredEdgeUIComponents = ['EdgeAppShell', 'EdgePageLayout', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeStatusBadge', 'EdgeLoadingState', 'EdgeEmptyState', 'EdgeErrorState'];
 
 export default {
   name: 'VetedgeStockExpiryMonitor',
@@ -257,6 +250,7 @@ export default {
   data() {
     return {
       edgeUIValid: true,
+      missingComponents: [],
       metadataLoading: true,
       loading: true,
       error: '',
@@ -288,9 +282,8 @@ export default {
     if (typeof window !== 'undefined') {
       const edgeUI = window.EdgeUI || {};
       const componentsSrc = edgeUI.components || edgeUI;
-      if (!componentsSrc.EdgeAppShell || !componentsSrc.EdgePageLayout || !componentsSrc.EdgeFilterBar) {
-        this.edgeUIValid = false;
-      }
+      this.missingComponents = requiredEdgeUIComponents.filter((name) => !componentsSrc[name]);
+      this.edgeUIValid = this.missingComponents.length === 0;
     }
   },
   mounted() {
@@ -425,6 +418,55 @@ export default {
 </script>
 
 <style scoped>
+.edge-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--edge-space-md, 16px);
+  align-items: end;
+}
+
+.edge-field {
+  min-width: 0;
+}
+
+.edge-field-label {
+  color: var(--edge-muted-text, var(--edge-text-muted));
+}
+
+.edge-input,
+.edge-select {
+  min-height: 38px;
+  border-color: var(--edge-border);
+  border-radius: var(--edge-radius, var(--edge-radius-md));
+  background: var(--edge-surface);
+  color: var(--edge-text);
+}
+
+.edge-primary-button {
+  background: var(--edge-primary);
+  color: #fff;
+  border-radius: var(--edge-radius, var(--edge-radius-md));
+}
+
+.edge-primary-button:hover:not(:disabled) {
+  background: var(--edge-primary-hover, var(--edge-primary));
+}
+
+.edge-stat-grid {
+  width: 100%;
+}
+
+.edge-table-card {
+  background: var(--edge-surface);
+  border: 1px solid var(--edge-border);
+  border-radius: var(--edge-radius, var(--edge-radius-lg));
+  box-shadow: var(--edge-shadow, var(--edge-shadow-sm));
+}
+
+.edge-dashboard-table {
+  color: var(--edge-text);
+}
+
 /* Filter Group styles */
 .filter-group {
   display: flex;
