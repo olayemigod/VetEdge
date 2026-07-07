@@ -741,6 +741,89 @@ python3 -m json.tool /tmp/vetedge_qa_data_inventory.json > /tmp/vetedge_qa_data_
 
 Phase 10G is complete when every missing scenario has either a prepared record name or a documented deferral reason, the read-only inventory has been rerun, missing count is reduced or explained, no data was created outside normal Desk workflow, and no submitted accounting or stock document was manually mutated.
 
+### Phase 10H Operational QA Execution Report
+
+Phase 10H records the operational QA execution status after rerunning the read-only inventory. In this pass, the inventory was executed successfully, but live Desk role-login QA was not performed in this session and the Phase 10G missing scenarios remain missing. No product code was changed, no records were created by script, and no accounting or stock documents were mutated.
+
+#### Inventory Summary
+
+| Run Date | Site | Total Scenarios | Found | Missing | Not Applicable | Output File | Notes |
+|---|---|---:|---:|---:|---:|---|---|
+| 2026-07-07 | `vetedge.local` | 66 | 44 | 22 | 0 | `/tmp/vetedge_qa_data_inventory.json`; `/tmp/vetedge_qa_data_inventory.pretty.json` | Read-only inventory rerun succeeded. Missing scenarios are unchanged from Phase 10F.1 and require Desk/manual preparation before rollout sign-off. |
+
+Remaining missing scenarios:
+
+- Consultation with posted dispensary Stock Entry reference.
+- Retain-payment cancellation resolutions in Pending Review, Approved, and Completed states.
+- Reschedule cancellation resolution with linked new appointment.
+- Refund Required resolutions with Approved evidence, Completed No Status Change, and Completed Cancel outcome.
+- Issue Customer Credit resolutions with Approved evidence, Completed No Status Change, and Completed Cancel outcome.
+- Admin Accounting Correction Completed with evidence.
+- Cancelled Lab Order with invoice history.
+- Cancelled Vaccination with invoice history.
+- Vaccination linked to consultation.
+- Cancelled Hospitalisation with preserved history.
+- Hospitalisation with stock/material issue reference.
+- Cancelled Grooming Session with invoice history.
+- Cancelled Boarding Booking with invoice history.
+- Boarding with charges.
+- Completed Appointment linked to consultation.
+- No-show Appointment preserving links/notes.
+
+#### Scenario Execution Table
+
+| Scenario | Record Name | Role Tested | Expected Result | Actual Result | Pass/Fail | Issue/Fix Needed | Notes |
+|---|---|---|---|---|---|---|---|
+| Safe unpaid cancellation | Not executed | Not executed | Consultation becomes `Cancelled`; no resolution required; safe draft cleanup only | Pending live Desk QA | Pending | Prepare/test record | Inventory alone cannot verify workflow execution. |
+| Paid/partly paid cancellation blocker | Not executed | Not executed | Direct cancellation blocked; financial resolution options shown; consultation unchanged | Pending live Desk QA | Pending | Prepare/test record | Requires paid/partly paid consultation and role login. |
+| Retain-payment resolution | Missing scenario records | Not executed | Pending Review -> Approved -> Completed; consultation cancels only after approved execution | Pending preparation | Pending | Prepare missing resolution examples | Missing in inventory. |
+| Reschedule resolution | Missing scenario record | Not executed | Approved reschedule creates linked appointment; old consultation unchanged | Pending preparation | Pending | Prepare missing resolution example | Missing in inventory. |
+| Refund Required outcomes | Missing scenario records | Not executed | Evidence required; Completed with selected status outcome; no automatic accounting document creation | Pending preparation | Pending | Prepare missing refund examples | Missing in inventory. |
+| Issue Customer Credit outcomes | Missing scenario records | Not executed | Evidence required; Completed with selected status outcome; no credit allocation | Pending preparation | Pending | Prepare missing credit examples | Missing in inventory. |
+| Admin Accounting Correction | Missing scenario record | Not executed | Evidence required; Completed; consultation unchanged; cancel outcome not allowed | Pending preparation | Pending | Prepare missing admin correction example | Missing in inventory. |
+| Billing Group QA across services | Candidate records partially available | Not executed | Current group history visible; patient outstanding separate; final statuses show history | Pending live Desk QA | Pending | Use inventory candidates and prepare missing final-status records | Inventory is not a browser/modal execution test. |
+| Final-status history QA | Candidate records partially available | Not executed | History visible; unsafe actions blocked | Pending live Desk QA | Pending | Prepare missing cancelled/final-status records | Missing cancelled lab/vaccine/grooming/boarding/hospitalisation examples. |
+| Stock/dispensary QA | Missing scenario record | Not executed | Submitted Stock Entry reference visible and immutable | Pending preparation | Pending | Prepare posted dispensary Stock Entry consultation | Missing in inventory. |
+| Branch/company QA | Not executed | Not executed | Branch/company filters and backend checks respected | Pending live role-login QA | Pending | Test with assigned branch users | Requires role-login QA. |
+
+#### Role Login QA Table
+
+| Role | User | Branch/Company | Workflows Tested | Pass/Fail | Permission Issues | Notes |
+|---|---|---|---|---|---|---|
+| VetEdge Administrator | Not executed |  |  | Pending | Not tested | Requires live login. |
+| Branch Manager | Not executed |  |  | Pending | Not tested | Requires live login. |
+| VetEdge Doctor | Not executed |  |  | Pending | Not tested | Must verify Item/Batch/UOM/Warehouse context and blocked accounting actions. |
+| VetEdge Front Desk | Not executed |  |  | Pending | Not tested | Must verify appointment/registration/check-in and blocked accounting resolution. |
+| Accounts/Cashier | Not executed |  |  | Pending | Not tested | Must verify Billing / Payment and blocked clinical edits. |
+| Accounts User | Not executed |  |  | Pending | Not tested | Must verify permitted payment/accounting resolution actions. |
+| Accounts Manager | Not executed |  |  | Pending | Not tested | Must verify approval/completion and external evidence exception where applicable. |
+| Lab User / Lab Technician | Not executed |  |  | Pending | Not tested | Must verify lab result workflow and no unrelated accounting mutation. |
+| Grooming User | Not executed |  |  | Pending | Not tested | Must verify grooming workflow and final-status history. |
+| Boarding User | Not executed |  |  | Pending | Not tested | Must verify boarding workflow and final-status history. |
+| Stock/Dispensary User | Not executed |  |  | Pending | Not tested | Must verify controlled stock posting and blocked submitted Stock Entry mutation. |
+
+#### Accounting / Stock Safety Table
+
+| Document Type | Sample Document | Before State | After State | Mutated? | Pass/Fail | Notes |
+|---|---|---|---|---|---|---|
+| Sales Invoice | Not sampled in live Desk QA | Not recorded | Not recorded | No mutation by inventory helper | Pending live QA | Inventory helper performs read-only queries only. |
+| Payment Entry | Not sampled in live Desk QA | Not recorded | Not recorded | No mutation by inventory helper | Pending live QA | No payment allocation/reallocation tested in Desk. |
+| Stock Entry | Not sampled in live Desk QA | Not recorded | Not recorded | No mutation by inventory helper | Pending live QA | Posted dispensary/hospitalisation stock scenarios still missing. |
+| Stock Ledger Entry | Not sampled in live Desk QA | Not recorded | Not recorded | No mutation by inventory helper | Pending live QA | No direct stock ledger test performed. |
+
+#### Defect Register
+
+| Defect ID | Area | Severity | Record/User | Description | Suggested Fix | Status |
+|---|---|---|---|---|---|---|
+| QA-10H-001 | QA data readiness | Medium | Inventory output | 22 required operational QA scenarios are still missing, so live QA cannot be completed end-to-end. | Prepare missing records through Phase 10G Desk workflows and rerun inventory. | Open |
+| QA-10H-002 | Live role-login QA | Medium | Role users | No live role-login QA results were supplied or executed in this session. | Execute Phase 10E checklist with real users and record pass/fail results. | Open |
+
+#### Rollout Decision
+
+Decision: **Blocked pending missing QA records**.
+
+Reason: the read-only inventory runs successfully and no data mutation occurred, but 22 required QA scenarios are still missing and live Desk role-login QA has not been executed. VetEdge should not be operationally signed off until the missing scenario records are prepared or explicitly deferred, the inventory is rerun, role-login QA is completed, and accounting/stock safety is verified against real sample documents.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
