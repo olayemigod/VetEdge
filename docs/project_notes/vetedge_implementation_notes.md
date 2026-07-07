@@ -824,6 +824,64 @@ Decision: **Blocked pending missing QA records**.
 
 Reason: the read-only inventory runs successfully and no data mutation occurred, but 22 required QA scenarios are still missing and live Desk role-login QA has not been executed. VetEdge should not be operationally signed off until the missing scenario records are prepared or explicitly deferred, the inventory is rerun, role-login QA is completed, and accounting/stock safety is verified against real sample documents.
 
+### Phase 10I Missing QA Records Preparation Status
+
+Phase 10I was requested to prepare or identify the 22 missing scenarios through normal Desk workflows only. No Desk records were prepared in this session because no live Desk login/session and role-user details were available to perform manual workflows. To preserve the safety rules, no records were created by script, no generator was added, no product code was changed, and no submitted accounting or stock document was manually mutated.
+
+#### Inventory Before / After
+
+| Run Date | Site | Total Scenarios | Found | Missing | Not Applicable | Output File | Notes |
+|---|---|---:|---:|---:|---:|---|---|
+| 2026-07-07 before preparation | `vetedge.local` | 66 | 44 | 22 | 0 | `/tmp/vetedge_qa_data_inventory.json` | Baseline from Phase 10H. |
+| 2026-07-07 after attempted preparation | `vetedge.local` | 66 | 44 | 22 | 0 | `/tmp/vetedge_qa_data_inventory.json`; `/tmp/vetedge_qa_data_inventory.pretty.json` | No Desk preparation was performed in this session; missing scenarios unchanged. |
+
+#### Prepared / Identified Records
+
+| Scenario | Prepared Record Name | Linked Invoice | Linked Payment Entry | Linked Stock Entry | Status | Reason / Next Step |
+|---|---|---|---|---|---|---|
+| Consultation with posted dispensary Stock Entry reference |  |  |  |  | Deferred | Requires normal Desk consultation/dispensary workflow with stock item, batch, warehouse, and controlled stock posting. |
+| Retain-payment resolution Pending Review |  |  |  |  | Deferred | Requires paid/partly paid consultation and Cancel Consultation dialog. |
+| Retain-payment resolution Approved |  |  |  |  | Deferred | Requires authorized approval through Desk. |
+| Retain-payment resolution Completed |  |  |  |  | Deferred | Requires approved retain-payment decision and authorized execution through Desk. |
+| Reschedule resolution with linked appointment |  |  |  |  | Deferred | Requires approved reschedule resolution and appointment creation through Desk. |
+| Refund Required Approved with evidence |  |  |  |  | Deferred | Requires accounting evidence prepared through normal ERPNext/test workflow. |
+| Refund Required Completed with No Status Change |  |  |  |  | Deferred | Requires approved refund decision, evidence, and completion through Desk. |
+| Refund Required Completed with Cancel outcome |  |  |  |  | Deferred | Requires separate approved refund decision, evidence, and cancel outcome through Desk. |
+| Issue Customer Credit Approved with evidence |  |  |  |  | Deferred | Requires accounting evidence prepared through normal ERPNext/test workflow. |
+| Issue Customer Credit Completed with No Status Change |  |  |  |  | Deferred | Requires approved credit decision, evidence, and completion through Desk. |
+| Issue Customer Credit Completed with Cancel outcome |  |  |  |  | Deferred | Requires separate approved credit decision, evidence, and cancel outcome through Desk. |
+| Admin Accounting Correction Completed with evidence |  |  |  |  | Deferred | Requires approved admin correction decision and correction evidence. |
+| Cancelled Lab Order with invoice history |  |  |  |  | Deferred | Requires lab order, Billing / Payment history, and normal cancellation through Desk. |
+| Cancelled Vaccination with invoice history |  |  |  |  | Deferred | Requires vaccination record, Billing / Payment history, and normal cancellation through Desk. |
+| Vaccination linked to consultation |  |  |  |  | Deferred | Requires creating vaccination from the consultation workflow. |
+| Cancelled Hospitalisation with preserved history |  |  |  |  | Deferred | Requires hospitalisation with charge/activity history and normal cancellation through Desk. |
+| Hospitalisation with stock/material issue reference |  |  |  |  | Deferred | Requires controlled hospitalisation stock/material issue workflow. |
+| Cancelled Grooming Session with invoice history |  |  |  |  | Deferred | Requires grooming session, Billing / Payment history, and normal cancellation through Desk. |
+| Cancelled Boarding Booking with invoice history |  |  |  |  | Deferred | Requires boarding booking, Billing / Payment history, and normal cancellation through Desk. |
+| Boarding with charges |  |  |  |  | Deferred | Requires normal boarding charge workflow. |
+| Completed Appointment linked to consultation |  |  |  |  | Deferred | Requires appointment check-in/start consultation and normal completion through Desk. |
+| No-show Appointment preserving links/notes |  |  |  |  | Deferred | Requires appointment notes/reason and normal No Show action through Desk. |
+
+#### Safety Confirmation
+
+- Business data was not mutated outside normal Desk workflow.
+- No records were created by script.
+- No submitted Sales Invoice was edited, cancelled, amended, or repaired.
+- No Payment Entry was edited or reallocated.
+- No submitted Stock Entry or Stock Ledger Entry was edited.
+- The read-only inventory was rerun and JSON was written to `/tmp` only.
+
+#### Current Blockers / Defects
+
+| ID | Area | Status | Description | Required Action |
+|---|---|---|---|---|
+| QA-10I-001 | Missing QA scenario preparation | Deferred | No live Desk session or role-user details were available in this agent session to prepare records manually. | QA staff should execute Phase 10G Desk preparation steps using actual role logins. |
+| QA-10I-002 | Inventory readiness | Open | Missing scenario count remains 22. | Prepare or explicitly defer each scenario, then rerun inventory. |
+
+#### Next Step
+
+Run the Phase 10G Desk preparation checklist with real users on `vetedge.local` or staging, fill the QA record register with document names, rerun the read-only inventory, and update this section with the new found/missing counts.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
