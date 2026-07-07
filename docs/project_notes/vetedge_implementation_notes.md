@@ -539,6 +539,47 @@ Safety limits:
 - Use the Phase 10C and Phase 10E checklists to validate the selected records by role.
 - Recommended next phase: live Desk QA execution using the generated inventory plus real role logins.
 
+#### Phase 10F.1 Live Inventory Execution
+
+Root cause of the first live-run failure: direct `env/bin/python` execution from the bench root initialized Frappe with the right site config but left the process working directory at the bench root. Frappe's logger builds site log paths relative to the current working directory, so it attempted to open `/home/olayemigod/frappe-bench/vetedge.local/logs/database.log` instead of the real `/home/olayemigod/frappe-bench/sites/vetedge.local/logs/database.log`.
+
+Fix made: `tools/vetedge_qa_data_inventory.py` now detects the Frappe bench root, initializes with the detected `sites` path, temporarily changes into the `sites` directory for `frappe.connect()`, and restores the original working directory in `finally`. This aligns the standalone helper with Frappe's logger path assumptions while keeping the inventory read-only.
+
+Live command used:
+
+```bash
+cd /home/olayemigod/frappe-bench
+env/bin/python apps/vetedge/tools/vetedge_qa_data_inventory.py \
+  --site vetedge.local \
+  --include-counts \
+  --include-samples \
+  --output /tmp/vetedge_qa_data_inventory.json
+python3 -m json.tool /tmp/vetedge_qa_data_inventory.json > /tmp/vetedge_qa_data_inventory.pretty.json
+```
+
+Live result on `vetedge.local`: 66 total scenarios, 44 found, 22 missing, 0 not applicable. Output files: `/tmp/vetedge_qa_data_inventory.json` and `/tmp/vetedge_qa_data_inventory.pretty.json`.
+
+Missing QA scenarios from the live inventory:
+
+- Consultation with posted dispensary Stock Entry reference.
+- Retain-payment cancellation resolutions in Pending Review, Approved, and Completed states.
+- Reschedule cancellation resolution with linked new appointment.
+- Refund Required resolutions with Approved evidence, Completed No Status Change, and Completed Cancel outcome.
+- Issue Customer Credit resolutions with Approved evidence, Completed No Status Change, and Completed Cancel outcome.
+- Admin Accounting Correction Completed with evidence.
+- Cancelled Lab Order with invoice history.
+- Cancelled Vaccination with invoice history.
+- Vaccination linked to consultation.
+- Cancelled Hospitalisation with preserved history.
+- Hospitalisation with stock/material issue reference.
+- Cancelled Grooming Session with invoice history.
+- Cancelled Boarding Booking with invoice history.
+- Boarding with charges.
+- Completed Appointment linked to consultation.
+- No-show Appointment preserving links/notes.
+
+Safety confirmation: the helper performed read-only DocType queries and wrote JSON only under `/tmp`; it did not create QA records, invoices, payments, stock entries, appointments, consultations, cancellation resolutions, or mutate submitted accounting/stock documents. Remaining manual QA step: create or identify the missing scenarios through normal Desk workflows before operational sign-off.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.

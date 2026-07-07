@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -197,6 +198,18 @@ def write_json(path: str | None, payload: dict[str, Any]) -> None:
 	target = Path(path)
 	target.parent.mkdir(parents=True, exist_ok=True)
 	target.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
+
+
+def find_bench_root(start: Path | None = None) -> Path:
+	start = (start or Path.cwd()).resolve()
+	for candidate in (start, *start.parents):
+		if (candidate / "sites").is_dir() and (candidate / "apps").is_dir():
+			return candidate
+	raise RuntimeError(f"Could not locate Frappe bench root from {start}")
+
+
+def get_sites_path(start: Path | None = None) -> Path:
+	return find_bench_root(start) / "sites"
 
 
 def doctype_exists(frappe, doctype: str | None) -> bool:
@@ -477,10 +490,13 @@ def _get_appointment_candidates(frappe, key: str) -> list[str]:
 def scan_site(site: str, *, include_counts: bool, include_samples: bool, sample_limit: int) -> dict[str, Any]:
 	import frappe
 
-	frappe.init(site=site, sites_path=str(Path.cwd() / "sites"))
-	frappe.connect()
+	original_cwd = Path.cwd()
+	sites_path = get_sites_path(original_cwd)
 	results: list[ScenarioResult] = []
 	try:
+		frappe.init(site=site, sites_path=str(sites_path))
+		os.chdir(sites_path)
+		frappe.connect()
 		for definition in SCENARIOS:
 			exists, records, notes = discover_scenario_records(frappe, definition)
 			results.append(
@@ -499,6 +515,7 @@ def scan_site(site: str, *, include_counts: bool, include_samples: bool, sample_
 			frappe.destroy()
 		except Exception:
 			pass
+		os.chdir(original_cwd)
 	return build_report(site, results)
 
 

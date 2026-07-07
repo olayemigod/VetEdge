@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -117,6 +118,26 @@ class VetEdgeQaDataInventoryTest(unittest.TestCase):
 			"erpnext_support",
 		):
 			self.assertIn(group, groups)
+
+	def test_find_bench_root_from_nested_app_path(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			root = Path(tmp)
+			(root / "sites").mkdir()
+			(root / "apps" / "vetedge" / "tools").mkdir(parents=True)
+
+			bench_root = self.tool.find_bench_root(root / "apps" / "vetedge" / "tools")
+
+		self.assertEqual(bench_root, root)
+
+	def test_get_sites_path_uses_detected_bench_root(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			root = Path(tmp)
+			(root / "sites").mkdir()
+			(root / "apps" / "vetedge").mkdir(parents=True)
+
+			sites_path = self.tool.get_sites_path(root / "apps" / "vetedge")
+
+		self.assertEqual(sites_path, root / "sites")
 
 	def test_negative_sample_limit_fails(self):
 		result = subprocess.run(
