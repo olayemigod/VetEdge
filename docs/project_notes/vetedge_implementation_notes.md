@@ -157,6 +157,131 @@ Summary:
 - Phase 10B.1 cross-service Billing Group consistency audit: inspected Billing Core, Billing Modal, payment gate helpers, consultation, registration, lab, vaccination, hospitalisation, grooming, boarding, and dispensary/stock dispensing flows. Result: no high-priority Billing Group consistency defect was found. Active Billing Session remains the action/draft surface resolved from explicit source context, source invoice fields, and Billing Session Charge evidence; Billing Group Invoice History remains the truth surface built from direct source invoice fields, consultation invoice references, Billing Sessions, Billing Session Charges, explicitly related service evidence, and supported registration-derived evidence; Patient Outstanding Context remains customer/patient-based display context only and is marked informational/does-not-satisfy-current-gate. Existing tests cover old patient invoices not satisfying current gates, patient outstanding rows being rendered separately, stale direct invoice references losing to stronger session evidence, related service invoice history, registration-derived invoice gates, final-status modal payloads, submitted document preservation, and safe draft cleanup limits. Module summary: consultation, registration, lab, vaccination, hospitalisation, grooming, and boarding pass the source-explicit billing-group audit; dispensary/pharmacy is not an independent billing-group source in this app and remains a consultation stock/child-row flow with Stock Entry references preserved. Remaining risk: manual Desk QA with legacy production records is still recommended for role-specific button visibility and historical `linked_invoice` rows that predate Billing Session evidence; Phase 10B.2 should add a service-by-service matrix around multiple invoices, old patient outstanding invoices, and legacy source links only where live data exposes gaps.
 - Phase 10B.2 Billing Group matrix hardening: added service-by-service regression coverage for consultation, lab, vaccination, hospitalisation, grooming, boarding, registration, dispensary stock references, and shared Billing Modal/Core helpers. The Billing Core matrix now proves multiple explicit current-service invoices are returned once per billing group across the major service doctypes while unrelated old same-patient invoices remain excluded; a legacy direct-link matrix proves `linked_invoice`/`sales_invoice` compatibility only imports the explicitly linked service invoice and does not infer by patient/customer/date. Billing Modal coverage now includes final-status consultation and cancelled hospitalisation payloads, plus a cross-service modal matrix proving current billing-group invoice history and old patient outstanding context remain separate with correct totals/counts. Registration coverage proves an unrelated old patient invoice does not satisfy the first-consultation registration gate when no explicit registration billing-group evidence exists. Dispensary coverage now also proves cancelled consultations preserve posted Stock Entry references without reposting. No service code or Billing Core behavior changed, no accounting/stock automation was added, and submitted Sales Invoices, Payment Entries, Stock Entries, Billing Group history, and Patient Outstanding Context rules remain preserved. Remaining risk: live Desk/browser QA with legacy production records is still needed to verify rendered custom buttons and historical source-link edge cases; Phase 10B closeout should focus on browser/data QA rather than new billing logic.
 - Phase 10B.3 Billing Group closeout QA: automated closeout passed for Billing Core, Billing Modal, consultation billing, payment gate, registration billing, lab, vaccination, hospitalisation, grooming, boarding, and dispensary suites after the Phase 10B.2 matrix hardening. Verified rules remain: Active Billing Session is the action/draft surface, Billing Group Invoice History is the truth surface, Patient Outstanding Context is display-only, old patient debt does not satisfy current service gates, final-status modal payloads keep invoice history visible, and dispensary Stock Entry references are preserved without reposting. No defects were found in automated QA and no code fixes were made in this closeout pass. Manual Desk/browser QA was requested but not run because the required in-app browser Node REPL tool was not available in this session; live browser QA remains the open operational closeout item for rendered custom-button behavior and legacy production records. Submitted Sales Invoices, Payment Entries, Stock Entries, billing-group history, and patient outstanding separation remain protected by the passing tests. Phase 10B can be considered code/test closed, with a final live Desk/browser verification recommended before operational rollout sign-off.
+
+### Phase 10C Live Desk Operational QA Checklist
+
+Use this checklist for pre-rollout Desk verification. This is an operational sign-off checklist only; failures should be logged as defects and fixed in a separate implementation phase.
+
+#### Consultation Cancellation Workflow
+
+- Safe unpaid cancellation: confirm preflight allows cancellation, safe draft cleanup runs where applicable, consultation becomes `Cancelled`, and no resolution record is required.
+- Paid/partly paid blocker: confirm direct cancellation is blocked, blockers are shown, and consultation status remains unchanged.
+- Retain-payment resolution: record request, approve as an authorized role, execute `Cancel Clinical Record and Retain Payment`, confirm consultation becomes `Cancelled`, resolution becomes `Completed`, and submitted invoices/payments remain unchanged.
+- Reschedule resolution: record request, approve, create/link new appointment, confirm resolution becomes `Completed`, old consultation status remains unchanged, and no payment/invoice value is moved.
+- Refund resolution with no status change: complete with accounting evidence, confirm resolution becomes `Completed`, consultation status remains unchanged, and no refund document is auto-created.
+- Refund resolution with cancel outcome: complete with accounting evidence and `Cancel Consultation After Financial Resolution`, confirm consultation becomes `Cancelled` and accounting documents remain unchanged by VetEdge.
+- Customer credit with no status change: complete with credit evidence, confirm consultation status remains unchanged and no credit is auto-applied.
+- Customer credit with cancel outcome: complete with credit evidence and cancel outcome, confirm consultation becomes `Cancelled` and no credit allocation is created.
+- Admin correction: complete with correction evidence, confirm resolution becomes `Completed`, consultation status remains unchanged, and no accounting document is auto-created.
+- Role restrictions: verify doctors/front desk can view/request as intended but cannot approve or execute accounting/cancellation resolution actions.
+
+#### Final-Status History Preservation
+
+Confirm history/view sections and links remain visible for:
+
+- Completed Consultation
+- Cancelled Consultation
+- Completed Lab Order
+- Cancelled Lab Order
+- Administered Vaccination Record
+- Cancelled Vaccination Record
+- Discharged Hospitalisation
+- Cancelled Hospitalisation
+- Completed Grooming Session
+- Cancelled Grooming Session
+- Checked Out Boarding Booking
+- Cancelled Boarding Booking
+- Completed Boarding Stay
+- Completed Appointment
+- Cancelled Appointment
+- No Show Appointment
+- Consultation with posted dispensary Stock Entry
+
+#### Billing / Payment Modal
+
+For Consultation, Lab Order, Vaccination Record, Hospitalisation, Grooming Session, Boarding Booking, and registration/first-consultation billing context:
+
+- Open `Billing / Payment` from a saved record and confirm the current Billing Group invoice history appears.
+- Confirm old patient outstanding invoices appear only under `Other Outstanding Invoices for this Patient`, when present.
+- Confirm patient outstanding invoices are not mixed into current Billing Group Invoice History.
+- Confirm patient outstanding invoices do not satisfy the current service payment gate.
+- Confirm `Open Invoice`, `Pay Outstanding`, `Submit Draft`, and related actions target the intended current-service invoice.
+- Confirm final-status records still show invoice history.
+- Confirm opening the modal does not create unsafe new invoices for final records.
+
+#### Accounting Safety
+
+For cancellation, billing modal, payment gate, registration, lab, vaccination, hospitalisation, grooming, boarding, and dispensary-related flows:
+
+- Submitted Sales Invoice remains submitted and unchanged.
+- Payment Entry remains submitted and unchanged.
+- No silent payment allocation or reallocation occurs.
+- No Credit Note, refund Payment Entry, or Journal Entry is auto-created unless that specific future workflow is intentionally being tested.
+- Billing Group Invoice History remains visible and is not cleared or rewritten as a side effect of status changes.
+
+#### Stock Safety
+
+- Submitted Stock Entry remains submitted and unchanged.
+- No duplicate Stock Entry is created by opening history, Billing / Payment, or final-status records.
+- Consultation dispensary/stock references remain visible.
+- Hospitalisation stock/material issue references remain visible.
+- Vaccination stock references remain visible where present.
+
+#### Role and Custom-Button Visibility
+
+Test with these roles where available:
+
+- VetEdge Administrator
+- Branch Manager
+- Doctor
+- Front Desk
+- Accounts/Cashier or Accounts User
+
+Confirm:
+
+- View/history buttons are visible to appropriate roles.
+- `Billing / Payment` is visible where the workflow supports billing review.
+- Accounting completion, approval, and retained-payment execution actions are hidden or blocked for doctors/front desk.
+- Unsafe mutation buttons are hidden or backend-blocked in final statuses.
+- Role-specific button groups still expose history links for final records.
+
+#### Recommended Test Records to Prepare
+
+- Active consultation with draft invoice.
+- Consultation with multiple submitted invoices.
+- Completed consultation.
+- Cancelled consultation.
+- Consultation with old patient outstanding debt.
+- Consultation with posted dispensary Stock Entry.
+- Completed and cancelled Lab Order with invoice.
+- Administered and cancelled Vaccination Record with invoice/stock.
+- Discharged Hospitalisation with charges and stock references.
+- Cancelled Hospitalisation with existing billing/stock history.
+- Grooming Session with invoice.
+- Boarding Booking/Stay with charges and care records.
+- Completed, cancelled, and no-show Appointment.
+
+#### Sign-Off Table
+
+| Area | Record Tested | Role Tested | Expected Result | Actual Result | Pass/Fail | Notes |
+|---|---|---|---|---|---|---|
+| Paid consultation cancellation |  |  | Block direct cancellation; resolution workflow required |  |  |  |
+| Retain-payment cancellation |  |  | Approved decision cancels clinical record only |  |  |  |
+| Refund no status change |  |  | Resolution completed; consultation unchanged |  |  |  |
+| Refund cancel outcome |  |  | Resolution completed; consultation cancelled |  |  |  |
+| Credit no status change |  |  | Resolution completed; consultation unchanged |  |  |  |
+| Credit cancel outcome |  |  | Resolution completed; consultation cancelled |  |  |  |
+| Admin correction |  |  | Resolution completed; consultation unchanged |  |  |  |
+| Final-status Billing / Payment |  |  | Billing Group history visible; no unsafe invoice creation |  |  |  |
+| Patient outstanding separation |  |  | Other patient debt shown separately only |  |  |  |
+| Dispensary Stock Entry preservation |  |  | Stock reference visible; no duplicate Stock Entry |  |  |  |
+| Hospitalisation billing/stock history |  |  | Charges, invoices, and stock refs visible |  |  |  |
+| Role/custom-button visibility |  |  | History visible; unsafe actions hidden/blocked |  |  |  |
+
+#### Rollout Rule
+
+Do not mark VetEdge cancellation/billing stabilization as operationally signed off until live Desk QA has at least one pass for these critical flows: paid consultation cancellation, refund/credit status outcome, final-status Billing / Payment modal, dispensary Stock Entry preservation, and hospitalisation billing/stock history.
+
 - Completed consultation history preservation: `Completed` is a clinical closure/read-only state, not a history removal state. The consultation form keeps Billing / Payment, invoice history, appointment details, medical history, Latest Vitals, lab order history, vaccination history, and submitted dispensary Stock Entry links visible after completion. Latest Vitals is consultation-specific: it reads only `Veterinary Vital Signs` linked to the current consultation and no longer falls back to the patient's most recent vitals from another visit. New clinical mutation actions such as new lab orders, new vaccinations, new vitals, hospitalisation admission, and dispensary confirmation remain blocked or hidden where unsafe. Verification focuses on UI action visibility because backend completion validation only enforces gates/vitals and does not clear planned treatments, consultation invoice references, appointment links, clinical notes, lab/vaccination records, or submitted accounting/stock documents. Remaining risk: browser QA should still be used to verify any site-specific custom form layout or role permission hiding.
 - Billing Group vs Patient Outstanding Context: current service billing group truth must come only from explicit source evidence such as current consultation invoice references, Billing Session Charges, direct source fields, source markers, or explicitly related service documents. Older invoices for the same patient/customer are informational/action-only and live in a separate patient outstanding context; they must not satisfy the current consultation payment gate or block current consultation cancellation unless explicitly linked into the current billing group. Root cause for the missing/incorrect outstanding display on VCON-2026-00071: a stale consultation invoice child row pointed at `ACC-SINV-2026-00126`, but stronger Billing Session Charge evidence mapped that invoice to `VCON-2026-00068`; the invoice was also already paid with zero outstanding, so it should be excluded from both the current billing group and the patient outstanding section. Implemented fix: billing-group resolution now skips stale direct consultation invoice references when conflicting session/charge evidence points to another consultation, only imports all session invoices when the session context matches the current source, and treats patient outstanding rows as display/action-only. The Billing Modal exposes outstanding rows separately as "Other Outstanding Invoices for this Patient" with clear copy that payment does not count toward the current consultation unless linked. Remaining risk: patient outstanding context uses customer/patient evidence for display convenience only and must not be reused by workflow gates.
 - Billing must continue through ERPNext Sales Invoice and Payment Entry.
