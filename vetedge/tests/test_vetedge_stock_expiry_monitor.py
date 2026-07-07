@@ -108,6 +108,8 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 
 		for component in ("EdgeAppShell", "EdgePageLayout", "EdgeFilterBar", "EdgeStatCard", "EdgeStatusBadge"):
 			self.assertIn(component, content)
+		for component in ("EdgeNotificationBell", "EdgeNotificationDrawer"):
+			self.assertIn(component, content)
 		self.assertIn('product="vetedge"', content)
 		self.assertIn('data-edge-product="vetedge"', content)
 		self.assertIn("EdgeSuite UI failed to load", content)
@@ -115,6 +117,51 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("requiredEdgeUIComponents", content)
 		self.assertNotIn("return 'div'", content)
 		self.assertNotIn("getComponent", content)
+
+	def test_edgesuite_notification_drawer_is_piloted_without_global_override(self):
+		"""Verify the Stock Expiry Monitor opts into the shared drawer through VetEdge APIs only."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		vue_path = os.path.join(
+			vetedge_path, "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+		)
+		hooks_path = os.path.join(vetedge_path, "hooks.py")
+		with open(vue_path, "r") as f:
+			content = f.read()
+		with open(hooks_path, "r") as f:
+			hooks = f.read()
+
+		self.assertIn("<EdgeNotificationBell", content)
+		self.assertIn("<EdgeNotificationDrawer", content)
+		self.assertIn("vetedge.services.notification_api.get_my_edgesuite_notifications", content)
+		self.assertIn("vetedge.services.notification_api.mark_my_edgesuite_notification_read", content)
+		self.assertIn("vetedge.services.notification_api.mark_all_my_notifications_read", content)
+		self.assertIn("acknowledge_my_notification", content)
+		self.assertIn("mark_my_notification_done", content)
+		self.assertIn("dismiss_my_notification", content)
+		self.assertNotIn("/assets/vetedge/js/veterinary_notification_center.js", hooks)
+		self.assertNotIn("app_include_js.append", hooks)
+
+	def test_notification_drawer_frontend_does_not_mutate_business_records(self):
+		"""Verify drawer wiring only calls notification APIs, not business document mutation APIs."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		vue_path = os.path.join(
+			vetedge_path, "public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+		)
+		with open(vue_path, "r") as f:
+			content = f.read()
+
+		for forbidden in (
+			"frappe.db.set_value",
+			"frappe.client.set_value",
+			"frappe.client.insert",
+			"frappe.client.delete",
+			"Sales Invoice",
+			"Payment Entry",
+			"Stock Entry",
+			"submit(",
+			"delete_doc",
+		):
+			self.assertNotIn(forbidden, content)
 
 	def test_filter_and_summary_labels_exist(self):
 		"""Verify visible filters and summary cards remain in the normal render flow."""

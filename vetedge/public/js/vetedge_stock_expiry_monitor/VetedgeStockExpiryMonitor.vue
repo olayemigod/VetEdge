@@ -26,6 +26,31 @@
     @navigate="handleNavigation"
     data-edge-product="vetedge"
   >
+    <template #notifications>
+      <EdgeNotificationBell
+        :unreadCount="notificationUnreadCount"
+        title="Notifications"
+        @toggle="toggleNotificationDrawer"
+      />
+      <EdgeNotificationDrawer
+        product="vetedge"
+        title="Notifications"
+        :open="notificationDrawerOpen"
+        :notifications="filteredNotifications"
+        :unreadCount="notificationUnreadCount"
+        :filter="notificationFilter"
+        :loading="notificationLoading"
+        :error="notificationError"
+        @close="notificationDrawerOpen = false"
+        @update:filter="setNotificationFilter"
+        @retry="fetchNotifications"
+        @refresh="fetchNotifications"
+        @mark-all-read="markAllNotificationsRead"
+        @action="runNotificationAction"
+        @open="openNotificationRoute"
+      />
+    </template>
+
     <EdgePageLayout>
       <template #header>
         <EdgePageHeader 
@@ -231,8 +256,18 @@ import EdgeStatusBadge from '../../../../../coreedge/coreedge/public/js/edgeui/c
 import EdgeEmptyState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeEmptyState.vue';
 import EdgeLoadingState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeLoadingState.vue';
 import EdgeErrorState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeErrorState.vue';
+import EdgeNotificationBell from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeNotificationBell.vue';
+import EdgeNotificationDrawer from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeNotificationDrawer.vue';
 
-const requiredEdgeUIComponents = ['EdgeAppShell', 'EdgePageLayout', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeStatusBadge', 'EdgeLoadingState', 'EdgeEmptyState', 'EdgeErrorState'];
+const requiredEdgeUIComponents = ['EdgeAppShell', 'EdgePageLayout', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeStatusBadge', 'EdgeLoadingState', 'EdgeEmptyState', 'EdgeErrorState', 'EdgeNotificationBell', 'EdgeNotificationDrawer'];
+const notificationApi = {
+  feed: 'vetedge.services.notification_api.get_my_edgesuite_notifications',
+  markRead: 'vetedge.services.notification_api.mark_my_edgesuite_notification_read',
+  markAllRead: 'vetedge.services.notification_api.mark_all_my_notifications_read',
+  acknowledge: 'vetedge.services.notification_api.acknowledge_my_notification',
+  done: 'vetedge.services.notification_api.mark_my_notification_done',
+  dismiss: 'vetedge.services.notification_api.dismiss_my_notification'
+};
 
 export default {
   name: 'VetedgeStockExpiryMonitor',
@@ -245,7 +280,9 @@ export default {
     EdgeErrorState,
     EdgeAppShell,
     EdgePageLayout,
-    EdgeFilterBar
+    EdgeFilterBar,
+    EdgeNotificationBell,
+    EdgeNotificationDrawer
   },
   data() {
     return {
@@ -257,6 +294,12 @@ export default {
       summary: {},
       rows: [],
       totalCount: 0,
+      notificationDrawerOpen: false,
+      notificationLoading: false,
+      notificationError: '',
+      notificationFilter: 'all',
+      notificationItems: [],
+      notificationUnreadCount: 0,
       warehouses: [],
       itemGroups: [],
       currentPage: 1,
@@ -289,6 +332,21 @@ export default {
   mounted() {
     this.fetchMetadata();
     this.fetchData();
+    this.fetchNotifications();
+  },
+  computed: {
+    filteredNotifications() {
+      if (this.notificationFilter === 'unread') {
+        return this.notificationItems.filter((item) => item.status === 'Unread');
+      }
+      if (this.notificationFilter === 'action_required') {
+        return this.notificationItems.filter((item) => (item.actions || []).length > 0);
+      }
+      if (this.notificationFilter === 'done') {
+        return this.notificationItems.filter((item) => ['Done', 'Dismissed', 'Archived'].includes(item.status));
+      }
+      return this.notificationItems;
+    }
   },
   methods: {
     formatDate(dateStr) {
@@ -319,6 +377,99 @@ export default {
       if (typeof frappe !== 'undefined' && name) {
         frappe.set_route('Form', doctype, name);
       }
+    },
+    callFrappe(method, args) {
+      return new Promise((resolve, reject) => {
+        if (typeof frappe === 'undefined' || !frappe.call) {
+          reject(new Error('Frappe Desk is not ready.'));
+          return;
+        }
+        frappe.call({
+          method,
+          args: args || {},
+          callback: (response) => resolve((response && response.message) || {}),
+          error: (error) => reject(error)
+        });
+      });
+    },
+    toggleNotificationDrawer() {
+      this.notificationDrawerOpen = !this.notificationDrawerOpen;
+      if (this.notificationDrawerOpen) {
+        this.fetchNotifications();
+      }
+    },
+    setNotificationFilter(filterKey) {
+      this.notificationFilter = filterKey;
+      this.fetchNotifications();
+    },
+    fetchNotifications() {
+      if (typeof frappe === 'undefined') {
+        return;
+      }
+      this.notificationLoading = true;
+      this.notificationError = '';
+      this.callFrappe(notificationApi.feed, { filter_key: this.notificationFilter, limit: 30 })
+        .then((message) => {
+          this.notificationItems = message.items || [];
+          this.notificationUnreadCount = Number(message.unread_count || 0);
+        })
+        .catch((error) => {
+          this.notificationError = error.message || 'Notifications could not be loaded.';
+        })
+        .finally(() => {
+          this.notificationLoading = false;
+        });
+    },
+    runNotificationAction(payload) {
+      const action = payload && payload.action;
+      const notification = payload && payload.notification;
+      if (!action || !notification || !notification.name) {
+        return;
+      }
+      const methodByAction = {
+        mark_read: notificationApi.markRead,
+        acknowledge: notificationApi.acknowledge,
+        done: notificationApi.done,
+        dismiss: notificationApi.dismiss
+      };
+      const method = methodByAction[action.key];
+      if (!method) {
+        return;
+      }
+      this.notificationLoading = true;
+      this.callFrappe(method, { notification_name: notification.name })
+        .then((message) => {
+          this.notificationUnreadCount = Number(message.unread_count || this.notificationUnreadCount || 0);
+          return this.fetchNotifications();
+        })
+        .catch((error) => {
+          this.notificationError = error.message || 'Notification action failed.';
+        })
+        .finally(() => {
+          this.notificationLoading = false;
+        });
+    },
+    markAllNotificationsRead() {
+      this.notificationLoading = true;
+      this.callFrappe(notificationApi.markAllRead)
+        .then((message) => {
+          this.notificationUnreadCount = Number(message.unread_count || 0);
+          return this.fetchNotifications();
+        })
+        .catch((error) => {
+          this.notificationError = error.message || 'Could not mark notifications read.';
+        })
+        .finally(() => {
+          this.notificationLoading = false;
+        });
+    },
+    openNotificationRoute(notification) {
+      if (!notification || !notification.route || typeof frappe === 'undefined' || !frappe.set_route) {
+        return;
+      }
+      const route = notification.route.replace(/^\/app\//, '').split('/').filter(Boolean).map(decodeURIComponent);
+      frappe.set_route(route);
+      this.notificationDrawerOpen = false;
     },
     fetchMetadata() {
       if (typeof frappe === 'undefined') {
