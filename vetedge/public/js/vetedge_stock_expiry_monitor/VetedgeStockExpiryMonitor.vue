@@ -246,18 +246,7 @@
 </template>
 
 <script>
-// Product bundles import CoreEdge EdgeUI component sources so they render with this bundle's Vue runtime.
-import EdgeAppShell from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeAppShell.vue';
-import EdgePageLayout from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgePageLayout.vue';
-import EdgePageHeader from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgePageHeader.vue';
-import EdgeFilterBar from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeFilterBar.vue';
-import EdgeStatCard from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeStatCard.vue';
-import EdgeStatusBadge from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeStatusBadge.vue';
-import EdgeEmptyState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeEmptyState.vue';
-import EdgeLoadingState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeLoadingState.vue';
-import EdgeErrorState from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeErrorState.vue';
-import EdgeNotificationBell from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeNotificationBell.vue';
-import EdgeNotificationDrawer from '../../../../../coreedge/coreedge/public/js/edgeui/components/EdgeNotificationDrawer.vue';
+import { h } from 'vue';
 
 const requiredEdgeUIComponents = ['EdgeAppShell', 'EdgePageLayout', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeStatusBadge', 'EdgeLoadingState', 'EdgeEmptyState', 'EdgeErrorState', 'EdgeNotificationBell', 'EdgeNotificationDrawer'];
 const notificationApi = {
@@ -269,21 +258,203 @@ const notificationApi = {
   dismiss: 'vetedge.services.notification_api.dismiss_my_notification'
 };
 
+const EdgeAppShell = {
+  name: 'EdgeAppShell',
+  props: ['product', 'menuItems', 'activeRoute', 'title', 'tenantName', 'branchName', 'userName'],
+  emits: ['navigate'],
+  render() {
+    const menu = (this.menuItems || []).map((item) =>
+      h('button', {
+        class: ['edge-sidebar-item', item.route === this.activeRoute ? 'active' : ''],
+        type: 'button',
+        onClick: () => this.$emit('navigate', item.route)
+      }, [h('span', { class: 'edge-sidebar-icon' }, item.icon || ''), h('span', item.label || '')])
+    );
+    const context = [this.tenantName, this.branchName, this.userName].filter(Boolean).join(' · ');
+    return h('div', { class: 'edge-app-shell', 'data-edge-product': this.product }, [
+      h('div', { class: 'edge-topbar' }, [
+        h('div', { class: 'edge-topbar-title' }, this.title || ''),
+        h('div', { class: 'edge-topbar-context' }, context),
+        h('div', { class: 'edge-topbar-actions' }, this.$slots.notifications ? this.$slots.notifications() : [])
+      ]),
+      h('div', { class: 'edge-shell-body' }, [
+        h('aside', { class: 'edge-sidebar' }, menu),
+        h('main', { class: 'edge-shell-main' }, this.$slots.default ? this.$slots.default() : [])
+      ])
+    ]);
+  }
+};
+
+const EdgePageLayout = {
+  name: 'EdgePageLayout',
+  render() {
+    return h('section', { class: 'edge-page-layout' }, [
+      this.$slots.header ? h('div', { class: 'edge-page-layout-header' }, this.$slots.header()) : null,
+      h('div', { class: 'edge-page-layout-body' }, this.$slots.default ? this.$slots.default() : [])
+    ]);
+  }
+};
+
+const EdgePageHeader = {
+  name: 'EdgePageHeader',
+  props: ['title', 'subtitle'],
+  render() {
+    return h('div', { class: 'edge-page-header' }, [
+      h('h1', { class: 'edge-page-title' }, this.title || ''),
+      this.subtitle ? h('p', { class: 'edge-page-subtitle' }, this.subtitle) : null
+    ]);
+  }
+};
+
+const EdgeFilterBar = {
+  name: 'EdgeFilterBar',
+  props: ['title'],
+  render() {
+    return h('section', { class: 'edge-filter-bar' }, [
+      this.title ? h('h2', { class: 'edge-filter-title' }, this.title) : null,
+      h('div', { class: 'edge-filter-body' }, this.$slots.default ? this.$slots.default() : [])
+    ]);
+  }
+};
+
+const EdgeStatCard = {
+  name: 'EdgeStatCard',
+  props: ['label', 'value', 'icon', 'tooltip'],
+  render() {
+    return h('div', { class: 'edge-stat-card', title: this.tooltip || '' }, [
+      h('div', { class: 'edge-stat-icon' }, this.icon || ''),
+      h('div', { class: 'edge-stat-content' }, [
+        h('div', { class: 'edge-stat-label' }, this.label || ''),
+        h('div', { class: 'edge-stat-value' }, String(this.value ?? ''))
+      ])
+    ]);
+  }
+};
+
+const EdgeStatusBadge = {
+  name: 'EdgeStatusBadge',
+  props: ['label', 'status'],
+  render() {
+    const status = String(this.status || this.label || '').toLowerCase().replace(/\s+/g, '-');
+    return h('span', { class: ['edge-status-badge', `edge-status-${status}`] }, this.label || this.status || '');
+  }
+};
+
+const EdgeEmptyState = {
+  name: 'EdgeEmptyState',
+  props: ['title', 'description', 'icon'],
+  render() {
+    return h('div', { class: 'edge-empty-state' }, [
+      h('div', { class: 'edge-empty-icon' }, this.icon || ''),
+      h('h3', this.title || ''),
+      h('p', this.description || '')
+    ]);
+  }
+};
+
+const EdgeLoadingState = {
+  name: 'EdgeLoadingState',
+  props: ['message', 'skeleton'],
+  render() {
+    return h('div', { class: ['edge-loading-state', this.skeleton ? 'with-skeleton' : ''] }, [
+      h('div', { class: 'edge-loading-spinner' }),
+      h('p', this.message || 'Loading...')
+    ]);
+  }
+};
+
+const EdgeErrorState = {
+  name: 'EdgeErrorState',
+  props: ['title', 'message'],
+  emits: ['retry'],
+  render() {
+    return h('div', { class: 'edge-error-state' }, [
+      h('h3', this.title || 'Error'),
+      h('p', this.message || ''),
+      h('button', { class: 'edge-primary-button', type: 'button', onClick: () => this.$emit('retry') }, 'Retry')
+    ]);
+  }
+};
+
+const EdgeNotificationBell = {
+  name: 'EdgeNotificationBell',
+  props: ['unreadCount', 'title'],
+  emits: ['toggle'],
+  render() {
+    return h('button', { class: 'edge-notification-bell', type: 'button', title: this.title || 'Notifications', onClick: () => this.$emit('toggle') }, [
+      h('span', 'Notifications'),
+      this.unreadCount ? h('span', { class: 'edge-notification-count' }, String(this.unreadCount)) : null
+    ]);
+  }
+};
+
+const EdgeNotificationDrawer = {
+  name: 'EdgeNotificationDrawer',
+  props: ['product', 'title', 'open', 'notifications', 'unreadCount', 'filter', 'loading', 'error'],
+  emits: ['close', 'update:filter', 'retry', 'refresh', 'mark-all-read', 'action', 'open'],
+  render() {
+    if (!this.open) return null;
+    const filters = ['all', 'unread', 'action_required', 'done'].map((filter) =>
+      h('button', {
+        class: ['edge-notification-filter', this.filter === filter ? 'active' : ''],
+        type: 'button',
+        onClick: () => this.$emit('update:filter', filter)
+      }, filter.replace('_', ' '))
+    );
+    const items = (this.notifications || []).map((item) =>
+      h('article', { class: ['edge-notification-item', item.severity || '', item.status || ''] }, [
+        h('button', { class: 'edge-notification-title', type: 'button', onClick: () => this.$emit('open', item) }, item.title || item.name || 'Notification'),
+        h('p', { class: 'edge-notification-message' }, item.message || ''),
+        h('div', { class: 'edge-notification-meta' }, [item.category, item.status, item.created_at].filter(Boolean).join(' · ')),
+        h('div', { class: 'edge-notification-actions' }, (item.actions || []).map((action) =>
+          h('button', {
+            type: 'button',
+            disabled: action.enabled === false,
+            onClick: () => this.$emit('action', { notification: item, action })
+          }, action.label || action.key)
+        ))
+      ])
+    );
+    return h('div', { class: 'edge-notification-drawer-backdrop' }, [
+      h('aside', { class: 'edge-notification-drawer', 'data-edge-product': this.product }, [
+        h('header', { class: 'edge-notification-header' }, [
+          h('div', [h('h2', this.title || 'Notifications'), h('span', `${this.unreadCount || 0} unread`)]),
+          h('button', { type: 'button', onClick: () => this.$emit('close') }, 'Close')
+        ]),
+        h('div', { class: 'edge-notification-toolbar' }, [
+          ...filters,
+          h('button', { type: 'button', onClick: () => this.$emit('refresh') }, 'Refresh'),
+          h('button', { type: 'button', onClick: () => this.$emit('mark-all-read') }, 'Mark all read')
+        ]),
+        this.error ? h('div', { class: 'edge-error-state' }, [
+          h('p', this.error),
+          h('button', { type: 'button', onClick: () => this.$emit('retry') }, 'Retry')
+        ]) : null,
+        this.loading ? h('div', { class: 'edge-loading-state' }, 'Loading notifications...') : null,
+        !this.loading && !this.error && !items.length ? h('div', { class: 'edge-empty-state' }, 'No notifications') : null,
+        h('div', { class: 'edge-notification-list' }, items)
+      ])
+    ]);
+  }
+};
+
+const localEdgeUIComponents = {
+  EdgeAppShell,
+  EdgePageLayout,
+  EdgePageHeader,
+  EdgeFilterBar,
+  EdgeStatCard,
+  EdgeStatusBadge,
+  EdgeEmptyState,
+  EdgeLoadingState,
+  EdgeErrorState,
+  EdgeNotificationBell,
+  EdgeNotificationDrawer
+};
+
 export default {
   name: 'VetedgeStockExpiryMonitor',
-  components: {
-    EdgePageHeader,
-    EdgeStatCard,
-    EdgeStatusBadge,
-    EdgeEmptyState,
-    EdgeLoadingState,
-    EdgeErrorState,
-    EdgeAppShell,
-    EdgePageLayout,
-    EdgeFilterBar,
-    EdgeNotificationBell,
-    EdgeNotificationDrawer
-  },
+  components: localEdgeUIComponents,
   data() {
     return {
       edgeUIValid: true,
@@ -322,12 +493,8 @@ export default {
     };
   },
   created() {
-    if (typeof window !== 'undefined') {
-      const edgeUI = window.EdgeUI || {};
-      const componentsSrc = edgeUI.components || edgeUI;
-      this.missingComponents = requiredEdgeUIComponents.filter((name) => !componentsSrc[name]);
-      this.edgeUIValid = this.missingComponents.length === 0;
-    }
+    this.missingComponents = requiredEdgeUIComponents.filter((name) => !localEdgeUIComponents[name]);
+    this.edgeUIValid = this.missingComponents.length === 0;
   },
   mounted() {
     this.fetchMetadata();

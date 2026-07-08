@@ -927,6 +927,7 @@ Fix status:
 ## Fixed Issues
 
 - Recent drift/bug-fix work stabilized permission/access behavior, UI labels, medical history cleanup, master pricing foundations, consultation billing settings, lab result workflow, lab order UX/status cleanup, and vaccination pricing/UI cleanup.
+- Stock Expiry Monitor cloud build safety: the page no longer imports CoreEdge private EdgeUI Vue component source files or requires `edgeui.bundle.js` at runtime. It keeps app-local lightweight EdgeSuite-compatible presentation components inside the VetEdge bundle, preserving filters, cards, table, loading, empty, error, and notification drawer behavior without a build-time CoreEdge frontend dependency.
 - Future fixed issues should be recorded here only when they do not already have a matching known issue entry above. If a known issue is fixed, update that known issue in place.
 
 ## Risks and Revisit Items
