@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import cstr, flt
 
 from vetedge.services.reporting_logic_v2 import execute_structured_report as _base_execute_structured_report
+from vetedge.services.report_insights import build_report_summary
 from vetedge.services.report_visibility import normalize_report_filters
 
 
@@ -13,7 +14,7 @@ def execute_structured_report(report_name: str, filters=None):
     filters = frappe._dict(filters or {})
     branch = cstr(filters.get("branch") or "").strip()
     if not branch:
-        return columns, data, message, chart, summary
+        return columns, data, message, chart, build_report_summary(report_name, data, filters, summary)
 
     if report_name in {"Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
         data = [row for row in data if cstr(row.get("service_branch")) == branch]
@@ -39,6 +40,8 @@ def execute_structured_report(report_name: str, filters=None):
             {"label": "Paid", "value": sum(flt(row.get("paid_amount")) for row in data), "indicator": "Blue"},
             {"label": "Outstanding", "value": sum(flt(row.get("outstanding_amount")) for row in data), "indicator": "Orange"},
         ]
+
+    summary = build_report_summary(report_name, data, filters, summary)
 
     return columns, data, message, chart, summary
 

@@ -320,6 +320,19 @@ VetEdge workflows depend on ERPNext/Core access to `Customer`, `Item`, `Item Pri
 - Manual Desk QA is still required with real users for workspace visibility, Link field search/filtering, branch/company user-permission behavior, and ERPNext Role Permission Manager assignments for support DocTypes.
 - Recommended next phase: live role-login QA using the Phase 10C checklist plus the Phase 10D role matrix, starting with Doctor, Front Desk, Accounts/Cashier, Branch Manager, Lab Technician, Grooming/Boarding user, and Dispensary/Stock user.
 
+### Phase 10F Report Insights Cards
+
+Status: implemented for existing high-value operational report routes.
+
+Summary:
+- Added a reusable backend report-summary pattern for VetEdge operational insight cards. The cards use Frappe Script Report report_summary output where possible, so they render above the existing report table without a CoreEdge frontend dependency or a custom table rewrite.
+- Enhanced existing report routes for Consultation Register, Lab Order Report, Vaccination Report, Boarding Report, Grooming Report, Patient Register, Revenue Summary, Unpaid Invoice Report, Stock Expiry Status, Active Hospitalisations, Hospitalisation Charge Summary, Care Location Occupancy, Hospitalisation Discharge Watch, and Pending Hospitalisation Actions.
+- Added future-safe summary builders for Appointment Report and Missed Appointment Report, but did not create those report routes because they are not present in the current app tree.
+- Calculation rules are row-based and filter-aware: summaries are built from the same filtered result rows returned to the report table after existing date, branch, company, patient, owner, practitioner, status, warehouse, and report-specific filters have been applied. Empty datasets return zero-value cards instead of errors.
+- Billing cards continue to use current report rows and labels such as Current Service Outstanding; they do not merge Patient Outstanding Context into current-service Billing Group truth. No submitted Sales Invoice, Payment Entry, Stock Entry, or Stock Ledger Entry mutation was added.
+- Stock Expiry Status keeps the existing report source and chart while expanding the summary strip to include affected items, warehouses, and suggested action.
+- Manual QA still required: open each enhanced report in Desk, apply date/branch/company/status filters, confirm cards update with the table, confirm empty states, confirm role-specific report access, and confirm no browser console errors.
+
 ### Phase 10E Live Role Login QA Checklist
 
 Use this checklist to verify real Desk behavior with actual users and ERPNext Role Permission Manager/User Permission assignments. This is operational QA only; failures should be logged as defects and fixed separately.

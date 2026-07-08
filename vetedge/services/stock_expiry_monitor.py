@@ -151,16 +151,9 @@ def get_stock_expiry_rows(filters=None) -> list[dict]:
 
 
 def get_summary(rows: list[dict]) -> list[dict]:
-	counts = {status: 0 for status in EXPIRY_STATUSES}
-	for row in rows:
-		status = row.get("expiry_status") or "Safe"
-		counts[status] = counts.get(status, 0) + 1
-	return [
-		_summary_card(_("Total Items"), len(rows), "Blue"),
-		_summary_card(_("Expired"), counts.get("Expired", 0), "Red"),
-		_summary_card(_("Expiring Soon"), counts.get("Expiring Soon", 0), "Orange"),
-		_summary_card(_("Safe"), counts.get("Safe", 0), "Green"),
-	]
+	from vetedge.services.report_insights import build_report_summary
+
+	return build_report_summary("Stock Expiry Status", rows)
 
 
 def get_status_chart(summary: list[dict]) -> dict:
