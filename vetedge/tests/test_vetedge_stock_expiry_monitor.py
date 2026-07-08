@@ -46,8 +46,8 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("Dispensary User", roles)
 		self.assertIn("Branch Manager", roles)
 
-	def test_loader_does_not_require_coreedge_edgeui_bundle(self):
-		"""Verify stock_expiry_monitor.js loads only the VetEdge bundle."""
+	def test_loader_loads_edgeui_before_product_bundle(self):
+		"""Verify stock_expiry_monitor.js loads public EdgeUI before the VetEdge bundle."""
 		vetedge_path = frappe.get_app_path("vetedge")
 		js_path = os.path.join(
 			vetedge_path, "veterinary", "page", "stock_expiry_monitor", "stock_expiry_monitor.js"
@@ -57,9 +57,14 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		with open(js_path, "r") as f:
 			content = f.read()
 			
-		self.assertNotIn("frappe.require('edgeui.bundle.js'", content)
-		self.assertNotIn("edgeui.bundle.js", content)
+		edgeui_idx = content.find("frappe.require('edgeui.bundle.js'")
+		product_idx = content.find("frappe.require('vetedge_stock_expiry_monitor.bundle.js'")
+		self.assertNotEqual(edgeui_idx, -1)
+		self.assertNotEqual(product_idx, -1)
+		self.assertLess(edgeui_idx, product_idx)
 		self.assertIn("frappe.require('vetedge_stock_expiry_monitor.bundle.js'", content)
+		self.assertIn("window.EdgeUI", content)
+		self.assertIn("Required EdgeSuite shell components could not be resolved", content)
 		self.assertIn("unmount()", content)
 		self.assertIn("current_visit_id", content)
 
@@ -118,6 +123,8 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("missingComponents", content)
 		self.assertIn("requiredEdgeUIComponents", content)
 		self.assertIn("localEdgeUIComponents", content)
+		self.assertIn("resolveEdgeUIComponents", content)
+		self.assertIn("window.EdgeUI", content)
 		self.assertIn("import { h } from 'vue'", content)
 		self.assertNotIn("coreedge/coreedge/public/js/edgeui", content)
 		self.assertNotIn("../../../../../coreedge", content)
@@ -195,10 +202,10 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		with open(js_path, "r") as f:
 			content = f.read()
 
-		self.assertNotIn("frappe.require('edgeui.bundle.js'", content)
+		self.assertIn("frappe.require('edgeui.bundle.js'", content)
 		self.assertIn("vetedge_stock_expiry_monitor.bundle.js", content)
 		self.assertIn("mountVetedgeStockExpiryMonitor", content)
-		self.assertIn("Stock Expiry Monitor failed to load", content)
+		self.assertIn("EdgeSuite UI failed to load", content)
 		self.assertIn('data-edge-product="vetedge"', content)
 		self.assertNotIn("edgeui.bundle.css", content)
 		self.assertNotIn("vetedge_stock_expiry_monitor.bundle.css", content)

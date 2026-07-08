@@ -325,11 +325,11 @@ VetEdge workflows depend on ERPNext/Core access to `Customer`, `Item`, `Item Pri
 Status: implemented for existing high-value operational report routes.
 
 Summary:
-- Added a reusable backend report-summary pattern for VetEdge operational insight cards. The cards use Frappe Script Report report_summary output where possible, so they render above the existing report table without a CoreEdge frontend dependency or a custom table rewrite.
+- Added a reusable backend report-summary pattern for VetEdge operational insight cards. The cards use Frappe Script Report `report_summary` output where possible, so they render above the existing report table without a CoreEdge frontend dependency or a custom table rewrite.
 - Enhanced existing report routes for Consultation Register, Lab Order Report, Vaccination Report, Boarding Report, Grooming Report, Patient Register, Revenue Summary, Unpaid Invoice Report, Stock Expiry Status, Active Hospitalisations, Hospitalisation Charge Summary, Care Location Occupancy, Hospitalisation Discharge Watch, and Pending Hospitalisation Actions.
 - Added future-safe summary builders for Appointment Report and Missed Appointment Report, but did not create those report routes because they are not present in the current app tree.
 - Calculation rules are row-based and filter-aware: summaries are built from the same filtered result rows returned to the report table after existing date, branch, company, patient, owner, practitioner, status, warehouse, and report-specific filters have been applied. Empty datasets return zero-value cards instead of errors.
-- Billing cards continue to use current report rows and labels such as Current Service Outstanding; they do not merge Patient Outstanding Context into current-service Billing Group truth. No submitted Sales Invoice, Payment Entry, Stock Entry, or Stock Ledger Entry mutation was added.
+- Billing cards continue to use current report rows and labels such as `Current Service Outstanding`; they do not merge Patient Outstanding Context into current-service Billing Group truth. No submitted Sales Invoice, Payment Entry, Stock Entry, or Stock Ledger Entry mutation was added.
 - Stock Expiry Status keeps the existing report source and chart while expanding the summary strip to include affected items, warehouses, and suggested action.
 - Manual QA still required: open each enhanced report in Desk, apply date/branch/company/status filters, confirm cards update with the table, confirm empty states, confirm role-specific report access, and confirm no browser console errors.
 
@@ -940,7 +940,7 @@ Fix status:
 ## Fixed Issues
 
 - Recent drift/bug-fix work stabilized permission/access behavior, UI labels, medical history cleanup, master pricing foundations, consultation billing settings, lab result workflow, lab order UX/status cleanup, and vaccination pricing/UI cleanup.
-- Stock Expiry Monitor cloud build safety: the page no longer imports CoreEdge private EdgeUI Vue component source files or requires `edgeui.bundle.js` at runtime. It keeps app-local lightweight EdgeSuite-compatible presentation components inside the VetEdge bundle, preserving filters, cards, table, loading, empty, error, and notification drawer behavior without a build-time CoreEdge frontend dependency.
+- Stock Expiry Monitor cloud build/runtime safety: the page no longer imports CoreEdge private EdgeUI Vue component source files at build time. The Desk page loader uses the public EdgeSuite runtime contract by loading `edgeui.bundle.js`, validating `window.EdgeUI.components`, then loading `vetedge_stock_expiry_monitor.bundle.js`; if the shared shell is missing, it shows an explicit failure block instead of raw unstyled success UI. App-local lightweight components remain available inside the VetEdge bundle so the product build does not require private CoreEdge frontend source paths.
 - Future fixed issues should be recorded here only when they do not already have a matching known issue entry above. If a known issue is fixed, update that known issue in place.
 
 ## Risks and Revisit Items
