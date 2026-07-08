@@ -227,11 +227,23 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		with open(sidebar_path, "r") as f:
 			sidebar = json.load(f)
 
-		expected_groups = ["Dashboard", "Operations", "Records", "Reports", "Settings"]
+		expected_workspace_groups = ["Dashboard", "Operations", "Records", "Reports", "Settings"]
+		expected_sidebar_groups = [
+			"Dashboard",
+			"Front Desk",
+			"Clinical",
+			"Hospital & Services",
+			"Inventory / Pharmacy",
+			"Reports",
+			"Veterinary Masters",
+			"Configuration",
+			"Platform",
+			"Help & Training",
+		]
 		workspace_groups = [row["label"] for row in workspace["links"] if row.get("type") == "Card Break"]
 		sidebar_groups = [row["label"] for row in sidebar["items"] if row.get("type") == "Section Break"]
-		self.assertEqual(workspace_groups, expected_groups)
-		self.assertEqual(sidebar_groups, expected_groups)
+		self.assertEqual(workspace_groups, expected_workspace_groups)
+		self.assertEqual(sidebar_groups, expected_sidebar_groups)
 
 		for rows in (workspace["links"], sidebar["items"]):
 			links = {
@@ -248,3 +260,7 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 				if row.get("type") == "Link"
 			)
 			self.assertFalse([key for key, count in counts.items() if key[1] and count > 1])
+
+		sidebar_labels = [row.get("label") for row in sidebar["items"]]
+		self.assertGreater(sidebar_labels.index("Stock Expiry Monitor"), sidebar_labels.index("Inventory / Pharmacy"))
+		self.assertLess(sidebar_labels.index("Stock Expiry Monitor"), sidebar_labels.index("Reports"))
