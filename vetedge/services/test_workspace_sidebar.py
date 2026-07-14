@@ -525,3 +525,36 @@ class TestWorkspaceSidebar(TestCase):
 				[item.get("label") for item in items].index(patient_items[0]["label"]),
 				[item.get("label") for item in items].index("Front Desk"),
 			)
+
+	def test_edgesuite_product_menu_registration(self):
+		# Read and verify edgesuite_product_menu.js content
+		js_path = APP_ROOT / "public/js/edgesuite_product_menu.js"
+		self.assertTrue(js_path.exists())
+		js_content = js_path.read_text(encoding="utf-8")
+		
+		# Assert registration structure
+		self.assertIn('product: "VetEdge"', js_content)
+		self.assertIn('label: "Product"', js_content)
+		self.assertIn('label: "Workspace"', js_content)
+		self.assertIn('label: "Platform"', js_content)
+		
+		# Assert dashboards submenu exists
+		self.assertIn('label: "Dashboards"', js_content)
+		self.assertIn('type: "Submenu"', js_content)
+		
+		# Assert all 10 dashboards are present
+		dashboards = [
+			"vetedge-executive-dashboard",
+			"vetedge-clinical-dashboard",
+			"veterinary-financial-dashboard",
+			"vetedge-inventory-dispensary-dashboard",
+			"vetedge-lab-dashboard",
+			"vetedge-vaccination-dashboard",
+			"vetedge-boarding-dashboard",
+			"vetedge-grooming-dashboard",
+			"vetedge-practitioner-performance-dashboard",
+			"vetedge-branch-performance-dashboard"
+		]
+		for db in dashboards:
+			self.assertIn(db, js_content)
+

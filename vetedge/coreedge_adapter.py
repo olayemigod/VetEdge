@@ -476,6 +476,12 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	except Exception:
 		branding = {}
 
+	bootinfo.edgesuite_product_menu = frappe._dict({
+		"product_label": branding.get("app_title") or "VetEdge",
+		"is_coreedge_available": bootinfo.is_coreedge_available,
+		"show_coreedge_controls": bootinfo.should_show_coreedge_controls
+	})
+
 	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
 	sidebar_items = bootinfo.get("workspace_sidebar_item")
 	if sidebar_items:
