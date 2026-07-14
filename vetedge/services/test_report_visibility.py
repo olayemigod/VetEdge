@@ -11,6 +11,7 @@ from vetedge.services.report_visibility import (
 	normalize_report_filters,
 	validate_dashboard_access,
 	validate_report_access,
+	get_earliest_transaction_date,
 )
 
 
@@ -75,3 +76,20 @@ class TestReportVisibility(TestCase):
 			)
 
 		self.assertEqual(filters.branch, "Main Branch")
+
+	def test_get_earliest_transaction_date(self):
+		# Mock frappe.db.get_value to return a date string
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", return_value="2021-05-10"):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2021-05-10")
+
+		# Test database query fallback
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", side_effect=[None, SimpleNamespace(date=lambda: "2022-06-15")]):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2022-06-15")
+
+		# Test fallback on exception
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", side_effect=Exception):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2020-01-01")
+

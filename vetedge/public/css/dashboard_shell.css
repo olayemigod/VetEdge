@@ -1,12 +1,189 @@
+/* dashboard_shell.css — EdgeSuite Workspace & Dashboard Styles */
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Layout Tokens
+   Shared spacing system for all EdgeSuite products.
+   VetEdge, RetailEdge, ClinicEdge, EduEdge, CoreEdge.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+	--edge-page-padding: 32px;
+	--edge-section-gap: 24px;
+	--edge-card-gap: 16px;
+	--edge-content-max-width: 1440px;
+	--edge-bg: #f7f9fc;
+	--edge-border: #dfe5ef;
+	--edge-radius: 8px;
+	--edge-text: #1e293b;
+	--edge-text-muted: #667085;
+	--edge-primary: #1677ff;
+	--edge-danger: #d92d20;
+	--edge-warning: #b7791f;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Workspace Container
+   Provides consistent breathing space between sidebar and content.
+   ─────────────────────────────────────────────────────────────── */
+
+.page-container[data-page-container] .layout-main .layout-main-section {
+	padding-left: var(--edge-page-padding);
+	padding-right: var(--edge-page-padding);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Dashboard Root
+   ─────────────────────────────────────────────────────────────── */
+
 .vetedge-dashboard-root {
-	padding: 16px 0;
+	padding: var(--edge-section-gap) var(--edge-page-padding);
+	max-width: var(--edge-content-max-width);
+	margin: 0 auto;
+	background-color: var(--edge-bg);
 }
 
 .vetedge-dashboard-root .vetedge-dashboard-report {
-	margin-bottom: 4px;
+	margin-bottom: 8px;
 }
 
 .vetedge-dashboard-root .vetedge-dashboard-kpis,
-.vetedge-dashboard-root .vetedge-dashboard-charts {
+.vetedge-dashboard-root .vetedge-dashboard-charts,
+.vetedge-dashboard-collection,
+.vetedge-dashboard-composition,
+.vetedge-dashboard-health {
 	min-height: 24px;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Dashboard Section Spacing
+   ─────────────────────────────────────────────────────────────── */
+
+.vetedge-dashboard-kpi-section,
+.vetedge-dashboard-collection-section,
+.vetedge-dashboard-composition-section,
+.vetedge-dashboard-health-section,
+.vetedge-dashboard-outstanding-section,
+.vetedge-dashboard-trend-section {
+	margin-bottom: var(--edge-section-gap);
+}
+
+.vetedge-dashboard-section-title {
+	font-size: 1.1rem;
+	font-weight: 600;
+	color: var(--edge-text);
+	margin-bottom: var(--edge-card-gap);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Premium Micro-interactions for EdgeSuite Dashboard Cards
+   ─────────────────────────────────────────────────────────────── */
+
+.edge-suite-interactive-card {
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+	border: 1px solid var(--edge-border);
+	border-radius: var(--edge-radius);
+}
+
+.edge-suite-interactive-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+	border-color: var(--edge-primary);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Alert Styling
+   ─────────────────────────────────────────────────────────────── */
+
+.edge-alerts-container .alert {
+	border-radius: var(--edge-radius);
+	border: 1px solid rgba(0, 0, 0, 0.03);
+	margin-bottom: 8px;
+}
+
+.edge-alerts-container .alert-danger {
+	background-color: #fff1f0;
+	border-color: #ffccc7;
+	color: var(--edge-danger);
+}
+
+.edge-alerts-container .alert-warning {
+	background-color: #fffbe6;
+	border-color: #ffe58f;
+	color: var(--edge-warning);
+}
+
+.edge-alerts-container .alert-info {
+	background-color: #e6f7ff;
+	border-color: #91d5ff;
+	color: var(--edge-primary);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Outstanding Rankings & Tables
+   ─────────────────────────────────────────────────────────────── */
+
+.vetedge-dashboard-outstanding .progress {
+	background-color: var(--edge-border);
+	overflow: hidden;
+}
+
+.vetedge-dashboard-outstanding .progress-bar {
+	transition: width 0.6s ease;
+}
+
+.vetedge-dashboard-outstanding table th {
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.5px;
+	color: var(--edge-text-muted);
+	background-color: var(--edge-bg);
+}
+
+.vetedge-dashboard-outstanding table td {
+	vertical-align: middle;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Report Executive Header Spacing
+   ─────────────────────────────────────────────────────────────── */
+
+.edgesuite-executive-header {
+	border-radius: var(--edge-radius);
+	border: 1px solid var(--edge-border);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Responsive: Tablet
+   ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 992px) {
+	:root {
+		--edge-page-padding: 20px;
+		--edge-section-gap: 20px;
+	}
+
+	.vetedge-dashboard-root {
+		padding: var(--edge-section-gap) var(--edge-page-padding);
+	}
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Responsive: Mobile
+   ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 576px) {
+	:root {
+		--edge-page-padding: 12px;
+		--edge-section-gap: 16px;
+		--edge-card-gap: 12px;
+	}
+
+	.vetedge-dashboard-root {
+		padding: var(--edge-section-gap) var(--edge-page-padding);
+	}
+
+	.page-container[data-page-container] .layout-main .layout-main-section {
+		padding-left: var(--edge-page-padding);
+		padding-right: var(--edge-page-padding);
+	}
 }

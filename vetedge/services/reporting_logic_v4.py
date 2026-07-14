@@ -74,68 +74,31 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         return payload
 
     if key == "financial":
-        revenue_rows = _rows("Revenue Summary", month_filters)
-        unpaid_rows = _rows("Unpaid Invoice Report", month_filters)
+        from vetedge.services.financial_insights import get_financial_insights
+        insights = get_financial_insights(filters)
 
-        draft_filters = frappe._dict(month_filters.copy())
-        draft_filters.status = "Draft"
-        draft_rows = _rows("Unpaid Invoice Report", draft_filters)
+        # Retrieve current dataset for chart rendering
+        current_dataset = insights.get("dataset") or []
 
-        total_revenue = sum(flt(row.get("grand_total")) for row in revenue_rows)
-        paid_revenue = sum(flt(row.get("paid_amount")) for row in revenue_rows)
-        outstanding_revenue = sum(flt(row.get("outstanding_amount")) for row in unpaid_rows)
+        # Normalize key names for compatibility with existing chart sum helpers
+        for row in current_dataset:
+            row["name"] = row.get("sales_invoice")
+            row["service_category"] = row.get("service_source")
 
-        payload["kpis"] = [
-            _kpi(
-                _("Total Revenue"),
-                _currency(total_revenue),
-                action={
-                    "type": "report",
-                    "target": "Revenue Summary",
-                    "filters": {}
-                }
-            ),
-            _kpi(
-                _("Paid Revenue"),
-                _currency(paid_revenue),
-                action={
-                    "type": "report",
-                    "target": "Revenue Summary",
-                    "filters": {}
-                }
-            ),
-            _kpi(
-                _("Outstanding Revenue"),
-                _currency(outstanding_revenue),
-                action={
-                    "type": "report",
-                    "target": "Unpaid Invoice Report",
-                    "filters": {}
-                }
-            ),
-            _kpi(
-                _("Draft / Pending Invoices"),
-                len(draft_rows),
-                action={
-                    "type": "report",
-                    "target": "Unpaid Invoice Report",
-                    "filters": {"status": "Draft"}
-                }
-            ),
-            _kpi(
-                _("Payments Received"),
-                _currency(paid_revenue),
-                action={
-                    "type": "report",
-                    "target": "Revenue Summary",
-                    "filters": {}
-                }
-            ),
-        ]
+        submitted_rows = [r for r in current_dataset if r.get("docstatus") == 1]
+        unpaid_rows = [r for r in submitted_rows if flt(r.get("outstanding_amount")) > 0]
+
+        payload["kpis"] = insights["kpis"]
+        payload["collection_metrics"] = insights["collection_metrics"]
+        payload["revenue_composition"] = insights["revenue_composition"]
+        payload["outstanding_breakdowns"] = insights["outstanding_breakdowns"]
+        payload["health_indicators"] = insights["health_indicators"]
+        payload["alerts"] = insights["alerts"]
+
         payload["charts"] = [
-            _daily_revenue_chart(revenue_rows),
-            _branch_revenue_chart(revenue_rows),
-            _service_area_revenue_chart(revenue_rows),
+            _daily_revenue_chart(submitted_rows),
+            _branch_revenue_chart(submitted_rows),
+            _service_area_revenue_chart(submitted_rows),
             _unpaid_status_chart(unpaid_rows),
         ]
         return payload

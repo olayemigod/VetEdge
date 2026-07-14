@@ -690,6 +690,112 @@ class TestFinancialDatasetUnification(unittest.TestCase):
                 self.assertEqual(draft_kpi["action"]["filters"]["status"], "Draft")
 
 
+class TestFinancialInsights(unittest.TestCase):
+    def test_financial_insights_reconciliation_and_schema(self):
+        invoices = [
+            frappe._dict(name="SINV-001", posting_date="2026-07-05", company="Company A", customer="CUST-001", grand_total=1000.0, outstanding_amount=400.0, docstatus=1, due_date="2026-07-20", branch="Branch A", cost_center="CC-A", status="Unpaid"),
+            frappe._dict(name="SINV-002", posting_date="2026-07-10", company="Company A", customer="CUST-002", grand_total=500.0, outstanding_amount=0.0, docstatus=1, due_date="2026-07-25", branch="Branch B", cost_center="CC-B", status="Paid"),
+            frappe._dict(name="SINV-003", posting_date="2026-07-12", company="Company A", customer="CUST-001", grand_total=300.0, outstanding_amount=300.0, docstatus=0, due_date="2026-07-30", branch="Branch A", cost_center="CC-A", status="Draft"),
+        ]
+
+        branch_by_cc = {"CC-B": "Branch B", "CC-A": "Branch A"}
+
+        def db_exists(doctype, name=None):
+            return doctype in {"DocType", "Sales Invoice", "Veterinary Consultation", "Branch", "Payment Entry Reference", "Payment Entry"}
+
+        def get_all(doctype, filters=None, fields=None, order_by=None, **kwargs):
+            if doctype == "Sales Invoice":
+                res = invoices
+                from_date = filters.get("posting_date")
+                if from_date:
+                    if isinstance(from_date, tuple) and from_date[0] == "between":
+                        d_range = from_date[1]
+                        res = [r for r in res if d_range[0] <= r.posting_date <= d_range[1]]
+                if filters.get("company"):
+                    res = [r for r in res if r.company == filters.get("company")]
+                return res
+            elif doctype == "Payment Entry Reference":
+                return [frappe._dict(reference_name="SINV-002", parent="PE-001")]
+            elif doctype == "Payment Entry":
+                return [frappe._dict(name="PE-001", posting_date="2026-07-12", branch="Branch B")]
+            elif doctype == "Branch":
+                return [frappe._dict(name="Branch A", cost_center="CC-A"), frappe._dict(name="Branch B", cost_center="CC-B")]
+            return []
+
+        from vetedge.services.financial_insights import get_financial_insights
+
+        with (
+            patch("vetedge.services.financial_dataset.frappe.db.exists", side_effect=db_exists),
+            patch("vetedge.services.financial_dataset.frappe.get_all", side_effect=get_all),
+            patch("vetedge.services.reporting_structure._branch_from_cost_center", side_effect=lambda cc: branch_by_cc.get(cc, "")),
+            patch("vetedge.services.reporting_structure.frappe.db.exists", side_effect=db_exists),
+            patch("vetedge.services.reporting_structure.frappe.get_all", side_effect=get_all),
+            patch("vetedge.services.reporting_structure._existing_field", side_effect=lambda dt, candidates: candidates[0]),
+            patch("vetedge.services.financial_insights.frappe.db.exists", side_effect=db_exists),
+            patch("vetedge.services.financial_insights.frappe.get_all", side_effect=get_all),
+        ):
+            insights = get_financial_insights({"from_date": "2026-07-01", "to_date": "2026-07-15"})
+
+            kpis = insights["kpis"]
+            self.assertEqual(len(kpis), 5)
+
+            total_revenue = next(k for k in kpis if k["id"] == "total_revenue")
+            paid_revenue = next(k for k in kpis if k["id"] == "paid_revenue")
+            outstanding_revenue = next(k for k in kpis if k["id"] == "outstanding_revenue")
+
+            self.assertEqual(total_revenue["value"], 1500.0)
+            self.assertEqual(paid_revenue["value"], 1100.0)
+            self.assertEqual(outstanding_revenue["value"], 400.0)
+
+            # Reconcile Math
+            self.assertEqual(total_revenue["value"], paid_revenue["value"] + outstanding_revenue["value"])
+
+            # Check Schema validations
+            for card in kpis + insights["collection_metrics"] + insights["revenue_composition"] + insights["health_indicators"]:
+                self.assertIn("id", card)
+                self.assertIn("title", card)
+                self.assertIn("value", card)
+                self.assertIn("secondary_value", card)
+                self.assertIn("trend", card)
+                self.assertIn("tooltip", card)
+                self.assertIn("severity", card)
+                self.assertIn("category", card)
+
+            # Check Collection performance
+            coll_metrics = insights["collection_metrics"]
+            cr = next(m for m in coll_metrics if m["id"] == "collection_rate")
+            self.assertEqual(cr["value"], 1100.0 / 1500.0 * 100.0)
+
+            # Check Average Days to Payment
+            dp = next(m for m in coll_metrics if m["id"] == "avg_days_payment")
+            self.assertEqual(dp["value"], 2.0)
+
+            # Check Health Indicators
+            health = insights["health_indicators"]
+            self.assertTrue(any(h["id"] == "billing_completion_rate" for h in health))
+            self.assertTrue(any(h["id"] == "payment_completion_rate" for h in health))
+            self.assertTrue(any(h["id"] == "revenue_concentration" for h in health))
+
+    def test_financial_insights_handles_empty_dataset_gracefully(self):
+        from vetedge.services.financial_insights import get_financial_insights
+
+        def get_empty(*args, **kwargs):
+            return []
+
+        with (
+            patch("vetedge.services.financial_dataset.frappe.db.exists", return_value=True),
+            patch("vetedge.services.financial_dataset.frappe.get_all", side_effect=get_empty),
+            patch("vetedge.services.reporting_structure._get_sales_invoice_rows", return_value=[]),
+        ):
+            insights = get_financial_insights({"from_date": "2026-07-01", "to_date": "2026-07-15"})
+
+            total_rev = next(k for k in insights["kpis"] if k["id"] == "total_revenue")
+            cr = next(m for m in insights["collection_metrics"] if m["id"] == "collection_rate")
+
+            self.assertEqual(total_rev["value"], 0.0)
+            self.assertEqual(cr["value"], 0.0)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

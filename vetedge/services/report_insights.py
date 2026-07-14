@@ -1,24 +1,33 @@
+# report_insights.py
 from __future__ import annotations
 
 from collections import Counter
-
+import frappe
 from frappe import _
-from frappe.utils import cint, cstr, flt
-
+from frappe.utils import cint, cstr, flt, getdate, nowdate
+from vetedge.services.report_metadata import get_report_definition
 
 MONEY_REPORTS = {"Revenue Summary", "Unpaid Invoice Report", "Hospitalisation Charge Summary"}
 
-
-def insight_card(label, value, indicator="Blue", datatype=None, subtitle=None):
+def insight_card(label, value, indicator="Blue", datatype=None, subtitle=None, trend=None, action=None, id=None, suffix=None):
 	card = {
 		"label": _(label),
+		"title": _(label),
 		"value": value,
 		"indicator": indicator,
 	}
+	if id:
+		card["id"] = id
 	if datatype:
 		card["datatype"] = datatype
 	if subtitle:
 		card["subtitle"] = _(subtitle)
+	if trend:
+		card["trend"] = trend
+	if action:
+		card["action"] = action
+	if suffix:
+		card["suffix"] = suffix
 	return card
 
 
@@ -29,8 +38,36 @@ def percent(numerator, denominator, precision=1):
 	return flt((flt(numerator) / denominator) * 100, precision)
 
 
-def build_report_summary(report_name, rows, filters=None, existing_summary=None):
+def normalize_filter_value(value):
+	if value is None:
+		return ""
+	if isinstance(value, (list, tuple, set)):
+		val_list = list(value)
+		if not val_list:
+			return ""
+		return normalize_filter_value(val_list[0])
+	return value
+
+
+def normalize_iterable_value(value):
+	if value is None:
+		return []
+	if isinstance(value, (list, tuple, set)):
+		return value
+	return [value]
+
+
+def build_report_summary(report_name, rows, filters=None, existing_summary=None, prev_rows=None):
 	rows = list(rows or [])
+	prev_rows = list(prev_rows or [])
+	filters = filters or {}
+
+	# 1. Check if report metadata definition is registered
+	definition = get_report_definition(report_name)
+	if definition:
+		return _build_metadata_insights(report_name, rows, prev_rows, definition, filters)
+
+	# 2. Fallback to old custom functions for backward compatibility
 	builders = {
 		"Consultation Register": consultation_summary,
 		"Appointment Report": appointment_summary,
@@ -52,8 +89,189 @@ def build_report_summary(report_name, rows, filters=None, existing_summary=None)
 	builder = builders.get(cstr(report_name))
 	if not builder:
 		return existing_summary or []
-	return builder(rows, filters or {})
+	return builder(rows, filters)
 
+
+def _build_metadata_insights(report_name, rows, prev_rows, definition, filters) -> list[dict]:
+	"""
+	Generalized Metadata-Driven Insights Engine.
+	"""
+	metrics = {}
+	prev_metrics = {}
+
+	# A. Helper to compute metrics dictionary for a dataset
+	def compute_metrics(target_rows, target_metrics):
+		for card in definition.get("cards", []):
+			cid = card["id"]
+			ctype = card.get("type")
+			field = card.get("field")
+
+			if ctype == "count":
+				if field:
+					val_iterable = normalize_iterable_value(card.get("value"))
+					target_metrics[cid] = sum(1 for r in target_rows if cstr(r.get(field)).strip().lower() in {cstr(v).lower() for v in val_iterable})
+				else:
+					target_metrics[cid] = len(target_rows)
+
+			elif ctype == "sum":
+				target_metrics[cid] = sum(flt(r.get(field)) for r in target_rows if r.get(field) is not None)
+
+			elif ctype == "average":
+				vals = [flt(r.get(field)) for r in target_rows if r.get(field) is not None]
+				target_metrics[cid] = flt(sum(vals) / len(vals), 2) if vals else 0.0
+
+			elif ctype == "mode":
+				vals = [cstr(r.get(field)).strip() for r in target_rows if r.get(field) is not None]
+				target_metrics[cid] = Counter(vals).most_common(1)[0][0] if vals else ""
+
+			elif ctype == "count_missing_field":
+				target_metrics[cid] = sum(1 for r in target_rows if not r.get(field))
+
+			elif ctype == "average_duration":
+				durations = []
+				for r in target_rows:
+					start = r.get(card.get("start_field"))
+					end = r.get(card.get("end_field"))
+					if start and end:
+						try:
+							diff = getdate(end) - getdate(start)
+							durations.append(diff.total_seconds() / 3600.0)  # hours
+						except Exception:
+							pass
+				target_metrics[cid] = flt(sum(durations) / len(durations), 1) if durations else 0.0
+
+			elif ctype == "count_comparison":
+				op = card.get("op", ">=")
+				val_comp = flt(normalize_filter_value(card.get("value", 0)))
+				cnt = 0
+				for r in target_rows:
+					item_val = flt(r.get(field))
+					if op == ">=" and item_val >= val_comp:
+						cnt += 1
+					elif op == ">" and item_val > val_comp:
+						cnt += 1
+					elif op == "<=" and item_val <= val_comp:
+						cnt += 1
+					elif op == "<" and item_val < val_comp:
+						cnt += 1
+					elif op == "==" and item_val == val_comp:
+						cnt += 1
+				target_metrics[cid] = cnt
+
+		# Formula/percentages computed in second pass
+		for card in definition.get("cards", []):
+			cid = card["id"]
+			ctype = card.get("type")
+			if ctype == "percentage":
+				num = flt(target_metrics.get(card.get("numerator"), 0.0))
+				den = flt(target_metrics.get(card.get("denominator"), 0.0))
+				target_metrics[cid] = percent(num, den)
+
+	compute_metrics(rows, metrics)
+	if prev_rows:
+		compute_metrics(prev_rows, prev_metrics)
+
+	# B. Generate Cards
+	insight_cards = []
+	for card in definition.get("cards", []):
+		cid = card["id"]
+		val = metrics.get(cid, 0.0)
+		prev_val = prev_metrics.get(cid, 0.0)
+
+		# Trend badge details
+		trend = None
+		if prev_rows and isinstance(val, (int, float)) and isinstance(prev_val, (int, float)):
+			diff = val - prev_val
+			pct = percent(diff, prev_val) if prev_val else (100.0 if diff > 0 else 0.0)
+			trend = {
+				"direction": "up" if diff > 0 else ("down" if diff < 0 else "flat"),
+				"percentage": abs(pct)
+			}
+
+		# Click actions (drilldown options)
+		action = None
+		if definition.get("capabilities", {}).get("supports_drilldown"):
+			if card.get("field"):
+				action = {
+					"type": "report",
+					"target": report_name,
+					"filters": {card["field"]: normalize_filter_value(card.get("value"))}
+				}
+
+		datatype = card.get("datatype")
+		suffix = card.get("suffix", "")
+
+		insight_cards.append(
+			insight_card(
+				label=card["title"],
+				value=val,
+				indicator=card.get("indicator", "Blue"),
+				datatype=datatype,
+				trend=trend,
+				action=action,
+				id=cid,
+				suffix=suffix
+			)
+		)
+
+	# C. Health score calculation
+	health_score = 100.0
+	health_rules = definition.get("health_rules")
+	if health_rules:
+		health_score = health_rules.evaluate(metrics)
+
+	health_rating = _("Healthy")
+	health_severity = "success"
+	if health_score >= 90.0:
+		health_rating = _("Excellent")
+		health_severity = "success"
+	elif health_score >= 75.0:
+		health_rating = _("Healthy")
+		health_severity = "info"
+	else:
+		health_rating = _("Needs Attention")
+		health_severity = "warning"
+
+	# D. Actionable recommendations
+	recommendations = []
+	for rule in definition.get("recommendation_rules", []):
+		if rule.evaluate(metrics):
+			metric_val = metrics.get(rule.metric_key, "")
+			recommendations.append({
+				"title": rule.title.format(metric_val),
+				"description": rule.description,
+				"severity": rule.severity
+			})
+
+	# E. Construct Metadata envelope (EdgeSuite Payload contract)
+	metadata = {
+		"is_edgesuite_metadata": True,
+		"__edgesuite__": {
+			"version": "1.0.0"
+		},
+		"title": definition.get("title", report_name),
+		"icon": definition.get("icon", "table"),
+		"capabilities": definition.get("capabilities", {}),
+		"health_score": {
+			"score": health_score,
+			"rating": health_rating,
+			"severity": health_severity
+		},
+		"recommendations": recommendations,
+		"empty_state": definition.get("empty_state", {
+			"message": _("No data matching filters."),
+			"suggestions": [_("Check the filter inputs.")]
+		}),
+		"last_refresh": nowdate(),
+		"filter_summary": ", ".join(f"{k}: {v}" for k, v in filters.items() if v)
+	}
+
+	# Append metadata dict to the cards list
+	insight_cards.append(metadata)
+	return insight_cards
+
+
+# Old custom summaries builders (retained for fallback / compatibility)
 
 def consultation_summary(rows, filters=None):
 	total = len(rows)

@@ -203,5 +203,121 @@ class TestReportInsights(unittest.TestCase):
 					self.assertNotIn(needle, text, str(path))
 
 
+class TestEdgeSuiteReportFramework(unittest.TestCase):
+	def test_metadata_pluggable_registration(self):
+		from vetedge.services.report_metadata import register_report, get_report_definition, HealthRule, RecommendationRule
+
+		test_definition = {
+			"title": "Test Report",
+			"icon": "star",
+			"capabilities": {
+				"supports_health_score": True,
+				"supports_recommendations": True,
+				"supports_comparison": True
+			},
+			"cards": [
+				{"id": "total_items", "title": "Total Items", "type": "count", "indicator": "Blue"},
+				{"id": "error_items", "title": "Errors", "type": "count", "field": "status", "value": {"Error", "failed"}, "indicator": "Red"},
+				{"id": "success_rate", "title": "Success Rate", "type": "percentage", "numerator": "total_items", "denominator": "total_items", "indicator": "Green"}
+			],
+			"health_rules": HealthRule(metric_key="success_rate", scale=1.0),
+			"recommendation_rules": [
+				RecommendationRule(
+					metric_key="error_items",
+					operator="gt",
+					threshold_value=2,
+					title="High Errors",
+					description="Investigate immediately.",
+					severity="danger"
+				)
+			],
+			"empty_state": {
+				"message": "Empty test state.",
+				"suggestions": ["Add dummy data."]
+			}
+		}
+
+		register_report("Custom Test Report", test_definition)
+
+		self.assertEqual(get_report_definition("Custom Test Report"), test_definition)
+
+		rows = [
+			{"status": "Success"},
+			{"status": "Error"},
+			{"status": "Error"},
+			{"status": "Error"}
+		]
+
+		from vetedge.services.report_insights import build_report_summary
+		summary = build_report_summary("Custom Test Report", rows)
+
+		metadata = next(item for item in summary if item.get("is_edgesuite_metadata"))
+		self.assertEqual(metadata["__edgesuite__"]["version"], "1.0.0")
+		self.assertEqual(metadata["title"], "Test Report")
+		self.assertEqual(metadata["icon"], "star")
+		self.assertTrue(metadata["capabilities"]["supports_health_score"])
+
+		self.assertEqual(len(metadata["recommendations"]), 1)
+		self.assertEqual(metadata["recommendations"][0]["title"], "High Errors")
+		self.assertEqual(metadata["recommendations"][0]["severity"], "danger")
+
+		# Assert data-only contract has absolutely no HTML strings
+		for card in summary:
+			for key, val in card.items():
+				if isinstance(val, str):
+					self.assertNotIn("<", val)
+					self.assertNotIn(">", val)
+
+	def test_metadata_insights_robustness_with_scalar_and_iterable_values(self):
+		from decimal import Decimal
+		from vetedge.services.report_metadata import register_report
+		from vetedge.services.report_insights import build_report_summary
+
+		test_definition = {
+			"title": "Robustness Test Report",
+			"capabilities": {
+				"supports_drilldown": True
+			},
+			"cards": [
+				{"id": "card_int", "title": "Int Card", "type": "count", "field": "status", "value": 15000},
+				{"id": "card_float", "title": "Float Card", "type": "count", "field": "status", "value": 15.5},
+				{"id": "card_decimal", "title": "Decimal Card", "type": "count_comparison", "field": "amount", "op": ">=", "value": Decimal("100.50")},
+				{"id": "card_str", "title": "Str Card", "type": "count", "field": "status", "value": "Paid"},
+				{"id": "card_none", "title": "None Card", "type": "count", "field": "status", "value": None},
+				{"id": "card_list", "title": "List Card", "type": "count", "field": "status", "value": ["Completed", "Active"]},
+				{"id": "card_tuple", "title": "Tuple Card", "type": "count", "field": "status", "value": ("Completed", "Active")},
+				{"id": "card_empty", "title": "Empty Card", "type": "count", "field": "status", "value": []}
+			]
+		}
+
+		register_report("Robustness Test Report", test_definition)
+
+		rows = [
+			{"status": "15000", "amount": 150.0},
+			{"status": "15.5", "amount": 100.5},
+			{"status": "Paid", "amount": 50.0},
+			{"status": "Completed", "amount": 0.0},
+		]
+
+		# This should build summary successfully without raising TypeError
+		summary = build_report_summary("Robustness Test Report", rows)
+		self.assertTrue(summary)
+
+		# Check the action filters generated for each card to verify correct value mapping
+		card_filters = {}
+		for card in summary:
+			if "action" in card and card["action"]:
+				card_filters[card["id"]] = card["action"]["filters"]
+
+		self.assertEqual(card_filters.get("card_int"), {"status": 15000})
+		self.assertEqual(card_filters.get("card_float"), {"status": 15.5})
+		self.assertEqual(card_filters.get("card_decimal"), {"amount": Decimal("100.50")})
+		self.assertEqual(card_filters.get("card_str"), {"status": "Paid"})
+		self.assertEqual(card_filters.get("card_none"), {"status": ""})
+		self.assertEqual(card_filters.get("card_list"), {"status": "Completed"})
+		self.assertEqual(card_filters.get("card_tuple"), {"status": "Completed"})
+		self.assertEqual(card_filters.get("card_empty"), {"status": ""})
+
+
 if __name__ == "__main__":
 	unittest.main()

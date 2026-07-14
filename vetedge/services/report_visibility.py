@@ -405,3 +405,20 @@ def _should_lock_practitioner_view(user: str | None, scope_name: str, scope_type
 	if get_user_roles(user) & BRANCH_MANAGER_REPORTING_ROLES:
 		return False
 	return bool(get_user_roles(user) & DOCTOR_REPORTING_ROLES)
+
+
+@frappe.whitelist()
+def get_earliest_transaction_date():
+	earliest_date = "2020-01-01"
+	try:
+		res = frappe.db.get_value("Sales Invoice", filters={}, fieldname="posting_date", order_by="posting_date asc")
+		if res:
+			earliest_date = cstr(res)
+		else:
+			res = frappe.db.get_value("Veterinary Patient", filters={}, fieldname="creation", order_by="creation asc")
+			if res:
+				earliest_date = cstr(res.date())
+	except Exception:
+		pass
+	return earliest_date
+
