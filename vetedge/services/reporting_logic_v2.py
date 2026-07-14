@@ -18,8 +18,8 @@ def execute_structured_report(report_name: str, filters=None):
     if report_name in {"Consultation Register", "Planned Treatment", "Lab Order Report", "Vaccination Report", "Boarding Report", "Grooming Report"}:
         _replace_owner_from_patient(data, "patient", "owner")
 
-    if report_name == "Unpaid Invoice Report" and filters.get("branch"):
-        data = [row for row in data if _invoice_matches_branch(row.get("invoice"), filters.get("branch"))]
+    # Branch filtering for Unpaid Invoice Report is now unified inside build_financial_dataset
+    pass
 
     if report_name == "Dispensary Activity Report":
         data = _enrich_stock_activity_rows(data, filters.get("branch"))

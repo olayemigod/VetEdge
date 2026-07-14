@@ -11,14 +11,17 @@
 			<div class="row">
 				${kpis
 					.map(
-						(kpi) => `
-							<div class="col-md-4 mb-3">
-								<div class="border rounded p-3 bg-white">
-									<div class="text-muted small">${escapeHtml(kpi.label)}</div>
-									<div style="font-size: 1.4rem; font-weight: 600;">${escapeHtml(kpi.value)}</div>
+						(kpi) => {
+							const actionAttr = kpi.action ? `class="border rounded p-3 bg-white vetedge-dashboard-kpi-card" style="cursor: pointer;" data-action="${escapeHtml(JSON.stringify(kpi.action))}"` : 'class="border rounded p-3 bg-white"';
+							return `
+								<div class="col-md-4 mb-3">
+									<div ${actionAttr}>
+										<div class="text-muted small">${escapeHtml(kpi.label)}</div>
+										<div style="font-size: 1.4rem; font-weight: 600;">${escapeHtml(kpi.value)}</div>
+									</div>
 								</div>
-							</div>
-						`
+							`;
+						}
 					)
 					.join("")}
 			</div>
@@ -179,7 +182,28 @@
 			wrapper.on("click", ".vetedge-dashboard-report", function () {
 				const report = $(this).data("report");
 				if (report) {
+					frappe.route_options = {
+						from_date: state.from_date,
+						to_date: state.to_date,
+						branch: state.branch
+					};
 					frappe.set_route("query-report", report);
+				}
+			});
+
+			wrapper.on("click", ".vetedge-dashboard-kpi-card", function () {
+				const actionStr = $(this).attr("data-action");
+				if (actionStr) {
+					const action = JSON.parse(actionStr);
+					if (action.type === "report" && action.target) {
+						const routeFilters = Object.assign({}, {
+							from_date: state.from_date,
+							to_date: state.to_date,
+							branch: state.branch
+						}, action.filters || {});
+						frappe.route_options = routeFilters;
+						frappe.set_route("query-report", action.target);
+					}
 				}
 			});
 

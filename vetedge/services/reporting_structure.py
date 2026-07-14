@@ -498,13 +498,25 @@ def _revenue_summary(filters):
 
 
 def _unpaid_invoice_report(filters):
-    rows = _get_sales_invoice_rows(filters, unpaid_only=True)
-    invoice_context = _build_invoice_context_map([row["name"] for row in rows])
-    patient_titles = _get_patient_title_map(context.get("patient") for context in invoice_context.values())
+    from vetedge.services.financial_dataset import build_financial_dataset
+    dataset = build_financial_dataset(filters)
+
+    status_val = filters.get("status")
+    docstatus_val = filters.get("docstatus")
+
+    if status_val == "Draft" or docstatus_val == 0:
+        rows = [row for row in dataset if row["docstatus"] == 0]
+    else:
+        rows = [row for row in dataset if row["docstatus"] == 1 and row["outstanding_amount"] > 0]
+
+    patient_ids = [row["patient"] for row in rows if row.get("patient")]
+    patient_titles = _get_patient_title_map(patient_ids) if patient_ids else {}
+
     data = []
     for row in rows:
         age_base = getdate(row.get("due_date") or row.get("posting_date") or nowdate())
         age_days = max(0, date_diff(nowdate(), age_base))
+
         if filters.get("age_range"):
             age_range = cstr(filters.get("age_range"))
             if age_range == "0-30" and not (0 <= age_days <= 30):
@@ -515,21 +527,20 @@ def _unpaid_invoice_report(filters):
                 continue
             if age_range == "90+" and age_days < 91:
                 continue
-        context = invoice_context.get(row["name"], {})
-        row_branch = _resolve_invoice_report_branch(row, context)
-        data.append(
-            {
-                "invoice": row.get("name"),
-                "customer": row.get("customer"),
-                "posting_date": row.get("posting_date"),
-                "due_date": row.get("due_date"),
-                "outstanding_amount": flt(row.get("outstanding_amount")),
-                "age_days": age_days,
-                "branch": row_branch,
-                "cost_center": context.get("cost_center") or row.get("cost_center"),
-                "linked_patient": patient_titles.get(context.get("patient")) or context.get("patient"),
-            }
-        )
+
+        row_data = {
+            "invoice": row.get("sales_invoice"),
+            "customer": row.get("customer"),
+            "posting_date": row.get("posting_date"),
+            "due_date": row.get("due_date"),
+            "outstanding_amount": flt(row.get("outstanding_amount")),
+            "age_days": age_days,
+            "branch": row.get("branch"),
+            "cost_center": row.get("cost_center"),
+            "linked_patient": patient_titles.get(row.get("patient")) or row.get("patient"),
+        }
+        data.append(row_data)
+
     columns = [
         _col("invoice", "Link", "Sales Invoice"),
         _col("customer", "Link", "Customer"),
@@ -979,29 +990,27 @@ def _get_sales_invoice_rows(filters, unpaid_only=False):
 
 
 def _build_revenue_summary_rows(filters):
-    rows = _get_sales_invoice_rows(filters)
-    invoice_context = _build_invoice_context_map([row["name"] for row in rows])
+    from vetedge.services.financial_dataset import build_financial_dataset
+    dataset = build_financial_dataset(filters)
     data = []
-    for row in rows:
-        context = invoice_context.get(row["name"], {})
-        row_branch = _resolve_invoice_report_branch(row, context)
-        if filters.get("branch") and cstr(row_branch) != cstr(filters.get("branch")):
+    for row in dataset:
+        # Only submitted Sales Invoices are included in Revenue Summary
+        if row["docstatus"] != 1:
             continue
-        service_category = context.get("service_category") or _("General")
-        if filters.get("service_category") and service_category != filters.get("service_category"):
+        if filters.get("service_category") and row.get("service_source") != filters.get("service_category"):
             continue
         data.append(
             {
-                "invoice": row.get("name"),
+                "invoice": row.get("sales_invoice"),
                 "posting_date": row.get("posting_date"),
                 "customer": row.get("customer"),
-                "branch": row_branch,
-                "cost_center": context.get("cost_center") or row.get("cost_center"),
-                "service_category": service_category,
+                "branch": row.get("branch"),
+                "cost_center": row.get("cost_center"),
+                "service_category": row.get("service_source"),
                 "grand_total": flt(row.get("grand_total")),
-                "paid_amount": flt(row.get("grand_total")) - flt(row.get("outstanding_amount")),
+                "paid_amount": flt(row.get("paid_amount")),
                 "outstanding_amount": flt(row.get("outstanding_amount")),
-                "status": row.get("status") or _invoice_status_from_row(row),
+                "status": row.get("payment_status"),
             }
         )
     return data

@@ -545,5 +545,151 @@ class TestReportingStructure(unittest.TestCase):
         self.assertEqual(chart["empty_state"], "No pending hospitalisation actions.")
 
 
+class TestFinancialDatasetUnification(unittest.TestCase):
+    def test_financial_dataset_and_dashboard_reconciliation(self):
+        invoices = [
+            frappe._dict(name="SINV-001", posting_date="2026-07-05", company="Company A", customer="CUST-001", grand_total=1000.0, outstanding_amount=400.0, docstatus=1, due_date="2026-07-20", branch=None, cost_center="CC-A", status="Unpaid"),
+            frappe._dict(name="SINV-002", posting_date="2026-07-10", company="Company A", customer="CUST-002", grand_total=500.0, outstanding_amount=0.0, docstatus=1, due_date="2026-07-25", branch=None, cost_center="CC-B", status="Paid"),
+            frappe._dict(name="SINV-003", posting_date="2026-07-12", company="Company A", customer="CUST-001", grand_total=300.0, outstanding_amount=300.0, docstatus=0, due_date="2026-07-30", branch="Branch A", cost_center="CC-A", status="Draft"),
+            frappe._dict(name="SINV-004", posting_date="2026-07-14", company="Company A", customer="CUST-003", grand_total=1200.0, outstanding_amount=1200.0, docstatus=1, due_date="2026-07-28", branch=None, cost_center="CC-A", status="Unpaid"),
+        ]
+
+        consultations = [
+            frappe._dict(name="VCON-001", sales_invoice="SINV-001", linked_invoice="SINV-001", invoice="SINV-001", patient="VP-001", service_branch="Branch A", branch=None, cost_center="CC-A")
+        ]
+
+        vaccinations = [
+            frappe._dict(name="VVAC-001", linked_invoice="SINV-004", patient="VP-002", service_branch="Branch A", branch=None, cost_center="CC-A")
+        ]
+
+        branch_by_cc = {"CC-B": "Branch B", "CC-A": "Branch A"}
+
+        def db_exists(doctype, name=None):
+            return doctype in {
+                "DocType", "Sales Invoice", "Veterinary Consultation", 
+                "Veterinary Vaccination Record", "Branch", 
+                "Consultation Invoice Reference", "Veterinary Billing Session Charge"
+            }
+
+        def get_all(doctype, filters=None, fields=None, order_by=None, **kwargs):
+            if doctype == "Sales Invoice":
+                res = invoices
+                from_date = filters.get("posting_date")
+                if from_date:
+                    if isinstance(from_date, tuple) and from_date[0] == "between":
+                        d_range = from_date[1]
+                        res = [r for r in res if d_range[0] <= r.posting_date <= d_range[1]]
+                if filters.get("company"):
+                    res = [r for r in res if r.company == filters.get("company")]
+                return res
+            elif doctype == "Veterinary Consultation":
+                if filters:
+                    inv_key = next((k for k in filters if k in ("sales_invoice", "linked_invoice", "invoice")), None)
+                    if inv_key:
+                        inv_val = filters[inv_key]
+                        inv_in = inv_val[1] if isinstance(inv_val, tuple) else inv_val
+                        if not isinstance(inv_in, (list, tuple)):
+                            inv_in = [inv_in]
+                        return [c for c in consultations if c.sales_invoice in inv_in or c.get(inv_key) in inv_in]
+                return consultations
+            elif doctype == "Veterinary Vaccination Record":
+                if filters:
+                    inv_key = next((k for k in filters if k in ("sales_invoice", "linked_invoice", "invoice")), None)
+                    if inv_key:
+                        inv_val = filters[inv_key]
+                        inv_in = inv_val[1] if isinstance(inv_val, tuple) else inv_val
+                        if not isinstance(inv_in, (list, tuple)):
+                            inv_in = [inv_in]
+                        return [v for v in vaccinations if v.linked_invoice in inv_in or v.get(inv_key) in inv_in]
+                return vaccinations
+            elif doctype == "Branch":
+                return [frappe._dict(name="Branch A", cost_center="CC-A"), frappe._dict(name="Branch B", cost_center="CC-B")]
+            return []
+
+        from vetedge.services.financial_dataset import build_financial_dataset
+
+        with (
+            patch("vetedge.services.reporting_structure.frappe.db.exists", side_effect=db_exists),
+            patch("vetedge.services.reporting_structure.frappe.get_all", side_effect=get_all),
+            patch("vetedge.services.reporting_structure._branch_from_cost_center", side_effect=lambda cc: branch_by_cc.get(cc, "")),
+            patch("vetedge.services.reporting_structure._get_invoice_payment_branch_map", return_value={}),
+            patch("vetedge.services.reporting_structure._existing_field", side_effect=lambda dt, candidates: candidates[0]),
+        ):
+            # Test 1: Fetch financial dataset with no filters (defaults to date range)
+            dataset = build_financial_dataset({"from_date": "2026-07-01", "to_date": "2026-07-15"})
+            self.assertEqual(len(dataset), 4)
+
+            # Check derived branch, patient, and service source
+            inv1 = next(r for r in dataset if r["sales_invoice"] == "SINV-001")
+            self.assertEqual(inv1["branch"], "Branch A")
+            self.assertEqual(inv1["patient"], "VP-001")
+            self.assertEqual(inv1["service_source"], "Consultation")
+
+            inv2 = next(r for r in dataset if r["sales_invoice"] == "SINV-002")
+            self.assertEqual(inv2["branch"], "Branch B")
+            self.assertEqual(inv2["service_source"], "General")
+
+            inv4 = next(r for r in dataset if r["sales_invoice"] == "SINV-004")
+            self.assertEqual(inv4["branch"], "Branch A")
+            self.assertEqual(inv4["patient"], "VP-002")
+            self.assertEqual(inv4["service_source"], "Vaccination")
+
+            # Test 2: Filter by Branch A
+            dataset_branch_a = build_financial_dataset({"from_date": "2026-07-01", "to_date": "2026-07-15", "branch": "Branch A"})
+            self.assertEqual(len(dataset_branch_a), 3)
+
+            # Test 3: Dashboard & KPI reconciliation
+            frappe_stub = SimpleNamespace(
+                _dict=frappe._dict,
+                format_value=lambda val, opts=None: val,
+                db=SimpleNamespace(exists=db_exists, count=lambda dt, filt: 0),
+                get_all=get_all
+            )
+
+            from vetedge.services.reporting_logic_v3 import execute_structured_report
+
+            def mock_execute_report(report_name, filters=None):
+                from vetedge.services.reporting_structure import execute_structured_report as base_exec
+                with (
+                    patch("vetedge.services.reporting_structure.frappe.db.exists", side_effect=db_exists),
+                    patch("vetedge.services.reporting_structure.frappe.get_all", side_effect=get_all),
+                    patch("vetedge.services.reporting_structure._branch_from_cost_center", side_effect=lambda cc: branch_by_cc.get(cc, "")),
+                    patch("vetedge.services.reporting_structure._get_invoice_payment_branch_map", return_value={}),
+                    patch("vetedge.services.reporting_structure._existing_field", side_effect=lambda dt, candidates: candidates[0]),
+                ):
+                    return base_exec(report_name, filters)
+
+            from vetedge.services import reporting_logic_v4
+
+            with (
+                patch.object(reporting_logic_v4, "frappe", frappe_stub),
+                patch.object(reporting_logic_v4, "nowdate", return_value="2026-07-15"),
+                patch.object(reporting_logic_v4, "validate_dashboard_access"),
+                patch.object(reporting_logic_v4, "normalize_dashboard_filters", side_effect=lambda key, filters: frappe._dict(filters or {})),
+                patch("vetedge.services.reporting_logic_v4.execute_structured_report", side_effect=mock_execute_report),
+            ):
+                payload = reporting_logic_v4.get_dashboard_payload("financial", {"from_date": "2026-07-01", "to_date": "2026-07-15", "branch": "Branch A"})
+
+                total_rev_kpi = next(k for k in payload["kpis"] if k["label"] == "Total Revenue")
+                paid_rev_kpi = next(k for k in payload["kpis"] if k["label"] == "Paid Revenue")
+                out_rev_kpi = next(k for k in payload["kpis"] if k["label"] == "Outstanding Revenue")
+                draft_kpi = next(k for k in payload["kpis"] if k["label"] == "Draft / Pending Invoices")
+
+                # Reconcile sum aggregations
+                self.assertEqual(total_rev_kpi["value"], 2200.0)
+                self.assertEqual(paid_rev_kpi["value"], 600.0)
+                self.assertEqual(out_rev_kpi["value"], 1600.0)
+                self.assertEqual(draft_kpi["value"], 1)
+
+                # Total = Paid + Outstanding
+                self.assertEqual(total_rev_kpi["value"], paid_rev_kpi["value"] + out_rev_kpi["value"])
+
+                # Check action metadata navigation targets
+                self.assertEqual(out_rev_kpi["action"]["target"], "Unpaid Invoice Report")
+                self.assertEqual(draft_kpi["action"]["target"], "Unpaid Invoice Report")
+                self.assertEqual(draft_kpi["action"]["filters"]["status"], "Draft")
+
+
 if __name__ == "__main__":
+    import unittest
     unittest.main()

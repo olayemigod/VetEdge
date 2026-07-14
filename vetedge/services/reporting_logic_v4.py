@@ -75,16 +75,62 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
 
     if key == "financial":
         revenue_rows = _rows("Revenue Summary", month_filters)
-        unpaid_rows = _rows("Unpaid Invoice Report", filters)
+        unpaid_rows = _rows("Unpaid Invoice Report", month_filters)
+
+        draft_filters = frappe._dict(month_filters.copy())
+        draft_filters.status = "Draft"
+        draft_rows = _rows("Unpaid Invoice Report", draft_filters)
+
         total_revenue = sum(flt(row.get("grand_total")) for row in revenue_rows)
         paid_revenue = sum(flt(row.get("paid_amount")) for row in revenue_rows)
-        outstanding_revenue = sum(flt(row.get("outstanding_amount")) for row in revenue_rows)
+        outstanding_revenue = sum(flt(row.get("outstanding_amount")) for row in unpaid_rows)
+
         payload["kpis"] = [
-            _kpi(_("Total Revenue"), _currency(total_revenue)),
-            _kpi(_("Paid Revenue"), _currency(paid_revenue)),
-            _kpi(_("Outstanding Revenue"), _currency(outstanding_revenue)),
-            _kpi(_("Draft / Pending Invoices"), len(unpaid_rows)),
-            _kpi(_("Payments Received"), _currency(paid_revenue)),
+            _kpi(
+                _("Total Revenue"),
+                _currency(total_revenue),
+                action={
+                    "type": "report",
+                    "target": "Revenue Summary",
+                    "filters": {}
+                }
+            ),
+            _kpi(
+                _("Paid Revenue"),
+                _currency(paid_revenue),
+                action={
+                    "type": "report",
+                    "target": "Revenue Summary",
+                    "filters": {}
+                }
+            ),
+            _kpi(
+                _("Outstanding Revenue"),
+                _currency(outstanding_revenue),
+                action={
+                    "type": "report",
+                    "target": "Unpaid Invoice Report",
+                    "filters": {}
+                }
+            ),
+            _kpi(
+                _("Draft / Pending Invoices"),
+                len(draft_rows),
+                action={
+                    "type": "report",
+                    "target": "Unpaid Invoice Report",
+                    "filters": {"status": "Draft"}
+                }
+            ),
+            _kpi(
+                _("Payments Received"),
+                _currency(paid_revenue),
+                action={
+                    "type": "report",
+                    "target": "Revenue Summary",
+                    "filters": {}
+                }
+            ),
         ]
         payload["charts"] = [
             _daily_revenue_chart(revenue_rows),
@@ -537,8 +583,11 @@ def _boarding_occupancy(filters):
     return f"{int(occupied)} / {int(capacity)} ({round((occupied / capacity) * 100, 1)}%)"
 
 
-def _kpi(label, value):
-    return {"label": label, "value": value}
+def _kpi(label, value, action=None):
+    kpi = {"label": label, "value": value}
+    if action:
+        kpi["action"] = action
+    return kpi
 
 
 def _currency(value):
