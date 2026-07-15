@@ -204,7 +204,7 @@ class TestPermissions(TestCase):
 			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
 			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
 		):
-			self.assertIsNone(
+			self.assertTrue(
 				has_veterinary_lab_order_permission(
 					lab_order,
 					user="doctor@example.com",
@@ -220,7 +220,7 @@ class TestPermissions(TestCase):
 			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
 			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
 		):
-			self.assertIsNone(
+			self.assertTrue(
 				has_veterinary_consultation_permission(
 					consultation,
 					user="doctor@example.com",
@@ -349,6 +349,215 @@ class TestPermissions(TestCase):
 				)
 			)
 
+	def test_system_manager_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="doctor@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="System Manager",
+					permission_type="read",
+				)
+			)
+
+	def test_administrator_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="doctor@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="Administrator",
+					permission_type="read",
+				)
+			)
+
+	def test_vetedge_administrator_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="doctor@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="VetEdge Administrator",
+					permission_type="read",
+				)
+			)
+
+	def test_missed_appointment_creator_can_read_immediately(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="doctor@example.com",
+			branch="Branch B",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="doctor@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_same_branch_doctor_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="doctor2@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_different_branch_doctor_is_denied_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch B",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+			patch("vetedge.services.permissions._document_exists", return_value=True),
+		):
+			self.assertFalse(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="doctor2@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_same_branch_front_desk_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="frontdesk@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_same_branch_manager_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="manager@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_same_branch_vetedge_branch_manager_can_read_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch A",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+		):
+			self.assertTrue(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="vetmanager@example.com",
+					permission_type="read",
+				)
+			)
+
+	def test_unauthorized_user_denied_missed_appointment(self):
+		record = frappe._dict(
+			doctype="Veterinary Missed Appointment",
+			name="VMISS-001",
+			owner="other@example.com",
+			branch="Branch B",
+		)
+
+		with (
+			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Branch A"]),
+			patch("vetedge.services.permissions._document_exists", return_value=True),
+		):
+			self.assertFalse(
+				has_veterinary_missed_appointment_permission(
+					record,
+					user="unauthorized@example.com",
+					permission_type="read",
+				)
+			)
+
+
 	def test_patient_access_is_global_when_restriction_disabled(self):
 		with (
 			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
@@ -464,7 +673,7 @@ class TestPermissions(TestCase):
 			patch("vetedge.services.permissions.get_assigned_branches", return_value=["Main Branch"]),
 			patch("vetedge.services.permissions._document_exists", return_value=False),
 		):
-			self.assertIsNone(
+			self.assertTrue(
 				has_veterinary_appointment_permission(
 					appointment,
 					user="doctor@example.com",
@@ -513,7 +722,7 @@ class TestPermissions(TestCase):
 			patch("vetedge.services.permissions.is_portal_owner_user", return_value=False),
 			patch("vetedge.services.permissions.user_has_global_branch_access", return_value=True),
 		):
-			self.assertIsNone(
+			self.assertTrue(
 				has_veterinary_consultation_permission(
 					consultation,
 					user="admin@example.com",

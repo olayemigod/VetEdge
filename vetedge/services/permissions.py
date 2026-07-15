@@ -1187,12 +1187,12 @@ def get_notification_admin_only_query(user: str | None = None) -> str | None:
 	return None if is_notification_admin(user) else "1=0"
 
 
-def has_veterinary_patient_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+def has_veterinary_patient_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
 		from vetedge.services import portal_access
 
-		return portal_access.has_veterinary_patient_permission(doc, user=user, permission_type=permission_type)
+		return bool(portal_access.has_veterinary_patient_permission(doc, user=user, permission_type=permission_type))
 
 	if permission_type == "create" or not is_patient_branch_restriction_enabled():
 		return True
@@ -1221,30 +1221,112 @@ def has_veterinary_patient_permission(doc, user: str | None = None, permission_t
 	return bool(not branch or branch in branches)
 
 
-def has_veterinary_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
-	return has_document_permission(doc, "Veterinary Appointment", "branch", permission_type=permission_type, user=user)
-
-
-def has_veterinary_missed_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
-	return has_document_permission(doc, "Veterinary Missed Appointment", "branch", permission_type=permission_type, user=user)
-
-
-def has_veterinary_consultation_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
-	return has_document_permission(doc, "Veterinary Consultation", "service_branch", permission_type=permission_type, user=user)
-
-
-def has_veterinary_vital_signs_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
-	return has_document_permission(doc, "Veterinary Vital Signs", "service_branch", permission_type=permission_type, user=user)
-
-
-def has_veterinary_lab_order_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+def has_veterinary_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
 		return False
-	return has_document_permission(doc, "Veterinary Lab Order", "service_branch", permission_type=permission_type, user=user)
+	if user_has_global_branch_access(user):
+		return True
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Appointment", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Appointment", user=user):
+		return True
+
+	result = has_document_permission(doc, "Veterinary Appointment", "branch", permission_type=permission_type, user=user)
+	return True if result is None else result
 
 
-def has_veterinary_vaccination_record_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool | None:
+def has_veterinary_missed_appointment_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	if user_has_global_branch_access(user):
+		return True
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Missed Appointment", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Missed Appointment", user=user):
+		return True
+
+	result = has_document_permission(doc, "Veterinary Missed Appointment", "branch", permission_type=permission_type, user=user)
+	return True if result is None else result
+
+
+def has_veterinary_consultation_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	if user_has_global_branch_access(user):
+		return True
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Consultation", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Consultation", user=user):
+		return True
+
+	result = has_document_permission(doc, "Veterinary Consultation", "service_branch", permission_type=permission_type, user=user)
+	return True if result is None else result
+
+
+def has_veterinary_vital_signs_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	if user_has_global_branch_access(user):
+		return True
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Vital Signs", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Vital Signs", user=user):
+		return True
+
+	result = has_document_permission(doc, "Veterinary Vital Signs", "service_branch", permission_type=permission_type, user=user)
+	return True if result is None else result
+
+
+def has_veterinary_lab_order_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
+	user = user or get_current_user()
+	if is_portal_owner_user(user):
+		return False
+	if user_has_global_branch_access(user):
+		return True
+
+	name = doc if isinstance(doc, str) else getattr(doc, "name", None)
+	if permission_type == "create":
+		return True
+	if _is_unsaved_document(doc, "Veterinary Lab Order", name):
+		return True
+	if permission_type in {None, "write"} and not name:
+		return True
+	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Lab Order", user=user):
+		return True
+
+	result = has_document_permission(doc, "Veterinary Lab Order", "service_branch", permission_type=permission_type, user=user)
+	return True if result is None else result
+
+
+def has_veterinary_vaccination_record_permission(doc, user: str | None = None, permission_type: str | None = None) -> bool:
 	user = user or get_current_user()
 	if is_portal_owner_user(user):
 		return False
@@ -1261,7 +1343,8 @@ def has_veterinary_vaccination_record_permission(doc, user: str | None = None, p
 	if permission_type in OWNER_READ_PERMISSION_TYPES and is_document_owner(doc, "Veterinary Vaccination Record", user=user):
 		return True
 
-	return has_document_permission(doc, "Veterinary Vaccination Record", "service_branch", permission_type=permission_type, user=user)
+	result = has_document_permission(doc, "Veterinary Vaccination Record", "service_branch", permission_type=permission_type, user=user)
+	return True if result is None else result
 
 
 
