@@ -95,7 +95,7 @@ class TestStockExpiryMonitor(TestCase):
 
 		self.assertGreater(len(columns), 0)
 		self.assertEqual(data, [])
-		self.assertEqual([row["value"] for row in summary], [0, 0, 0, 0])
+		self.assertEqual([row["value"] for row in summary], [0, 0, 0, 0, 0, 0, 'No immediate action'])
 		self.assertEqual(chart["title"], "Stock Expiry Status")
 
 	def test_query_applies_company_warehouse_branch_filters(self):

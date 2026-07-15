@@ -107,17 +107,16 @@ class TestNavigationAssets(TestCase):
 		self.assertEqual(
 			top_level,
 			[
-				"Executive Dashboard",
-				"Dashboards",
-				"Training Centre",
-				"Veterinary Records",
-				"Hospitalisation",
-				"Pet Grooming",
-				"Pet Boarding",
-				"Veterinary Masters",
+				"Dashboard",
+				"Front Desk",
+				"Clinical",
+				"Hospital & Services",
+				"Inventory / Pharmacy",
 				"Reports",
-				"Billing",
-				"Setup",
+				"Veterinary Masters",
+				"Configuration",
+				"Platform",
+				"Help & Training",
 			],
 		)
 		self.assertNotIn("Platform Settings", top_level)
@@ -167,13 +166,13 @@ class TestNavigationAssets(TestCase):
 			if item.get("type") == "Link"
 		}
 
-		self.assertGreater(labels.index("Financial Dashboard"), labels.index("Dashboards"))
-		self.assertLess(labels.index("Financial Dashboard"), labels.index("Veterinary Records"))
+		self.assertGreater(labels.index("Financial Dashboard"), labels.index("Dashboard"))
+		self.assertLess(labels.index("Financial Dashboard"), labels.index("Front Desk"))
 		self.assertEqual(links["Financial Dashboard"]["link_to"], "veterinary-financial-dashboard")
 		self.assertEqual(links["Financial Dashboard"]["link_type"], "Page")
 
-		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Hospitalisation"))
-		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Pet Grooming"))
+		self.assertGreater(labels.index("Hospitalisation Dashboard"), labels.index("Hospital & Services"))
+		self.assertLess(labels.index("Hospitalisation Dashboard"), labels.index("Inventory / Pharmacy"))
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_to"], "veterinary-hospitalisation-dashboard")
 		self.assertEqual(links["Hospitalisation Dashboard"]["link_type"], "Page")
 
@@ -196,18 +195,17 @@ class TestNavigationAssets(TestCase):
 		self.assertIn("Training Centre", links)
 		self.assertEqual(links["Training Centre"]["link_to"], "veterinary-training-centre")
 		self.assertEqual(links["Training Centre"]["link_type"], "Page")
-		self.assertIn("Training Centre", [item.get("label") for item in items if not item.get("child")])
+		self.assertNotIn("Training Centre", [item.get("label") for item in items if not item.get("child")])
 		labels = [item.get("label") for item in items]
 		training_section_index = next(
 			index for index, item in enumerate(items)
-			if item.get("label") == "Training Centre" and item.get("type") == "Section Break"
+			if item.get("label") == "Help & Training" and item.get("type") == "Section Break"
 		)
 		training_link_index = next(
 			index for index, item in enumerate(items)
 			if item.get("label") == "Training Centre" and item.get("type") == "Link"
 		)
 		self.assertGreater(training_link_index, training_section_index)
-		self.assertLess(training_link_index, labels.index("Veterinary Records"))
 
 	def test_no_duplicate_dashboard_top_level_sections(self):
 		items = json.loads(WORKSPACE_SIDEBAR_PATH.read_text())["items"]

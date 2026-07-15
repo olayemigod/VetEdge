@@ -397,6 +397,7 @@ function history_consultation_section(rows) {
 								${row.service_branch ? ` | ${escape_consultation_history_html(row.service_branch)}` : ""}
 								${row.status ? ` | ${escape_consultation_history_html(row.status)}` : ""}
 							</div>
+							${history_rich_block(__("Assessment"), row.assessment_notes)}
 							${history_treatment_plan_block(row)}
 							${row.follow_up_date ? `<div><strong>${__("Follow-up")}</strong>: ${escape_consultation_history_html(row.follow_up_date)}</div>` : ""}
 						</div>`

@@ -69,6 +69,10 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("Required EdgeSuite shell components could not be resolved", content)
 		self.assertIn("unmount()", content)
 		self.assertIn("current_visit_id", content)
+		self.assertIn("createVisitId", content)
+		self.assertIn("crypto.randomUUID", content)
+		self.assertIn("Math.random", content)
+		self.assertNotIn("frappe.utils.get_random_string", content)
 
 	def test_edgeui_not_copied(self):
 		"""Assert that shared EdgeUI Vue components are not cloned or copied into VetEdge."""
@@ -213,6 +217,21 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertNotIn("edgeui.bundle.css", content)
 		self.assertNotIn("vetedge_stock_expiry_monitor.bundle.css", content)
 		self.assertNotIn("createEdgeApp", content)
+
+	def test_stock_expiry_assets_are_not_globally_included(self):
+		"""Verify Stock Expiry assets are loaded via assets.json-backed frappe.require only."""
+		vetedge_path = frappe.get_app_path("vetedge")
+		hooks_path = os.path.join(vetedge_path, "hooks.py")
+		with open(hooks_path, "r") as f:
+			hooks = f.read()
+
+		for forbidden in (
+			"/assets/coreedge/js/edgeui.bundle.js",
+			"/assets/coreedge/js/edgeui.bundle.css",
+			"/assets/vetedge/js/vetedge_stock_expiry_monitor.bundle.css",
+			"/assets/vetedge/js/vetedge_stock_expiry_monitor.bundle.js",
+		):
+			self.assertNotIn(forbidden, hooks)
 
 	def test_no_stock_mutation_logic_introduced_in_frontend(self):
 		"""Verify the monitor frontend remains read-only for stock records."""
@@ -396,4 +415,3 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		has_guard = "if (!page)" in content or "if (!wrapper.page)" in content
 		self.assertTrue(has_guard,
 			"on_page_show must guard against wrapper.page being undefined before accessing page.body")
-
