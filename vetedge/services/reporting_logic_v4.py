@@ -344,13 +344,15 @@ def _group_count(rows, key_field):
     return grouped
 
 
-def _chart(title, chart_type, labels, values, color):
+def _chart(title, chart_type, labels, values, color, value_type="integer"):
     return {
         "title": title,
         "type": chart_type,
         "data": {"labels": labels, "datasets": [{"name": title, "values": values}]},
         "colors": [color],
         "barOptions": {"stacked": 0},
+        "value_type": value_type,
+        "fieldtype": "Currency" if value_type == "currency" else "Int",
     }
 
 
@@ -369,19 +371,19 @@ def _consultation_chart(rows):
 def _daily_revenue_chart(rows):
     grouped = _group_sum(rows, "posting_date", "grand_total")
     labels = sorted(grouped)
-    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c")
+    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c", "currency")
 
 
 def _branch_revenue_chart(rows):
     grouped = _group_sum(rows, "branch", "grand_total")
     labels = sorted(grouped)
-    return _chart(_("Revenue by Branch"), "bar", labels, [grouped[label] for label in labels], "#10b981")
+    return _chart(_("Revenue by Branch"), "bar", labels, [grouped[label] for label in labels], "#10b981", "currency")
 
 
 def _service_area_revenue_chart(rows):
     grouped = _group_sum(rows, "service_category", "grand_total")
     labels = sorted(grouped)
-    return _chart(_("Revenue by Service Area"), "bar", labels, [grouped[label] for label in labels], "#6366f1")
+    return _chart(_("Revenue by Service Area"), "bar", labels, [grouped[label] for label in labels], "#6366f1", "currency")
 
 
 def _consultation_by_branch_chart(rows):
@@ -407,7 +409,7 @@ def _unpaid_status_chart(rows):
 def _stock_usage_chart(rows):
     labels = [cstr(row.get("item")) for row in rows if row.get("item")]
     values = [flt(row.get("total_qty_issued")) for row in rows if row.get("item")]
-    return _chart(_("Stock Usage Summary"), "bar", labels, values, "#8b5cf6")
+    return _chart(_("Stock Usage Summary"), "bar", labels, values, "#8b5cf6", "float")
 
 
 def _grooming_chart(rows):
@@ -429,7 +431,7 @@ def _branch_performance_chart(rows, filters=None):
             grouped[branch] = grouped.get(branch, 0) + flt(row.get("grand_total"))
         labels = sorted(grouped)
         values = [grouped[label] for label in labels]
-    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981")
+    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981", "currency")
 
 
 def _lab_status_chart(rows):
@@ -506,6 +508,8 @@ def _stacked_practitioner_revenue_chart(rows):
         "data": {"labels": labels, "datasets": datasets},
         "colors": [palette[index % len(palette)] for index in range(len(datasets))],
         "barOptions": {"stacked": 1},
+        "value_type": "currency",
+        "fieldtype": "Currency",
     }
 
 

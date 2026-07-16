@@ -1753,7 +1753,7 @@ def _daily_revenue_chart(filters):
     for row in rows:
         grouped[cstr(getdate(row.get("posting_date")))] += flt(row.get("grand_total"))
     labels = sorted(grouped)
-    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c")
+    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c", "currency")
 
 
 def _lab_orders_by_status_chart(filters):
@@ -1792,7 +1792,7 @@ def _revenue_by_branch_chart(filters):
     rows = _build_branch_performance_rows(filters)
     labels = [row.get("branch") for row in rows]
     values = [flt(row.get("revenue_total")) for row in rows]
-    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981")
+    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981", "currency")
 
 
 def _consultations_by_branch_chart(filters):
@@ -1878,6 +1878,8 @@ def _stacked_practitioner_revenue_chart(rows):
         "data": {"labels": labels, "datasets": datasets},
         "colors": [palette[index % len(palette)] for index in range(len(datasets))],
         "barOptions": {"stacked": 1},
+        "value_type": "currency",
+        "fieldtype": "Currency",
     }
 
 
@@ -2051,13 +2053,15 @@ def _col(fieldname, fieldtype="Data", options=None, label=None):
     return column
 
 
-def _chart(title, chart_type, labels, values, color):
+def _chart(title, chart_type, labels, values, color, value_type="integer"):
     return {
         "data": {"labels": labels, "datasets": [{"name": title, "values": values}]},
         "type": chart_type,
         "colors": [color],
         "barOptions": {"stacked": 0},
         "title": title,
+        "value_type": value_type,
+        "fieldtype": "Currency" if value_type == "currency" else "Int",
     }
 
 

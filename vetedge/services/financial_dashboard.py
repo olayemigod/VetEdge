@@ -510,11 +510,13 @@ def get_report_chart(filters=None) -> dict | None:
 	return chart_map.get(chart_name, get_daily_revenue_chart)(filters)
 
 
-def chart(labels: list, datasets: list[dict], chart_type: str) -> dict:
+def chart(labels: list, datasets: list[dict], chart_type: str, value_type: str = "currency") -> dict:
 	return {
 		"data": {
 			"labels": [str(label) for label in labels],
 			"datasets": datasets,
 		},
 		"type": chart_type,
+		"value_type": value_type,
+		"fieldtype": "Currency" if value_type == "currency" else "Int",
 	}
