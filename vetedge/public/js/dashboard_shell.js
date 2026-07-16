@@ -25,7 +25,15 @@
 		return `<span class="${colorClass} ml-2 font-weight-bold" style="font-size: 0.85rem;">${symbol} ${trend.percentage}%</span>`;
 	}
 
-	function renderGenericCard(card, formatterType = "currency") {
+	function cardFormatterType(card, fallback = "raw") {
+		const valueType = String(card.value_type || card.fieldtype || card.format || "").toLowerCase();
+		if (valueType === "currency") return "currency";
+		if (valueType === "percent") return "percent";
+		return fallback;
+	}
+
+	function renderGenericCard(card, formatterType = "raw") {
+		formatterType = cardFormatterType(card, formatterType);
 		const actionAttr = card.action 
 			? `class="border rounded p-3 bg-white vetedge-dashboard-kpi-card h-100 edge-suite-interactive-card" style="cursor: pointer;" data-action="${escapeHtml(JSON.stringify(card.action))}"` 
 			: 'class="border rounded p-3 bg-white h-100"';
@@ -92,9 +100,10 @@
 									: 'class="border rounded p-3 bg-white h-100"';
 								
 								let formattedValue = kpi.value;
-								if (typeof kpi.value === "number") {
-									formattedValue = formatCurrency(kpi.value);
-								}
+								const formatType = cardFormatterType(kpi);
+								if (formatType === "currency" && typeof kpi.value === "number") formattedValue = formatCurrency(kpi.value);
+								if (formatType === "percent" && typeof kpi.value === "number") formattedValue = `${roundValue(kpi.value, 1)}%`;
+								if (String(kpi.value_type || kpi.fieldtype || "").toLowerCase() === "integer" && typeof kpi.value === "number") formattedValue = String(Math.round(kpi.value));
 								
 								const trendHtml = renderTrend(kpi.trend);
 								const secondaryHtml = kpi.secondary_value 
@@ -194,28 +203,64 @@
 					if (card.id === "collection_rate") {
 						return `<div class="col-md-3 mb-3">${renderProgressCard(card)}</div>`;
 					}
-					return `<div class="col-md-3 mb-3">${renderGenericCard(card, "currency")}</div>`;
+					return `<div class="col-md-3 mb-3">${renderGenericCard(card, cardFormatterType(card))}</div>`;
 				}).join("")}
 			</div>
 		`;
 	}
 
-	function renderRevenueComposition(composition) {
-		if (!composition || !composition.length) return "";
-		return `
-			<div class="row">
-				${composition.map(card => {
-					const action = {
-						type: "report",
-						target: "Revenue Summary",
-						filters: { service_category: card.title }
-					};
-					const enrichedCard = Object.assign({}, card, { action });
-					return `<div class="col-md-3 mb-3">${renderGenericCard(enrichedCard, "currency")}</div>`;
-				}).join("")}
-			</div>
-		`;
+	function renderRevenueComposition(container, composition) {
+		clearChartInstances(container);
+		if (!composition || !composition.length) {
+			container.html('<div class="vetedge-revenue-composition-empty">No revenue recorded for the selected period.</div>');
+			return;
+		}
+
+		const entries = composition.filter((card) => Number(card.value) > 0);
+		const total = entries.reduce((sum, card) => sum + Number(card.value || 0), 0);
+		if (!entries.length || !total) {
+			container.html('<div class="vetedge-revenue-composition-empty">No revenue recorded for the selected period.</div>');
+			return;
+		}
+
+		const palette = ["#1677ff", "#16a34a", "#8b5cf6", "#f59e0b", "#ec4899", "#0ea5e9", "#14b8a6", "#f97316"];
+		container.html(`
+			<section class="vetedge-revenue-composition-panel">
+				<header class="vetedge-revenue-composition-header">
+					<div><h3>Revenue Composition</h3><p>Revenue mix for the selected branch and date range.</p></div>
+					<button class="btn btn-default btn-sm vetedge-dashboard-report" data-report="Revenue Summary">View Report</button>
+				</header>
+				<div class="vetedge-revenue-composition-cards">
+					${entries.map((card, index) => {
+						const share = Number(card.share_percent ?? ((Number(card.value) / total) * 100));
+						return `<article class="vetedge-revenue-composition-card">
+							<div class="vetedge-revenue-composition-marker" style="background:${palette[index % palette.length]}"></div>
+							<div class="vetedge-revenue-composition-name">${escapeHtml(card.title)}</div>
+							<div class="vetedge-revenue-composition-amount">${escapeHtml(formatChartValue(card.value, card))}</div>
+							<div class="vetedge-revenue-composition-share">${roundValue(share, 1)}% of Revenue</div>
+							<div class="vetedge-revenue-composition-progress"><span style="width:${Math.min(share, 100)}%; background:${palette[index % palette.length]}"></span></div>
+						</article>`;
+					}).join("")}
+				</div>
+				<div class="vetedge-revenue-composition-chart-layout">
+					<div class="vetedge-revenue-composition-donut-wrap">
+						<div class="vetedge-revenue-composition-donut" id="vetedge-revenue-composition-chart"></div>
+						<div class="vetedge-revenue-composition-total"><span>Total Revenue</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>
+					</div>
+					<div class="vetedge-revenue-composition-legend">
+						${entries.map((card, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(card.title)}</span><strong>${escapeHtml(formatChartValue(card.value, card))}</strong></div>`).join("")}
+					</div>
+				</div>
+			</section>`);
+
+		const chart = {
+			title: "Revenue Composition", type: "donut", value_type: "currency", fieldtype: "Currency",
+			data: { labels: entries.map((card) => card.title), datasets: [{ name: "Revenue", values: entries.map((card) => Number(card.value)) }] },
+			colors: entries.map((card, index) => palette[index % palette.length]),
+		};
+		renderChartWhenReady({ wrapper: container, container: container.find("#vetedge-revenue-composition-chart"), chart });
 	}
+
 
 	function renderHealthIndicators(health) {
 		if (!health || !health.length) return "";
@@ -337,67 +382,59 @@
 		`;
 	}
 
-	function renderCharts(wrapper, charts) {
-		const chartArea = wrapper.find(".vetedge-dashboard-charts");
-		chartArea.empty();
+	function formatChartValue(value, chart) {
+		const valueType = cardFormatterType(chart);
+		if (valueType === "currency" && typeof value === "number") return formatCurrency(value);
+		if (valueType === "percent" && typeof value === "number") return `${roundValue(value, 1)}%`;
+		if (valueType === "integer" && typeof value === "number") return String(Math.round(value));
+		if (valueType === "float" && typeof value === "number") return roundValue(value, 2);
+		return value;
+	}
 
-		// Clean up previous chart instances
-		if (wrapper._chartInstances) {
-			wrapper._chartInstances.length = 0;
-		}
-		wrapper._chartInstances = [];
-
-		if (!charts || !charts.length) {
-			chartArea.html('<div class="text-muted small">No chart data available for the current filters.</div>');
-			return;
-		}
-
-		charts.forEach((chart, index) => {
-			const chartId = `vetedge-dashboard-chart-${index}`;
-			chartArea.append(`
-				<div class="col-md-6 mb-4">
-					<div class="border rounded p-3 bg-white h-100">
-						<div class="mb-2" style="font-weight: 600;">${escapeHtml(chart.title || "Chart")}</div>
-						<div id="${chartId}" style="min-height: 280px;"></div>
-					</div>
-				</div>
-			`);
+	function clearChartInstances(wrapper) {
+		(wrapper._chartInstances || []).forEach((instance) => {
+			if (instance && typeof instance.destroy === "function") instance.destroy();
 		});
+		wrapper._chartInstances = [];
+	}
 
-		// Defer chart initialization to next animation frame so containers
-		// have been laid out by the browser and have non-zero dimensions.
+	function renderChartWhenReady({ wrapper, container, chart, maxAttempts = 5, attempt = 0 }) {
 		requestAnimationFrame(() => {
-			charts.forEach((chart, index) => {
-				const chartId = `vetedge-dashboard-chart-${index}`;
-				const chartTarget = wrapper.find(`#${chartId}`);
-				if (!chartTarget.length) return;
-
-				if (!(chart.data && chart.data.labels && chart.data.labels.length)) {
-					chartTarget.html(renderChartTable(chart));
-					return;
-				}
-				if (!frappe.Chart) {
-					chartTarget.html(renderChartTable(chart));
-					return;
-				}
-				try {
-					const instance = new frappe.Chart(`#${chartId}`, {
-						title: chart.title || "",
-						data: chart.data,
-						type: chart.type || "bar",
-						colors: chart.colors || ["#5b8def"],
-						barOptions: chart.barOptions || { stacked: 0 },
-						height: 260,
-					});
-					wrapper._chartInstances.push(instance);
-				} catch (error) {
-					console.warn("VetEdge dashboard chart failed to render", error);
-					chartTarget.html(renderChartTable(chart));
-				}
-			});
+			const element = container && container.get(0);
+			const ready = element && element.isConnected && element.offsetWidth > 0 && element.offsetHeight > 0 && frappe.Chart;
+			if (!ready && attempt < maxAttempts - 1) {
+				renderChartWhenReady({ wrapper, container, chart, maxAttempts, attempt: attempt + 1 });
+				return;
+			}
+			if (!ready) { container.html(renderChartTable(chart)); return; }
+			try {
+				container.empty();
+				const instance = new frappe.Chart(element, {
+					title: chart.title || "", data: chart.data, type: chart.type || "bar",
+					colors: chart.colors || ["#5b8def"], barOptions: chart.barOptions || { stacked: 0 }, height: 260,
+					tooltipOptions: { formatTooltipY: (value) => formatChartValue(value, chart) },
+				});
+				wrapper._chartInstances.push(instance);
+			} catch (error) {
+				console.warn("VetEdge dashboard chart failed to render", error);
+				container.html(renderChartTable(chart));
+			}
 		});
 	}
 
+	function renderCharts(wrapper, charts) {
+		const chartArea = wrapper.find(".vetedge-dashboard-charts");
+		clearChartInstances(wrapper);
+		chartArea.empty();
+		if (!charts || !charts.length) { chartArea.html('<div class="text-muted small">No chart data available for the current filters.</div>'); return; }
+		charts.forEach((chart, index) => {
+			const chartId = `vetedge-dashboard-chart-${index}`;
+			chartArea.append(`<div class="col-md-6 mb-4"><div class="border rounded p-3 bg-white h-100"><div class="mb-2" style="font-weight: 600;">${escapeHtml(chart.title || "Chart")}</div><div id="${chartId}" style="min-height: 280px;"></div></div></div>`);
+			const container = chartArea.find(`#${chartId}`);
+			if (!(chart.data && chart.data.labels && chart.data.labels.length)) { container.html(renderChartTable(chart)); return; }
+			renderChartWhenReady({ wrapper, container, chart });
+		});
+	}
 
 	function buildFilters(page, state, refresh_fn, config) {
 		const branchField = page.add_field({
@@ -420,27 +457,13 @@
 			options: frappe.EdgeSuite.DateRanges.getOptions(),
 			default: state.date_preset,
 			change() {
-				if (state.is_updating_dates) return;
+				if (state.is_updating_dates || state.is_updating_preset) return;
 				const val = presetField.get_value();
-				state.date_preset = val;
-				frappe.route_options = Object.assign({}, frappe.route_options, { date_preset: val });
 				if (val && val !== "custom") {
-					const range = frappe.EdgeSuite.DateRanges.getRange(val);
-					if (range) {
-						state.from_date = range.start;
-						state.to_date = range.end;
-						
-						state.is_updating_preset = true;
-						fromField.set_value(range.start);
-						toField.set_value(range.end);
-						state.is_updating_preset = false;
-						
-						frappe.route_options = Object.assign({}, frappe.route_options, {
-							from_date: range.start,
-							to_date: range.end
-						});
-						refresh_fn();
-					}
+					frappe.EdgeSuite.DateRanges.applyPreset({ state, preset: val, presetField, fromField, toField, refresh: refresh_fn });
+				} else {
+					state.date_preset = "custom";
+					frappe.route_options = Object.assign({}, frappe.route_options, { date_preset: "custom" });
 				}
 			}
 		});
@@ -525,13 +548,9 @@
 			}
 
 			let refresh_timeout = null;
-			function debounced_refresh() {
-				if (refresh_timeout) {
-					clearTimeout(refresh_timeout);
-				}
-				refresh_timeout = setTimeout(() => {
-					refresh();
-				}, 50);
+			function debounced_refresh(afterRefresh) {
+				if (refresh_timeout) clearTimeout(refresh_timeout);
+				refresh_timeout = setTimeout(() => refresh(afterRefresh), 50);
 			}
 
 			page.set_title(config.title);
@@ -603,7 +622,7 @@
 				}
 			});
 
-			function refresh() {
+			function refresh(afterRefresh) {
 				wrapper.find(".vetedge-dashboard-kpis").html('<div class="text-muted small">Loading dashboard...</div>');
 				wrapper.find(".vetedge-dashboard-charts").empty();
 				
@@ -639,7 +658,7 @@
 
 						// Render Revenue Composition
 						if (payload.revenue_composition && payload.revenue_composition.length) {
-							wrapper.find(".vetedge-dashboard-composition").html(renderRevenueComposition(payload.revenue_composition));
+							wrapper.find(".vetedge-dashboard-composition").html(renderRevenueComposition(wrapper.find(".vetedge-dashboard-composition"), payload.revenue_composition));
 							wrapper.find(".vetedge-dashboard-composition-section").show();
 						} else {
 							wrapper.find(".vetedge-dashboard-composition-section").hide();
@@ -663,6 +682,7 @@
 
 						// Render Charts
 						renderCharts(wrapper, payload.charts || []);
+						if (typeof afterRefresh === "function") afterRefresh();
 					},
 				});
 			}

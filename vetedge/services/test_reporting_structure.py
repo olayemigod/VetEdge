@@ -796,6 +796,50 @@ class TestFinancialInsights(unittest.TestCase):
             self.assertEqual(cr["value"], 0.0)
 
 
+    def test_financial_card_semantic_types(self):
+        from vetedge.services.financial_insights import _build_collection_metrics, _build_summary_cards
+
+        current = {"total_revenue": 100, "paid_revenue": 80, "outstanding_revenue": 20, "invoice_count": 1,
+                   "paid_invoice_count": 1, "unpaid_invoice_count": 0, "overdue_invoice_count": 0,
+                   "draft_invoice_count": 2, "draft_invoice_value": 50, "avg_days_payment": 1}
+        cards = _build_summary_cards(current, current, {}) + _build_collection_metrics(current, current)
+        types = {card["id"]: card["value_type"] for card in cards}
+        self.assertEqual(types["draft_invoices"], "integer")
+        self.assertEqual(types["total_revenue"], "currency")
+        self.assertEqual(types["outstanding_revenue"], "currency")
+        self.assertEqual(types["collection_rate"], "percent")
+        self.assertEqual(types["avg_days_payment"], "float")
+
+
+    def test_dashboard_chart_semantic_types(self):
+        from vetedge.services import reporting_logic_v4
+        from vetedge.services import reporting_structure
+
+        financial = reporting_logic_v4._daily_revenue_chart([{"posting_date": "2026-07-16", "grand_total": 2500}])
+        counts = reporting_logic_v4._consultation_chart([{"consultation_date": "2026-07-16"}])
+        branch_revenue = reporting_structure._chart("Revenue by Branch", "bar", ["Main"], [2500], "#10b981", "currency")
+
+        self.assertEqual(financial["value_type"], "currency")
+        self.assertEqual(financial["fieldtype"], "Currency")
+        self.assertEqual(counts["value_type"], "integer")
+        self.assertEqual(counts["fieldtype"], "Int")
+        self.assertEqual(branch_revenue["value_type"], "currency")
+
+
+    def test_revenue_composition_uses_raw_currency_values_and_shares(self):
+        from vetedge.services.financial_insights import _build_revenue_composition
+
+        composition = _build_revenue_composition({
+            "total_revenue": 648300.0,
+            "revenue_by_service": {"Consultation": 284300.0, "Lab": 160500.0, "Vaccination": 150000.0, "Other": 53500.0},
+        })
+        self.assertEqual(sum(card["value"] for card in composition), 648300.0)
+        self.assertTrue(all(card["value_type"] == "currency" for card in composition))
+        self.assertTrue(all(isinstance(card["value"], float) for card in composition))
+        self.assertEqual(composition[0]["title"], "Consultation")
+        self.assertAlmostEqual(sum(card["share_percent"] for card in composition), 100.0, places=0)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

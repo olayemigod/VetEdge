@@ -240,6 +240,7 @@ def _build_summary_cards(current, prev, filters) -> list[dict]:
 	return [
 		{
 			"id": "total_revenue",
+			"value_type": "currency",
 			"title": _("Total Revenue"),
 			"value": current["total_revenue"],
 			"secondary_value": f"{current['invoice_count']} Invoices",
@@ -251,6 +252,7 @@ def _build_summary_cards(current, prev, filters) -> list[dict]:
 		},
 		{
 			"id": "paid_revenue",
+			"value_type": "currency",
 			"title": _("Paid Revenue"),
 			"value": current["paid_revenue"],
 			"secondary_value": f"{current['paid_invoice_count']} Fully Paid Invoices",
@@ -262,6 +264,7 @@ def _build_summary_cards(current, prev, filters) -> list[dict]:
 		},
 		{
 			"id": "outstanding_revenue",
+			"value_type": "currency",
 			"title": _("Outstanding Revenue"),
 			"value": current["outstanding_revenue"],
 			"secondary_value": f"{current['overdue_invoice_count']} Overdue Invoices / {current['unpaid_invoice_count']} Unpaid",
@@ -273,6 +276,7 @@ def _build_summary_cards(current, prev, filters) -> list[dict]:
 		},
 		{
 			"id": "draft_invoices",
+			"value_type": "integer",
 			"title": _("Draft / Pending Invoices"),
 			"label": _("Draft / Pending Invoices"),
 			"value": current["draft_invoice_count"],
@@ -285,6 +289,7 @@ def _build_summary_cards(current, prev, filters) -> list[dict]:
 		},
 		{
 			"id": "payments_received",
+			"value_type": "currency",
 			"title": _("Payments Received"),
 			"value": current["paid_revenue"],
 			"secondary_value": f"Avg payment amount: {frappe.format_value(current['paid_revenue'] / current['paid_invoice_count'] if current['paid_invoice_count'] else 0.0, {'fieldtype': 'Currency'})}",
@@ -310,6 +315,7 @@ def _build_collection_metrics(current, prev) -> list[dict]:
 	return [
 		{
 			"id": "collection_rate",
+			"value_type": "percent",
 			"title": _("Collection Rate"),
 			"value": curr_cr,
 			"secondary_value": f"{round(curr_cr, 1)}%",
@@ -320,6 +326,7 @@ def _build_collection_metrics(current, prev) -> list[dict]:
 		},
 		{
 			"id": "avg_invoice_value",
+			"value_type": "currency",
 			"title": _("Average Invoice Value"),
 			"value": curr_aiv,
 			"secondary_value": None,
@@ -330,6 +337,7 @@ def _build_collection_metrics(current, prev) -> list[dict]:
 		},
 		{
 			"id": "avg_outstanding_balance",
+			"value_type": "currency",
 			"title": _("Average Outstanding Balance"),
 			"value": curr_aob,
 			"secondary_value": None,
@@ -340,6 +348,7 @@ def _build_collection_metrics(current, prev) -> list[dict]:
 		},
 		{
 			"id": "avg_days_payment",
+			"value_type": "float",
 			"title": _("Average Days to Payment"),
 			"value": current["avg_days_payment"],
 			"secondary_value": f"{current['avg_days_payment']} Days",
@@ -360,6 +369,8 @@ def _build_revenue_composition(current) -> list[dict]:
 			"id": f"rev_comp_{service.lower()}",
 			"title": service,
 			"value": val,
+			"value_type": "currency",
+			"share_percent": round(pct, 1),
 			"secondary_value": f"{round(pct, 1)}% of Revenue",
 			"trend": None,
 			"tooltip": f"Total revenue generated from {service} services.",

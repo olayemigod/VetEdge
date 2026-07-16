@@ -187,3 +187,31 @@
 		padding-right: var(--edge-page-padding);
 	}
 }
+
+
+/* Financial revenue composition panel */
+.vetedge-revenue-composition-panel { background: #fff; border: 1px solid var(--edge-border); border-radius: var(--edge-radius); padding: 20px; }
+.vetedge-revenue-composition-header { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.vetedge-revenue-composition-header h3 { margin: 0; color: var(--edge-text); font-size: 1.1rem; font-weight: 600; }
+.vetedge-revenue-composition-header p { margin: 4px 0 0; color: var(--edge-text-muted); font-size: .82rem; }
+.vetedge-revenue-composition-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.vetedge-revenue-composition-card { position: relative; border: 1px solid var(--edge-border); border-radius: 7px; padding: 14px; overflow: hidden; }
+.vetedge-revenue-composition-marker { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.vetedge-revenue-composition-name { color: var(--edge-text-muted); font-size: .8rem; padding-left: 3px; }
+.vetedge-revenue-composition-amount { color: var(--edge-text); font-size: 1.05rem; font-weight: 700; margin-top: 7px; }
+.vetedge-revenue-composition-share { color: var(--edge-text-muted); font-size: .78rem; margin-top: 4px; }
+.vetedge-revenue-composition-progress { background: var(--edge-bg); border-radius: 4px; height: 4px; margin-top: 10px; overflow: hidden; }
+.vetedge-revenue-composition-progress span { display: block; height: 100%; border-radius: inherit; }
+.vetedge-revenue-composition-chart-layout { display: grid; grid-template-columns: minmax(260px, .85fr) minmax(240px, 1fr); gap: 28px; align-items: center; margin-top: 24px; }
+.vetedge-revenue-composition-donut-wrap { min-height: 300px; position: relative; }
+.vetedge-revenue-composition-donut { min-height: 300px; }
+.vetedge-revenue-composition-total { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; }
+.vetedge-revenue-composition-total span { color: var(--edge-text-muted); font-size: .75rem; }
+.vetedge-revenue-composition-total strong { color: var(--edge-text); font-size: 1rem; max-width: 120px; }
+.vetedge-revenue-composition-legend { display: grid; gap: 10px; }
+.vetedge-revenue-composition-legend div { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 9px; align-items: center; font-size: .82rem; }
+.vetedge-revenue-composition-legend i { display: block; width: 9px; height: 9px; border-radius: 50%; }
+.vetedge-revenue-composition-legend span { color: var(--edge-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vetedge-revenue-composition-legend strong { color: var(--edge-text); font-weight: 600; }
+.vetedge-revenue-composition-empty { border: 1px dashed var(--edge-border); border-radius: var(--edge-radius); color: var(--edge-text-muted); padding: 28px; text-align: center; background: #fff; }
+@media (max-width: 576px) { .vetedge-revenue-composition-panel { padding: 14px; } .vetedge-revenue-composition-header { align-items: flex-start; flex-direction: column; } .vetedge-revenue-composition-chart-layout { grid-template-columns: 1fr; gap: 16px; } }

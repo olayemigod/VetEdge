@@ -63,11 +63,8 @@
 					start = today.clone().subtract(1, "years").startOf("year");
 					end = today.clone().subtract(1, "years").endOf("year");
 					break;
-				case "full_history":
-					return {
-						start: this.earliestDate,
-						end: today.clone().endOf("day").format("YYYY-MM-DD")
-					};
+			case "full_history":
+				return { start: "", end: "" };
 				default:
 					return null;
 			}
@@ -111,6 +108,25 @@
 				{ value: "full_history", label: __("Full History") },
 				{ value: "custom", label: __("-- Custom Range --") }
 			];
+		},
+
+		applyPreset({ state, preset, presetField, fromField, toField, refresh }) {
+			const range = this.getRange(preset);
+			if (!range) return false;
+			state.is_updating_preset = true;
+			state.date_preset = preset;
+			state.from_date = range.start;
+			state.to_date = range.end;
+			presetField.set_value(preset);
+			fromField.set_value(range.start);
+			toField.set_value(range.end);
+			frappe.route_options = Object.assign({}, frappe.route_options, {
+				date_preset: preset, from_date: range.start, to_date: range.end,
+			});
+			requestAnimationFrame(() => {
+				refresh(() => requestAnimationFrame(() => { state.is_updating_preset = false; }));
+			});
+			return true;
 		}
 	};
 	
