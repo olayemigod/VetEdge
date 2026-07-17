@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -82,6 +84,54 @@ class TestAppointmentFlow(TestCase):
 		frappe_stub = make_frappe_stub()
 		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
 			self.assertRaises(frappe.ValidationError, validate_status, doc)
+
+	def test_final_statuses_are_terminal_and_preserve_existing_links(self):
+		for final_status in ("Completed", "Cancelled", "No Show"):
+			with self.subTest(final_status=final_status):
+				doc = make_appointment_doc(
+					status="Confirmed",
+					primary_owner="CUST-001",
+					linked_consultation="VCON-001",
+					source_doctype="Veterinary Grooming",
+					source_name="VGRM-001",
+					notes="Existing appointment notes",
+				)
+				previous = make_appointment_doc(
+					status=final_status,
+					primary_owner="CUST-001",
+					linked_consultation="VCON-001",
+					source_doctype="Veterinary Grooming",
+					source_name="VGRM-001",
+					notes="Existing appointment notes",
+				)
+				doc.get_doc_before_save = lambda previous=previous: previous
+
+				frappe_stub = make_frappe_stub()
+				with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
+					self.assertRaises(frappe.ValidationError, validate_status, doc)
+
+				self.assertEqual(doc.patient, "VP-001")
+				self.assertEqual(doc.primary_owner, "CUST-001")
+				self.assertEqual(doc.linked_consultation, "VCON-001")
+				self.assertEqual(doc.source_doctype, "Veterinary Grooming")
+				self.assertEqual(doc.source_name, "VGRM-001")
+				self.assertEqual(doc.notes, "Existing appointment notes")
+
+	def test_appointment_metadata_and_ui_preserve_final_status_history_links(self):
+		meta_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "veterinary_appointment" / "veterinary_appointment.json"
+		js_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "veterinary_appointment" / "veterinary_appointment.js"
+		meta = json.loads(meta_path.read_text())
+		fields = {field["fieldname"]: field for field in meta["fields"]}
+		script = js_path.read_text()
+
+		self.assertIn("Completed", fields["status"]["options"])
+		self.assertIn("Cancelled", fields["status"]["options"])
+		self.assertIn("No Show", fields["status"]["options"])
+		self.assertEqual(fields["linked_consultation"]["read_only"], 1)
+		self.assertEqual(fields["source_name"]["read_only"], 1)
+		self.assertIn("add_consultation_link_actions(frm)", script)
+		self.assertIn('__("Open Service Consultation")', script)
+		self.assertIn('__("Open Originating Consultation")', script)
 
 	def test_confirmed_appointment_can_move_to_in_consultation(self):
 		doc = make_appointment_doc(status="In Consultation")
@@ -364,6 +414,8 @@ def make_appointment_doc(**overrides):
 		appointment_datetime="2026-04-19 09:00:00",
 		status="Scheduled",
 		created_from="Manual",
+		source_doctype=None,
+		source_name=None,
 		is_follow_up=0,
 		follow_up_reference=None,
 		linked_consultation=None,

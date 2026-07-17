@@ -380,6 +380,8 @@ def generate_hospitalisation_activity_reference() -> str:
 
 def sync_hospitalisation_title(doc) -> None:
 	patient_title = get_hospitalisation_patient_title(doc)
+	if hasattr(doc, "patient_name"):
+		doc.patient_name = patient_title
 	parts = [patient_title or "Hospitalisation"]
 	admission_date = get_hospitalisation_admission_date_title(doc)
 	veterinarian_title = get_hospitalisation_veterinarian_title(doc)

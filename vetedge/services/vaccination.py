@@ -50,6 +50,8 @@ PAYMENT_OVERRIDE_ROLES = {*ELEVATED_ROLES, "Branch Manager", "VetEdge Branch Man
 @dataclass(frozen=True)
 class VaccineDefaults:
 	default_item: str | None = None
+	default_price: float | None = None
+	price_list: str | None = None
 	default_next_due_days: int = 0
 	default_validity_days: int = 0
 	species: str | None = None
@@ -67,6 +69,8 @@ def validate_vaccine(doc) -> None:
 		frappe.throw("Default Validity Days cannot be negative.", frappe.ValidationError)
 	if cint(doc.get("default_next_due_days")) < 0:
 		frappe.throw("Default Next Due Days cannot be negative.", frappe.ValidationError)
+	if doc.get("default_price") not in (None, "") and flt(doc.get("default_price")) < 0:
+		frappe.throw("Default Price cannot be negative.", frappe.ValidationError)
 	if doc.default_item:
 		validate_sales_item(doc.default_item, "Vaccine Default Item", allow_stock=True)
 
@@ -80,6 +84,8 @@ def validate_vaccination_record(doc) -> None:
 	set_vaccination_identity_fields(doc)
 	validate_consultation_link(doc)
 	validate_vaccine_applicability(doc)
+	validate_vaccination_rate_edit_protection(doc, previous)
+	prepare_vaccination_billing_fields(doc, previous)
 	validate_branch_action_access(doc, previous)
 	validate_action_roles(doc, previous)
 	validate_administered_record_edit(doc, previous)
@@ -202,6 +208,99 @@ def validate_vaccine_applicability(doc) -> None:
 	patient_species = frappe.db.get_value("Veterinary Patient", doc.patient, "species")
 	if patient_species and patient_species != vaccine.species:
 		frappe.throw(f"Vaccine {doc.vaccine} is only configured for Species {vaccine.species}.", frappe.ValidationError)
+
+
+def validate_vaccination_rate_edit_protection(doc, previous=None) -> None:
+	if not previous or flt(doc.get("rate")) == flt(getattr(previous, "rate", 0) or 0):
+		return
+	invoice_name = doc.get("linked_invoice") or getattr(previous, "linked_invoice", None)
+	if not invoice_name:
+		return
+	docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
+	if docstatus != 0:
+		frappe.throw("Vaccination Rate cannot be changed after the linked invoice is submitted or cancelled.", frappe.ValidationError)
+
+
+def prepare_vaccination_billing_fields(doc, previous=None) -> None:
+	defaults = get_vaccination_billing_defaults(
+		doc.vaccine,
+		company=doc.get("company"),
+		customer=doc.get("primary_owner"),
+		branch=doc.get("service_branch"),
+	)
+	if not doc.get("billing_item") or _should_refresh_vaccination_billing_defaults(doc, previous):
+		doc.billing_item = defaults.get("billing_item")
+	if doc.get("rate") not in (None, "") and flt(doc.get("rate")) < 0:
+		frappe.throw("Vaccination Rate cannot be negative.", frappe.ValidationError)
+
+	default_rate = defaults.get("rate")
+	if _should_set_default_vaccination_rate(doc, previous) and default_rate not in (None, ""):
+		doc.rate = flt(default_rate)
+
+	if _rate_changed_by_user(doc, previous):
+		doc.rate_manually_edited = 1
+
+	rate = flt(doc.get("rate"))
+	doc.amount = rate if rate else 0
+
+
+def _should_refresh_vaccination_billing_defaults(doc, previous=None) -> bool:
+	if cint(doc.get("rate_manually_edited")):
+		return False
+	if not previous:
+		return False
+	return doc.get("vaccine") != getattr(previous, "vaccine", None)
+
+
+def _should_set_default_vaccination_rate(doc, previous=None) -> bool:
+	if doc.get("rate") in (None, ""):
+		return True
+	if cint(doc.get("rate_manually_edited")):
+		return False
+	return bool(previous and doc.get("vaccine") != getattr(previous, "vaccine", None))
+
+
+def _rate_changed_by_user(doc, previous=None) -> bool:
+	if not previous:
+		default_rate = get_vaccination_billing_defaults(doc.vaccine).get("rate") if doc.get("vaccine") else None
+		return doc.get("rate") not in (None, "") and default_rate not in (None, "") and flt(doc.get("rate")) != flt(default_rate)
+	return flt(doc.get("rate")) != flt(getattr(previous, "rate", 0) or 0)
+
+
+@frappe.whitelist()
+def get_vaccination_billing_defaults(
+	vaccine: str,
+	company: str | None = None,
+	customer: str | None = None,
+	branch: str | None = None,
+) -> dict:
+	if not vaccine:
+		return {"billing_item": None, "rate": 0, "amount": 0}
+
+	defaults = get_vaccine_defaults(vaccine)
+	item_code = defaults.default_item
+	rate = flt(defaults.default_price)
+	if item_code and rate <= 0:
+		try:
+			from vetedge.services.billing_core import _get_item_selling_rate
+
+			rate = flt(
+				_get_item_selling_rate(
+					item_code,
+					company=company,
+					customer=customer,
+					branch=branch,
+					master_price_list=defaults.price_list,
+				)
+			)
+		except Exception:
+			rate = 0
+
+	return {
+		"billing_item": item_code,
+		"rate": rate,
+		"amount": rate,
+	}
 
 
 def validate_branch_action_access(doc, previous=None) -> None:
@@ -329,13 +428,15 @@ def get_vaccine_defaults(vaccine: str) -> VaccineDefaults:
 	row = frappe.db.get_value(
 		VACCINE_DOCTYPE,
 		vaccine,
-		["default_item", "default_next_due_days", "default_validity_days", "species", "is_active"],
+		["default_item", "price_list", "default_price", "default_next_due_days", "default_validity_days", "species", "is_active"],
 		as_dict=True,
 	)
 	if not row:
 		frappe.throw(f"Vaccine {vaccine} is not valid.", frappe.ValidationError)
 	return VaccineDefaults(
 		default_item=row.default_item,
+		price_list=row.get("price_list"),
+		default_price=row.get("default_price"),
 		default_next_due_days=cint(row.default_next_due_days),
 		default_validity_days=cint(row.default_validity_days),
 		species=row.species,
@@ -461,6 +562,8 @@ def create_vaccination_from_consultation(
 	notes: str | None = None,
 	administered_on: str | None = None,
 	next_due_date: str | None = None,
+	billing_item: str | None = None,
+	rate: float | None = None,
 	create_invoice: int = 1,
 	post_stock: int = 1,
 ) -> dict:
@@ -477,6 +580,8 @@ def create_vaccination_from_consultation(
 		notes=notes,
 		administered_on=administered_on,
 		next_due_date=next_due_date,
+		billing_item=billing_item,
+		rate=rate,
 		create_invoice=create_invoice,
 		post_stock=post_stock,
 	)
@@ -504,6 +609,9 @@ def create_vaccination_from_consultation(
 			"notes": payload.get("notes"),
 			"administered_on": payload.get("administered_on") or now_datetime(),
 			"next_due_date": payload.get("next_due_date"),
+			"billing_item": payload.get("billing_item"),
+			"rate": payload.get("rate"),
+			"rate_manually_edited": 1 if payload.get("rate") not in (None, "") else 0,
 			"status": "Draft",
 		}
 	)
@@ -603,7 +711,8 @@ def create_vaccination_invoice(doc) -> str | None:
 		return result.get("invoice")
 
 	vaccine = get_vaccine_defaults(doc.vaccine)
-	if not vaccine.default_item:
+	item_code = _doc_get(doc, "billing_item") or vaccine.default_item
+	if not item_code:
 		return None
 
 	if doc.linked_consultation:
@@ -616,11 +725,11 @@ def create_vaccination_invoice(doc) -> str | None:
 		invoice = frappe.get_doc("Sales Invoice", invoice_name)
 		if invoice.customer and invoice.customer != doc.primary_owner:
 			frappe.throw("Linked Invoice customer does not match the vaccination owner.", frappe.ValidationError)
-		invoice_name = ensure_vaccination_invoice_item(invoice, vaccine.default_item, cost_center)
+		invoice_name = ensure_vaccination_invoice_item(invoice, item_code, cost_center, _doc_get(doc, "rate"))
 	else:
 		if doc.linked_invoice and is_active_sales_invoice(doc.linked_invoice):
 			return doc.linked_invoice
-		item = build_invoice_item(vaccine.default_item, 1, None, None, cost_center)
+		item = build_invoice_item(item_code, 1, None, _doc_get(doc, "rate"), cost_center)
 		invoice = frappe.get_doc(
 			{
 				"doctype": "Sales Invoice",
@@ -639,6 +748,13 @@ def create_vaccination_invoice(doc) -> str | None:
 	return invoice_name
 
 
+def _doc_get(doc, fieldname: str, default=None):
+	getter = getattr(doc, "get", None)
+	if callable(getter):
+		return getter(fieldname, default)
+	return getattr(doc, fieldname, default)
+
+
 def use_billing_core_for_vaccination() -> bool:
 	try:
 		from vetedge.services.billing_core import is_billing_sessions_enabled
@@ -648,11 +764,11 @@ def use_billing_core_for_vaccination() -> bool:
 		return False
 
 
-def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str) -> str:
+def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str, rate: float | None = None) -> str:
 	if invoice.docstatus == 2:
 		return invoice.name
 
-	item_payload = build_invoice_item(item_code, 1, None, None, cost_center)
+	item_payload = build_invoice_item(item_code, 1, None, rate, cost_center)
 	existing_row = next((row for row in (invoice.items or []) if row.item_code == item_code), None)
 	if existing_row:
 		existing_row.qty = item_payload["qty"]

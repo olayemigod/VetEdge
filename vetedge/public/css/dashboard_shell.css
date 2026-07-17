@@ -1,0 +1,347 @@
+/* dashboard_shell.css — EdgeSuite Workspace & Dashboard Styles */
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Layout Tokens
+   Shared spacing system for all EdgeSuite products.
+   VetEdge, RetailEdge, ClinicEdge, EduEdge, CoreEdge.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+	--edge-page-padding: 32px;
+	--edge-section-gap: 24px;
+	--edge-card-gap: 16px;
+	--edge-content-max-width: 1440px;
+	--edge-bg: #f7f9fc;
+	--edge-border: #dfe5ef;
+	--edge-radius: 8px;
+	--edge-text: #1e293b;
+	--edge-text-muted: #667085;
+	--edge-primary: #1677ff;
+	--edge-danger: #d92d20;
+	--edge-warning: #b7791f;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Workspace Container
+   Provides consistent breathing space between sidebar and content.
+   ─────────────────────────────────────────────────────────────── */
+
+.page-container[data-page-container] .layout-main .layout-main-section {
+	padding-left: var(--edge-page-padding);
+	padding-right: var(--edge-page-padding);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Dashboard Root
+   ─────────────────────────────────────────────────────────────── */
+
+.vetedge-dashboard-root {
+	padding: var(--edge-section-gap) var(--edge-page-padding);
+	max-width: var(--edge-content-max-width);
+	margin: 0 auto;
+	background-color: var(--edge-bg);
+}
+
+.vetedge-dashboard-root .vetedge-dashboard-report {
+	margin-bottom: 8px;
+}
+
+.vetedge-dashboard-root .vetedge-dashboard-kpis,
+.vetedge-dashboard-root .vetedge-dashboard-charts,
+.vetedge-dashboard-collection,
+.vetedge-dashboard-composition,
+.vetedge-dashboard-health {
+	min-height: 24px;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Dashboard Section Spacing
+   ─────────────────────────────────────────────────────────────── */
+
+.vetedge-dashboard-kpi-section,
+.vetedge-dashboard-collection-section,
+.vetedge-dashboard-composition-section,
+.vetedge-dashboard-health-section,
+.vetedge-dashboard-outstanding-section,
+.vetedge-dashboard-trend-section {
+	margin-bottom: var(--edge-section-gap);
+}
+
+.vetedge-dashboard-section-title {
+	font-size: 1.1rem;
+	font-weight: 600;
+	color: var(--edge-text);
+	margin-bottom: var(--edge-card-gap);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Premium Micro-interactions for EdgeSuite Dashboard Cards
+   ─────────────────────────────────────────────────────────────── */
+
+.edge-suite-interactive-card {
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+	border: 1px solid var(--edge-border);
+	border-radius: var(--edge-radius);
+}
+
+.edge-suite-interactive-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+	border-color: var(--edge-primary);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Alert Styling
+   ─────────────────────────────────────────────────────────────── */
+
+.edge-alerts-container .alert {
+	border-radius: var(--edge-radius);
+	border: 1px solid rgba(0, 0, 0, 0.03);
+	margin-bottom: 8px;
+}
+
+.edge-alerts-container .alert-danger {
+	background-color: #fff1f0;
+	border-color: #ffccc7;
+	color: var(--edge-danger);
+}
+
+.edge-alerts-container .alert-warning {
+	background-color: #fffbe6;
+	border-color: #ffe58f;
+	color: var(--edge-warning);
+}
+
+.edge-alerts-container .alert-info {
+	background-color: #e6f7ff;
+	border-color: #91d5ff;
+	color: var(--edge-primary);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Outstanding Rankings & Tables
+   ─────────────────────────────────────────────────────────────── */
+
+.vetedge-dashboard-outstanding .progress {
+	background-color: var(--edge-border);
+	overflow: hidden;
+}
+
+.vetedge-dashboard-outstanding .progress-bar {
+	transition: width 0.6s ease;
+}
+
+.vetedge-dashboard-outstanding table th {
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.5px;
+	color: var(--edge-text-muted);
+	background-color: var(--edge-bg);
+}
+
+.vetedge-dashboard-outstanding table td {
+	vertical-align: middle;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   EdgeSuite Report Executive Header Spacing
+   ─────────────────────────────────────────────────────────────── */
+
+.edgesuite-executive-header {
+	border-radius: var(--edge-radius);
+	border: 1px solid var(--edge-border);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Responsive: Tablet
+   ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 992px) {
+	:root {
+		--edge-page-padding: 20px;
+		--edge-section-gap: 20px;
+	}
+
+	.vetedge-dashboard-root {
+		padding: var(--edge-section-gap) var(--edge-page-padding);
+	}
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Responsive: Mobile
+   ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 576px) {
+	:root {
+		--edge-page-padding: 12px;
+		--edge-section-gap: 16px;
+		--edge-card-gap: 12px;
+	}
+
+	.vetedge-dashboard-root {
+		padding: var(--edge-section-gap) var(--edge-page-padding);
+	}
+
+	.page-container[data-page-container] .layout-main .layout-main-section {
+		padding-left: var(--edge-page-padding);
+		padding-right: var(--edge-page-padding);
+	}
+}
+
+
+/* Financial revenue composition panel */
+.vetedge-revenue-composition-panel { background: #fff; border: 1px solid var(--edge-border); border-radius: var(--edge-radius); padding: 20px; }
+.vetedge-revenue-composition-header { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.vetedge-revenue-composition-header h3 { margin: 0; color: var(--edge-text); font-size: 1.1rem; font-weight: 600; }
+.vetedge-revenue-composition-header p { margin: 4px 0 0; color: var(--edge-text-muted); font-size: .82rem; }
+.vetedge-revenue-composition-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.vetedge-revenue-composition-card { position: relative; border: 1px solid var(--edge-border); border-radius: 7px; padding: 14px; overflow: hidden; }
+.vetedge-revenue-composition-marker { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.vetedge-revenue-composition-name { color: var(--edge-text-muted); font-size: .8rem; padding-left: 3px; }
+.vetedge-revenue-composition-amount { color: var(--edge-text); font-size: 1.05rem; font-weight: 700; margin-top: 7px; }
+.vetedge-revenue-composition-share { color: var(--edge-text-muted); font-size: .78rem; margin-top: 4px; }
+.vetedge-revenue-composition-progress { background: var(--edge-bg); border-radius: 4px; height: 4px; margin-top: 10px; overflow: hidden; }
+.vetedge-revenue-composition-progress span { display: block; height: 100%; border-radius: inherit; }
+.vetedge-revenue-composition-chart-layout { display: grid; grid-template-columns: minmax(260px, .85fr) minmax(240px, 1fr); gap: 28px; align-items: center; margin-top: 24px; }
+.vetedge-revenue-composition-donut-wrap { min-height: 300px; position: relative; }
+.vetedge-revenue-composition-donut { min-height: 300px; }
+.vetedge-revenue-composition-total { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; }
+.vetedge-revenue-composition-total span { color: var(--edge-text-muted); font-size: .75rem; }
+.vetedge-revenue-composition-total strong { color: var(--edge-text); font-size: 1rem; max-width: 120px; }
+.vetedge-revenue-composition-legend { display: grid; gap: 10px; }
+.vetedge-revenue-composition-legend div { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 9px; align-items: center; font-size: .82rem; }
+.vetedge-revenue-composition-legend i { display: block; width: 9px; height: 9px; border-radius: 50%; }
+.vetedge-revenue-composition-legend span { color: var(--edge-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vetedge-revenue-composition-legend strong { color: var(--edge-text); font-weight: 600; }
+.vetedge-revenue-composition-empty { border: 1px dashed var(--edge-border); border-radius: var(--edge-radius); color: var(--edge-text-muted); padding: 28px; text-align: center; background: #fff; }
+@media (max-width: 576px) { .vetedge-revenue-composition-panel { padding: 14px; } .vetedge-revenue-composition-header { align-items: flex-start; flex-direction: column; } .vetedge-revenue-composition-chart-layout { grid-template-columns: 1fr; gap: 16px; } }
+
+
+/* VetEdge workspace sidebar: native Frappe behavior, scoped visual refinement. */
+.body-sidebar[data-title="VetEdge"],
+.body-sidebar[data-title="Veterinary"] {
+	--vetedge-sidebar-active: #e8f2ff;
+	--vetedge-sidebar-hover: #f2f6fb;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item {
+	margin-bottom: 3px;
+	border-radius: 8px;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor {
+	min-height: 32px;
+	padding-right: 6px;
+	border-radius: 8px;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .sidebar-item-icon {
+	color: var(--edge-text-muted);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item:hover .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item:hover .item-anchor {
+	background: var(--vetedge-sidebar-hover);
+	color: var(--edge-text);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item.active-sidebar .item-anchor,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor.selected,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor[aria-current="page"],
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item.active-sidebar .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor.selected,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor[aria-current="page"] {
+	background: var(--vetedge-sidebar-active);
+	color: var(--edge-primary);
+	font-weight: 600;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item.active-sidebar .sidebar-item-icon,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor.selected .sidebar-item-icon,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor[aria-current="page"] .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item.active-sidebar .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor.selected .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor[aria-current="page"] .sidebar-item-icon {
+	color: var(--edge-primary);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item:focus-within,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor:focus-visible,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item:focus-within,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--edge-primary) 55%, transparent);
+	outline-offset: 2px;
+}
+
+.body-sidebar[data-title="VetEdge"] a.section-break,
+.body-sidebar[data-title="Veterinary"] a.section-break {
+	color: var(--edge-text-muted);
+	font-size: .72rem;
+	font-weight: 700;
+	letter-spacing: .045em;
+	text-transform: uppercase;
+	min-height: 34px;
+	padding: 8px 4px;
+}
+
+.body-sidebar[data-title="VetEdge"] .sidebar-item-control .drop-icon,
+.body-sidebar[data-title="Veterinary"] .sidebar-item-control .drop-icon {
+	border-radius: 6px;
+}
+
+.body-sidebar[data-title="VetEdge"] .sidebar-item-control .drop-icon:focus-visible,
+.body-sidebar[data-title="Veterinary"] .sidebar-item-control .drop-icon:focus-visible {
+	outline: 2px solid var(--edge-primary);
+	outline-offset: 1px;
+}
+
+@media (max-width: 576px) {
+	.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor,
+	.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor { min-height: 38px; }
+	.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .sidebar-item-label,
+	.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .sidebar-item-label { white-space: normal; line-height: 1.2; }
+}
+
+/* VetEdge enhancement for the shared EdgeUI Product Menu. */
+#edge-product-menu-dropdown .vetedge-product-menu-profile {
+	display: grid;
+	grid-template-columns: 38px minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: center;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--edge-border);
+	background: var(--edge-bg);
+}
+#edge-product-menu-dropdown .vetedge-product-menu-avatar {
+	display: grid;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 50%;
+	background: var(--edge-primary);
+	color: #fff;
+	font-size: .8rem;
+	font-weight: 700;
+}
+#edge-product-menu-dropdown .vetedge-product-menu-profile strong,
+#edge-product-menu-dropdown .vetedge-product-menu-profile small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#edge-product-menu-dropdown .vetedge-product-menu-profile strong { color: var(--edge-text); font-size: .86rem; }
+#edge-product-menu-dropdown .vetedge-product-menu-profile small { color: var(--edge-text-muted); font-size: .72rem; }
+#edge-product-menu-dropdown .vetedge-product-menu-product { color: var(--edge-primary); font-size: .72rem; font-weight: 700; }
+#edge-product-menu-dropdown .vetedge-product-menu-active { background: #e8f2ff; color: var(--edge-primary); font-weight: 600; }
+@media (max-width: 576px) { #edge-product-menu-dropdown { max-width: calc(100vw - 16px); max-height: calc(100vh - 72px); overflow-y: auto; } }
+/* VetEdge-owned Product Menu fallback when the optional CoreEdge EdgeUI runtime is unavailable. */
+.vetedge-product-menu-trigger { display: inline-grid; place-items: center; width: 34px; height: 34px; margin: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--edge-text, #1e293b); font-size: 22px; line-height: 1; cursor: pointer; z-index: 1031; }
+.vetedge-product-menu-trigger:hover, .vetedge-product-menu-trigger:focus-visible { background: var(--edge-bg, #f7f9fc); color: var(--edge-primary, #1677ff); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: 2px; }
+.vetedge-product-menu-panel { position: fixed; top: 56px; right: 14px; z-index: 1055; width: min(440px, calc(100vw - 20px)); max-height: calc(100vh - 72px); overflow: hidden; background: #fff; border: 1px solid var(--edge-border, #dfe5ef); border-radius: 10px; box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }
+.vetedge-product-menu-panel[hidden] { display: none !important; }
+.vetedge-product-menu-scroll { max-height: calc(100vh - 158px); overflow-y: auto; padding: 10px 12px 16px; }
+.vetedge-product-menu-section { margin: 10px 0 16px; }
+.vetedge-product-menu-section h3 { margin: 0 0 6px; padding: 0 6px; color: var(--edge-text-muted, #667085); font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.vetedge-product-menu-link { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; width: 100%; min-height: 38px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--edge-text, #1e293b); text-align: left; cursor: pointer; }
+.vetedge-product-menu-link:hover, .vetedge-product-menu-link:focus-visible { background: var(--edge-bg, #f7f9fc); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: -2px; }
+.vetedge-product-menu-link-icon { overflow: hidden; color: var(--edge-text-muted, #667085); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 576px) { .vetedge-product-menu-panel { top: 48px; right: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 56px); } }

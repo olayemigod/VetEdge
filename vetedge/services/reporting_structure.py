@@ -34,6 +34,7 @@ REPORT_KEYS = {
     "Unpaid Invoice Report": "unpaid_invoice_report",
     "Dispensary Activity Report": "dispensary_activity_report",
     "Stock Usage Summary": "stock_usage_summary",
+    "Stock Expiry Status": "stock_expiry_status",
     "Lab Order Report": "lab_order_report",
     "Vaccination Report": "vaccination_report",
     "Boarding Report": "boarding_report",
@@ -85,6 +86,7 @@ def execute_structured_report(report_name: str, filters=None):
         "Unpaid Invoice Report": _unpaid_invoice_report,
         "Dispensary Activity Report": _dispensary_activity_report,
         "Stock Usage Summary": _stock_usage_summary,
+        "Stock Expiry Status": _stock_expiry_status,
         "Lab Order Report": _lab_order_report,
         "Vaccination Report": _vaccination_report,
         "Boarding Report": _boarding_report,
@@ -227,10 +229,15 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
         payload["charts"] = [_revenue_by_practitioner_chart(month_filters)]
     elif key == "inventory_dispensary":
         activity_rows = _build_dispensary_activity_rows(month_filters)
+        from vetedge.services.stock_expiry_monitor import get_stock_expiry_rows
+
+        expiry_rows = get_stock_expiry_rows(filters)
         payload["kpis"] = [
             _kpi(_("Dispense Events"), len(activity_rows)),
             _kpi(_("Items Issued"), flt(sum(flt(row.get("qty")) for row in activity_rows), 2)),
             _kpi(_("Warehouses Touched"), len({row.get("warehouse") for row in activity_rows if row.get("warehouse")})),
+            _kpi(_("Expired Stock"), sum(1 for row in expiry_rows if row.get("expiry_status") == "Expired")),
+            _kpi(_("Expiring Soon"), sum(1 for row in expiry_rows if row.get("expiry_status") == "Expiring Soon")),
         ]
 
     return payload
@@ -491,13 +498,25 @@ def _revenue_summary(filters):
 
 
 def _unpaid_invoice_report(filters):
-    rows = _get_sales_invoice_rows(filters, unpaid_only=True)
-    invoice_context = _build_invoice_context_map([row["name"] for row in rows])
-    patient_titles = _get_patient_title_map(context.get("patient") for context in invoice_context.values())
+    from vetedge.services.financial_dataset import build_financial_dataset
+    dataset = build_financial_dataset(filters)
+
+    status_val = filters.get("status")
+    docstatus_val = filters.get("docstatus")
+
+    if status_val == "Draft" or docstatus_val == 0:
+        rows = [row for row in dataset if row["docstatus"] == 0]
+    else:
+        rows = [row for row in dataset if row["docstatus"] == 1 and row["outstanding_amount"] > 0]
+
+    patient_ids = [row["patient"] for row in rows if row.get("patient")]
+    patient_titles = _get_patient_title_map(patient_ids) if patient_ids else {}
+
     data = []
     for row in rows:
         age_base = getdate(row.get("due_date") or row.get("posting_date") or nowdate())
         age_days = max(0, date_diff(nowdate(), age_base))
+
         if filters.get("age_range"):
             age_range = cstr(filters.get("age_range"))
             if age_range == "0-30" and not (0 <= age_days <= 30):
@@ -508,21 +527,20 @@ def _unpaid_invoice_report(filters):
                 continue
             if age_range == "90+" and age_days < 91:
                 continue
-        context = invoice_context.get(row["name"], {})
-        row_branch = _resolve_invoice_report_branch(row, context)
-        data.append(
-            {
-                "invoice": row.get("name"),
-                "customer": row.get("customer"),
-                "posting_date": row.get("posting_date"),
-                "due_date": row.get("due_date"),
-                "outstanding_amount": flt(row.get("outstanding_amount")),
-                "age_days": age_days,
-                "branch": row_branch,
-                "cost_center": context.get("cost_center") or row.get("cost_center"),
-                "linked_patient": patient_titles.get(context.get("patient")) or context.get("patient"),
-            }
-        )
+
+        row_data = {
+            "invoice": row.get("sales_invoice"),
+            "customer": row.get("customer"),
+            "posting_date": row.get("posting_date"),
+            "due_date": row.get("due_date"),
+            "outstanding_amount": flt(row.get("outstanding_amount")),
+            "age_days": age_days,
+            "branch": row.get("branch"),
+            "cost_center": row.get("cost_center"),
+            "linked_patient": patient_titles.get(row.get("patient")) or row.get("patient"),
+        }
+        data.append(row_data)
+
     columns = [
         _col("invoice", "Link", "Sales Invoice"),
         _col("customer", "Link", "Customer"),
@@ -624,6 +642,12 @@ def _stock_usage_summary(filters):
         _col("number_of_dispense_events", "Int"),
     ]
     return columns, list(grouped.values()), None, None, []
+
+
+def _stock_expiry_status(filters):
+    from vetedge.services.stock_expiry_monitor import execute_report
+
+    return execute_report(filters)
 
 
 def _lab_order_report(filters):
@@ -966,29 +990,27 @@ def _get_sales_invoice_rows(filters, unpaid_only=False):
 
 
 def _build_revenue_summary_rows(filters):
-    rows = _get_sales_invoice_rows(filters)
-    invoice_context = _build_invoice_context_map([row["name"] for row in rows])
+    from vetedge.services.financial_dataset import build_financial_dataset
+    dataset = build_financial_dataset(filters)
     data = []
-    for row in rows:
-        context = invoice_context.get(row["name"], {})
-        row_branch = _resolve_invoice_report_branch(row, context)
-        if filters.get("branch") and cstr(row_branch) != cstr(filters.get("branch")):
+    for row in dataset:
+        # Only submitted Sales Invoices are included in Revenue Summary
+        if row["docstatus"] != 1:
             continue
-        service_category = context.get("service_category") or _("General")
-        if filters.get("service_category") and service_category != filters.get("service_category"):
+        if filters.get("service_category") and row.get("service_source") != filters.get("service_category"):
             continue
         data.append(
             {
-                "invoice": row.get("name"),
+                "invoice": row.get("sales_invoice"),
                 "posting_date": row.get("posting_date"),
                 "customer": row.get("customer"),
-                "branch": row_branch,
-                "cost_center": context.get("cost_center") or row.get("cost_center"),
-                "service_category": service_category,
+                "branch": row.get("branch"),
+                "cost_center": row.get("cost_center"),
+                "service_category": row.get("service_source"),
                 "grand_total": flt(row.get("grand_total")),
-                "paid_amount": flt(row.get("grand_total")) - flt(row.get("outstanding_amount")),
+                "paid_amount": flt(row.get("paid_amount")),
                 "outstanding_amount": flt(row.get("outstanding_amount")),
-                "status": row.get("status") or _invoice_status_from_row(row),
+                "status": row.get("payment_status"),
             }
         )
     return data
@@ -1731,7 +1753,7 @@ def _daily_revenue_chart(filters):
     for row in rows:
         grouped[cstr(getdate(row.get("posting_date")))] += flt(row.get("grand_total"))
     labels = sorted(grouped)
-    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c")
+    return _chart(_("Daily Revenue"), "bar", labels, [grouped[label] for label in labels], "#30a46c", "currency")
 
 
 def _lab_orders_by_status_chart(filters):
@@ -1770,7 +1792,7 @@ def _revenue_by_branch_chart(filters):
     rows = _build_branch_performance_rows(filters)
     labels = [row.get("branch") for row in rows]
     values = [flt(row.get("revenue_total")) for row in rows]
-    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981")
+    return _chart(_("Revenue by Branch"), "bar", labels, values, "#10b981", "currency")
 
 
 def _consultations_by_branch_chart(filters):
@@ -1856,6 +1878,8 @@ def _stacked_practitioner_revenue_chart(rows):
         "data": {"labels": labels, "datasets": datasets},
         "colors": [palette[index % len(palette)] for index in range(len(datasets))],
         "barOptions": {"stacked": 1},
+        "value_type": "currency",
+        "fieldtype": "Currency",
     }
 
 
@@ -1866,7 +1890,7 @@ def _dashboard_report_links(key):
         "financial": ["Revenue Summary", "Unpaid Invoice Report"],
         "practitioner_performance": ["Practitioner Performance Report", "Consultation Register"],
         "branch_performance": ["Branch Performance Report", "Revenue Summary"],
-        "inventory_dispensary": ["Dispensary Activity Report", "Stock Usage Summary"],
+        "inventory_dispensary": ["Dispensary Activity Report", "Stock Usage Summary", "Stock Expiry Status"],
         "lab": ["Lab Order Report"],
         "vaccination": ["Vaccination Report"],
         "boarding": ["Boarding Report", "Kennel Availability Report"],
@@ -2029,13 +2053,15 @@ def _col(fieldname, fieldtype="Data", options=None, label=None):
     return column
 
 
-def _chart(title, chart_type, labels, values, color):
+def _chart(title, chart_type, labels, values, color, value_type="integer"):
     return {
         "data": {"labels": labels, "datasets": [{"name": title, "values": values}]},
         "type": chart_type,
         "colors": [color],
         "barOptions": {"stacked": 0},
         "title": title,
+        "value_type": value_type,
+        "fieldtype": "Currency" if value_type == "currency" else "Int",
     }
 
 

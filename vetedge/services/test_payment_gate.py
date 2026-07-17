@@ -83,6 +83,30 @@ class TestConsultationPaymentGate(TestCase):
 		):
 			payment_gate.assert_consultation_can_proceed(consultation(), "In Progress")
 
+	def test_billing_core_source_gate_result_allows_workflow_progression(self):
+		status = {
+			"gate": "Partial Payment Gate",
+			"can_proceed": True,
+			"message": "Payment gate passed.",
+			"linked_invoice_count": 2,
+			"paid_amount": 10000,
+			"outstanding_amount": 69000,
+			"invoices": [
+				{"name": "ACC-SINV-2026-00127", "docstatus": 1, "paid_amount": 10000, "outstanding_amount": 0},
+				{"name": "ACC-SINV-2026-00128", "docstatus": 1, "paid_amount": 0, "outstanding_amount": 69000},
+			],
+		}
+
+		with (
+			patch.object(payment_gate, "use_billing_core_for_payment_gate", return_value=True),
+			patch.object(payment_gate, "is_billable_consultation", return_value=True),
+			patch("vetedge.services.billing_core.get_source_payment_gate_status", return_value=status) as source_gate,
+			patch.object(payment_gate, "get_consultation_invoice_names_for_gate", side_effect=AssertionError("legacy invoice resolver must not run")),
+		):
+			payment_gate.assert_consultation_can_proceed(consultation(), "Ready for Treatment")
+
+		source_gate.assert_called_once_with("Veterinary Consultation", "VCON-001")
+
 	def test_billable_consultation_with_draft_invoice_is_blocked(self):
 		with self._gate_context(invoice(docstatus=0), gate="No Payment Gate") as context:
 			self.assertRaises(frappe.ValidationError, payment_gate.assert_consultation_can_proceed, consultation("SINV-001"), "Ready for Treatment")

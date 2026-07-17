@@ -127,6 +127,11 @@ REPORT_ROLE_MAP = {
 		*BRANCH_MANAGER_REPORTING_ROLES,
 		*DISPENSARY_REPORTING_ROLES,
 	},
+	"Stock Expiry Status": {
+		*ADMIN_REPORTING_ROLES,
+		*BRANCH_MANAGER_REPORTING_ROLES,
+		*DISPENSARY_REPORTING_ROLES,
+	},
 	"Lab Order Report": {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
@@ -214,6 +219,14 @@ DASHBOARD_ROLE_MAP = {
 		*DOCTOR_REPORTING_ROLES,
 		*NURSE_REPORTING_ROLES,
 	},
+	"hospitalisation": {
+		*ADMIN_REPORTING_ROLES,
+		*BRANCH_MANAGER_REPORTING_ROLES,
+		*DOCTOR_REPORTING_ROLES,
+		*NURSE_REPORTING_ROLES,
+		*FRONT_DESK_REPORTING_ROLES,
+		*FINANCE_REPORTING_ROLES,
+	},
 	"boarding": {
 		*ADMIN_REPORTING_ROLES,
 		*BRANCH_MANAGER_REPORTING_ROLES,
@@ -249,8 +262,14 @@ BRANCH_FILTERED_REPORTS = {
 	"Unpaid Invoice Report",
 	"Dispensary Activity Report",
 	"Stock Usage Summary",
+	"Stock Expiry Status",
 	"Lab Order Report",
 	"Vaccination Report",
+	"Active Hospitalisations",
+	"Hospitalisation Charge Summary",
+	"Care Location Occupancy",
+	"Hospitalisation Discharge Watch",
+	"Pending Hospitalisation Actions",
 	"Boarding Report",
 	"Kennel Availability Report",
 	"Grooming Report",
@@ -386,3 +405,20 @@ def _should_lock_practitioner_view(user: str | None, scope_name: str, scope_type
 	if get_user_roles(user) & BRANCH_MANAGER_REPORTING_ROLES:
 		return False
 	return bool(get_user_roles(user) & DOCTOR_REPORTING_ROLES)
+
+
+@frappe.whitelist()
+def get_earliest_transaction_date():
+	earliest_date = "2020-01-01"
+	try:
+		res = frappe.db.get_value("Sales Invoice", filters={}, fieldname="posting_date", order_by="posting_date asc")
+		if res:
+			earliest_date = cstr(res)
+		else:
+			res = frappe.db.get_value("Veterinary Patient", filters={}, fieldname="creation", order_by="creation asc")
+			if res:
+				earliest_date = cstr(res.date())
+	except Exception:
+		pass
+	return earliest_date
+

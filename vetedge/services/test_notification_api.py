@@ -20,6 +20,7 @@ def _install_frappe_stub() -> None:
 		frappe._ = lambda value, *args, **kwargs: value
 		frappe.whitelist = lambda *args, **kwargs: (lambda fn: fn) if args == () else args[0]
 		frappe.validate_and_sanitize_search_inputs = lambda fn: fn
+		frappe.scrub = lambda value: str(value).lower().replace(" ", "-")
 		frappe.session = SimpleNamespace(user="doctor@example.com")
 		sys.modules["frappe"] = frappe
 
@@ -261,3 +262,85 @@ class TestNotificationApi(TestCase):
 		]
 		legacy_label = "Vet" + "Edge"
 		self.assertFalse([message for message in messages if legacy_label in message])
+
+	def test_edgesuite_notification_adapter_returns_standard_payload_shape(self):
+		rows = [
+			{
+				"name": "VNI-001",
+				"notification_title": "Lab result ready",
+				"message": "A lab result needs review.",
+				"priority": "High",
+				"status": "Unread",
+				"event_key": "lab_result_ready_for_review",
+				"created_on": "2026-07-07 09:00:00",
+				"reference_doctype": "Veterinary Lab Order",
+				"reference_name": "VLAB-001",
+				"action_url": "/app/veterinary-lab-order/VLAB-001",
+			}
+		]
+		frappe_stub = SimpleNamespace(
+			session=SimpleNamespace(user="doctor@example.com"),
+			PermissionError=Exception,
+			scrub=lambda value: str(value).lower().replace(" ", "-"),
+		)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "get_notification_feed", return_value=rows) as feed,
+			patch.object(notification_api, "get_unread_notification_count", return_value=1) as count,
+		):
+			result = notification_api.get_my_edgesuite_notifications(filter_key="all", limit=25)
+
+		feed.assert_called_once_with(
+			user="doctor@example.com",
+			status=None,
+			include_archived=False,
+			limit=25,
+		)
+		count.assert_called_once_with(user="doctor@example.com")
+		item = result["items"][0]
+		for field in (
+			"name",
+			"title",
+			"message",
+			"status",
+			"category",
+			"severity",
+			"created_at",
+			"source_doctype",
+			"source_name",
+			"route",
+			"actions",
+		):
+			self.assertIn(field, item)
+		self.assertEqual(item["severity"], "warning")
+		self.assertEqual(item["actions"][0], {"key": "mark_read", "label": "Mark read", "enabled": True})
+		self.assertEqual(result["unread_count"], 1)
+		self.assertEqual(result["filters"], ["all", "unread", "action_required", "done"])
+
+	def test_edgesuite_unread_count_is_backend_derived(self):
+		frappe_stub = SimpleNamespace(session=SimpleNamespace(user="doctor@example.com"), PermissionError=Exception)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "get_notification_feed", return_value=[]),
+			patch.object(notification_api, "get_unread_notification_count", return_value=7) as count,
+		):
+			result = notification_api.get_my_edgesuite_notifications(filter_key="unread")
+
+		self.assertEqual(result["unread_count"], 7)
+		count.assert_called_once_with(user="doctor@example.com")
+
+	def test_edgesuite_mark_read_delegates_to_existing_backend_validation(self):
+		frappe_stub = SimpleNamespace(session=SimpleNamespace(user="doctor@example.com"), PermissionError=Exception)
+
+		with (
+			patch.object(notification_api, "frappe", frappe_stub),
+			patch.object(notification_api, "mark_notification_read", return_value={"name": "VNI-001", "status": "Read"}) as mark_read,
+			patch.object(notification_api, "get_unread_notification_count", return_value=0),
+		):
+			result = notification_api.mark_my_edgesuite_notification_read("VNI-001")
+
+		mark_read.assert_called_once_with("VNI-001", user="doctor@example.com")
+		self.assertEqual(result["status"], "Read")
+		self.assertEqual(result["unread_count"], 0)

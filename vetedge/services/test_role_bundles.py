@@ -93,7 +93,7 @@ class TestRoleBundles(TestCase):
 
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=lambda doctype, name: True),
-			get_doc=lambda doctype, name: bundle if doctype == "VetEdge Role Bundle" else user_doc,
+			get_doc=lambda doctype, name: bundle if doctype == "Veterinary Role Bundle" else user_doc,
 			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.ValidationError)()),
 			ValidationError=frappe.ValidationError,
 		)

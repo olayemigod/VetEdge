@@ -183,6 +183,16 @@ class TestHospitalisationActions(TestCase):
 		self.assertIn("add_lab_activities_with_billing", script)
 		self.assertIn("frm.reload_doc().then", script)
 
+	def test_hospitalisation_final_status_keeps_history_billing_actions_visible(self):
+		js_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "veterinary_hospitalisation" / "veterinary_hospitalisation.js"
+		script = js_path.read_text()
+
+		self.assertIn('frm.add_custom_button(__("Billing / Payment")', script)
+		self.assertIn('frm.add_custom_button(__("Check Payment Gate")', script)
+		self.assertIn('frm.add_custom_button(__("View Charge Summary")', script)
+		self.assertIn('if (["Cancelled", "Discharged"].includes(frm.doc.status))', script)
+		self.assertIn('if (frm.is_new() || ["Cancelled", "Discharged"].includes(frm.doc.status))', script)
+
 	def test_medication_item_context_uses_price_and_stock_defaults(self):
 		hosp = doc(doctype="Veterinary Hospitalisation", name="VHOS-001", company="Company A", customer="CUST-001", service_branch="Main")
 
@@ -536,6 +546,93 @@ class TestHospitalisationActions(TestCase):
 		self.assertEqual(hosp.status, "Discharged")
 		self.assertEqual(hosp.discharged_by, "vet@example.com")
 		self.assertEqual(hosp.discharge_summary, "Recovered")
+
+	def test_discharged_hospitalisation_preserves_history_links_and_references(self):
+		charge_items = [
+			doc(name="CHG-1", item="WARD-DAY", amount=5000, billing_status="Invoiced", sales_invoice="SINV-001"),
+			doc(name="CHG-2", item="MED-001", amount=1200, billing_status="Invoiced", sales_invoice="SINV-001", source_activity="ACT-1"),
+		]
+		activities = [
+			doc(name="ACT-1", activity_type="Medication", stock_entry="STE-001", notes="Medication administered"),
+			doc(name="ACT-2", activity_type="Observation", notes="Stable overnight"),
+		]
+		hosp = doc(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			status="Under Care",
+			patient="VP-001",
+			customer="CUST-001",
+			linked_consultation="VCON-001",
+			service_branch="Main Branch",
+			care_location=None,
+			care_location_history="Kennel A occupied from admission to release",
+			sales_invoice="SINV-001",
+			billing_session="VBS-001",
+			stock_entry_reference="STE-001",
+			charge_items=charge_items,
+			activities=activities,
+		)
+		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name=None: hosp)
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "require_internal_user"),
+			patch.object(hospitalisation, "now", return_value="2026-06-19 09:00:00"),
+			patch.object(
+				hospitalisation,
+				"get_hospitalisation_discharge_billing_state",
+				return_value=({"outstanding_amount": 0, "invoice_ledger": {"SINV-001": {"docstatus": 1}}}, {"can_proceed": True, "status": "Allowed", "message": "Payment gate passed."}),
+			),
+		):
+			result = hospitalisation.discharge_hospitalisation("VHOS-001", "Recovered")
+
+		self.assertEqual(result["hospitalisation"], "VHOS-001")
+		self.assertEqual(hosp.status, "Discharged")
+		self.assertEqual(hosp.patient, "VP-001")
+		self.assertEqual(hosp.customer, "CUST-001")
+		self.assertEqual(hosp.linked_consultation, "VCON-001")
+		self.assertIsNone(hosp.care_location)
+		self.assertEqual(hosp.care_location_history, "Kennel A occupied from admission to release")
+		self.assertEqual(hosp.sales_invoice, "SINV-001")
+		self.assertEqual(hosp.billing_session, "VBS-001")
+		self.assertEqual(hosp.stock_entry_reference, "STE-001")
+		self.assertEqual(hosp.charge_items, charge_items)
+		self.assertEqual(hosp.activities, activities)
+
+	def test_cancelled_hospitalisation_history_is_preserved_by_validation(self):
+		charge_items = [doc(name="CHG-1", item="WARD-DAY", amount=5000, billing_status="Invoiced", sales_invoice="SINV-001")]
+		activities = [doc(name="ACT-1", activity_type="Medication", stock_entry="STE-001")]
+		hosp = doc(
+			doctype="Veterinary Hospitalisation",
+			name="VHOS-001",
+			status="Cancelled",
+			patient="VP-001",
+			customer="CUST-001",
+			linked_consultation="VCON-001",
+			care_location="Kennel A",
+			sales_invoice="SINV-001",
+			billing_session="VBS-001",
+			stock_entry_reference="STE-001",
+			charge_items=charge_items,
+			activities=activities,
+		)
+		frappe_stub = make_frappe_stub()
+
+		with (
+			patch.object(hospitalisation, "frappe", frappe_stub),
+			patch.object(hospitalisation, "is_hospitalisation_enabled", return_value=True),
+		):
+			hospitalisation.validate_hospitalisation(hosp)
+
+		self.assertEqual(hosp.patient, "VP-001")
+		self.assertEqual(hosp.customer, "CUST-001")
+		self.assertEqual(hosp.linked_consultation, "VCON-001")
+		self.assertEqual(hosp.care_location, "Kennel A")
+		self.assertEqual(hosp.sales_invoice, "SINV-001")
+		self.assertEqual(hosp.billing_session, "VBS-001")
+		self.assertEqual(hosp.stock_entry_reference, "STE-001")
+		self.assertEqual(hosp.charge_items, charge_items)
+		self.assertEqual(hosp.activities, activities)
 
 
 def run_hospitalisation_gate(gate, invoice_doc, payment_rows=None):

@@ -200,6 +200,7 @@ def build_source_summary(doc, config: BillingSourceConfig) -> dict:
 		"owner": owner,
 		"owner_name": get_display_value("Customer", owner, "customer_name"),
 		"service_branch": branch,
+		"company": doc.get("company"),
 	}
 
 
@@ -405,14 +406,31 @@ def is_billing_sessions_enabled() -> bool:
 		return False
 
 
-def get_billing_session_summary_for_source(source_doctype: str, source_name: str) -> dict | None:
+def get_billing_session_summary_for_source(
+	source_doctype: str,
+	source_name: str,
+	sync_source_charges: bool = False,
+) -> dict | None:
 	try:
 		from vetedge.services.billing_core import get_billing_session_summary, resolve_billing_session
 	except Exception:
 		return None
 	if not is_billing_sessions_enabled():
 		return None
-	session = resolve_billing_session(source_doctype, source_name)
+	if sync_source_charges and source_doctype == "Veterinary Consultation":
+		try:
+			from vetedge.services.billing_core import closed_billing_session_covers_current_source_payloads, sync_source_charge_payloads_to_billing_session
+
+			historical_session = resolve_billing_session(source_doctype, source_name, include_closed_satisfied=True)
+			if historical_session and historical_session.get("status") == "Closed":
+				if closed_billing_session_covers_current_source_payloads(historical_session, source_doctype, source_name):
+					return None
+
+			session = sync_source_charge_payloads_to_billing_session(source_doctype, source_name)
+		except Exception:
+			raise
+	else:
+		session = resolve_billing_session(source_doctype, source_name)
 	if not session:
 		return None
 	return get_billing_session_summary(session)
@@ -441,13 +459,39 @@ def get_primary_session_invoice_summary(session_summary: dict | None, fallback: 
 	return fallback
 
 
-def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict | None) -> dict:
+def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict | None, invoice_history: list[dict] | None = None) -> dict:
 	current_total = flt(invoice_summary.get("grand_total")) if invoice_summary else 0
 	current_paid = flt(invoice_summary.get("paid_amount")) if invoice_summary else 0
 	current_outstanding = flt(invoice_summary.get("outstanding_amount")) if invoice_summary else 0
 	current_name = invoice_summary.get("name") if invoice_summary else None
 	current_status = invoice_summary.get("payment_status") or invoice_summary.get("status") if invoice_summary else None
 	currency = invoice_summary.get("currency") if invoice_summary else None
+
+	if invoice_history:
+		active_invoices = [row for row in invoice_history if cint(row.get("docstatus")) != 2]
+		linked_invoices = [row.get("name") or row.get("invoice") for row in active_invoices if row.get("name") or row.get("invoice")]
+		total = sum(flt(row.get("grand_total")) for row in active_invoices)
+		paid = sum(flt(row.get("paid_amount")) for row in active_invoices)
+		outstanding = sum(flt(row.get("outstanding_amount")) for row in active_invoices)
+		currency = currency or next((row.get("currency") for row in active_invoices if row.get("currency")), None)
+		return {
+			"total_amount": total,
+			"paid_amount": paid,
+			"outstanding_amount": outstanding,
+			"payment_status": get_history_payment_status(active_invoices),
+			"billing_session_total": flt((session_summary or {}).get("total_invoiced")),
+			"billing_session_paid": flt((session_summary or {}).get("total_paid")),
+			"billing_session_outstanding": flt((session_summary or {}).get("outstanding_amount")),
+			"billing_session_status": (session_summary or {}).get("payment_status"),
+			"linked_invoice_count": len(linked_invoices),
+			"linked_invoices": linked_invoices,
+			"current_invoice_total": current_total,
+			"current_invoice_paid": current_paid,
+			"current_invoice_outstanding": current_outstanding,
+			"current_invoice_name": current_name,
+			"current_invoice_status": current_status,
+			"currency": currency,
+		}
 
 	if not session_summary:
 		return {
@@ -497,6 +541,25 @@ def get_billing_modal_totals(session_summary: dict | None, invoice_summary: dict
 	}
 
 
+def get_history_payment_status(invoice_history: list[dict]) -> str | None:
+	if not invoice_history:
+		return None
+	submitted = [row for row in invoice_history if cint(row.get("docstatus")) == 1]
+	has_draft = any(cint(row.get("docstatus")) == 0 for row in invoice_history)
+	if any(row.get("payment_state") == "Partly Paid" or flt(row.get("paid_amount")) > 0 for row in invoice_history):
+		if has_draft or not (submitted and all(row.get("payment_state") == "Paid" for row in submitted)):
+			return "Partly Paid"
+	if submitted and all(row.get("payment_state") == "Paid" for row in submitted) and not has_draft:
+		return "Paid"
+	if any(row.get("payment_state") == "Partly Paid" or flt(row.get("paid_amount")) > 0 for row in invoice_history):
+		return "Partly Paid"
+	if submitted:
+		return "Unpaid"
+	if has_draft:
+		return "Draft"
+	return None
+
+
 def get_payment_modes() -> list[str]:
 	if not frappe.db.exists("DocType", "Mode of Payment"):
 		return []
@@ -516,10 +579,17 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	assert_can_read_source(doc)
 	invoice_name = get_linked_invoice_name(doc, config)
 	invoice_summary = get_invoice_summary(invoice_name)
-	session_summary = get_billing_session_summary_for_source(source_doctype, source_name)
+	session_summary = get_billing_session_summary_for_source(
+		source_doctype,
+		source_name,
+		sync_source_charges=source_doctype == "Veterinary Consultation",
+	)
 	invoice_summary = get_primary_session_invoice_summary(session_summary, invoice_summary)
+	invoice_history = get_billing_group_history_for_modal(source_doctype, source_name)
+	patient_outstanding_context = get_patient_outstanding_context_for_modal(doc, invoice_history)
 	actions = get_available_actions(config, invoice_summary, session_summary)
-	totals = get_billing_modal_totals(session_summary, invoice_summary)
+	totals = get_billing_modal_totals(session_summary, invoice_summary, invoice_history)
+	payment_gate = get_billing_group_payment_gate_for_modal(source_doctype, source_name) if invoice_history else None
 	state = {
 		"config": {
 			"source_doctype": config.source_doctype,
@@ -529,8 +599,11 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 		},
 		"source": build_source_summary(doc, config),
 		"invoice": invoice_summary,
+		"invoice_history": invoice_history,
+		"billing_group_invoice_history": invoice_history,
+		"patient_outstanding_context": patient_outstanding_context,
 		"billing_session": session_summary,
-		"payment_gate": (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
+		"payment_gate": payment_gate or (session_summary or {}).get("payment_gate") or get_consultation_payment_gate_state(doc, invoice_summary),
 		"actions": actions,
 		"payment_modes": get_payment_modes(),
 		**totals,
@@ -548,6 +621,86 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	):
 		state[fieldname] = actions.get(fieldname)
 	return state
+
+
+def get_billing_group_history_for_modal(source_doctype: str, source_name: str) -> list[dict]:
+	if not source_supports_billing_session(source_doctype) or not is_billing_sessions_enabled():
+		return []
+	from vetedge.services.billing_core import get_billing_group_invoice_history
+
+	return enrich_invoice_history_for_modal(get_billing_group_invoice_history(source_doctype, source_name, include_related=True))
+
+
+def get_patient_outstanding_context_for_modal(doc, invoice_history: list[dict] | None = None) -> list[dict]:
+	from vetedge.services.billing_core import get_patient_outstanding_invoice_context
+
+	excluded = {row.get("name") or row.get("invoice") for row in invoice_history or []}
+	rows = get_patient_outstanding_invoice_context(
+		patient=doc.get("patient") or doc.get("animal") or (doc.get("name") if doc.get("doctype") == "Veterinary Patient" else None),
+		customer=doc.get("primary_owner") or doc.get("customer"),
+		exclude_billing_group=excluded,
+	)
+	return enrich_patient_outstanding_context_for_modal(rows)
+
+
+def enrich_patient_outstanding_context_for_modal(invoice_history: list[dict] | None) -> list[dict]:
+	rows = enrich_invoice_history_for_modal(invoice_history)
+	for row in rows:
+		row["informational_only"] = True
+		row["does_not_satisfy_current_gate"] = True
+		row["source_label"] = row.get("source_label") or "Other outstanding invoice for this patient"
+	return rows
+
+
+def enrich_invoice_history_for_modal(invoice_history: list[dict] | None) -> list[dict]:
+	rows = []
+	for source in invoice_history or []:
+		row = dict(source)
+		invoice_name = row.get("name") or row.get("invoice")
+		if not invoice_name:
+			continue
+		docstatus = cint(row.get("docstatus"))
+		outstanding = flt(row.get("outstanding_amount"))
+		payment_state = row.get("payment_state") or row.get("payment_status") or row.get("status")
+		row["invoice"] = invoice_name
+		row["name"] = invoice_name
+		row["payment_status"] = payment_state
+		row["source_label"] = get_invoice_history_source_label(row)
+		row["can_open_invoice"] = bool(invoice_name)
+		row["can_pay_outstanding"] = bool(invoice_name and docstatus == 1 and outstanding > 0)
+		row["can_pay"] = row["can_pay_outstanding"]
+		row["can_submit_invoice"] = bool(invoice_name and docstatus == 0)
+		if row["can_pay_outstanding"]:
+			row["action_label"] = "Pay Outstanding"
+		elif docstatus == 0:
+			row["action_label"] = "Open / Submit"
+		elif docstatus == 1 and outstanding <= 0:
+			row["action_label"] = "Paid"
+		elif docstatus == 2:
+			row["action_label"] = "Cancelled"
+		else:
+			row["action_label"] = row.get("action_label") or "View"
+		rows.append(row)
+	return rows
+
+
+def get_invoice_history_source_label(row: dict) -> str:
+	source_doctype = row.get("source_doctype")
+	source_name = row.get("source_name")
+	source_detail = row.get("source_detail_name")
+	relation_type = row.get("relation_type")
+	parts = [part for part in (source_doctype, source_name, source_detail) if part]
+	if parts:
+		return " / ".join(parts)
+	return (relation_type or "").replace("_", " ").title()
+
+
+def get_billing_group_payment_gate_for_modal(source_doctype: str, source_name: str) -> dict | None:
+	if not source_supports_billing_session(source_doctype) or not is_billing_sessions_enabled():
+		return None
+	from vetedge.services.billing_core import get_source_payment_gate_status
+
+	return get_source_payment_gate_status(source_doctype, source_name)
 
 
 @frappe.whitelist()
@@ -588,7 +741,20 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 			if is_billing_sessions_enabled():
 				result = sync_source_to_billing_session(source_doctype, source_name)
-				return {"created": True, "result": result, "state": get_billing_modal_state(source_doctype, source_name)}
+				state = get_billing_modal_state(source_doctype, source_name)
+				open_invoice_name = (
+					result.get("open_invoice_name")
+					or result.get("invoice")
+					or state.get("open_invoice_name")
+					or (state.get("invoice") or {}).get("name")
+				)
+				return {
+					"created": True,
+					"invoice": result.get("invoice") or open_invoice_name,
+					"open_invoice_name": open_invoice_name,
+					"result": result,
+					"state": state,
+				}
 		except Exception:
 			raise
 
@@ -601,7 +767,20 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 
 	method = frappe.get_attr(config.create_invoice_method)
 	result = method(**{config.create_invoice_arg: source_name})
-	return {"created": True, "result": result, "state": get_billing_modal_state(source_doctype, source_name)}
+	state = get_billing_modal_state(source_doctype, source_name)
+	open_invoice_name = (
+		result.get("open_invoice_name")
+		or result.get("invoice")
+		or state.get("open_invoice_name")
+		or (state.get("invoice") or {}).get("name")
+	)
+	return {
+		"created": True,
+		"invoice": result.get("invoice") or open_invoice_name,
+		"open_invoice_name": open_invoice_name,
+		"result": result,
+		"state": state,
+	}
 
 
 @frappe.whitelist()
@@ -635,6 +814,13 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 		reference_doctype=source_doctype,
 		reference_name=source_name
 	)
+	if source_supports_billing_session(source_doctype) and is_billing_sessions_enabled():
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		sync_result = sync_source_to_billing_session(source_doctype, source_name)
+		if sync_result.get("requires_confirmation"):
+			frappe.throw(sync_result.get("message") or "Confirm draft invoice cleanup before submitting.", frappe.ValidationError)
+		invoice = sync_result.get("invoice") or invoice
 	invoice_name = resolve_modal_invoice_name(doc, config, invoice)
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)
@@ -646,7 +832,9 @@ def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | N
 	if not frappe.has_permission("Sales Invoice", "submit", doc=invoice_doc):
 		frappe.throw("You do not have permission to submit this Sales Invoice.", frappe.PermissionError)
 
-	ensure_invoice_due_date_not_before_posting_date(invoice_doc)
+	from vetedge.services.billing_core import prepare_vetedge_invoice_for_submit
+
+	prepare_vetedge_invoice_for_submit(invoice_doc, verified_vetedge_link=True)
 	invoice_doc.submit()
 	return {"invoice": invoice_doc.name, "state": get_billing_modal_state(source_doctype, source_name)}
 
@@ -767,6 +955,10 @@ def assert_invoice_is_linked_to_source_or_session(invoice_name: str, doc, config
 		return
 	session_summary = get_billing_session_summary_for_source(doc.doctype, doc.name)
 	if session_summary and any(row.get("name") == invoice_name for row in session_summary.get("invoices") or []):
+		return
+	if any((row.get("name") or row.get("invoice")) == invoice_name for row in get_billing_group_history_for_modal(doc.doctype, doc.name)):
+		return
+	if any((row.get("name") or row.get("invoice")) == invoice_name for row in get_patient_outstanding_context_for_modal(doc, [])):
 		return
 	frappe.throw("The selected Sales Invoice is not linked to this billing source.", frappe.PermissionError)
 

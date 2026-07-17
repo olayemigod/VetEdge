@@ -6,7 +6,13 @@ from unittest.mock import patch
 
 import frappe
 
-from vetedge.services.report_visibility import normalize_report_filters, validate_report_access
+from vetedge.services.report_visibility import (
+	normalize_dashboard_filters,
+	normalize_report_filters,
+	validate_dashboard_access,
+	validate_report_access,
+	get_earliest_transaction_date,
+)
 
 
 class TestReportVisibility(TestCase):
@@ -46,3 +52,44 @@ class TestReportVisibility(TestCase):
 			)
 
 		self.assertEqual(filters.branch, "Main Branch")
+
+	def test_hospitalisation_dashboard_allows_clinical_roles_and_defaults_branch(self):
+		frappe_stub = SimpleNamespace(
+			_dict=lambda value=None: frappe._dict(value or {}),
+			defaults=SimpleNamespace(get_user_default=lambda key: None),
+			throw=lambda message, exc=None: (_ for _ in ()).throw((exc or frappe.PermissionError)()),
+			PermissionError=frappe.PermissionError,
+		)
+
+		with (
+			patch("vetedge.services.report_visibility.frappe", frappe_stub),
+			patch("vetedge.services.report_visibility.is_portal_owner_user", return_value=False),
+			patch("vetedge.services.report_visibility.get_user_roles", return_value={"VetEdge Doctor"}),
+			patch("vetedge.services.report_visibility.user_has_global_branch_access", return_value=False),
+			patch("vetedge.services.report_visibility.get_assigned_branches", return_value=["Main Branch"]),
+		):
+			validate_dashboard_access("hospitalisation", user="doctor@example.com")
+			filters = normalize_dashboard_filters(
+				"hospitalisation",
+				{},
+				user="doctor@example.com",
+			)
+
+		self.assertEqual(filters.branch, "Main Branch")
+
+	def test_get_earliest_transaction_date(self):
+		# Mock frappe.db.get_value to return a date string
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", return_value="2021-05-10"):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2021-05-10")
+
+		# Test database query fallback
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", side_effect=[None, SimpleNamespace(date=lambda: "2022-06-15")]):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2022-06-15")
+
+		# Test fallback on exception
+		with patch("vetedge.services.report_visibility.frappe.db.get_value", side_effect=Exception):
+			date = get_earliest_transaction_date()
+			self.assertEqual(date, "2020-01-01")
+

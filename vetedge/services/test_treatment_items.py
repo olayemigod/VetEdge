@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -8,7 +9,9 @@ import frappe
 
 from vetedge.services.treatment_items import (
 	apply_planned_treatment_defaults,
+	get_planned_treatment_item_billing_defaults,
 	get_treatment_item_defaults,
+	get_treatment_item_link_options,
 	validate_treatment_item_profile,
 )
 
@@ -43,6 +46,57 @@ class TestTreatmentItems(TestCase):
 
 		self.assertEqual(row.service_type, "Medication Service")
 		self.assertEqual(row.treatment_type, "Medication")
+
+	def test_planned_treatment_defaults_use_billing_core_price_fallback(self):
+		frappe_stub = make_frappe_stub(
+			exists=lambda doctype, name=None: doctype == "DocType",
+			get_value=lambda doctype, name, fields=None, as_dict=False: frappe._dict(
+				item="MED-001",
+				service_type="Medication Service",
+				treatment_type="Medication",
+				shelf_life_in_days=365,
+				price_list="Clinic Selling",
+				default_price=0,
+			)
+			if doctype == "Veterinary Treatment Item"
+			else frappe._dict(stock_uom="Nos", standard_rate=300),
+		)
+
+		with (
+			patch("vetedge.services.treatment_items.frappe", frappe_stub),
+			patch("vetedge.services.billing_core._get_item_selling_rate", return_value=1250) as get_rate,
+		):
+			defaults = get_planned_treatment_item_billing_defaults("MED-001", company="VetEdge Co", customer="CUST-001", branch="Main")
+
+		self.assertEqual(defaults.rate, 1250)
+		self.assertEqual(defaults.uom, "Nos")
+		get_rate.assert_called_once_with(
+			"MED-001",
+			company="VetEdge Co",
+			customer="CUST-001",
+			branch="Main",
+			uom="Nos",
+			master_price_list="Clinic Selling",
+		)
+
+	def test_apply_planned_treatment_defaults_does_not_overwrite_existing_rate(self):
+		row = frappe._dict(item="MED-001", service_type=None, treatment_type=None, rate=999)
+
+		with patch(
+			"vetedge.services.treatment_items.get_planned_treatment_item_billing_defaults",
+			return_value=SimpleNamespace(
+				item="MED-001",
+				service_type="Medication Service",
+				treatment_type="Medication",
+				shelf_life_in_days=180,
+				uom="Nos",
+				rate=1250,
+			),
+		), patch("vetedge.services.treatment_items.get_treatment_item_defaults", return_value=None):
+			apply_planned_treatment_defaults(row)
+
+		self.assertEqual(row.rate, 999)
+		self.assertEqual(row.service_type, "Medication Service")
 
 	def test_validate_treatment_item_profile_accepts_valid_links(self):
 		doc = frappe._dict(
@@ -88,8 +142,43 @@ class TestTreatmentItems(TestCase):
 		):
 			self.assertRaises(frappe.ValidationError, validate_treatment_item_profile, doc)
 
+	def test_treatment_item_link_options_are_vetedge_curated_items(self):
+		queries = []
 
-def make_frappe_stub(exists=None, get_value=None, set_value=None):
+		def sql(query, values=None):
+			queries.append((query, values))
+			return [["MED-001", "Medication"]]
+
+		frappe_stub = make_frappe_stub(
+			exists=lambda doctype, name=None: doctype == "DocType" and name == "Veterinary Treatment Item",
+			sql=sql,
+		)
+
+		with (
+			patch("vetedge.services.treatment_items.frappe", frappe_stub),
+			patch("vetedge.services.treatment_items.require_internal_user"),
+		):
+			results = get_treatment_item_link_options("Item", "med", "name", 0, 20, {})
+
+		self.assertEqual(results, [["MED-001", "Medication"]])
+		self.assertIn("`tabVeterinary Treatment Item`", queries[0][0])
+		self.assertIn("INNER JOIN `tabItem`", queries[0][0])
+		self.assertEqual(queries[0][1]["search"], "%med%")
+
+	def test_consultation_planned_treatment_item_picker_uses_vetedge_query(self):
+		js = (
+			Path(__file__).resolve().parents[1]
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_consultation"
+			/ "veterinary_consultation.js"
+		).read_text()
+
+		self.assertIn('query: "vetedge.services.treatment_items.get_treatment_item_link_options"', js)
+		self.assertNotIn('frm.set_query("item", "planned_treatments", () => ({\n\t\t\tfilters: {\n\t\t\t\tdisabled: 0,', js)
+
+
+def make_frappe_stub(exists=None, get_value=None, set_value=None, sql=None):
 	def throw(*args, **kwargs):
 		exc = args[1] if len(args) > 1 else kwargs.get("exc")
 		if isinstance(exc, type) and issubclass(exc, Exception):
@@ -101,6 +190,7 @@ def make_frappe_stub(exists=None, get_value=None, set_value=None):
 			exists=exists or (lambda *args, **kwargs: True),
 			get_value=get_value or (lambda *args, **kwargs: None),
 			set_value=set_value or (lambda *args, **kwargs: None),
+			sql=sql or (lambda *args, **kwargs: []),
 		),
 		get_meta=lambda doctype: SimpleNamespace(has_field=lambda fieldname: fieldname in {"disabled", "shelf_life_in_days"}),
 		throw=throw,

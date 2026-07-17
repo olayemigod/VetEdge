@@ -80,6 +80,66 @@ class TestNotificationItemStructure(TestCase):
 
 
 class TestNotificationItemService(TestCase):
+	def test_owner_facing_notification_title_prefers_patient_name(self):
+		title = notifications.get_owner_facing_notification_title(
+			"missed_appointment",
+			{"patient_name": "Bruno", "reference_name": "VMISS-001"},
+		)
+
+		self.assertEqual(title, "Missed Appointment - Bruno")
+
+	def test_owner_facing_notification_title_uses_document_name_only_as_fallback(self):
+		title = notifications.get_owner_facing_notification_title(
+			"consultation_awaiting_payment",
+			{"reference_name": "VCON-001"},
+		)
+
+		self.assertEqual(title, "Consultation Awaiting Payment - VCON-001")
+
+	def test_create_notification_item_stores_patient_facing_title(self):
+		inserted = []
+
+		class Doc(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+			def insert(self, **kwargs):
+				inserted.append(self)
+				self.name = "VNI-NEW"
+
+		def get_doc(value, name=None):
+			if isinstance(value, dict):
+				return Doc(**value)
+			return Doc(doctype=value, name=name)
+
+		frappe_stub = SimpleNamespace(
+			ValidationError=Exception,
+			db=SimpleNamespace(
+				exists=Mock(return_value=True),
+				get_value=Mock(return_value=None),
+				set_value=Mock(),
+			),
+			get_doc=Mock(side_effect=get_doc),
+			scrub=lambda value: str(value).lower().replace(" ", "_"),
+			publish_realtime=Mock(),
+		)
+
+		with (
+			patch.object(notifications, "frappe", frappe_stub),
+			patch.object(notifications, "ensure_frappe_notification_log", return_value=None),
+		):
+			result = notifications.create_notification_item(
+				event_key="lab_result_ready_for_review",
+				recipient_user="doctor@example.com",
+				notification_title="Veterinary Lab Result Ready for Review",
+				reference_doctype="Veterinary Lab Order",
+				reference_name="VLAB-001",
+				payload={"patient_name": "Bella"},
+			)
+
+		self.assertTrue(result["created"])
+		self.assertEqual(inserted[0].notification_title, "Lab Result Ready - Bella")
+
 	def test_create_notification_item_reuses_existing_idempotency_key(self):
 		existing = SimpleNamespace(name="VNI-001", frappe_notification_log="NOTIF-001", get=lambda key, default=None: getattr(existing, key, default))
 		frappe_stub = SimpleNamespace(
@@ -150,7 +210,7 @@ class TestNotificationItemService(TestCase):
 		self.assertEqual(inserted[1], ("Notification Log", {"ignore_permissions": True}))
 		self.assertEqual(docs[0].status, "Unread")
 		self.assertEqual(docs[1].for_user, "doctor@example.com")
-		self.assertEqual(docs[1].subject, "Lab order created")
+		self.assertEqual(docs[1].subject, "Lab Order Created - VLAB-001")
 		self.assertEqual(docs[1].document_type, "Veterinary Lab Order")
 		self.assertEqual(docs[1].document_name, "VLAB-001")
 		frappe_stub.publish_realtime.assert_not_called()

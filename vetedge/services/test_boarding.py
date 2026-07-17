@@ -194,6 +194,23 @@ class TestBoardingBusinessRulesDocumentation(unittest.TestCase):
 		module = load_boarding_module()
 		self.assertEqual(module.calculate_boarding_billable_days(date(2026, 5, 1), date(2026, 5, 3)), 3)
 
+	def test_boarding_booking_final_status_keeps_billing_payment_visible(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "pet_boarding_booking" / "pet_boarding_booking.js"
+		script = script_path.read_text()
+
+		self.assertIn('frm.add_custom_button(__("Billing / Payment")', script)
+		self.assertNotIn('if (frm.doc.status !== "Cancelled")', script)
+		self.assertIn('frm.add_custom_button(__("View Invoices")', script)
+		self.assertIn('frm.add_custom_button(__("View Stay")', script)
+
+	def test_completed_boarding_stay_keeps_history_view_but_hides_new_care_record(self):
+		script_path = Path(__file__).resolve().parents[1] / "veterinary" / "doctype" / "pet_boarding_stay" / "pet_boarding_stay.js"
+		script = script_path.read_text()
+
+		self.assertIn('if (frm.doc.status === "Active")', script)
+		self.assertIn('frm.add_custom_button(__("Add Care Record")', script)
+		self.assertIn('frm.add_custom_button(__("View Care Records")', script)
+
 
 class TestKennelAvailabilityBoard(unittest.TestCase):
 	def setUp(self):

@@ -4,6 +4,23 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+VETEDGE_PRODUCT_FAMILY = "veterinary_practice"
+VETEDGE_DISTRIBUTION = "vetedge"
+VETEDGE_DISPLAY_LABEL = "VetEdge"
+
+VETEDGE_FEATURE_KEYS = {
+	"stock_expiry",
+	"financial_dashboard",
+	"hospitalisation_dashboard",
+	"appointment",
+	"consultation",
+	"billing",
+	"lab",
+	"vaccination",
+	"grooming",
+	"boarding",
+}
+
 def is_coreedge_available() -> bool:
 	try:
 		return "coreedge" in frappe.get_installed_apps()
@@ -74,6 +91,42 @@ def get_vetedge_product_app() -> str:
 	except Exception:
 		return "VetEdge"
 
+def get_product_family() -> str:
+	return VETEDGE_PRODUCT_FAMILY
+
+def get_distribution() -> str:
+	return VETEDGE_DISTRIBUTION
+
+def normalize_feature_key(feature_key: str | None) -> str | None:
+	if not feature_key:
+		return None
+	return str(feature_key).strip().lower().replace(" ", "_").replace("-", "_")
+
+def resolve_product_identity(
+	product_app: str | None = None,
+	tenant: str | None = None,
+	feature_key: str | None = None,
+) -> dict:
+	app = product_app or get_vetedge_product_app()
+	normalized_feature = normalize_feature_key(feature_key)
+	return {
+		"product_app": app,
+		"active_product_app": app,
+		"legacy_product_key": str(app).strip().lower().replace(" ", "_").replace("-", "_") if app else None,
+		"product_family": get_product_family(),
+		"distribution": get_distribution(),
+		"display_label": VETEDGE_DISPLAY_LABEL,
+		"tenant": tenant,
+		"feature_key": normalized_feature,
+		"known_feature_key": normalized_feature in VETEDGE_FEATURE_KEYS if normalized_feature else False,
+	}
+
+def get_supported_feature_keys() -> set[str]:
+	return set(VETEDGE_FEATURE_KEYS)
+
+def get_vetedge_desk_route() -> str:
+	return "/app/vetedge"
+
 def _get_local_fallback_context(user: str | None = None) -> dict:
 	resolved_user = user or frappe.session.user
 	default_company = None
@@ -89,11 +142,15 @@ def _get_local_fallback_context(user: str | None = None) -> dict:
 			pass
 	
 	product_app = get_vetedge_product_app()
+	identity = resolve_product_identity(product_app=product_app)
 	return {
 		"user": resolved_user,
 		"tenant": None,
 		"product_app": product_app,
 		"active_product_app": product_app,
+		"product_family": identity["product_family"],
+		"distribution": identity["distribution"],
+		"distribution_context": identity,
 		"branch": None,
 		"active_branch": None,
 		"company": default_company,
@@ -110,7 +167,15 @@ def get_current_vetedge_context(user: str | None = None) -> dict:
 		return _get_local_fallback_context(user)
 	try:
 		from coreedge.adapters.context import get_current_context
-		return get_current_context(user=user)
+		context = get_current_context(user=user)
+		identity = resolve_product_identity(
+			product_app=context.get("product_app") or context.get("active_product_app") or get_vetedge_product_app(),
+			tenant=context.get("tenant"),
+		)
+		context.setdefault("product_family", identity["product_family"])
+		context.setdefault("distribution", identity["distribution"])
+		context.setdefault("distribution_context", identity)
+		return context
 	except (ImportError, ModuleNotFoundError):
 		return _get_local_fallback_context(user)
 
@@ -127,9 +192,18 @@ def has_vetedge_access(product_app: str | None = None, tenant: str | None = None
 	try:
 		from coreedge.adapters.access import has_product_access
 		try:
-			return has_product_access(product_code=app, tenant=tenant, user=user)
+			return has_product_access(
+				product_code=app,
+				tenant=tenant,
+				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
+			)
 		except TypeError:
-			return has_product_access(product_app=app, tenant=tenant, user=user)
+			try:
+				return has_product_access(product_code=app, tenant=tenant, user=user)
+			except TypeError:
+				return has_product_access(product_app=app, tenant=tenant, user=user)
 	except (ImportError, ModuleNotFoundError):
 		return True
 
@@ -166,6 +240,8 @@ def require_vetedge_access(
 				product_code=app,
 				tenant=tenant,
 				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
 				source_app=action,
 				source_doctype=reference_doctype,
 				source_docname=reference_name
@@ -195,19 +271,112 @@ def require_vetedge_access(
 
 def get_vetedge_access_context(product_app: str | None = None, tenant: str | None = None, user: str | None = None) -> dict:
 	if not should_show_coreedge_controls():
-		return {"allowed": True, "enforcement_action": "Allow", "primary_reason_code": "PLATFORM_DISABLED"}
+		return {
+			"allowed": True,
+			"enforcement_action": "Allow",
+			"primary_reason_code": "PLATFORM_DISABLED",
+			"distribution_context": resolve_product_identity(product_app=product_app, tenant=tenant),
+		}
 	app = product_app or get_vetedge_product_app()
 	try:
 		from coreedge.adapters.access import get_access_context
 		try:
-			return get_access_context(product_code=app, tenant=tenant, user=user)
+			context = get_access_context(
+				product_code=app,
+				tenant=tenant,
+				user=user,
+				product_family=get_product_family(),
+				distribution=get_distribution(),
+			)
 		except TypeError:
 			try:
-				return get_access_context(product_app=app, tenant=tenant, user=user)
+				context = get_access_context(product_app=app, tenant=tenant, user=user)
 			except TypeError:
-				return get_access_context(user=user)
+				context = get_access_context(user=user)
+		if isinstance(context, dict):
+			context.setdefault("distribution_context", resolve_product_identity(product_app=app, tenant=tenant))
+		return context
 	except (ImportError, ModuleNotFoundError):
-		return {"allowed": True, "enforcement_action": "Allow", "primary_reason_code": "PLATFORM_MISSING"}
+		return {
+			"allowed": True,
+			"enforcement_action": "Allow",
+			"primary_reason_code": "PLATFORM_MISSING",
+			"distribution_context": resolve_product_identity(product_app=app, tenant=tenant),
+		}
+
+def check_vetedge_feature_access(
+	feature_key: str,
+	product_app: str | None = None,
+	tenant: str | None = None,
+	user: str | None = None,
+) -> dict:
+	normalized_feature = normalize_feature_key(feature_key)
+	identity = resolve_product_identity(product_app=product_app, tenant=tenant, feature_key=normalized_feature)
+	if not is_coreedge_enabled():
+		return {
+			"allowed": True,
+			"access_result": "Allowed",
+			"primary_reason_code": "PLATFORM_DISABLED",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+		}
+	if not is_coreedge_available():
+		if should_fail_closed_when_coreedge_missing():
+			return {
+				"allowed": False,
+				"access_result": "Denied",
+				"primary_reason_code": "PLATFORM_MISSING",
+				"feature_key": normalized_feature,
+				"product_family": identity["product_family"],
+				"distribution": identity["distribution"],
+				"distribution_context": identity,
+			}
+		return {
+			"allowed": True,
+			"access_result": "Allowed",
+			"primary_reason_code": "PLATFORM_MISSING_FAIL_OPEN",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+		}
+	try:
+		from coreedge.coreedge.runtime import check_feature_access
+		try:
+			result = check_feature_access(
+				user=user,
+				tenant=tenant,
+				product_app=identity["product_app"],
+				product_family=identity["product_family"],
+				distribution=identity["distribution"],
+				feature_key=normalized_feature,
+			)
+		except TypeError:
+			result = check_feature_access(
+				user=user,
+				tenant=tenant,
+				product_app=identity["product_app"],
+				feature_key=normalized_feature,
+			)
+		if isinstance(result, dict):
+			result.setdefault("feature_key", normalized_feature)
+			result.setdefault("product_family", identity["product_family"])
+			result.setdefault("distribution", identity["distribution"])
+			result.setdefault("distribution_context", identity)
+		return result
+	except (ImportError, ModuleNotFoundError):
+		context = get_vetedge_access_context(product_app=identity["product_app"], tenant=tenant, user=user)
+		return {
+			"allowed": bool(context.get("allowed", True)),
+			"access_result": "Allowed" if context.get("allowed", True) else "Denied",
+			"feature_key": normalized_feature,
+			"product_family": identity["product_family"],
+			"distribution": identity["distribution"],
+			"distribution_context": identity,
+			"context": context,
+		}
 
 def get_visible_vetedge_sidebar_items(items: list[dict]) -> list[dict]:
 	if should_show_coreedge_controls():
@@ -235,15 +404,137 @@ def get_visible_vetedge_settings_items(items: list[dict]) -> list[dict]:
 			filtered.append(item)
 	return filtered
 
+def _get_allowed_workspace_names(bootinfo) -> list[str]:
+	try:
+		pages = (bootinfo.get("workspaces") or {}).get("pages") or []
+	except Exception:
+		return []
+	return [page.get("name") for page in pages if page.get("name")]
+
+def _build_sidebar_item_for_boot(item) -> dict:
+	boot_item = {
+		"label": item.label,
+		"link_to": item.link_to,
+		"link_type": item.link_type,
+		"type": item.type,
+		"icon": item.icon,
+		"child": item.child,
+		"collapsible": item.collapsible,
+		"indent": item.indent,
+		"keep_closed": item.keep_closed,
+		"url": item.url,
+		"show_arrow": item.show_arrow,
+		"filters": item.filters,
+		"route_options": item.route_options,
+		"tab": item.navigate_to_tab,
+	}
+	if (
+		item.link_type == "Report"
+		and item.link_to
+		and frappe.db.exists("Report", item.link_to)
+		and not frappe.db.get_value("Report", item.link_to, "disabled")
+	):
+		report_type, ref_doctype = frappe.db.get_value(
+			"Report", item.link_to, ["report_type", "ref_doctype"]
+		)
+		boot_item["report"] = {"report_type": report_type, "ref_doctype": ref_doctype}
+	return boot_item
+
+def get_canonical_vetedge_sidebar_for_boot(bootinfo) -> dict | None:
+	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists("Workspace Sidebar", "VetEdge"):
+		return None
+
+	sidebar_doc = frappe.get_doc("Workspace Sidebar", "VetEdge")
+	allowed_workspaces = _get_allowed_workspace_names(bootinfo)
+	items = []
+	for item in sidebar_doc.items:
+		if (
+			item.type == "Section Break"
+			or sidebar_doc.is_item_allowed(item.link_to, item.link_type, allowed_workspaces)
+		):
+			items.append(_build_sidebar_item_for_boot(item))
+
+	if not any(item["type"] != "Section Break" for item in items):
+		return None
+
+	return {
+		"label": "Veterinary",
+		"items": items,
+		"header_icon": sidebar_doc.header_icon,
+		"module_onboarding": sidebar_doc.module_onboarding,
+		"module": sidebar_doc.module,
+		"app": sidebar_doc.app,
+	}
+
 def filter_bootinfo_for_coreedge_platform(bootinfo):
 	bootinfo.is_coreedge_available = is_coreedge_available()
 	bootinfo.should_show_coreedge_controls = should_show_coreedge_controls()
 	
+	try:
+		from vetedge.services.branding import get_branding
+		branding = get_branding()
+	except Exception:
+		branding = {}
+
+	bootinfo.edgesuite_product_menu = frappe._dict({
+		"product_label": branding.get("app_title") or "VetEdge",
+		"is_coreedge_available": bootinfo.is_coreedge_available,
+		"show_coreedge_controls": bootinfo.should_show_coreedge_controls
+	})
+
+	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
+	sidebar_items = bootinfo.get("workspace_sidebar_item")
+	if sidebar_items:
+		source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
+		if source_sidebar:
+			source_sidebar["label"] = branding.get("module_label") or "Veterinary"
+			sidebar_items["veterinary"] = source_sidebar
+			sidebar_items["vetedge"] = source_sidebar
+
+	# Always override the desktop icon label in bootinfo to be VetEdge (or the branded app_title)
+	desktop_icons = bootinfo.get("desktop_icons")
+	if desktop_icons:
+		for icon in desktop_icons:
+			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
+				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				icon["link_type"] = "Workspace Sidebar"
+				icon["link"] = ""
+				icon["link_to"] = "VetEdge"
+
+	# Always override the app_data app_title and logo for app screen
+	if bootinfo.get("app_data"):
+		for app in bootinfo.app_data:
+			if app.get("app_name") == "vetedge":
+				app["app_title"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				app["route"] = get_vetedge_desk_route()
+				if branding.get("logo"):
+					app["app_logo_url"] = branding.get("logo")
+
+	# Apply white-label overrides if enabled
+	if branding.get("enabled"):
+		# Set app title in bootinfo for the tab title suffix
+		bootinfo.app_title = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+		
+		# Override app logo url dynamically
+		if branding.get("logo"):
+			bootinfo.app_logo_url = branding.get("logo")
+			if bootinfo.get("navbar_settings"):
+				bootinfo.navbar_settings.app_logo = branding.get("logo")
+			
+			# Patch frappe.boot's get_app_logo reference to return the branded logo url
+			try:
+				import frappe.boot as boot
+				boot.get_app_logo = lambda: branding.get("logo")
+			except Exception:
+				pass
+
 	if not bootinfo.should_show_coreedge_controls:
-		sidebar_items = bootinfo.get("workspace_sidebar_item")
 		if sidebar_items and "vetedge" in sidebar_items:
 			items = sidebar_items["vetedge"].get("items") or []
 			sidebar_items["vetedge"]["items"] = get_visible_vetedge_sidebar_items(items)
+		if sidebar_items and "veterinary" in sidebar_items:
+			items = sidebar_items["veterinary"].get("items") or []
+			sidebar_items["veterinary"]["items"] = get_visible_vetedge_sidebar_items(items)
 		
 		workspaces_data = bootinfo.get("workspaces")
 		if workspaces_data and "pages" in workspaces_data:

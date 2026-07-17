@@ -10,6 +10,7 @@ import frappe
 
 from vetedge.seed.master_data import CONSULTATION_TYPES
 from vetedge.services.consultation_flow import (
+	apply_linked_appointment_context,
 	claim_linked_appointment_for_consultation,
 	get_consultation_appointment_summary,
 	get_next_daily_consultation_number,
@@ -21,11 +22,30 @@ from vetedge.services.consultation_flow import (
 	validate_linked_appointment,
 	validate_completion_requirements,
 	validate_service_branch_access,
+	validate_consultation_status,
 	validate_consultation_status_transition,
+)
+from vetedge.veterinary.doctype.veterinary_consultation.veterinary_consultation import (
+	normalize_consultation_payment_status_fields,
 )
 
 
 class TestConsultationFlow(TestCase):
+	def test_consultation_payment_status_normalizer_removes_draft_invoice_pending(self):
+		doc = frappe._dict(
+			payment_status="Draft Invoice Pending",
+			planned_treatments=[
+				frappe._dict(payment_status="Draft Invoice Pending"),
+				frappe._dict(payment_status="Partially Paid"),
+			],
+		)
+
+		normalize_consultation_payment_status_fields(doc)
+
+		self.assertEqual(doc.payment_status, "Unpaid")
+		self.assertEqual(doc.planned_treatments[0].payment_status, "Unpaid")
+		self.assertEqual(doc.planned_treatments[1].payment_status, "Partly Paid")
+
 	def test_consultation_type_master_doctype_is_defined(self):
 		doctype_path = (
 			Path(__file__).resolve().parents[1]
@@ -78,7 +98,8 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(field["label"], "Consultation Type")
 		self.assertEqual(field["fieldtype"], "Link")
 		self.assertEqual(field["options"], "Consultation Type")
-		self.assertFalse(field.get("reqd"))
+		self.assertEqual(field.get("default"), "General Consultation")
+		self.assertEqual(field.get("reqd"), 1)
 		self.assertIn("consultation_type", doctype["field_order"])
 
 	def test_consultation_feature_flag_blocks_validation(self):
@@ -95,6 +116,7 @@ class TestConsultationFlow(TestCase):
 
 	def test_consultation_defaults_practitioner_to_current_doctor(self):
 		doc = frappe._dict(
+			name="VCON-001",
 			patient="VP-001",
 			primary_owner=None,
 			consulting_practitioner=None,
@@ -268,6 +290,29 @@ class TestConsultationFlow(TestCase):
 			validate_consultation(doc)
 
 		self.assertEqual(doc.consultation_type, "General Consultation")
+
+	def test_linked_appointment_does_not_overwrite_selected_consultation_type(self):
+		doc = frappe._dict(
+			linked_appointment="VAPT-001",
+			service_branch=None,
+			consulting_practitioner=None,
+			consultation_type="House Call",
+			presenting_complaint=None,
+		)
+		appointment = frappe._dict(
+			branch="Branch B",
+			practitioner="doctor@example.com",
+			consultation_type="General Consultation",
+			appointment_type="Consultation",
+			notes="Owner requested a house call.",
+		)
+
+		with patch("vetedge.services.consultation_flow.get_linked_appointment_data", return_value=appointment):
+			apply_linked_appointment_context(doc)
+
+		self.assertEqual(doc.consultation_type, "House Call")
+		self.assertEqual(doc.service_branch, "Branch B")
+		self.assertEqual(doc.consulting_practitioner, "doctor@example.com")
 
 	def test_linked_appointment_house_call_maps_to_seeded_consultation_type(self):
 		doc = frappe._dict(
@@ -816,8 +861,29 @@ class TestConsultationFlow(TestCase):
 		self.assertEqual(doc.planned_treatments[0].amount, 100)
 		self.assertEqual(doc.planned_treatments[1].amount, 500)
 
+	def test_ready_for_treatment_lock_is_skipped_during_billing_sync(self):
+		from vetedge.services.consultation_flow import validate_consultation_scope_lock
+
+		doc = frappe._dict(
+			name="VCON-001",
+			status="Ready for Treatment",
+			planned_treatments=[frappe._dict(name="ROW-1", item="CONSULT-ITEM", qty=1, rate=250)],
+		)
+		doc.get_doc_before_save = lambda: frappe._dict(
+			status="Ready for Treatment",
+			planned_treatments=[frappe._dict(name="ROW-1", item="CONSULT-ITEM", qty=1, rate=100)],
+		)
+
+		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+		frappe.flags.vetedge_billing_core_syncing = True
+		try:
+			validate_consultation_scope_lock(doc)
+		finally:
+			frappe.flags.vetedge_billing_core_syncing = previous
+
 	def test_completion_requires_vitals_when_setting_is_active(self):
 		doc = frappe._dict(name="VCON-001", status="Completed")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
 
 		with (
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
@@ -828,6 +894,62 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
 		):
 			self.assertRaises(frappe.ValidationError, validate_completion_requirements, doc)
+
+	def test_completion_gate_is_skipped_during_billing_core_sync(self):
+		doc = frappe._dict(name="VCON-001", status="Completed")
+		previous = getattr(frappe.flags, "vetedge_billing_core_syncing", False)
+		frappe.flags.vetedge_billing_core_syncing = True
+		try:
+			with (
+				patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+				patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+			):
+				validate_completion_requirements(doc)
+		finally:
+			frappe.flags.vetedge_billing_core_syncing = previous
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
+	def test_completion_gate_is_skipped_when_status_did_not_change(self):
+		doc = frappe._dict(name="VCON-001", status="Completed")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Completed")
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
+	def test_completion_gate_is_skipped_on_ordinary_ready_for_treatment_save(self):
+		doc = frappe._dict(name="VCON-001", status="Ready for Treatment")
+		doc.get_doc_before_save = lambda: frappe._dict(status="Ready for Treatment")
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", side_effect=frappe.ValidationError) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_not_called()
+		dispensary_gate.assert_not_called()
+
+	def test_completion_gate_uses_canonical_billing_group_result(self):
+		doc = frappe._dict(name="VCON-2026-00069", status="Ready for Treatment")
+		doc.get_doc_before_save = lambda: frappe._dict(status="In Progress")
+
+		with (
+			patch("vetedge.services.consultation_flow.assert_consultation_can_proceed", return_value=None) as gate,
+			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements") as dispensary_gate,
+			patch("vetedge.services.consultation_flow.is_vitals_required_before_completion", return_value=False),
+		):
+			validate_completion_requirements(doc)
+
+		gate.assert_called_once_with(doc, "Ready for Treatment")
+		dispensary_gate.assert_called_once_with(doc)
 
 	def test_consultation_status_transition_allows_in_progress_to_billing(self):
 		validate_consultation_status_transition("In Progress", "Awaiting Payment")
@@ -871,11 +993,11 @@ class TestConsultationFlow(TestCase):
 				"Ready for Treatment",
 			)
 
-	def test_transition_consultation_status_blocks_cancelling_paid_consultation(self):
+	def test_transition_consultation_status_uses_safe_cancellation_execution(self):
 		doc = frappe._dict(
 			name="VCON-001",
 			status="Ready for Treatment",
-			payment_status="Paid",
+			payment_status="Unpaid",
 			save=lambda: doc,
 		)
 		frappe_stub = make_frappe_stub(get_doc=lambda doctype, name: doc)
@@ -886,7 +1008,10 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.can_access_consultation"),
 			patch("vetedge.services.consultation_flow.validate_consultation_invoice_before_progress"),
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
-			patch("vetedge.services.consultation_flow.frappe.throw", side_effect=frappe.ValidationError),
+			patch(
+				"vetedge.services.consultation_cancellation.execute_consultation_cancellation",
+				side_effect=frappe.ValidationError,
+			) as safe_cancel,
 		):
 			self.assertRaises(
 				frappe.ValidationError,
@@ -894,6 +1019,7 @@ class TestConsultationFlow(TestCase):
 				"VCON-001",
 				"Cancelled",
 			)
+		safe_cancel.assert_called_once_with("VCON-001")
 
 	def test_consultation_status_transition_rejects_completed_reopen(self):
 		frappe_stub = make_frappe_stub()
@@ -958,6 +1084,7 @@ class TestConsultationFlow(TestCase):
 
 	def test_validate_consultation_blocks_saving_paid_consultation_as_cancelled(self):
 		doc = frappe._dict(
+			name="VCON-001",
 			patient="VP-001",
 			primary_owner="CUST-001",
 			consulting_practitioner="doctor@example.com",
@@ -1005,9 +1132,38 @@ class TestConsultationFlow(TestCase):
 			patch("vetedge.services.consultation_flow.validate_consultation_payment_before_treatment"),
 			patch("vetedge.services.consultation_flow.sync_consultation_dispensary_state"),
 			patch("vetedge.services.consultation_flow.validate_consultation_dispensary_requirements"),
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled", side_effect=frappe.ValidationError) as preflight,
 		):
 			with self.assertRaises(frappe.ValidationError):
 				validate_consultation(doc)
+		preflight.assert_called_once_with("VCON-001")
+
+	def test_retain_payment_cancellation_flag_skips_standard_cancel_preflight(self):
+		doc = frappe._dict(status="Cancelled", name="VCON-001")
+		previous = frappe._dict(status="Ready for Treatment")
+
+		with (
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled") as preflight,
+			patch("vetedge.services.consultation_flow.frappe.flags", frappe._dict(vetedge_retain_payment_cancellation=True)),
+		):
+			from vetedge.services.consultation_flow import validate_paid_consultation_cancellation
+
+			validate_paid_consultation_cancellation(doc, previous)
+
+		preflight.assert_not_called()
+
+	def test_financial_resolution_cancellation_flag_allows_cancelled_status_save(self):
+		doc = frappe._dict(status="Cancelled", name="VCON-001")
+		previous = frappe._dict(status="Completed")
+		doc.get_doc_before_save = lambda: previous
+
+		with (
+			patch("vetedge.services.consultation_flow.validate_consultation_can_be_cancelled") as preflight,
+			patch("vetedge.services.consultation_flow.frappe.flags", frappe._dict(vetedge_financial_resolution_cancellation=True)),
+		):
+			validate_consultation_status(doc)
+
+		preflight.assert_not_called()
 
 	def test_linked_appointment_must_belong_to_selected_patient(self):
 		doc = frappe._dict(

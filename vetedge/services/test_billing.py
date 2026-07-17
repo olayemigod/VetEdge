@@ -8,6 +8,7 @@ import frappe
 
 from vetedge.services.billing import (
 	ConsultationBillingSettings,
+	can_edit_default_consultation_billing_item,
 	consultation_requires_invoice_before_progress,
 	create_consultation_invoice,
 	get_invoice_access_summary,
@@ -45,6 +46,59 @@ class TestConsultationBilling(TestCase):
 				consultation,
 				settings,
 			)
+
+	def test_consultation_billing_enabled_does_not_require_item_when_auto_add_disabled(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item=None,
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=False,
+			enable_treatment_billing=True,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		validate_consultation_invoice_request(consultation, settings)
+
+	def test_consultation_billing_enabled_requires_item_when_auto_add_enabled(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item=None,
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=False,
+			enable_treatment_billing=True,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=True,
+		)
+
+		self.assertRaises(frappe.ValidationError, validate_consultation_invoice_request, consultation, settings)
+
+	def test_consultation_requires_invoice_respects_default_item_auto_add_setting(self):
+		consultation = make_consultation()
+		settings = ConsultationBillingSettings(
+			enabled=True,
+			consultation_item="CONSULT-ITEM",
+			allow_doctor_collect_payment=False,
+			requires_payment_before_treatment=True,
+			enable_treatment_billing=False,
+			enforce_cost_center=True,
+			auto_add_default_consultation_billing_item=False,
+		)
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.frappe.get_all", return_value=[]),
+		):
+			self.assertFalse(consultation_requires_invoice_before_progress(consultation, "Ready for Treatment"))
+
+	def test_default_consultation_billing_item_edit_setting_is_exposed(self):
+		locked = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True, True, False)
+		editable = ConsultationBillingSettings(True, "CONSULT-ITEM", False, False, True, True, True, True)
+
+		self.assertFalse(can_edit_default_consultation_billing_item(locked))
+		self.assertTrue(can_edit_default_consultation_billing_item(editable))
 
 	def test_create_consultation_invoice_includes_consultation_and_treatments(self):
 		consultation = make_consultation()
@@ -426,6 +480,47 @@ class TestConsultationBilling(TestCase):
 		with patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings):
 			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
 
+	def test_validate_consultation_invoice_before_progress_uses_billing_group_gate(self):
+		consultation = make_consultation()
+		consultation.name = "VCON-2026-00069"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+		group_status = {
+			"gate": "Partial Payment Gate",
+			"can_proceed": True,
+			"message": "Payment gate passed.",
+			"linked_invoice_count": 2,
+			"paid_amount": 10000,
+			"outstanding_amount": 69000,
+		}
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.get_consultation_billing_group_gate_status", return_value=group_status),
+			patch("vetedge.services.billing.is_active_sales_invoice", side_effect=AssertionError("legacy invoice check must not run")),
+		):
+			validate_consultation_invoice_before_progress(consultation, "Ready for Treatment")
+
+	def test_validate_consultation_payment_before_treatment_uses_billing_group_gate(self):
+		consultation = make_consultation()
+		consultation.name = "VCON-2026-00069"
+		settings = ConsultationBillingSettings(True, "CONSULT-ITEM", False, True, True, True)
+		group_status = {
+			"gate": "Partial Payment Gate",
+			"can_proceed": True,
+			"message": "Payment gate passed.",
+			"linked_invoice_count": 2,
+			"paid_amount": 10000,
+			"outstanding_amount": 69000,
+		}
+
+		with (
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+			patch("vetedge.services.billing.user_has_any_role", return_value=False),
+			patch("vetedge.services.billing.get_consultation_billing_group_gate_status", return_value=group_status),
+			patch("vetedge.services.billing.get_consultation_invoice_names", side_effect=AssertionError("legacy invoice list must not run")),
+		):
+			validate_consultation_payment_before_treatment(consultation, "Ready for Treatment")
+
 	def test_get_invoice_access_summary_uses_invoice_permission_helper(self):
 		invoice_row = frappe._dict(
 			name="SINV-001",
@@ -463,6 +558,96 @@ class TestConsultationBilling(TestCase):
 		self.assertEqual(summary["name"], "SINV-001")
 		self.assertEqual(summary["customer"], "CUST-001")
 		self.assertTrue(summary["can_open_full_form"])
+
+	def test_partial_payment_updates_consultation_and_child_rows(self):
+		consultation_doc = frappe._dict(
+			name="VCON-001",
+			status="Awaiting Payment",
+			payment_status="Unpaid",
+			linked_invoice="SINV-001",
+			consultation_invoices=[
+				frappe._dict(sales_invoice="SINV-001", invoice_status="Unpaid")
+			],
+			consultation_billing_sources=[
+				frappe._dict(sales_invoice="SINV-001", invoice_status="Unpaid", source_type="Treatment", source_name="PT-1")
+			]
+		)
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=1,
+			status="Partially Paid",
+			outstanding_amount=250,
+			grand_total=1000,
+			customer="CUST-001",
+			posting_date="2026-04-20",
+			due_date="2026-04-20",
+			currency="NGN"
+		)
+		set_values = []
+		saved_docs = []
+		consultation_doc.save = lambda *args, **kwargs: saved_docs.append(consultation_doc)
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					set_values=set_values,
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.billing.get_consultation_ready_status", return_value="Ready for Treatment"),
+			patch("vetedge.services.billing.emit_notification_event") as emit,
+		):
+			from vetedge.services.billing import sync_consultation_invoice_reference_from_invoice
+			sync_consultation_invoice_reference_from_invoice("VCON-001", invoice)
+
+		# The parent consultation should have "Partly Paid"
+		self.assertEqual(consultation_doc.payment_status, "Partly Paid")
+		self.assertNotEqual(consultation_doc.payment_status, "Partially Paid")
+
+		# The child rows should have "Partly Paid"
+		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Partly Paid")
+		self.assertEqual(consultation_doc.consultation_billing_sources[0].invoice_status, "Partly Paid")
+
+	def test_draft_invoice_sync_uses_unpaid_for_consultation_payment_rows(self):
+		consultation_doc = frappe._dict(
+			name="VCON-001",
+			status="Awaiting Payment",
+			payment_status="Unpaid",
+			linked_invoice="SINV-001",
+			consultation_invoices=[],
+			consultation_billing_sources=[],
+		)
+		invoice = frappe._dict(
+			name="SINV-001",
+			docstatus=0,
+			status="Draft",
+			outstanding_amount=0,
+			grand_total=1000,
+			customer="CUST-001",
+			posting_date="2026-04-20",
+			due_date="2026-04-20",
+			currency="NGN",
+		)
+		consultation_doc.save = lambda *args, **kwargs: None
+
+		with (
+			patch(
+				"vetedge.services.billing.frappe",
+				make_frappe_stub(
+					get_doc=lambda doctype, name: consultation_doc,
+					get_value=lambda *args, **kwargs: "Main",
+				),
+			),
+			patch("vetedge.services.billing.emit_notification_event"),
+		):
+			from vetedge.services.billing import sync_consultation_invoice_reference_from_invoice
+			sync_consultation_invoice_reference_from_invoice("VCON-001", invoice)
+
+		self.assertEqual(consultation_doc.payment_status, "Unpaid")
+		self.assertEqual(consultation_doc.consultation_invoices[0].invoice_status, "Unpaid")
+		self.assertNotEqual(consultation_doc.payment_status, "Draft Invoice Pending")
 
 
 def make_consultation(linked_invoice=None, status="In Progress"):
@@ -549,6 +734,7 @@ def make_frappe_stub(set_values=None, get_doc=None, get_value=None):
 		db=SimpleNamespace(
 			get_value=get_value,
 			set_value=lambda *args, **kwargs: set_values.append(args),
+			exists=lambda *args, **kwargs: True,
 		),
 		get_doc=get_doc,
 		get_all=lambda *args, **kwargs: [],

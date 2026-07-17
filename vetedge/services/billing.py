@@ -41,13 +41,16 @@ class ConsultationBillingSettings:
 	requires_payment_before_treatment: bool
 	enable_treatment_billing: bool
 	enforce_cost_center: bool
+	auto_add_default_consultation_billing_item: bool = True
+	allow_editing_consultation_billing_item: bool = True
 
 
 def validate_consultation_billing_settings(settings) -> None:
 	if not cint(settings.get("enable_consultation_billing")):
 		return
 
-	validate_sales_item(settings.get("consultation_item"), "Consultation Item", allow_stock=False)
+	if cint(settings.get("auto_add_default_consultation_billing_item", 1)):
+		validate_sales_item(settings.get("consultation_item"), "Consultation Item", allow_stock=False)
 
 
 def validate_sales_item(item_code: str | None, label: str, allow_stock: bool = True) -> None:
@@ -82,7 +85,27 @@ def get_consultation_billing_settings() -> ConsultationBillingSettings:
 		requires_payment_before_treatment=bool(get("consultation_requires_payment_before_treatment", 0)),
 		enable_treatment_billing=bool(settings.get("enable_vetedge") and get("enable_treatment_billing", 0)),
 		enforce_cost_center=bool(get("enforce_cost_center_on_billing", 1)),
+		auto_add_default_consultation_billing_item=bool(get("auto_add_default_consultation_billing_item", 1)),
+		allow_editing_consultation_billing_item=bool(get("allow_editing_consultation_billing_item", 1)),
 	)
+
+
+def is_consultation_billing_enabled() -> bool:
+	return bool(get_consultation_billing_settings().enabled)
+
+
+def should_auto_add_default_consultation_item(settings: ConsultationBillingSettings | None = None) -> bool:
+	settings = settings or get_consultation_billing_settings()
+	return bool(
+		getattr(settings, "enabled", False)
+		and getattr(settings, "auto_add_default_consultation_billing_item", True)
+		and getattr(settings, "consultation_item", None)
+	)
+
+
+def can_edit_default_consultation_billing_item(settings: ConsultationBillingSettings | None = None) -> bool:
+	settings = settings or get_consultation_billing_settings()
+	return bool(getattr(settings, "allow_editing_consultation_billing_item", True))
 
 
 @frappe.whitelist()
@@ -223,7 +246,7 @@ def validate_consultation_invoice_request(doc, settings: ConsultationBillingSett
 		frappe.throw("Consultation must have an owner/customer before billing.", frappe.ValidationError)
 	if not doc.service_branch:
 		frappe.throw("Consultation must have a service branch before billing.", frappe.ValidationError)
-	if not settings.consultation_item:
+	if getattr(settings, "auto_add_default_consultation_billing_item", True) and not settings.consultation_item:
 		frappe.throw("Consultation Item is required when consultation billing is enabled.", frappe.ValidationError)
 
 
@@ -241,7 +264,7 @@ def build_consultation_invoice_payload(
 	items: list[dict] = []
 	sources: list[dict] = []
 
-	if should_include_consultation_fee(consultation_doc, draft_invoice_name):
+	if should_auto_add_default_consultation_item(settings) and should_include_consultation_fee(consultation_doc, draft_invoice_name):
 		items.append(build_invoice_item(settings.consultation_item, 1, None, None, cost_center))
 		sources.append(
 			build_consultation_billing_source(
@@ -367,7 +390,7 @@ def consultation_requires_invoice_before_progress(doc, target_status: str | None
 	if get_consultation_invoice_names(doc):
 		return True
 
-	if settings.consultation_item or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])):
+	if should_auto_add_default_consultation_item(settings) or (settings.enable_treatment_billing and (doc.get("planned_treatments") or [])):
 		return True
 
 	for row in frappe.get_all(
@@ -383,6 +406,12 @@ def consultation_requires_invoice_before_progress(doc, target_status: str | None
 
 
 def validate_consultation_invoice_before_progress(doc, target_status: str | None = None) -> None:
+	source_gate = get_consultation_billing_group_gate_status(doc)
+	if billing_group_gate_has_invoice_evidence(source_gate):
+		if source_gate.get("can_proceed"):
+			return
+		frappe.throw(source_gate.get("message") or "A Sales Invoice must be generated before service can proceed.", frappe.ValidationError)
+
 	if not consultation_requires_invoice_before_progress(doc, target_status):
 		return
 
@@ -404,10 +433,16 @@ def validate_consultation_payment_before_treatment(doc, target_status: str | Non
 	if target_status not in {"Pending Dispensary", "Ready for Treatment", "Completed"}:
 		return
 
-	if not consultation_requires_invoice_before_progress(doc, target_status):
+	if user_has_any_role(get_current_user(), {*ELEVATED_ROLES, ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"}):
 		return
 
-	if user_has_any_role(get_current_user(), {*ELEVATED_ROLES, ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"}):
+	source_gate = get_consultation_billing_group_gate_status(doc)
+	if billing_group_gate_has_invoice_evidence(source_gate):
+		if source_gate.get("can_proceed"):
+			return
+		frappe.throw(source_gate.get("message") or "Full payment is required before service can proceed.", frappe.ValidationError)
+
+	if not consultation_requires_invoice_before_progress(doc, target_status):
 		return
 
 	invoice_names = get_consultation_invoice_names(doc)
@@ -428,6 +463,27 @@ def validate_consultation_payment_before_treatment(doc, target_status: str | Non
 				"All consultation-related invoices, including vaccination invoices, must be fully paid before treatment can proceed.",
 				frappe.ValidationError,
 			)
+
+
+def get_consultation_billing_group_gate_status(doc) -> dict | None:
+	try:
+		from vetedge.services.billing_core import get_source_payment_gate_status, is_billing_sessions_enabled
+
+		if not is_billing_sessions_enabled():
+			return None
+		if not doc.get("name"):
+			return None
+		return get_source_payment_gate_status("Veterinary Consultation", doc.name)
+	except Exception:
+		return None
+
+
+def billing_group_gate_has_invoice_evidence(status: dict | None) -> bool:
+	if not status:
+		return False
+	if status.get("linked_invoice_count"):
+		return True
+	return bool(status.get("invoices"))
 
 
 def emit_invoice_created_notifications(doc, invoice, settings: ConsultationBillingSettings) -> None:
@@ -523,7 +579,8 @@ def update_consultation_payment_status_from_payment_entry(doc, method: str | Non
 
 
 def update_single_consultation_payment_status(consultation, invoice) -> None:
-	new_payment_status = get_invoice_payment_status(invoice)
+	from vetedge.services.billing_core import get_consultation_payment_status
+	new_payment_status = get_consultation_payment_status(get_consultation_payment_source_status(invoice))
 	values = {"payment_status": new_payment_status}
 	consultation_doc = None
 
@@ -600,6 +657,12 @@ def get_invoice_payment_status(invoice) -> str:
 	if flt(invoice.outstanding_amount) < flt(invoice.grand_total):
 		return PARTLY_PAID_STATUS
 	return UNPAID_STATUS
+
+
+def get_consultation_payment_source_status(invoice) -> str:
+	if cint(getattr(invoice, "docstatus", 0)) == 0:
+		return getattr(invoice, "status", None) or "Draft"
+	return get_invoice_payment_status(invoice)
 
 
 def create_new_consultation_invoice(consultation_doc, items: list[dict], cost_center: str):
@@ -764,9 +827,10 @@ def build_consultation_invoice_reference_rows(doc, invoice) -> list[dict]:
 
 
 def build_consultation_invoice_reference(invoice) -> dict:
+	from vetedge.services.billing_core import get_consultation_payment_status
 	return {
 		"sales_invoice": invoice.name,
-		"invoice_status": invoice.status,
+		"invoice_status": get_consultation_payment_status(invoice.status),
 		"invoice_docstatus": invoice.docstatus,
 		"posting_date": invoice.posting_date,
 		"currency": invoice.currency,
@@ -776,6 +840,7 @@ def build_consultation_invoice_reference(invoice) -> dict:
 
 
 def build_consultation_billing_source_rows(doc, invoice, billed_sources: list[dict]) -> list[dict]:
+	from vetedge.services.billing_core import get_consultation_payment_status
 	rows = []
 	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
 		if row.sales_invoice == invoice.name:
@@ -796,7 +861,7 @@ def build_consultation_billing_source_rows(doc, invoice, billed_sources: list[di
 				**source,
 				"sales_invoice": invoice.name,
 				"invoice_docstatus": invoice.docstatus,
-				"invoice_status": invoice.status,
+				"invoice_status": get_consultation_payment_status(invoice.status),
 			}
 		)
 	return rows
@@ -847,7 +912,8 @@ def sync_consultation_invoice_reference_from_invoice(consultation_name: str, inv
 		update_consultation_billing_source_statuses(consultation_doc, invoice),
 	)
 	if consultation_doc.get("linked_invoice") == invoice.name:
-		consultation_doc.payment_status = get_invoice_payment_status(invoice)
+		from vetedge.services.billing_core import get_consultation_payment_status
+		consultation_doc.payment_status = get_consultation_payment_status(get_consultation_payment_source_status(invoice))
 	if getattr(consultation_doc, "save", None):
 		consultation_doc.save(ignore_permissions=True, ignore_version=True)
 
@@ -865,6 +931,7 @@ def get_latest_consultation_doc(doc):
 
 
 def update_consultation_billing_source_statuses(doc, invoice) -> list[dict]:
+	from vetedge.services.billing_core import get_consultation_payment_status
 	rows = []
 	for row in doc.get(CONSULTATION_BILLING_SOURCE_FIELD) or []:
 		rows.append(
@@ -873,7 +940,7 @@ def update_consultation_billing_source_statuses(doc, invoice) -> list[dict]:
 				"source_name": row.source_name,
 				"sales_invoice": row.sales_invoice,
 				"invoice_docstatus": invoice.docstatus if row.sales_invoice == invoice.name else row.invoice_docstatus,
-				"invoice_status": invoice.status if row.sales_invoice == invoice.name else row.invoice_status,
+				"invoice_status": get_consultation_payment_status(invoice.status) if row.sales_invoice == invoice.name else row.invoice_status,
 				"item_code": row.item_code,
 			}
 		)

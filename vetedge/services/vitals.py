@@ -156,11 +156,7 @@ def get_latest_vitals_for_consultation(consultation: str) -> dict | None:
 	if exact_match:
 		return exact_match
 
-	patient = frappe.db.get_value("Veterinary Consultation", consultation, "patient")
-	if not patient:
-		return None
-
-	return get_latest_vitals({"patient": patient})
+	return None
 
 
 def get_latest_vitals(filters: dict) -> dict | None:

@@ -17,6 +17,21 @@ from vetedge.services.notifications import (
 
 
 SAFE_PRIORITIES = {"Low", "Normal", "High", "Urgent"}
+EDGESUITE_STATUSES = {"Unread", "Read", "Acknowledged", "Done", "Dismissed", "Archived"}
+EDGESUITE_ACTIONS_BY_STATUS = {
+	"Unread": ("mark_read", "acknowledge", "done", "dismiss"),
+	"Read": ("acknowledge", "done", "dismiss"),
+	"Acknowledged": ("done", "dismiss"),
+	"Done": (),
+	"Dismissed": (),
+	"Archived": (),
+}
+EDGESUITE_ACTION_LABELS = {
+	"mark_read": "Mark read",
+	"acknowledge": "Acknowledge",
+	"done": "Done",
+	"dismiss": "Dismiss",
+}
 
 
 def _session_user() -> str:
@@ -58,6 +73,51 @@ def _normalize_notification(row) -> dict:
 	}
 
 
+def _priority_to_severity(priority: str | None) -> str:
+	value = (priority or "Normal").strip()
+	if value == "Urgent":
+		return "danger"
+	if value == "High":
+		return "warning"
+	if value == "Low":
+		return "info"
+	return "info"
+
+
+def _notification_route(action_url: str | None, reference_doctype: str | None, reference_name: str | None) -> str | None:
+	if action_url:
+		return action_url
+	if reference_doctype and reference_name:
+		return f"/app/{frappe.scrub(reference_doctype)}/{reference_name}"
+	return None
+
+
+def _edgesuite_actions(status: str | None) -> list[dict]:
+	return [
+		{"key": key, "label": EDGESUITE_ACTION_LABELS[key], "enabled": True}
+		for key in EDGESUITE_ACTIONS_BY_STATUS.get(status or "Unread", ())
+	]
+
+
+def _normalize_edgesuite_notification(row) -> dict:
+	item = _normalize_notification(row)
+	reference_doctype = item.get("reference_doctype")
+	reference_name = item.get("reference_name")
+	return {
+		"name": item.get("name"),
+		"title": item.get("title") or "Notification",
+		"message": item.get("message") or "",
+		"status": item.get("status") or "Unread",
+		"category": item.get("category") or "General",
+		"severity": _priority_to_severity(item.get("priority")),
+		"created_at": item.get("creation"),
+		"source_doctype": reference_doctype,
+		"source_name": reference_name,
+		"route": _notification_route(item.get("action_url"), reference_doctype, reference_name),
+		"actions": _edgesuite_actions(item.get("status")),
+	}
+
+
 def _filtered_items(rows: list, category: str | None = None, priority: str | None = None) -> list[dict]:
 	items = []
 	for row in rows:
@@ -67,6 +127,24 @@ def _filtered_items(rows: list, category: str | None = None, priority: str | Non
 		if priority and item["priority"] != priority:
 			continue
 		items.append(item)
+	return items
+
+
+def _edgesuite_status_filter(filter_key: str | None) -> str | None:
+	if filter_key == "unread":
+		return "Unread"
+	if filter_key in {"done", "archived"}:
+		return None
+	if filter_key == "action_required":
+		return None
+	return None
+
+
+def _filter_edgesuite_items(items: list[dict], filter_key: str | None) -> list[dict]:
+	if filter_key == "action_required":
+		return [item for item in items if item.get("actions")]
+	if filter_key in {"done", "archived"}:
+		return [item for item in items if item.get("status") in {"Done", "Dismissed", "Archived"}]
 	return items
 
 
@@ -186,6 +264,31 @@ def get_my_notifications(
 		"items": _filtered_items(rows, category=category, priority=priority),
 		"unread_count": get_unread_notification_count(user=user),
 	}
+
+
+@frappe.whitelist()
+def get_my_edgesuite_notifications(filter_key: str | None = "all", limit: int | str = 30) -> dict:
+	"""Return VetEdge notifications in the shared EdgeSuite drawer payload shape."""
+	user = _session_user()
+	status = _edgesuite_status_filter(filter_key)
+	rows = get_notification_feed(
+		user=user,
+		status=status,
+		include_archived=filter_key in {"done", "archived"},
+		limit=_coerce_limit(limit),
+	)
+	items = [_normalize_edgesuite_notification(row) for row in rows]
+	return {
+		"items": _filter_edgesuite_items(items, filter_key),
+		"unread_count": get_unread_notification_count(user=user),
+		"filters": ["all", "unread", "action_required", "done"],
+	}
+
+
+@frappe.whitelist()
+def mark_my_edgesuite_notification_read(notification_name: str) -> dict:
+	user = _session_user()
+	return _status_response(mark_notification_read(notification_name, user=user), user)
 
 
 @frappe.whitelist()

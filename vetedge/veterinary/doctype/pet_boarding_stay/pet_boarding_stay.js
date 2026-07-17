@@ -26,9 +26,11 @@ frappe.ui.form.on("Pet Boarding Stay", {
 });
 
 function addBoardingCareRecordActions(frm) {
-	frm.add_custom_button(__("Add Care Record"), () => {
-		showNewBoardingCareRecordDialog(frm);
-	}, __("Care Records"));
+	if (frm.doc.status === "Active") {
+		frm.add_custom_button(__("Add Care Record"), () => {
+			showNewBoardingCareRecordDialog(frm);
+		}, __("Care Records"));
+	}
 
 	frm.add_custom_button(__("View Care Records"), () => {
 		showBoardingCareRecordsDialog(frm);

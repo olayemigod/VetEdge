@@ -28,6 +28,10 @@
   "batch_no",
   "notes",
   "integration_section",
+  "billing_item",
+  "rate",
+  "amount",
+  "rate_manually_edited",
   "linked_invoice",
   "stock_entry_reference"
  ],
@@ -188,10 +192,36 @@
    "label": "Notes"
   },
   {
-   "collapsible": 1,
    "fieldname": "integration_section",
    "fieldtype": "Section Break",
-   "label": "Billing and Stock"
+   "label": "Pricing and Billing"
+  },
+  {
+   "description": "Vaccine or service item used for billing.",
+   "fieldname": "billing_item",
+   "fieldtype": "Link",
+   "label": "Billing Item",
+   "options": "Item"
+  },
+  {
+   "description": "Edit the Rate before billing to change the vaccination charge.",
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "rate_manually_edited",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Rate Manually Edited",
+   "no_copy": 1
   },
   {
    "fieldname": "linked_invoice",

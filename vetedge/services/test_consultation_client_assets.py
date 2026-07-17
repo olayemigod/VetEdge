@@ -17,7 +17,7 @@ class TestConsultationClientAssets(unittest.TestCase):
 
     def test_medical_history_popup_uses_existing_backend(self):
         self.assertIn("vetedge.services.medical_history.get_patient_medical_history_view", self.source)
-        self.assertIn("VetEdge Medical History", self.source)
+        self.assertIn("Medical History", self.source)
 
     def test_medical_history_popup_handles_missing_patient(self):
         self.assertIn("Select a patient/animal before viewing medical history.", self.source)

@@ -1,0 +1,28 @@
+{
+  "layer_count_ranges": {
+    "safe_transform": [900, 1150],
+    "preserve": [1600, 1800],
+    "manual_review": [2000, 2300],
+    "dangerous": [850, 980],
+    "unknown": [0, 250]
+  },
+  "required_dangerous_categories": [
+    "coreedge_reference",
+    "desk_route",
+    "doctype_json_identity",
+    "email_template_identity",
+    "patch_lineage",
+    "portal_route",
+    "report_json_identity",
+    "scheduler_event_dotted_path",
+    "whitelisted_method_reference"
+  ],
+  "required_static_checks": [
+    "canonical_order_detected",
+    "veterinary_patient_under_veterinary_records",
+    "stock_expiry_status_report_linked",
+    "financial_dashboard_under_dashboards",
+    "hospitalisation_dashboard_under_hospitalisation"
+  ],
+  "unknown_threshold": 250
+}

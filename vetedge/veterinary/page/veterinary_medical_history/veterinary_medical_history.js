@@ -1,7 +1,7 @@
 frappe.pages["veterinary-medical-history"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("VetEdge Medical History"),
+		title: __("Medical History"),
 		single_column: true,
 	});
 
@@ -201,8 +201,7 @@ class VetEdgeMedicalHistory {
 			[__("Branch"), "service_branch"],
 			[__("Status"), "status"],
 			[__("Complaint"), "presenting_complaint"],
-			[__("Assessment"), "assessment_notes", format_rich_text],
-			[__("Treatment Plan"), "treatment_plan", format_treatment_plan],
+			[__("Treatment Plan"), "treatment_plan_summary", format_rich_text],
 		]);
 		this.render_table(sections, __("Vitals History"), data.vitals || [], [
 			[__("Recorded On"), "timestamp", format_datetime],
@@ -401,21 +400,6 @@ function format_treatment_plan(rows, row) {
 	const summary = sanitize_rich_text(row?.treatment_plan_summary);
 	if (summary) {
 		parts.push(`<div class="mb-2">${summary}</div>`);
-	}
-
-	const treatments = Array.isArray(rows) ? rows : [];
-	if (treatments.length) {
-		const items = treatments
-			.map((treatment) => {
-				const item = escape_html(treatment.item || treatment.service_type || treatment.treatment_type || "");
-				const qty = treatment.qty ? ` ${escape_html(treatment.qty)}` : "";
-				const uom = treatment.uom ? ` ${escape_html(treatment.uom)}` : "";
-				const amount = treatment.amount ? ` - ${escape_html(format_currency(treatment.amount))}` : "";
-				const notes = treatment.notes ? `<div class="text-muted small">${escape_html(treatment.notes)}</div>` : "";
-				return `<li><div>${item}${qty}${uom}${amount}</div>${notes}</li>`;
-			})
-			.join("");
-		parts.push(`<ul class="mb-0 pl-3">${items}</ul>`);
 	}
 
 	if (!parts.length) {

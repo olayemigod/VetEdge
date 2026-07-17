@@ -1,0 +1,34 @@
+{
+ "actions": [],
+ "autoname": "field:bundle_name",
+ "creation": "2026-04-23 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "bundle_section",
+  "bundle_name",
+  "is_active",
+  "description",
+  "roles_section",
+  "roles"
+ ],
+ "fields": [
+  {"fieldname": "bundle_section", "fieldtype": "Section Break", "label": "Bundle"},
+  {"fieldname": "bundle_name", "fieldtype": "Data", "in_list_view": 1, "label": "Bundle Name", "reqd": 1, "unique": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "label": "Is Active"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "roles_section", "fieldtype": "Section Break", "label": "Roles"},
+  {"fieldname": "roles", "fieldtype": "Table", "label": "Roles", "options": "Veterinary Role Bundle Role", "reqd": 1}
+ ],
+ "module": "Veterinary",
+ "name": "Veterinary Role Bundle",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "VetEdge Administrator"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "bundle_name"
+}

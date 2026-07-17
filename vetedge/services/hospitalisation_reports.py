@@ -26,6 +26,7 @@ def get_hospitalisation_base_fields() -> list[str]:
 	return [
 		"name",
 		"patient",
+		"patient_name",
 		"customer",
 		"service_branch",
 		"admission_datetime",
@@ -41,6 +42,19 @@ def get_hospitalisation_base_fields() -> list[str]:
 		"discharge_summary",
 		"modified",
 	]
+
+
+def get_patient_display_name(patient: str | None) -> str:
+	if not patient:
+		return ""
+	try:
+		return frappe.db.get_value("Veterinary Patient", patient, "patient_name") or patient
+	except Exception:
+		return patient
+
+
+def get_doc_patient_display_name(doc) -> str:
+	return doc.get("patient_name") or get_patient_display_name(doc.get("patient"))
 
 
 def get_hospitalisation_docs(filters=None, active_only: bool = False) -> list:
@@ -230,7 +244,7 @@ def get_billing_session_report_summary(doc) -> dict:
 
 ACTIVE_HOSPITALISATIONS_COLUMNS = [
 	{"label": "Hospitalisation", "fieldname": "hospitalisation", "fieldtype": "Link", "options": HOSPITALISATION_DOCTYPE, "width": 170},
-	{"label": "Patient", "fieldname": "patient", "fieldtype": "Link", "options": "Veterinary Patient", "width": 160},
+	{"label": "Patient", "fieldname": "patient", "fieldtype": "Data", "width": 160},
 	{"label": "Pet Owner", "fieldname": "owner", "fieldtype": "Link", "options": "Customer", "width": 160},
 	{"label": "Branch", "fieldname": "branch", "fieldtype": "Link", "options": "Branch", "width": 130},
 	{"label": "Admission Date/Time", "fieldname": "admission_datetime", "fieldtype": "Datetime", "width": 160},
@@ -254,7 +268,7 @@ def get_active_hospitalisations(filters=None):
 		totals = get_charge_totals(doc)
 		rows.append({
 			"hospitalisation": doc.name,
-			"patient": doc.get("patient"),
+			"patient": get_doc_patient_display_name(doc),
 			"owner": doc.get("customer"),
 			"branch": doc.get("service_branch"),
 			"admission_datetime": doc.get("admission_datetime"),
@@ -274,7 +288,7 @@ def get_active_hospitalisations(filters=None):
 
 CHARGE_SUMMARY_COLUMNS = [
 	{"label": "Hospitalisation", "fieldname": "hospitalisation", "fieldtype": "Link", "options": HOSPITALISATION_DOCTYPE, "width": 170},
-	{"label": "Patient", "fieldname": "patient", "fieldtype": "Link", "options": "Veterinary Patient", "width": 150},
+	{"label": "Patient", "fieldname": "patient", "fieldtype": "Data", "width": 150},
 	{"label": "Pet Owner", "fieldname": "owner", "fieldtype": "Link", "options": "Customer", "width": 150},
 	{"label": "Branch", "fieldname": "branch", "fieldtype": "Link", "options": "Branch", "width": 130},
 	{"label": "Admission Date", "fieldname": "admission_date", "fieldtype": "Date", "width": 120},
@@ -314,7 +328,7 @@ def get_hospitalisation_charge_report(filters=None):
 		}
 		rows.append({
 			"hospitalisation": doc.name,
-			"patient": doc.get("patient"),
+			"patient": get_doc_patient_display_name(doc),
 			"owner": doc.get("customer"),
 			"branch": doc.get("service_branch"),
 			"admission_date": getdate(doc.get("admission_datetime")) if doc.get("admission_datetime") else None,
@@ -404,7 +418,7 @@ def get_care_location_occupancy_report(filters=None):
 			"capacity": capacity,
 			"active_occupancy": active_count,
 			"available_slots": max(capacity - active_count, 0),
-			"current_patients": ", ".join(filter(None, [log.get("patient") for log in logs])),
+			"current_patients": ", ".join(filter(None, [get_patient_display_name(log.get("patient")) for log in logs])),
 			"current_hospitalisations": ", ".join(filter(None, [log.get("hospitalisation") for log in logs])),
 			"assigned_since": assigned_since,
 			"occupancy_percent": occupancy_percent,
@@ -415,7 +429,7 @@ def get_care_location_occupancy_report(filters=None):
 
 DISCHARGE_WATCH_COLUMNS = [
 	{"label": "Hospitalisation", "fieldname": "hospitalisation", "fieldtype": "Link", "options": HOSPITALISATION_DOCTYPE, "width": 170},
-	{"label": "Patient", "fieldname": "patient", "fieldtype": "Link", "options": "Veterinary Patient", "width": 150},
+	{"label": "Patient", "fieldname": "patient", "fieldtype": "Data", "width": 150},
 	{"label": "Pet Owner", "fieldname": "owner", "fieldtype": "Link", "options": "Customer", "width": 150},
 	{"label": "Branch", "fieldname": "branch", "fieldtype": "Link", "options": "Branch", "width": 130},
 	{"label": "Admission Date/Time", "fieldname": "admission_datetime", "fieldtype": "Datetime", "width": 160},
@@ -452,7 +466,7 @@ def get_discharge_watch_report(filters=None):
 			continue
 		rows.append({
 			"hospitalisation": doc.name,
-			"patient": doc.get("patient"),
+			"patient": get_doc_patient_display_name(doc),
 			"owner": doc.get("customer"),
 			"branch": doc.get("service_branch"),
 			"admission_datetime": doc.get("admission_datetime"),
@@ -489,7 +503,7 @@ PENDING_ACTION_COLUMNS = [
 	{"label": "Action Type", "fieldname": "action_type", "fieldtype": "Data", "width": 180},
 	{"label": "Priority", "fieldname": "priority", "fieldtype": "Data", "width": 90},
 	{"label": "Hospitalisation", "fieldname": "hospitalisation", "fieldtype": "Link", "options": HOSPITALISATION_DOCTYPE, "width": 170},
-	{"label": "Patient", "fieldname": "patient", "fieldtype": "Link", "options": "Veterinary Patient", "width": 150},
+	{"label": "Patient", "fieldname": "patient", "fieldtype": "Data", "width": 150},
 	{"label": "Owner", "fieldname": "owner", "fieldtype": "Link", "options": "Customer", "width": 150},
 	{"label": "Branch", "fieldname": "branch", "fieldtype": "Link", "options": "Branch", "width": 130},
 	{"label": "Status", "fieldname": "status", "fieldtype": "Data", "width": 120},
@@ -512,7 +526,7 @@ def get_pending_hospitalisation_actions(filters=None):
 			rows.append({
 				**action,
 				"hospitalisation": doc.name,
-				"patient": doc.get("patient"),
+				"patient": get_doc_patient_display_name(doc),
 				"owner": doc.get("customer"),
 				"branch": doc.get("service_branch"),
 				"status": doc.get("status"),

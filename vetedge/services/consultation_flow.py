@@ -26,6 +26,11 @@ from vetedge.services.permissions import (
 )
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.treatment_items import apply_planned_treatment_defaults
+from vetedge.services.consultation_billing_plan import (
+	ensure_default_consultation_item_to_plan,
+	validate_default_consultation_plan_row_edit,
+)
+from vetedge.services.consultation_cancellation import validate_consultation_can_be_cancelled
 
 
 CONSULTATION_STATUSES = {
@@ -86,6 +91,8 @@ def validate_consultation(doc) -> None:
 		validate_registration_payment_before_first_consultation(doc.patient, current_consultation=getattr(doc, "name", None))
 	validate_linked_appointment(doc)
 	set_consultation_title(doc)
+	ensure_default_consultation_item_to_plan(doc)
+	validate_default_consultation_plan_row_edit(doc)
 	validate_service_branch_access(doc)
 	validate_consultation_children(doc)
 	sync_consultation_dispensary_state(doc)
@@ -104,14 +111,20 @@ def validate_consultation_status(doc) -> None:
 		frappe.throw(f"Invalid consultation status: {doc.status}", frappe.ValidationError)
 
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
-	if previous and previous.status in {"Completed", "Cancelled"} and doc.status != previous.status:
+	if (
+		previous
+		and previous.status in {"Completed", "Cancelled"}
+		and doc.status != previous.status
+		and not is_internal_financial_resolution_cancel_status_change(doc)
+	):
 		frappe.throw(
 			f"Consultation status cannot be changed after it is {previous.status}.",
 			frappe.ValidationError,
 		)
 
 	if previous and previous.status != doc.status:
-		validate_consultation_status_transition(previous.status, doc.status)
+		if not is_internal_financial_resolution_cancel_status_change(doc):
+			validate_consultation_status_transition(previous.status, doc.status)
 
 	validate_paid_consultation_cancellation(doc, previous)
 
@@ -128,16 +141,31 @@ def validate_consultation_status_transition(current_status: str, target_status: 
 def validate_paid_consultation_cancellation(doc, previous=None) -> None:
 	if doc.status != "Cancelled":
 		return
+	if is_internal_cancellation_status_change():
+		return
 
 	previous_status = getattr(previous, "status", None) if previous else None
 	if previous_status == "Cancelled":
 		return
+	if not getattr(doc, "name", None):
+		return
 
-	if getattr(doc, "payment_status", None) == "Paid":
-		frappe.throw(
-			"Paid consultations cannot be cancelled. Start the appropriate refund or finance reversal flow first, then create a new consultation if needed.",
-			frappe.ValidationError,
-		)
+	validate_consultation_can_be_cancelled(doc.name)
+
+
+def is_internal_cancellation_status_change() -> bool:
+	flags = getattr(frappe, "flags", None)
+	return bool(
+		getattr(flags, "vetedge_retain_payment_cancellation", False)
+		or getattr(flags, "vetedge_financial_resolution_cancellation", False)
+	)
+
+
+def is_internal_financial_resolution_cancel_status_change(doc) -> bool:
+	return bool(
+		getattr(doc, "status", None) == "Cancelled"
+		and getattr(getattr(frappe, "flags", None), "vetedge_financial_resolution_cancellation", False)
+	)
 
 
 def consultation_scope_is_locked(status: str | None) -> bool:
@@ -145,6 +173,9 @@ def consultation_scope_is_locked(status: str | None) -> bool:
 
 
 def validate_consultation_scope_lock(doc) -> None:
+	if is_internal_billing_sync_context():
+		return
+
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
 	if not previous or not consultation_scope_is_locked(previous.status):
 		return
@@ -156,6 +187,15 @@ def validate_consultation_scope_lock(doc) -> None:
 		"Treatment items cannot be added or changed after the consultation is Ready for Treatment. "
 		"Start a new consultation to capture additional treatment, lab, vaccine, or other clinical orders.",
 		frappe.ValidationError,
+	)
+
+
+def is_internal_billing_sync_context() -> bool:
+	flags = getattr(frappe, "flags", None)
+	return bool(
+		getattr(flags, "vetedge_billing_core_syncing", False)
+		or getattr(flags, "vetedge_billing_modal_syncing", False)
+		or getattr(flags, "ignore_consultation_treatment_lock_for_billing_sync", False)
 	)
 
 
@@ -183,6 +223,10 @@ def transition_consultation_status(consultation: str, status: str) -> dict:
 		reference_name=consultation
 	)
 	validate_consultation_status_transition(doc.status, status)
+	if status == "Cancelled":
+		from vetedge.services.consultation_cancellation import execute_consultation_cancellation
+
+		return execute_consultation_cancellation(consultation)
 	assert_consultation_can_proceed(doc, status)
 	previous = SimpleNamespace(status=doc.status)
 	doc.status = status
@@ -637,7 +681,12 @@ def validate_consultation_children(doc) -> None:
 		validate_enabled_link("Veterinary Diagnosis", row.diagnosis, "Diagnosis")
 
 	for row in doc.get("planned_treatments") or []:
-		apply_planned_treatment_defaults(row)
+		apply_planned_treatment_defaults(
+			row,
+			company=doc.get("company"),
+			customer=doc.get("primary_owner"),
+			branch=doc.get("service_branch"),
+		)
 		if flt(row.qty) <= 0:
 			frappe.throw("Planned Treatment Qty must be greater than zero.", frappe.ValidationError)
 		if row.get("rate") not in (None, "") and flt(row.rate) < 0:
@@ -689,10 +738,13 @@ def validate_enabled_item(item: str | None) -> None:
 
 
 def validate_completion_requirements(doc) -> None:
-	assert_consultation_can_proceed(doc, doc.status)
-	validate_consultation_dispensary_requirements(doc)
+	if getattr(getattr(frappe, "flags", None), "vetedge_billing_core_syncing", False):
+		return
+	if should_validate_final_workflow_gate(doc):
+		assert_consultation_can_proceed(doc, doc.status)
+		validate_consultation_dispensary_requirements(doc)
 
-	if doc.status != "Completed":
+	if not _status_transitioned_to(doc, "Completed"):
 		return
 
 	if is_vitals_required_before_completion() and not has_vitals_for_consultation(doc.name):
@@ -700,6 +752,22 @@ def validate_completion_requirements(doc) -> None:
 			"Veterinary Vital Signs are required before completing this consultation.",
 			frappe.ValidationError,
 		)
+
+
+def should_validate_final_workflow_gate(doc) -> bool:
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	return should_run_final_billing_gate(
+		doc,
+		status_field="status",
+		final_statuses={"Pending Dispensary", "Ready for Treatment", "Completed"},
+	)
+
+
+def _status_transitioned_to(doc, target_status: str) -> bool:
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	return should_run_final_billing_gate(doc, status_field="status", final_statuses={target_status})
 
 
 def is_vitals_required_before_completion() -> bool:

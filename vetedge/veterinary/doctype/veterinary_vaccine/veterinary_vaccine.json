@@ -14,6 +14,8 @@
   "description",
   "billing_section",
   "default_item",
+  "price_list",
+  "default_price",
   "schedule_section",
   "default_validity_days",
   "default_next_due_days"
@@ -68,6 +70,17 @@
    "in_standard_filter": 1,
    "label": "Default Item",
    "options": "Item"
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "options": "Price List"
+  },
+  {
+   "fieldname": "default_price",
+   "fieldtype": "Currency",
+   "label": "Default Price"
   },
   {
    "collapsible": 1,

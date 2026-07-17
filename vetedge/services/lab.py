@@ -5,13 +5,19 @@ from frappe.utils import cint, flt, now_datetime
 
 from vetedge.services.notifications import emit_notification_event
 from vetedge.services.permissions import (
+	ELEVATED_ROLES,
+	ROLE_LAB_TECHNICIAN,
+	ROLE_VETEDGE_DOCTOR,
 	can_access_branch_data,
 	can_access_consultation,
 	can_access_lab_order,
 	can_enter_lab_results,
 	can_request_lab_tests,
 	can_review_lab_results,
+	can_upload_lab_results,
 	get_current_user,
+	get_user_roles,
+	get_veterinary_settings_flag,
 )
 from vetedge.services.portal_access import require_internal_user
 
@@ -22,27 +28,54 @@ LAB_ORDER_ITEM_DOCTYPE = "Veterinary Lab Order Item"
 
 LAB_ORDER_STATUSES = {
 	"Draft",
-	"Requested",
+	"Ordered",
 	"Sample Collected",
+	"Sent to Lab",
 	"In Progress",
+	"Result Pending",
 	"Result Entered",
+	"Awaiting Review",
 	"Reviewed",
+	"Completed",
 	"Cancelled",
 }
 
 VALID_LAB_ORDER_STATUS_TRANSITIONS = {
-	"Draft": {"Requested", "Cancelled"},
-	"Requested": {"Sample Collected", "In Progress", "Cancelled"},
-	"Sample Collected": {"In Progress", "Cancelled"},
-	"In Progress": {"Result Entered", "Cancelled"},
-	"Result Entered": {"Reviewed", "Cancelled"},
-	"Reviewed": set(),
+	"Draft": {"Ordered", "Result Entered", "Awaiting Review", "Cancelled"},
+	"Ordered": {"Sample Collected", "Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review", "Cancelled"},
+	"Sample Collected": {"Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review", "Cancelled"},
+	"Sent to Lab": {"In Progress", "Result Pending", "Result Entered", "Awaiting Review", "Cancelled"},
+	"In Progress": {"Result Pending", "Result Entered", "Awaiting Review", "Cancelled"},
+	"Result Pending": {"Result Entered", "Awaiting Review", "Cancelled"},
+	"Result Entered": {"Awaiting Review", "Reviewed", "Completed", "Cancelled"},
+	"Awaiting Review": {"Reviewed", "Cancelled"},
+	"Reviewed": {"Completed", "Cancelled"},
+	"Completed": set(),
 	"Cancelled": set(),
 }
+LAB_ORDER_STATUS_ALIASES = {
+	"Requested": "Ordered",
+}
 
-LAB_RESULT_FIELDS = ("result_value", "result_text", "remarks")
-LAB_REVIEW_FINAL_STATUSES = {"Reviewed", "Cancelled"}
-LAB_RESULT_ENTRY_STATUSES = {"Sample Collected", "In Progress", "Result Entered"}
+LAB_RESULT_FIELDS = (
+	"result_format",
+	"requires_document_upload",
+	"allows_manual_result_entry",
+	"allows_doctor_result_entry",
+	"requires_result_review",
+	"result_value",
+	"result_unit",
+	"reference_range",
+	"abnormal_flag",
+	"result_text",
+	"result_attachment",
+	"remarks",
+)
+LAB_RESULT_CONTENT_FIELDS = ("result_value", "result_text", "remarks", "result_attachment")
+LAB_RESULT_UPLOAD_FIELDS = ("result_attachment",)
+LAB_REVIEW_FINAL_STATUSES = {"Completed", "Cancelled"}
+LAB_RESULT_ENTRY_STATUSES = {"Sample Collected", "Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review"}
+LAB_RESULT_FORMATS = {"Value Driven", "Text / Narrative", "Document Upload", "Mixed"}
 
 
 def validate_lab_test(doc) -> None:
@@ -54,6 +87,12 @@ def validate_lab_test(doc) -> None:
 	doc.test_name = str(doc.test_name).strip()
 	if doc.test_code:
 		doc.test_code = str(doc.test_code).strip().upper()
+	if not doc.get("result_format"):
+		doc.result_format = "Value Driven"
+	if doc.result_format not in LAB_RESULT_FORMATS:
+		frappe.throw(f"Invalid lab result format: {doc.result_format}", frappe.ValidationError)
+	if doc.result_format == "Document Upload":
+		doc.requires_document_upload = 1
 
 	if doc.default_rate is not None and flt(doc.default_rate) < 0:
 		frappe.throw("Default Rate cannot be negative.", frappe.ValidationError)
@@ -65,15 +104,51 @@ def validate_lab_test(doc) -> None:
 def validate_lab_order(doc) -> None:
 	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
 
+	normalize_lab_order_status_values(doc)
+	normalize_new_standalone_lab_order_status(doc, previous)
 	validate_lab_order_status(doc, previous)
 	resolve_lab_order_context(doc)
 	validate_lab_order_consultation_link(doc)
 	validate_lab_order_branch_access(doc)
 	validate_lab_order_request_permissions(doc, previous)
 	validate_lab_order_result_permissions(doc, previous)
+	validate_lab_order_rate_edits(doc, previous)
 	validate_lab_order_items(doc)
+	normalize_lab_order_result_workflow(doc)
 	validate_lab_order_status_requirements(doc)
+	validate_lab_order_completion_gate(doc, previous)
 	sync_lab_order_review_metadata(doc)
+
+
+def normalize_lab_order_status_values(doc) -> None:
+	doc.status = normalize_lab_order_status(doc.get("status"))
+	for row in doc.get("lab_tests") or []:
+		row.status = normalize_lab_order_status(row.get("status"))
+
+
+def normalize_lab_order_status(status: str | None) -> str | None:
+	if not status:
+		return status
+	return LAB_ORDER_STATUS_ALIASES.get(status, status)
+
+
+def normalize_new_standalone_lab_order_status(doc, previous=None) -> None:
+	is_new_method = getattr(doc, "is_new", None)
+	is_new = bool(is_new_method()) if callable(is_new_method) else False
+	if previous is not None and not is_new:
+		return
+	if doc.get("consultation"):
+		return
+	if doc.get("status") not in {"Result Entered", "Awaiting Review", "Reviewed"}:
+		return
+	if any(_row_has_lab_result_content(row) for row in doc.get("lab_tests") or []):
+		return
+	doc.status = "Draft"
+	for row in doc.get("lab_tests") or []:
+		if row.get("status") in {"Result Entered", "Awaiting Review", "Reviewed"}:
+			row.status = "Ordered"
+		if row.get("result_status") in {"Awaiting Review", "Reviewed"}:
+			row.result_status = "Pending"
 
 
 def validate_lab_order_status(doc, previous=None) -> None:
@@ -83,17 +158,18 @@ def validate_lab_order_status(doc, previous=None) -> None:
 	if doc.status not in LAB_ORDER_STATUSES:
 		frappe.throw(f"Invalid lab order status: {doc.status}", frappe.ValidationError)
 
-	if previous and previous.status in LAB_REVIEW_FINAL_STATUSES and previous.status != doc.status:
+	previous_status = normalize_lab_order_status(previous.status) if previous else None
+	if previous and previous_status in LAB_REVIEW_FINAL_STATUSES and previous_status != doc.status:
 		frappe.throw(
-			f"Lab order status cannot be changed after it is {previous.status}.",
+			f"Lab order status cannot be changed after it is {previous_status}.",
 			frappe.ValidationError,
 		)
 
-	if previous and previous.status != doc.status:
-		allowed = VALID_LAB_ORDER_STATUS_TRANSITIONS.get(previous.status, set())
+	if previous and previous_status != doc.status:
+		allowed = VALID_LAB_ORDER_STATUS_TRANSITIONS.get(previous_status, set())
 		if doc.status not in allowed:
 			frappe.throw(
-				f"Lab order status cannot move from {previous.status} to {doc.status}.",
+				f"Lab order status cannot move from {previous_status} to {doc.status}.",
 				frappe.ValidationError,
 			)
 
@@ -177,7 +253,7 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 	if not user or user == "Guest":
 		return
 
-	if previous and _has_reviewed_result_edit(doc, previous):
+	if previous and _has_reviewed_result_edit(doc, previous) and not _can_edit_reviewed_lab_results(user):
 		frappe.throw(
 			"Reviewed lab results are read-only and cannot be edited.",
 			frappe.ValidationError,
@@ -186,8 +262,12 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 	if previous is None:
 		if doc.status in LAB_RESULT_ENTRY_STATUSES:
 			can_enter_lab_results(user, doc, raise_exception=True)
+			if _has_lab_result_upload(doc):
+				can_upload_lab_results(user, doc, raise_exception=True)
 		elif doc.status == "Reviewed":
 			can_review_lab_results(user, doc, raise_exception=True)
+			if _has_lab_result_upload(doc):
+				can_upload_lab_results(user, doc, raise_exception=True)
 		return
 
 	if doc.status != previous.status:
@@ -204,6 +284,25 @@ def validate_lab_order_result_permissions(doc, previous=None) -> None:
 
 	if previous and _lab_result_content_changed(doc, previous):
 		can_enter_lab_results(user, doc, raise_exception=True)
+		if _lab_result_upload_changed(doc, previous):
+			can_upload_lab_results(user, doc, raise_exception=True)
+
+
+def validate_lab_order_rate_edits(doc, previous=None) -> None:
+	if previous is None:
+		return
+	if not doc.get("linked_invoice"):
+		return
+	if not _lab_order_row_rate_changed(doc, previous):
+		return
+	if not frappe.db.exists("Sales Invoice", doc.linked_invoice):
+		return
+	invoice_status = frappe.db.get_value("Sales Invoice", doc.linked_invoice, ["docstatus", "status"], as_dict=True)
+	if invoice_status and cint(invoice_status.get("docstatus")) == 1:
+		frappe.throw(
+			"Lab order rates cannot be changed after the linked invoice is submitted.",
+			frappe.ValidationError,
+		)
 
 
 def validate_lab_order_items(doc) -> None:
@@ -215,6 +314,7 @@ def validate_lab_order_items(doc) -> None:
 
 	seen_templates: set[str] = set()
 	current_user = get_current_user()
+	linked_invoice_billing_status = get_lab_order_linked_invoice_billing_status(doc)
 	for row in rows:
 		if not row.lab_test_template:
 			frappe.throw("Each lab order row must reference a Veterinary Lab Test.", frappe.ValidationError)
@@ -228,7 +328,20 @@ def validate_lab_order_items(doc) -> None:
 		lab_test = frappe.db.get_value(
 			LAB_TEST_DOCTYPE,
 			row.lab_test_template,
-			["test_name", "sample_type", "linked_item", "default_rate", "is_active"],
+			[
+				"test_name",
+				"sample_type",
+				"linked_item",
+				"default_rate",
+				"is_active",
+				"result_format",
+				"result_unit",
+				"reference_range",
+				"requires_document_upload",
+				"allows_manual_result_entry",
+				"allows_doctor_result_entry",
+				"requires_result_review",
+			],
 			as_dict=True,
 		)
 		if not lab_test:
@@ -241,44 +354,200 @@ def validate_lab_order_items(doc) -> None:
 			row.sample_type = lab_test.sample_type
 		if not row.billing_item and lab_test.linked_item:
 			row.billing_item = lab_test.linked_item
+		if row.get("rate") in (None, "") and lab_test.get("default_rate") is not None:
+			row.rate = flt(lab_test.default_rate)
+		if row.get("rate") not in (None, "") and flt(row.get("rate")) < 0:
+			frappe.throw(f"Rate cannot be negative for {row.lab_test_template}.", frappe.ValidationError)
+		if linked_invoice_billing_status:
+			row.billing_status = linked_invoice_billing_status
+		elif not row.get("billing_status"):
+			row.billing_status = "Not Billed"
+		if not row.get("result_action"):
+			row.result_action = "Result Actions"
+		if not row.get("result_format"):
+			row.result_format = lab_test.get("result_format") or "Value Driven"
+		if row.get("result_format") not in LAB_RESULT_FORMATS:
+			frappe.throw(f"Invalid lab result format for {row.lab_test_template}: {row.get('result_format')}", frappe.ValidationError)
+		row.requires_document_upload = cint(lab_test.get("requires_document_upload"))
+		row.allows_manual_result_entry = cint(lab_test.get("allows_manual_result_entry", 1))
+		row.allows_doctor_result_entry = cint(lab_test.get("allows_doctor_result_entry", 1))
+		row.requires_result_review = cint(lab_test.get("requires_result_review", 1)) if is_lab_result_review_required() else 0
+		if not row.get("result_unit") and lab_test.get("result_unit"):
+			row.result_unit = lab_test.result_unit
+		if not row.get("reference_range") and lab_test.get("reference_range"):
+			row.reference_range = lab_test.reference_range
 		if row.billing_item:
 			validate_sales_item(row.billing_item, "Lab Billing Item", allow_stock=False)
 
-		has_result = any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_FIELDS)
+		has_result = _row_has_lab_result_content(row)
 		if has_result:
+			validate_lab_result_format_content(row)
+			validate_lab_result_actor_permissions(row, current_user, doc)
 			if not row.entered_by:
 				row.entered_by = current_user
 			if not row.entered_on:
 				row.entered_on = now_datetime()
-			if row.result_status in (None, "", "Pending"):
-				row.result_status = "Entered"
-			if row.status not in {"Reviewed", "Cancelled"}:
-				row.status = "Result Entered"
+			if row.get("result_attachment"):
+				if not row.get("uploaded_by"):
+					row.uploaded_by = current_user
+				if not row.get("uploaded_on"):
+					row.uploaded_on = now_datetime()
+			if row.status not in {"Reviewed", "Completed", "Cancelled"}:
+				if cint(row.get("requires_result_review")) and row.get("result_status") != "Reviewed":
+					row.result_status = "Awaiting Review"
+					row.status = "Awaiting Review"
+				else:
+					if row.result_status in (None, "", "Pending", "Awaiting Review"):
+						row.result_status = "Entered"
+					row.status = "Result Entered"
 		else:
 			if not row.result_status:
 				row.result_status = "Pending"
-			if doc.status in {"Requested", "Sample Collected", "In Progress"}:
+			if doc.status in {"Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending"}:
 				row.status = doc.status
 			elif not row.status:
-				row.status = "Requested"
+				row.status = "Ordered"
 
 		if doc.status == "Reviewed" and row.status != "Cancelled":
 			row.status = "Reviewed"
 			row.result_status = "Reviewed"
+		if doc.status == "Completed" and row.status != "Cancelled":
+			row.status = "Completed"
+		row.result_summary = build_lab_result_summary(row)
+
+
+def normalize_lab_order_result_workflow(doc) -> None:
+	if doc.status in {"Reviewed", "Completed", "Cancelled"}:
+		return
+
+	active_rows = [row for row in doc.get("lab_tests") or [] if row.get("status") != "Cancelled"]
+	if not active_rows:
+		return
+
+	if any(row.get("result_status") == "Awaiting Review" or row.get("status") == "Awaiting Review" for row in active_rows):
+		doc.status = "Awaiting Review"
+		return
+
+	if all(_row_has_lab_result_content(row) for row in active_rows):
+		doc.status = "Result Entered"
 
 
 def validate_lab_order_status_requirements(doc) -> None:
-	if doc.status not in {"Result Entered", "Reviewed"}:
+	if doc.status not in {"Result Entered", "Awaiting Review", "Reviewed", "Completed"}:
 		return
 
 	for row in doc.get("lab_tests") or []:
 		if row.status == "Cancelled":
 			continue
-		if not any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_FIELDS):
+		if not _row_has_lab_result_content(row):
 			frappe.throw(
 				f"Enter a result value or result text for {row.lab_test_template} before marking this lab order as {doc.status}.",
 				frappe.ValidationError,
 			)
+		if doc.status in {"Reviewed", "Completed"} and cint(row.get("requires_result_review")) and row.get("result_status") != "Reviewed":
+			frappe.throw(
+				f"Review the lab result for {row.lab_test_template} before marking this lab order as {doc.status}.",
+				frappe.ValidationError,
+			)
+
+
+def validate_lab_order_completion_gate(doc, previous=None) -> None:
+	from vetedge.services.billing_core import should_run_final_billing_gate
+
+	if not should_run_final_billing_gate(doc, status_field="status", final_statuses={"Completed"}):
+		return
+	if not lab_order_has_billable_items(doc):
+		return
+
+	if use_billing_core_for_lab_order() and doc.get("name"):
+		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session
+
+		session = resolve_billing_session(LAB_ORDER_DOCTYPE, doc.name, include_closed_satisfied=True)
+		if not session:
+			frappe.throw("A Sales Invoice must be generated before service can proceed.", frappe.ValidationError)
+		gate = get_payment_gate_status(session)
+		if not gate.get("can_proceed"):
+			frappe.throw(gate.get("message") or "Please submit the invoice before completing this workflow.", frappe.ValidationError)
+		return
+
+	if not doc.get("linked_invoice") or not frappe.db.exists("Sales Invoice", doc.linked_invoice):
+		frappe.throw("A Sales Invoice must be generated before service can proceed.", frappe.ValidationError)
+	invoice = frappe.db.get_value("Sales Invoice", doc.linked_invoice, ["docstatus", "status", "outstanding_amount"], as_dict=True)
+	if not invoice or cint(invoice.get("docstatus")) != 1:
+		frappe.throw("Please submit the invoice before completing this workflow.", frappe.ValidationError)
+
+
+def lab_order_has_billable_items(doc) -> bool:
+	return any(row.get("billing_item") for row in doc.get("lab_tests") or [] if row.get("status") != "Cancelled")
+
+
+def validate_lab_result_format_content(row) -> None:
+	result_format = row.get("result_format") or "Value Driven"
+	if result_format == "Value Driven" and not row.get("result_value"):
+		frappe.throw(f"Enter a result value for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Text / Narrative" and not row.get("result_text"):
+		frappe.throw(f"Enter a narrative result for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Document Upload" and not row.get("result_attachment"):
+		frappe.throw(f"Upload a result document for {row.lab_test_template}.", frappe.ValidationError)
+	if result_format == "Mixed" and not any(
+		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text", "result_attachment")
+	):
+		frappe.throw(f"Enter or upload a result for {row.lab_test_template}.", frappe.ValidationError)
+
+
+def _row_has_lab_result_content(row) -> bool:
+	return any(row.get(fieldname) not in (None, "") for fieldname in LAB_RESULT_CONTENT_FIELDS)
+
+
+def get_lab_order_linked_invoice_billing_status(doc) -> str | None:
+	if not doc.get("linked_invoice") or not frappe.db.exists("Sales Invoice", doc.linked_invoice):
+		return None
+	invoice = frappe.db.get_value("Sales Invoice", doc.linked_invoice, ["docstatus", "status", "outstanding_amount"], as_dict=True)
+	if not invoice:
+		return None
+	if cint(invoice.get("docstatus")) == 1:
+		if invoice.get("status") == "Paid" or flt(invoice.get("outstanding_amount")) <= 0:
+			return "Paid"
+		return "Submitted Invoiced"
+	if cint(invoice.get("docstatus")) == 0:
+		return "Draft Invoiced"
+	return "Cancelled"
+
+
+def build_lab_result_summary(row) -> str:
+	parts = []
+	if row.get("result_value") not in (None, ""):
+		value = str(row.get("result_value"))
+		if row.get("result_unit"):
+			value = f"{value} {row.get('result_unit')}"
+		parts.append(value)
+	if row.get("result_text"):
+		text = str(row.get("result_text")).strip()
+		if len(text) > 80:
+			text = f"{text[:77]}..."
+		parts.append(text)
+	if row.get("result_attachment"):
+		parts.append("Document uploaded")
+	if cint(row.get("abnormal_flag")):
+		parts.append("Abnormal")
+	return " | ".join(part for part in parts if part)
+
+
+def validate_lab_result_actor_permissions(row, user: str | None, doc) -> None:
+	if not user or user == "Guest":
+		return
+	if not cint(row.get("allows_manual_result_entry", 1)) and any(
+		row.get(fieldname) not in (None, "") for fieldname in ("result_value", "result_text")
+	):
+		frappe.throw(f"Manual result entry is not allowed for {row.lab_test_template}.", frappe.PermissionError)
+	roles = get_user_roles(user)
+	is_elevated = bool(roles & ELEVATED_ROLES)
+	is_lab_staff = bool(roles & {ROLE_LAB_TECHNICIAN, "VetEdge Lab Technician"})
+	is_doctor = bool(roles & {ROLE_VETEDGE_DOCTOR})
+	if is_doctor and not (is_elevated or is_lab_staff) and not cint(row.get("allows_doctor_result_entry", 1)):
+		frappe.throw(f"Doctors are not allowed to enter results for {row.lab_test_template}.", frappe.PermissionError)
+	if row.get("result_attachment") and is_doctor and not (is_elevated or is_lab_staff):
+		can_upload_lab_results(user, doc, raise_exception=True)
 
 
 def sync_lab_order_review_metadata(doc) -> None:
@@ -293,7 +562,23 @@ def sync_lab_order_review_metadata(doc) -> None:
 		doc.doctor_reviewed_on = now_datetime()
 
 
+def is_lab_result_review_required() -> bool:
+	return get_veterinary_settings_flag("require_lab_result_review", default=True)
+
+
+def _can_edit_reviewed_lab_results(user: str | None) -> bool:
+	roles = get_user_roles(user)
+	if roles & ELEVATED_ROLES:
+		return True
+	if not get_veterinary_settings_flag("allow_lab_result_edit_after_review", default=False):
+		return False
+	return can_review_lab_results(user, raise_exception=False)
+
+
 def handle_lab_order_after_insert(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_lab_order_to_consultation_plan
+
+	sync_lab_order_to_consultation_plan(doc)
 	emit_notification_event(
 		"lab_order_created",
 		doc.doctype,
@@ -310,6 +595,10 @@ def handle_lab_order_after_insert(doc) -> None:
 
 
 def handle_lab_order_on_update(doc) -> None:
+	from vetedge.services.consultation_billing_plan import sync_lab_order_to_consultation_plan
+
+	sync_lab_order_to_consultation_plan(doc)
+	sync_cancelled_lab_order_billing(doc)
 	previous = doc.get_doc_before_save()
 	if not previous or previous.status == doc.status:
 		return
@@ -326,6 +615,19 @@ def handle_lab_order_on_update(doc) -> None:
 	elif doc.status == "Result Entered":
 		emit_notification_event("lab_result_entered", doc.doctype, doc.name, payload)
 		emit_notification_event("lab_result_ready_for_review", doc.doctype, doc.name, payload)
+	elif doc.status == "Awaiting Review":
+		emit_notification_event("lab_result_ready_for_review", doc.doctype, doc.name, payload)
+
+
+def sync_cancelled_lab_order_billing(doc) -> None:
+	if doc.status != "Cancelled" or not doc.get("name") or not use_billing_core_for_lab_order():
+		return
+	try:
+		from vetedge.services.billing_core import sync_source_to_billing_session
+
+		sync_source_to_billing_session(LAB_ORDER_DOCTYPE, doc.name)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Lab Order cancellation billing cleanup failed")
 
 
 @frappe.whitelist()
@@ -376,7 +678,7 @@ def create_lab_order_from_consultation(
 			"service_branch": consultation_doc.service_branch,
 			"requested_by": get_current_user(),
 			"requested_on": now_datetime(),
-			"status": "Requested",
+			"status": "Ordered",
 			"sample_notes": sample_notes,
 			"lab_tests": rows,
 		}
@@ -431,7 +733,20 @@ def get_active_lab_tests_for_picker() -> list[dict]:
 	return frappe.get_all(
 		LAB_TEST_DOCTYPE,
 		filters={"is_active": 1},
-		fields=["name", "test_name", "sample_type", "linked_item", "default_rate"],
+		fields=[
+			"name",
+			"test_name",
+			"sample_type",
+			"linked_item",
+			"default_rate",
+			"result_format",
+			"result_unit",
+			"reference_range",
+			"requires_document_upload",
+			"allows_manual_result_entry",
+			"allows_doctor_result_entry",
+			"requires_result_review",
+		],
 		order_by="test_name asc",
 	)
 
@@ -487,6 +802,13 @@ def get_lab_order_popup_summary(lab_order: str) -> dict:
 				"billing_item": row.get("billing_item"),
 				"status": row.get("status"),
 				"result_status": row.get("result_status"),
+				"result_format": row.get("result_format"),
+				"result_value": row.get("result_value"),
+				"result_unit": row.get("result_unit"),
+				"reference_range": row.get("reference_range"),
+				"abnormal_flag": cint(row.get("abnormal_flag")),
+				"result_text": row.get("result_text"),
+				"result_attachment": row.get("result_attachment"),
 				"notes": row.get("notes"),
 			}
 			for row in order.get("lab_tests") or []
@@ -513,6 +835,13 @@ def create_lab_test_from_dialog(values: dict | str | None = None) -> dict:
 			"description": values.get("description"),
 			"sample_type": values.get("sample_type"),
 			"linked_item": values.get("linked_item"),
+			"result_format": values.get("result_format") or "Value Driven",
+			"result_unit": values.get("result_unit"),
+			"reference_range": values.get("reference_range"),
+			"requires_document_upload": values.get("requires_document_upload"),
+			"allows_manual_result_entry": values.get("allows_manual_result_entry", 1),
+			"allows_doctor_result_entry": values.get("allows_doctor_result_entry", 1),
+			"requires_result_review": values.get("requires_result_review", 1),
 			"default_rate": values.get("default_rate"),
 			"is_active": 1,
 		}
@@ -557,7 +886,7 @@ def create_standalone_lab_order(
 			"service_branch": service_branch or patient_context.default_branch,
 			"requested_by": get_current_user(),
 			"requested_on": now_datetime(),
-			"status": "Requested",
+			"status": "Ordered",
 			"sample_notes": sample_notes,
 			"lab_tests": rows,
 		}
@@ -636,7 +965,8 @@ def build_lab_order_invoice_items(order, cost_center: str) -> list[dict]:
 		if not row.billing_item:
 			continue
 		default_rate = frappe.db.get_value(LAB_TEST_DOCTYPE, row.lab_test_template, "default_rate")
-		items.append(build_invoice_item(row.billing_item, 1, None, default_rate, cost_center))
+		rate = row.get("rate") if row.get("rate") not in (None, "") else default_rate
+		items.append(build_invoice_item(row.billing_item, 1, None, rate, cost_center))
 	return items
 
 
@@ -813,7 +1143,7 @@ def _get_lab_order_items_summary(order_names: list[str]) -> dict[str, dict]:
 	rows = frappe.get_all(
 		LAB_ORDER_ITEM_DOCTYPE,
 		filters={"parent": ["in", order_names]},
-		fields=["parent", "lab_test_name", "lab_test_template", "result_value", "result_text"],
+		fields=["parent", "lab_test_name", "lab_test_template", "result_value", "result_text", "result_attachment"],
 		order_by="idx asc",
 	)
 	result: dict[str, dict] = {}
@@ -822,7 +1152,7 @@ def _get_lab_order_items_summary(order_names: list[str]) -> dict[str, dict]:
 		test_name = row.lab_test_name or row.lab_test_template
 		if test_name:
 			entry["tests"].append(test_name)
-		result_value = row.result_text or row.result_value
+		result_value = row.result_text or row.result_value or ("Document uploaded" if row.result_attachment else None)
 		if result_value not in (None, ""):
 			entry.setdefault("result_rows", []).append(f"{test_name}: {result_value}")
 
@@ -851,8 +1181,23 @@ def _serialize_request_rows(doc) -> list[tuple]:
 			row.get("notes"),
 			row.get("sample_type"),
 			row.get("billing_item"),
+			flt(row.get("rate")) if row.get("rate") not in (None, "") else None,
 		)
 		for row in doc.get("lab_tests") or []
+	]
+
+
+def _lab_order_row_rate_changed(doc, previous) -> bool:
+	return _serialize_lab_order_rates(doc) != _serialize_lab_order_rates(previous)
+
+
+def _serialize_lab_order_rates(doc) -> list[tuple]:
+	return [
+		(
+			row.get("name") or f"idx-{idx}",
+			flt(row.get("rate")) if row.get("rate") not in (None, "") else None,
+		)
+		for idx, row in enumerate(doc.get("lab_tests") or [], start=1)
 	]
 
 
@@ -865,6 +1210,26 @@ def _lab_result_content_changed(doc, previous) -> bool:
 		if not previous_row:
 			continue
 		for fieldname in LAB_RESULT_FIELDS + ("status", "result_status"):
+			if (row.get(fieldname) or None) != (previous_row.get(fieldname) or None):
+				return True
+	return False
+
+
+def _has_lab_result_upload(doc) -> bool:
+	return any(row.get("result_attachment") not in (None, "") for row in doc.get("lab_tests") or [])
+
+
+def _lab_result_upload_changed(doc, previous) -> bool:
+	current_rows = {row.name or f"idx-{idx}": row for idx, row in enumerate(doc.get("lab_tests") or [], start=1)}
+	previous_rows = {row.name or f"idx-{idx}": row for idx, row in enumerate(previous.get("lab_tests") or [], start=1)}
+
+	for key, row in current_rows.items():
+		previous_row = previous_rows.get(key)
+		if not previous_row:
+			if row.get("result_attachment") not in (None, ""):
+				return True
+			continue
+		for fieldname in LAB_RESULT_UPLOAD_FIELDS:
 			if (row.get(fieldname) or None) != (previous_row.get(fieldname) or None):
 				return True
 	return False

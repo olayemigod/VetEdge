@@ -81,15 +81,15 @@ class TestNotificationStructure(TestCase):
 		doctype_json = json.loads(
 			(
 				APP_ROOT
-				/ "veterinary/doctype/vetedge_notification_log/vetedge_notification_log.json"
+				/ "veterinary/doctype/veterinary_notification_log/veterinary_notification_log.json"
 			).read_text()
 		)
-		self.assertEqual(doctype_json["name"], "VetEdge Notification Log")
+		self.assertEqual(doctype_json["name"], "Veterinary Notification Log")
 
 	def test_notification_doctypes_are_admin_only(self):
 		for path in (
-			APP_ROOT / "veterinary/doctype/vetedge_notification_log/vetedge_notification_log.json",
-			APP_ROOT / "veterinary/doctype/vetedge_notification_preference/vetedge_notification_preference.json",
+			APP_ROOT / "veterinary/doctype/veterinary_notification_log/veterinary_notification_log.json",
+			APP_ROOT / "veterinary/doctype/veterinary_notification_preference/veterinary_notification_preference.json",
 		):
 			doctype_json = json.loads(path.read_text())
 			roles = {row.get("role") for row in doctype_json.get("permissions", []) if row.get("role")}
@@ -99,7 +99,7 @@ class TestNotificationStructure(TestCase):
 		doctype_json = json.loads(
 			(
 				APP_ROOT
-				/ "veterinary/doctype/vetedge_notification_log/vetedge_notification_log.json"
+				/ "veterinary/doctype/veterinary_notification_log/veterinary_notification_log.json"
 			).read_text()
 		)
 		fields = {field.get("fieldname"): field for field in doctype_json["fields"]}
@@ -145,11 +145,22 @@ class TestNotificationStructure(TestCase):
 
 	def test_notification_admin_permission_hooks_are_registered(self):
 		hooks_py = (APP_ROOT / "hooks.py").read_text()
-		self.assertIn('"VetEdge Notification Log": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
-		self.assertIn('"VetEdge Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
-		self.assertIn('"VetEdge Notification Log": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
-		self.assertIn('"VetEdge Notification Preference": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
-		self.assertIn('"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertIn('"Veterinary Notification Log": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
+		self.assertIn('"Veterinary Notification Preference": "vetedge.services.permissions.get_notification_admin_only_query"', hooks_py)
+		self.assertIn('"Veterinary Notification Log": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertIn('"Veterinary Notification Preference": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+		self.assertNotIn('"Veterinary Settings": "vetedge.services.permissions.has_notification_admin_permission"', hooks_py)
+
+	def test_veterinary_settings_grants_doctor_read_without_admin_write(self):
+		settings_json = json.loads((APP_ROOT / "veterinary/doctype/veterinary_settings/veterinary_settings.json").read_text())
+		doctor_perms = [
+			row
+			for row in settings_json.get("permissions", [])
+			if row.get("role") == "VetEdge Doctor" and row.get("permlevel", 0) == 0
+		]
+		self.assertEqual(len(doctor_perms), 1)
+		self.assertEqual(doctor_perms[0].get("read"), 1)
+		self.assertNotEqual(doctor_perms[0].get("write"), 1)
 
 	def test_notification_workspace_links_are_admin_only(self):
 		workspace_json = json.loads((APP_ROOT / "workspace_sidebar/vetedge.json").read_text())
@@ -164,11 +175,11 @@ class TestNotificationStructure(TestCase):
 
 		links = collect_links(workspace_json.get("items"))
 		for label in (
-			"VetEdge Settings",
+			"Settings",
 			"Notification Items",
-			"VetEdge Notification Event Registry",
-			"VetEdge Notification Log",
-			"VetEdge Notification Preference",
+			"Notification Event Registry",
+			"Notification Log",
+			"Notification Preference",
 		):
 			depends_on = links[label].get("display_depends_on", "")
 			self.assertIn("System Manager", depends_on)

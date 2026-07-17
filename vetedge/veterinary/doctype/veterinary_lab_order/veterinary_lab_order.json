@@ -18,6 +18,8 @@
   "requested_by",
   "linked_invoice",
   "sample_notes",
+  "lab_tests_section",
+  "lab_tests_workbench",
   "lab_tests",
   "doctor_reviewed_by",
   "doctor_reviewed_on"
@@ -26,7 +28,7 @@
   {"default": "VLAB-.YYYY.-.#####", "fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "VLAB-.YYYY.-.#####", "reqd": 1},
   {"fieldname": "lab_order_title", "fieldtype": "Data", "hidden": 1, "label": "Lab Order Title", "no_copy": 1, "read_only": 1},
   {"fieldname": "patient", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "reqd": 1},
-  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "no_copy": 1, "options": "Draft\nRequested\nSample Collected\nIn Progress\nResult Entered\nReviewed\nCancelled", "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "no_copy": 1, "options": "Draft\nOrdered\nSample Collected\nSent to Lab\nIn Progress\nResult Pending\nResult Entered\nAwaiting Review\nReviewed\nCompleted\nCancelled", "reqd": 1},
   {"default": "Now", "fieldname": "requested_on", "fieldtype": "Datetime", "in_list_view": 1, "label": "Requested On", "no_copy": 1, "reqd": 1},
   {"fieldname": "primary_owner", "fieldtype": "Link", "in_list_view": 1, "label": "Primary Owner", "options": "Customer", "read_only": 1},
   {"fieldname": "service_branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Service Branch", "options": "Branch", "reqd": 1},
@@ -35,6 +37,8 @@
   {"fieldname": "requested_by", "fieldtype": "Link", "label": "Requested By", "no_copy": 1, "options": "User", "read_only": 1},
   {"fieldname": "linked_invoice", "fieldtype": "Link", "label": "Linked Invoice", "no_copy": 1, "options": "Sales Invoice", "read_only": 1},
   {"fieldname": "sample_notes", "fieldtype": "Small Text", "label": "Sample Notes"},
+  {"fieldname": "lab_tests_section", "fieldtype": "Section Break", "label": "Lab Tests & Results"},
+  {"fieldname": "lab_tests_workbench", "fieldtype": "HTML", "label": "Lab Tests Workbench", "no_copy": 1},
   {"fieldname": "lab_tests", "fieldtype": "Table", "label": "Lab Tests", "options": "Veterinary Lab Order Item", "reqd": 1},
   {"fieldname": "doctor_reviewed_by", "fieldtype": "Link", "label": "Doctor Reviewed By", "no_copy": 1, "options": "User", "read_only": 1},
   {"fieldname": "doctor_reviewed_on", "fieldtype": "Datetime", "label": "Doctor Reviewed On", "no_copy": 1, "read_only": 1}
