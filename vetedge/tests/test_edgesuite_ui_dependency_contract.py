@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_PATH = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 STOCK_EXPIRY_LOADER = (
