@@ -215,3 +215,133 @@
 .vetedge-revenue-composition-legend strong { color: var(--edge-text); font-weight: 600; }
 .vetedge-revenue-composition-empty { border: 1px dashed var(--edge-border); border-radius: var(--edge-radius); color: var(--edge-text-muted); padding: 28px; text-align: center; background: #fff; }
 @media (max-width: 576px) { .vetedge-revenue-composition-panel { padding: 14px; } .vetedge-revenue-composition-header { align-items: flex-start; flex-direction: column; } .vetedge-revenue-composition-chart-layout { grid-template-columns: 1fr; gap: 16px; } }
+
+
+/* VetEdge workspace sidebar: native Frappe behavior, scoped visual refinement. */
+.body-sidebar[data-title="VetEdge"],
+.body-sidebar[data-title="Veterinary"] {
+	--vetedge-sidebar-active: #e8f2ff;
+	--vetedge-sidebar-hover: #f2f6fb;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item {
+	margin-bottom: 3px;
+	border-radius: 8px;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor {
+	min-height: 32px;
+	padding-right: 6px;
+	border-radius: 8px;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .sidebar-item-icon {
+	color: var(--edge-text-muted);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item:hover .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item:hover .item-anchor {
+	background: var(--vetedge-sidebar-hover);
+	color: var(--edge-text);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item.active-sidebar .item-anchor,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor.selected,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor[aria-current="page"],
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item.active-sidebar .item-anchor,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor.selected,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor[aria-current="page"] {
+	background: var(--vetedge-sidebar-active);
+	color: var(--edge-primary);
+	font-weight: 600;
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item.active-sidebar .sidebar-item-icon,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor.selected .sidebar-item-icon,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor[aria-current="page"] .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item.active-sidebar .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor.selected .sidebar-item-icon,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor[aria-current="page"] .sidebar-item-icon {
+	color: var(--edge-primary);
+}
+
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item:focus-within,
+.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor:focus-visible,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item:focus-within,
+.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--edge-primary) 55%, transparent);
+	outline-offset: 2px;
+}
+
+.body-sidebar[data-title="VetEdge"] a.section-break,
+.body-sidebar[data-title="Veterinary"] a.section-break {
+	color: var(--edge-text-muted);
+	font-size: .72rem;
+	font-weight: 700;
+	letter-spacing: .045em;
+	text-transform: uppercase;
+	min-height: 34px;
+	padding: 8px 4px;
+}
+
+.body-sidebar[data-title="VetEdge"] .sidebar-item-control .drop-icon,
+.body-sidebar[data-title="Veterinary"] .sidebar-item-control .drop-icon {
+	border-radius: 6px;
+}
+
+.body-sidebar[data-title="VetEdge"] .sidebar-item-control .drop-icon:focus-visible,
+.body-sidebar[data-title="Veterinary"] .sidebar-item-control .drop-icon:focus-visible {
+	outline: 2px solid var(--edge-primary);
+	outline-offset: 1px;
+}
+
+@media (max-width: 576px) {
+	.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .item-anchor,
+	.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .item-anchor { min-height: 38px; }
+	.body-sidebar[data-title="VetEdge"] .standard-sidebar-item .sidebar-item-label,
+	.body-sidebar[data-title="Veterinary"] .standard-sidebar-item .sidebar-item-label { white-space: normal; line-height: 1.2; }
+}
+
+/* VetEdge enhancement for the shared EdgeUI Product Menu. */
+#edge-product-menu-dropdown .vetedge-product-menu-profile {
+	display: grid;
+	grid-template-columns: 38px minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: center;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--edge-border);
+	background: var(--edge-bg);
+}
+#edge-product-menu-dropdown .vetedge-product-menu-avatar {
+	display: grid;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 50%;
+	background: var(--edge-primary);
+	color: #fff;
+	font-size: .8rem;
+	font-weight: 700;
+}
+#edge-product-menu-dropdown .vetedge-product-menu-profile strong,
+#edge-product-menu-dropdown .vetedge-product-menu-profile small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#edge-product-menu-dropdown .vetedge-product-menu-profile strong { color: var(--edge-text); font-size: .86rem; }
+#edge-product-menu-dropdown .vetedge-product-menu-profile small { color: var(--edge-text-muted); font-size: .72rem; }
+#edge-product-menu-dropdown .vetedge-product-menu-product { color: var(--edge-primary); font-size: .72rem; font-weight: 700; }
+#edge-product-menu-dropdown .vetedge-product-menu-active { background: #e8f2ff; color: var(--edge-primary); font-weight: 600; }
+@media (max-width: 576px) { #edge-product-menu-dropdown { max-width: calc(100vw - 16px); max-height: calc(100vh - 72px); overflow-y: auto; } }
+/* VetEdge-owned Product Menu fallback when the optional CoreEdge EdgeUI runtime is unavailable. */
+.vetedge-product-menu-trigger { display: inline-grid; place-items: center; width: 34px; height: 34px; margin: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--edge-text, #1e293b); font-size: 22px; line-height: 1; cursor: pointer; z-index: 1031; }
+.vetedge-product-menu-trigger:hover, .vetedge-product-menu-trigger:focus-visible { background: var(--edge-bg, #f7f9fc); color: var(--edge-primary, #1677ff); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: 2px; }
+.vetedge-product-menu-panel { position: fixed; top: 56px; right: 14px; z-index: 1055; width: min(440px, calc(100vw - 20px)); max-height: calc(100vh - 72px); overflow: hidden; background: #fff; border: 1px solid var(--edge-border, #dfe5ef); border-radius: 10px; box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }
+.vetedge-product-menu-panel[hidden] { display: none !important; }
+.vetedge-product-menu-scroll { max-height: calc(100vh - 158px); overflow-y: auto; padding: 10px 12px 16px; }
+.vetedge-product-menu-section { margin: 10px 0 16px; }
+.vetedge-product-menu-section h3 { margin: 0 0 6px; padding: 0 6px; color: var(--edge-text-muted, #667085); font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.vetedge-product-menu-link { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; width: 100%; min-height: 38px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--edge-text, #1e293b); text-align: left; cursor: pointer; }
+.vetedge-product-menu-link:hover, .vetedge-product-menu-link:focus-visible { background: var(--edge-bg, #f7f9fc); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: -2px; }
+.vetedge-product-menu-link-icon { overflow: hidden; color: var(--edge-text-muted, #667085); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 576px) { .vetedge-product-menu-panel { top: 48px; right: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 56px); } }

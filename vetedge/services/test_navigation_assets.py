@@ -216,24 +216,24 @@ class TestNavigationAssets(TestCase):
 
 	def test_dashboard_shell_renders_chart_table_fallbacks(self):
 		source = (APP_ROOT / "public" / "js" / "dashboard_shell.js").read_text()
+		for expected in (
+			"renderChartTable", "chart.empty_state", "chart.rows", "chart.columns", "if (!ready)",
+			"VetEdge dashboard chart failed to render", "renderChartWhenReady", "element.isConnected",
+			"maxAttempts = 5", "clearChartInstances", "new frappe.Chart(element", "formatChartValue",
+			"formatTooltipY", "renderRevenueComposition(container, composition)",
+			"vetedge-revenue-composition-chart", "formatChartValue(card.value, card)",
+			"No revenue recorded for the selected period.",
+		):
+			self.assertIn(expected, source)
 
-		self.assertIn("renderChartTable", source)
-		self.assertIn("chart.empty_state", source)
-		self.assertIn("chart.rows", source)
-		self.assertIn("chart.columns", source)
-		self.assertIn("if (!ready)", source)
-		self.assertIn("VetEdge dashboard chart failed to render", source)
-		self.assertIn("renderChartWhenReady", source)
-		self.assertIn("element.isConnected", source)
-		self.assertIn("maxAttempts = 5", source)
-		self.assertIn("clearChartInstances", source)
-		self.assertIn("new frappe.Chart(element", source)
-		self.assertIn("formatChartValue", source)
-		self.assertIn("formatTooltipY", source)
-		self.assertIn("renderRevenueComposition(container, composition)", source)
-		self.assertIn("vetedge-revenue-composition-chart", source)
-		self.assertIn("formatChartValue(card.value, card)", source)
-		self.assertIn("No revenue recorded for the selected period.", source)
+	def test_vetedge_sidebar_visual_styles_remain_native_and_scoped(self):
+		styles = (APP_ROOT / "public" / "css" / "dashboard_shell.css").read_text()
+		for expected in (
+			'.body-sidebar[data-title="VetEdge"]', '.body-sidebar[data-title="Veterinary"]',
+			"a.section-break", ".active-sidebar", ":focus-visible", ".vetedge-product-menu-trigger",
+			".vetedge-product-menu-panel", "z-index: 1055",
+		):
+			self.assertIn(expected, styles)
 
 	def test_dashboard_shell_uses_semantic_card_types_and_shared_preset_guard(self):
 		shell = (APP_ROOT / "public" / "js" / "dashboard_shell.js").read_text()
