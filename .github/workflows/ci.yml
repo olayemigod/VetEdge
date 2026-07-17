@@ -1,0 +1,208 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Fast validation
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile Python
+        run: python -m compileall -q vetedge
+
+      - name: Ruff
+        run: |
+          ruff check \
+            vetedge/tests/test_edgesuite_ui_dependency_contract.py
+
+      - name: Validate EdgeSuite UI dependency contract
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_edgesuite_ui_dependency_contract.py
+
+  frontend:
+    name: Frontend validation
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Check Stock Expiry Monitor JavaScript
+        run: |
+          node --check \
+            vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
+
+          node --check \
+            vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
+
+  frappe-v16:
+    name: Frappe v16 standalone integration
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install bench prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev pkg-config redis-tools
+          python -m pip install --upgrade frappe-bench
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create clean Frappe v16 bench
+        run: |
+          bench init \
+            --frappe-branch version-16 \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            frappe-bench
+
+          cd frappe-bench
+
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Check out private EdgeSuite UI
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
+
+      - name: Fetch ERPNext, Payments, and local applications
+        working-directory: frappe-bench
+        run: |
+          bench get-app \
+            --branch version-16 \
+            --skip-assets \
+            https://github.com/frappe/erpnext.git
+
+          bench get-app \
+            --branch develop \
+            --skip-assets \
+            https://github.com/frappe/payments.git
+
+          bench get-app \
+            --skip-assets \
+            "$GITHUB_WORKSPACE/edgesuite-ui-source"
+
+          bench get-app \
+            --skip-assets \
+            "$GITHUB_WORKSPACE"
+
+      - name: Create standalone VetEdge site
+        working-directory: frappe-bench
+        run: |
+          bench new-site ci.localhost \
+            --db-host 127.0.0.1 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+
+          bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
+          bench --site ci.localhost install-app edgesuite_ui
+          bench --site ci.localhost install-app vetedge
+
+          bench --site ci.localhost set-config edge_platform_mode standalone
+          bench --site ci.localhost set-config coreedge_required 0
+
+      - name: Verify standalone application set
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost list-apps | tee /tmp/installed-apps.txt
+
+          grep -Eq '^frappe[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^erpnext[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^payments[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
+
+          if grep -Eq '^coreedge[[:space:]]' /tmp/installed-apps.txt; then
+            echo "CoreEdge must not be installed in the standalone VetEdge CI site."
+            exit 1
+          fi
+
+      - name: Build EdgeSuite UI and VetEdge assets
+        working-directory: frappe-bench
+        run: |
+          bench build --app edgesuite_ui
+          bench build --app vetedge
+          bench --site ci.localhost migrate
+
+      - name: Run standalone adapter tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_coreedge_adapter
+
+      - name: Run Stock Expiry Monitor tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_stock_expiry_monitor 
