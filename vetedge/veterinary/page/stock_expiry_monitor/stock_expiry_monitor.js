@@ -70,11 +70,11 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			return __('The standalone EdgeSuite UI runtime is unavailable.');
 		}
 
-		if (typeof runtime.createEdgeApp !== 'function') {
+		if (!runtime?.createEdgeApp) {
 			return __('EdgeSuite UI does not expose createEdgeApp.');
 		}
 
-		const components = runtime.components || runtime;
+		const components = runtime?.components || runtime;
 		const missing = requiredComponents.filter((name) => !components[name]);
 
 		if (missing.length) {

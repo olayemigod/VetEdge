@@ -7,6 +7,7 @@ export function mountVetedgeStockExpiryMonitor(target) {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
 
+	VetedgeStockExpiryMonitor.components = runtime.components;
 	const app = runtime.createEdgeApp(VetedgeStockExpiryMonitor);
 	app.mount(target);
 
