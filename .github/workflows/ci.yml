@@ -64,7 +64,7 @@ jobs:
 
   frappe-v16:
     name: Frappe v16 standalone integration
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
