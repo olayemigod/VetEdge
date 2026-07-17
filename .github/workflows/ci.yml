@@ -125,30 +125,14 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Verify private EdgeSuite UI access
-        env:
-          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
-        run: |
-          test -n "$EDGESUITE_UI_TOKEN" || {
-            echo "EDGESUITE_UI_TOKEN is missing"
-            exit 1
-          }
+      - name: Check out private EdgeSuite UI
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
 
-          git ls-remote \
-            "https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/olayemigod/processedge-edge-suite-ui.git" \
-            HEAD >/dev/null
-
-          echo "Private EdgeSuite UI repository access verified."
-
-      - name: Configure private EdgeSuite UI access
-        env:
-          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/".insteadOf \
-            "https://github.com/"
-
-      - name: Fetch ERPNext, EdgeSuite UI, and VetEdge
+      - name: Fetch ERPNext and install local applications
         working-directory: frappe-bench
         run: |
           bench get-app \
@@ -158,7 +142,7 @@ jobs:
 
           bench get-app \
             --skip-assets \
-            https://github.com/olayemigod/processedge-edge-suite-ui.git
+            "$GITHUB_WORKSPACE/edgesuite-ui-source"
 
           bench get-app \
             --skip-assets \
