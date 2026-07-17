@@ -33,21 +33,46 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			.appendTo(page.body);
 	};
 
-	frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+	frappe.require('edgeui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visit_id) return;
 
-		$loading.remove();
+		const runtime = window.EdgeSuiteUI || window.EdgeUI;
+		const required = [
+			'EdgeAppShell',
+			'EdgePageLayout',
+			'EdgePageHeader',
+			'EdgeFilterBar',
+			'EdgeStatCard',
+			'EdgeStatusBadge',
+			'EdgeLoadingState',
+			'EdgeEmptyState',
+			'EdgeErrorState',
+			'EdgeNotificationBell',
+			'EdgeNotificationDrawer'
+		];
+		const missing = required.filter((name) => !runtime?.components?.[name]);
 
-		if (!window.VetedgeStockExpiryMonitor || !window.mountVetedgeStockExpiryMonitor) {
-			showLoadFailure(__('Failed to load Stock Expiry Monitor bundle.'));
+		if (!runtime?.createEdgeApp || missing.length) {
+			showLoadFailure(__('EdgeSuite UI runtime is unavailable or incomplete. Missing: ') + (missing.join(', ') || 'createEdgeApp'));
 			return;
 		}
 
-		try {
-			const root = $('<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-			wrapper.vue_app = window.mountVetedgeStockExpiryMonitor(root[0]);
-		} catch (e) {
-			showLoadFailure(__('Error mounting Stock Expiry Monitor: ') + e.message);
-		}
+		frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+			if (wrapper.current_visit_id !== visit_id) return;
+
+			$loading.remove();
+
+			if (!window.VetedgeStockExpiryMonitor || !window.mountVetedgeStockExpiryMonitor) {
+				showLoadFailure(__('Failed to load Stock Expiry Monitor bundle.'));
+				return;
+			}
+
+			try {
+				const root = $('<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+				wrapper.vue_app = window.mountVetedgeStockExpiryMonitor(root[0]);
+			} catch (e) {
+				showLoadFailure(__('Error mounting Stock Expiry Monitor: ') + e.message);
+			}
+		});
 	});
 };
