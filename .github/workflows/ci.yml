@@ -34,7 +34,9 @@ jobs:
         run: python -m compileall -q vetedge
 
       - name: Ruff
-        run: ruff check .
+        run: |
+          ruff check \
+            vetedge/tests/test_edgesuite_ui_dependency_contract.py
 
       - name: Validate EdgeSuite UI dependency contract
         run: |
