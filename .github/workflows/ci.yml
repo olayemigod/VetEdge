@@ -125,12 +125,7 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Configure private EdgeSuite UI access
-        run: |
-          git config --global \
-            url."https://x-access-token:${{ secrets.EDGESUITE_UI_TOKEN }}@github.com/".insteadOf \
-            "https://github.com/"
-            - name: Configure private EdgeSuite UI access
+      - name: Verify private EdgeSuite UI access
         env:
           EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
         run: |
@@ -139,19 +134,20 @@ jobs:
             exit 1
           }
 
-          git config --global \
-            url."https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/".insteadOf \
-            "https://github.com/"
-
-      - name: Verify private EdgeSuite UI access
-        env:
-          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
-        run: |
           git ls-remote \
             "https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/olayemigod/processedge-edge-suite-ui.git" \
             HEAD >/dev/null
 
           echo "Private EdgeSuite UI repository access verified."
+
+      - name: Configure private EdgeSuite UI access
+        env:
+          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
       - name: Fetch ERPNext, EdgeSuite UI, and VetEdge
         working-directory: frappe-bench
         run: |
@@ -218,4 +214,4 @@ jobs:
         run: |
           bench --site ci.localhost run-tests \
             --app vetedge \
-            --module vetedge.tests.test_vetedge_stock_expiry_monitor
+            --module vetedge.tests.test_vetedge_stock_expiry_monitor 
