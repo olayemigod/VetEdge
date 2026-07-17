@@ -19,7 +19,7 @@
     product="vetedge"
     :menuItems="menuItems"
     activeRoute="/app/stock-expiry-monitor"
-    title="VetEdge"
+    title="Veterinary"
     :tenantName="tenantName"
     :branchName="branchName"
     :userName="userName"
@@ -663,7 +663,7 @@ export default {
       // Populate user info from frappe.boot if present
       if (frappe.boot) {
         this.userName = frappe.boot.user_info?.[frappe.session.user]?.fullname || frappe.session.user;
-        this.tenantName = frappe.boot.sysdefaults?.company || 'VetEdge';
+        this.tenantName = frappe.boot.sysdefaults?.company || 'Veterinary';
         this.branchName = frappe.boot.user_info?.[frappe.session.user]?.branch || '';
       }
 
