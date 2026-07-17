@@ -130,7 +130,28 @@ jobs:
           git config --global \
             url."https://x-access-token:${{ secrets.EDGESUITE_UI_TOKEN }}@github.com/".insteadOf \
             "https://github.com/"
+            - name: Configure private EdgeSuite UI access
+        env:
+          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
+        run: |
+          test -n "$EDGESUITE_UI_TOKEN" || {
+            echo "EDGESUITE_UI_TOKEN is missing"
+            exit 1
+          }
 
+          git config --global \
+            url."https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
+      - name: Verify private EdgeSuite UI access
+        env:
+          EDGESUITE_UI_TOKEN: ${{ secrets.EDGESUITE_UI_TOKEN }}
+        run: |
+          git ls-remote \
+            "https://x-access-token:${EDGESUITE_UI_TOKEN}@github.com/olayemigod/processedge-edge-suite-ui.git" \
+            HEAD >/dev/null
+
+          echo "Private EdgeSuite UI repository access verified."
       - name: Fetch ERPNext, EdgeSuite UI, and VetEdge
         working-directory: frappe-bench
         run: |
