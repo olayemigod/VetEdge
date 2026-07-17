@@ -132,13 +132,18 @@ jobs:
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
-      - name: Fetch ERPNext and install local applications
+      - name: Fetch ERPNext, Payments, and local applications
         working-directory: frappe-bench
         run: |
           bench get-app \
             --branch version-16 \
             --skip-assets \
             https://github.com/frappe/erpnext.git
+
+          bench get-app \
+            --branch develop \
+            --skip-assets \
+            https://github.com/frappe/payments.git
 
           bench get-app \
             --skip-assets \
@@ -158,6 +163,7 @@ jobs:
             --no-mariadb-socket
 
           bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
           bench --site ci.localhost install-app edgesuite_ui
           bench --site ci.localhost install-app vetedge
 
@@ -171,6 +177,7 @@ jobs:
 
           grep -Eq '^frappe[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^erpnext[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^payments[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
 
