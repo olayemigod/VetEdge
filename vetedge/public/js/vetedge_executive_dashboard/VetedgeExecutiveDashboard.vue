@@ -425,7 +425,8 @@ export default {
 .vetedge-executive-dashboard-root .edge-app-shell,
 .vetedge-executive-dashboard-root .edge-shell-body,
 .vetedge-executive-dashboard-root .edge-shell-main,
-.vetedge-executive-dashboard-root .edge-page-layout {
+.vetedge-executive-dashboard-root .edge-page-layout,
+.vetedge-executive-dashboard-root .edge-page-layout-body {
 	width: 100%;
 	max-width: none;
 	min-width: 0;
