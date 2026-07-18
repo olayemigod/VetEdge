@@ -18,6 +18,9 @@ COMPONENT = (
 	/ "VetedgeExecutiveDashboard.vue"
 )
 PRODUCT_MENU = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "edgesuite_product_menu.js"
+SHARED_SHELL = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_shell" / "VetedgeEdgeSuiteShell.vue"
+SHELL_STYLES = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "dashboard_shell.css"
+BADGE_STYLES = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "veterinary_unread_badge.css"
 STOCK_COMPONENT = (
 	REPOSITORY_ROOT
 	/ "vetedge"
@@ -38,7 +41,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		config = json.loads(self.read(PAGE_CONFIG))
 		self.assertEqual(config["name"], "vetedge-executive-dashboard")
 		self.assertEqual(config["module"], "Veterinary")
-		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU, SERVER_API):
+		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU, SHARED_SHELL, SERVER_API):
 			self.assertTrue(path.exists(), path)
 
 	def test_loader_uses_complete_standalone_runtime_contract(self):
@@ -63,27 +66,26 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 	def test_bundle_mounts_component_through_edgesuite_ui(self):
 		content = self.read(BUNDLE)
 		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", content)
-		self.assertIn("VetedgeExecutiveDashboard.components = runtime.components", content)
+		self.assertIn("VetedgeExecutiveDashboard.components = { ...runtime.components, VetedgeEdgeSuiteShell }", content)
+		self.assertIn("import VetedgeEdgeSuiteShell", content)
 		self.assertIn("runtime.createEdgeApp(VetedgeExecutiveDashboard)", content)
 		self.assertNotIn("import { createApp } from 'vue'", content)
 		self.assertNotIn("coreedge", content.lower())
 
 	def test_product_menu_and_notification_actions_are_present(self):
 		component = self.read(COMPONENT)
+		shell = self.read(SHARED_SHELL)
 		product_menu = self.read(PRODUCT_MENU)
-		self.assertNotIn(':menuItems="menuItems"', component)
-		self.assertIn("window.VetedgeProductMenu?.mount?.()", component)
-		self.assertIn("EdgeNotificationBell", component)
-		self.assertIn("EdgeNotificationDrawer", component)
+		self.assertIn("VetedgeEdgeSuiteShell", component)
+		self.assertIn("EdgeNotificationBell", shell)
+		self.assertIn("EdgeNotificationDrawer", shell)
 		self.assertIn("notificationApi", component)
-		self.assertIn("window.VetedgeProductMenu", product_menu)
-		for public_method in ("mount,", "unmount,", "remount,"):
-			self.assertIn(public_method, product_menu)
-		self.assertIn('".page-head .page-actions"', product_menu)
-		self.assertIn('"header .navbar .navbar-right"', product_menu)
-		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
-		self.assertIn("<circle", product_menu)
-		self.assertIn("target.node.prepend(slot)", product_menu)
+		self.assertIn("vetedge-suite-waffle-icon", shell)
+		self.assertIn("wafflePoints", shell)
+		self.assertLess(shell.index("vetedge-suite-icon-button"), shell.index("vetedge-suite-context"))
+		for contract in ("setInlineMode", "getSections", "navigate"):
+			self.assertIn(contract, product_menu)
+		self.assertNotIn("frappe.realtime", product_menu)
 
 	def test_product_menu_is_global_idempotent_and_lifecycle_aware(self):
 		product_menu = self.read(PRODUCT_MENU)
@@ -111,21 +113,28 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 	def test_shared_shell_contract_is_present_on_both_reference_pages(self):
 		executive = self.read(COMPONENT)
 		stock = self.read(STOCK_COMPONENT)
+		shell = self.read(SHARED_SHELL)
 		for component in (executive, stock):
-			self.assertIn("EdgeAppShell", component)
+			self.assertIn("VetedgeEdgeSuiteShell", component)
 			self.assertNotIn(':menuItems="menuItems"', component)
-			self.assertIn("EdgeNotificationBell", component)
-			self.assertIn("EdgeNotificationDrawer", component)
-			self.assertIn('product="vetedge"', component)
-			self.assertIn('data-edge-product="vetedge"', component)
-			self.assertIn("window.VetedgeProductMenu", component)
-			self.assertIn("tenantName", component)
-			self.assertIn("branchName", component)
-			self.assertIn("userName", component)
-			self.assertIn("vetedge-notification-icon", component)
 			self.assertNotIn("coreedge/", component.lower())
-		self.assertIn("'All Branches'", stock)
-		self.assertIn("syncShellContext", stock)
+		for contract in (
+			"vetedge-suite-context-bar",
+			"vetedge-suite-context-leading",
+			"EdgeNotificationBell",
+			"EdgeNotificationDrawer",
+			"setInlineMode?.(true)",
+			"setInlineMode?.(false)",
+			"Dashboards",
+			"Veterinary Records",
+			"Clinical Operations",
+			"Billing & Payments",
+			"Inventory & Pharmacy",
+			"Reports",
+			"Setup",
+		):
+			self.assertIn(contract, shell)
+		self.assertNotIn("frappe.realtime", shell)
 
 	def test_no_internal_navigation_and_empty_menu_uses_full_width(self):
 		executive = self.read(COMPONENT)
@@ -167,7 +176,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 	def test_responsive_kpi_grid_and_edgesuite_controls_are_used(self):
 		content = self.read(COMPONENT)
 		for component in (
-			"EdgeAppShell",
+			"VetedgeEdgeSuiteShell",
 			"EdgePageLayout",
 			"EdgePageHeader",
 			"EdgeFilterBar",
@@ -187,6 +196,21 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("edge-input edge-control", content)
 		self.assertIn("edge-button edge-button--primary", content)
 
+	def test_fluid_shell_container_grid_and_chart_resize_contract(self):
+		component = self.read(COMPONENT)
+		styles = self.read(SHELL_STYLES)
+		for contract in ("ResizeObserver", "resizeObserver?.disconnect()", "requestAnimationFrame", "chart?.resize?.()"):
+			self.assertIn(contract, component)
+		self.assertNotIn("display: grid !important", component)
+		for contract in ("container-type: inline-size", "grid-template-columns: repeat(5", ":has(.vetedge-suite-shell)"):
+			self.assertIn(contract, styles)
+
+	def test_global_notification_badge_is_neutralized_for_edgesuite_pages(self):
+		styles = self.read(BADGE_STYLES)
+		self.assertIn("body:has(.vetedge-suite-shell)", styles)
+		self.assertIn("#veterinary-unread-bell-badge", styles)
+		self.assertIn("sidebar-collapsed", styles)
+
 	def test_existing_api_report_chart_and_currency_workflows_are_preserved(self):
 		content = self.read(COMPONENT)
 		self.assertIn("vetedge.services.reporting_logic_v4.get_dashboard_payload", content)
@@ -204,5 +228,5 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn('if key == "executive":', content)
 
 	def test_no_coreedge_frontend_dependency(self):
-		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU):
+		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU, SHARED_SHELL):
 			self.assertNotIn("coreedge/", self.read(path).lower())
