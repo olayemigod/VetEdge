@@ -346,3 +346,77 @@
 .vetedge-product-menu-link:hover, .vetedge-product-menu-link:focus-visible { background: var(--edge-bg, #f7f9fc); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: -2px; }
 .vetedge-product-menu-link-icon { overflow: hidden; color: var(--edge-text-muted, #667085); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 576px) { .vetedge-product-menu-panel { top: 48px; right: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 56px); } }
+/* Shared content-only EdgeSuite shell for VetEdge Desk pages. Frappe owns primary navigation. */
+.vetedge-executive-dashboard-root,
+.vetedge-expiry-monitor-root {
+	--edge-primary: #1677ff;
+	--edge-primary-soft: #e8f2ff;
+	--edge-success: #16a34a;
+	--edge-warning: #d97706;
+	--edge-danger: #dc2626;
+	--edge-text: #172033;
+	--edge-text-muted: #667085;
+	--edge-border: #dbe4f0;
+	--edge-bg: #f6f9fc;
+	--edge-surface: #fff;
+	background: linear-gradient(180deg, var(--edge-primary-soft) 0, #f8fbff 180px, var(--edge-bg) 420px);
+}
+.vetedge-executive-dashboard-root .edge-sidebar,
+.vetedge-executive-dashboard-root .edge-shell-sidebar,
+.vetedge-expiry-monitor-root .edge-sidebar,
+.vetedge-expiry-monitor-root .edge-shell-sidebar {
+	display: none !important;
+}
+.vetedge-executive-dashboard-root .edge-shell-body,
+.vetedge-executive-dashboard-root .edge-shell-main,
+.vetedge-executive-dashboard-root .edge-page-layout,
+.vetedge-expiry-monitor-root .edge-shell-body,
+.vetedge-expiry-monitor-root .edge-shell-main,
+.vetedge-expiry-monitor-root .edge-page-layout {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+.vetedge-executive-dashboard-root .edge-topbar,
+.vetedge-expiry-monitor-root .edge-topbar {
+	min-height: 52px;
+	padding: 8px 24px;
+	border-bottom: 1px solid var(--edge-border);
+	background: rgba(255, 255, 255, .94);
+}
+.vetedge-executive-dashboard-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout-body {
+	padding-left: 28px;
+	padding-right: 28px;
+}
+.vetedge-executive-dashboard-root .vetedge-notification-icon,
+.vetedge-expiry-monitor-root .vetedge-notification-icon {
+	display: inline-grid;
+	place-items: center;
+	font-size: 1rem;
+	line-height: 1;
+}
+@media (max-width: 900px) {
+	.vetedge-executive-dashboard-root .edge-topbar,
+	.vetedge-expiry-monitor-root .edge-topbar {
+		padding-left: 18px;
+		padding-right: 18px;
+	}
+	.vetedge-executive-dashboard-root .edge-page-layout__content,
+	.vetedge-expiry-monitor-root .edge-page-layout__content,
+	.vetedge-expiry-monitor-root .edge-page-layout-body {
+		padding-left: 18px;
+		padding-right: 18px;
+	}
+}
+@media (max-width: 576px) {
+	.vetedge-executive-dashboard-root .edge-topbar,
+	.vetedge-expiry-monitor-root .edge-topbar,
+	.vetedge-executive-dashboard-root .edge-page-layout__content,
+	.vetedge-expiry-monitor-root .edge-page-layout__content,
+	.vetedge-expiry-monitor-root .edge-page-layout-body {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+}
