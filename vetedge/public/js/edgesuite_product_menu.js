@@ -15,6 +15,8 @@
 		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor" },
 		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings" },
 	];
+	// Compatibility name retained for callers and regression coverage.
+	const configured_routes = FALLBACK_ROUTES;
 	const state = {
 		loaded: true,
 		lifecycleSubscriptions: [],
