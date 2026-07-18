@@ -97,14 +97,20 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			"vetedge-product-menu-section-links",
 			"Quick access",
 			"VetEdge workspace",
+			"function menuIcon(icon)",
+			"window.frappe?.utils?.icon?.(name, \"sm\")",
+			"vetedge-owned-mega-menu",
 		):
 			self.assertIn(contract, product_menu)
+		self.assertNotIn("runtime.registerProductMenu", product_menu)
 		for contract in (
 			"Isolated Veterinary product mega menu",
 			"repeat(3, minmax(0, 1fr))",
 			"repeat(2, minmax(0, 1fr))",
 			"grid-template-columns: minmax(0, 1fr)",
 			".vetedge-product-menu-panel",
+			"never show raw icon identifiers",
+			".vetedge-product-menu-link-icon .icon",
 		):
 			self.assertIn(contract, styles)
 		self.assertNotIn("vetedge-executive-dashboard-root", product_menu)
