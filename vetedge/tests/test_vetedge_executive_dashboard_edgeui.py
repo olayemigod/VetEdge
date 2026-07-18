@@ -82,7 +82,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("notificationApi", component)
 		self.assertIn("vetedge-suite-waffle-icon", shell)
 		self.assertIn("wafflePoints", shell)
-		self.assertLess(shell.index("vetedge-suite-icon-button"), shell.index("vetedge-suite-context"))
+		self.assertLess(shell.index("vetedge-suite-icon-button"), shell.index('<div class="vetedge-suite-context"'))
 		for contract in ("setInlineMode", "getSections", "navigate"):
 			self.assertIn(contract, product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
