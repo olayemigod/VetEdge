@@ -60,6 +60,9 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(required, content)
 		self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_executive_dashboard.bundle.js"))
 		self.assertNotIn("dashboard_shell.js", content)
+		self.assertIn("createAssetFailureTrace", content)
+		self.assertIn("execution failed before loader fallback", content)
+		self.assertIn("dashboardBundleTrace.error", content)
 		self.assertNotIn("coreedge", content.lower())
 
 	def test_bundle_mounts_component_through_edgesuite_ui(self):
