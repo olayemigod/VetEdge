@@ -110,7 +110,11 @@
 						<div><span>Overview</span><h2>Executive Summary</h2></div>
 						<small>{{ activePeriodLabel }}</small>
 					</div>
-					<EdgeDashboardLayout class="vetedge-executive-kpi-grid" minColumnWidth="11rem">
+					<EdgeDashboardLayout
+						class="vetedge-executive-kpi-grid"
+						data-testid="vetedge-executive-kpi-grid"
+						minColumnWidth="11rem"
+					>
 						<EdgeStatCard
 							v-for="(card, index) in payload.kpis"
 							:key="card.id || card.label || card.title"
@@ -119,6 +123,7 @@
 							:helper="card.secondary_value || ''"
 							:tone="cardTone(index)"
 							:tooltip="card.tooltip || ''"
+							data-testid="vetedge-executive-kpi-card"
 						/>
 					</EdgeDashboardLayout>
 				</section>
@@ -336,8 +341,16 @@ export default {
 			return Boolean(chart.data?.labels?.length && chart.data?.datasets?.some((dataset) => dataset.values?.length));
 		},
 		destroyCharts() {
-			this.chartInstances.forEach((chart) => chart?.destroy?.());
+			const charts = this.chartInstances;
 			this.chartInstances = [];
+			charts.forEach((chart) => {
+				try {
+					chart?.destroy?.();
+				} catch (error) {
+					// A route remount can remove a chart target before its ResizeObserver cleans up.
+					console.warn('Executive Dashboard chart cleanup failed', error);
+				}
+			});
 		},
 		renderCharts() {
 			this.destroyCharts();
@@ -345,7 +358,7 @@ export default {
 			(this.payload.charts || []).forEach((chart, index) => {
 				if (!this.chartHasSeries(chart)) return;
 				const target = document.getElementById(`vetedge-executive-chart-${index}`);
-				if (!target) return;
+				if (!target?.isConnected) return;
 				try {
 					const instance = new frappe.Chart(target, {
 						title: '',

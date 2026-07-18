@@ -2,7 +2,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "vue": ["../edgesuite_ui/edgesuite_ui/public/js/edgeui/vue-bridge.js"]
+      "vue": [
+        "vetedge/public/js/edgesuite_vue_bridge.js"
+      ]
     }
   }
 }

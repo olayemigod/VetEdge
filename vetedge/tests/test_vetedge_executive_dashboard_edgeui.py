@@ -232,6 +232,31 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		for contract in ("filters.branch", "date_preset", "from_date", "to_date", "frappe.route_options"):
 			self.assertIn(contract, content)
 
+	def test_kpi_cards_have_runtime_registration_and_browser_render_contract(self):
+		loader = self.read(LOADER)
+		component = self.read(COMPONENT)
+		bundle = self.read(BUNDLE)
+
+		self.assertIn('dashboard.components = Object.assign({}, runtime.components, dashboard.components || {})', loader)
+		self.assertNotIn('wrapper.vue_app.component(name, component);', loader)
+		self.assertIn('VetedgeExecutiveDashboard.components = runtime.components', bundle)
+		bridge = self.read(REPOSITORY_ROOT / 'vetedge' / 'public' / 'js' / 'edgesuite_vue_bridge.js')
+		self.assertIn('const runtime = window.EdgeSuiteUI || window.EdgeUI;', bridge)
+		self.assertIn('export const resolveComponent', bridge)
+		self.assertIn('export const Fragment = getVue().Fragment;', bridge)
+		self.assertIn('v-for="(card, index) in payload.kpis"', component)
+		self.assertIn('data-testid="vetedge-executive-kpi-card"', component)
+		self.assertIn('data-testid="vetedge-executive-kpi-grid"', component)
+		# Browser smoke assertion: document.querySelectorAll('[data-testid="vetedge-executive-kpi-card"]').length > 0.
+		self.assertIn('EdgeStatCard', component)
+
+	def test_chart_cleanup_tolerates_route_remount_before_resize_observer_cleanup(self):
+		component = self.read(COMPONENT)
+		self.assertIn("const charts = this.chartInstances", component)
+		self.assertIn("chart?.destroy?.()", component)
+		self.assertIn("Executive Dashboard chart cleanup failed", component)
+		self.assertIn("if (!target?.isConnected) return;", component)
+
 	def test_responsive_kpi_grid_and_edgesuite_controls_are_used(self):
 		content = self.read(COMPONENT)
 		for component in (

@@ -105,7 +105,10 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 				$loading.remove();
 				const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
 					.appendTo(page.body);
-				wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
+				const dashboard = window.VetedgeExecutiveDashboard;
+				// Keep the product bundle and direct page mount on the same component contract.
+				dashboard.components = Object.assign({}, runtime.components, dashboard.components || {});
+				wrapper.vue_app = runtime.createEdgeApp(dashboard);
 				wrapper.vue_app.mount(root[0]);
 			} catch (error) {
 				console.error('Error mounting Executive Dashboard:', error);
