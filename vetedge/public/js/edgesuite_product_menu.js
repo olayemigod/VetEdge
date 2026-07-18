@@ -1,11 +1,10 @@
-// VetEdge Product Menu: canonical Workspace Sidebar rendered through EdgeSuite UI or a safe Desk fallback.
+// VetEdge Product Menu: cross-product navigation for the Frappe v16 Desk navbar.
 (function () {
 	"use strict";
 
 	if (typeof window === "undefined") return;
 
 	const PRODUCT = "VetEdge";
-	const EDGE_TRIGGER = "edge-product-menu-trigger";
 	const FALLBACK_SLOT = "vetedge-product-menu-slot";
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
@@ -14,13 +13,38 @@
 		".navbar .navbar-right",
 		"header .navbar .navbar-nav.ms-auto",
 		"header .navbar .navbar-nav.ml-auto",
-		"header .navbar .navbar-nav",
+		"header .navbar .navbar-collapse .navbar-nav",
+		"header .navbar .navbar-collapse",
+		"header .navbar .container",
 	];
 	const LIFECYCLE_EVENTS = ["toolbar_setup", "page-change", "desktop_screen", "sidebar_setup"];
+	const FALLBACK_ROUTES = [
+		{ label: "Executive Dashboard", icon: "dashboard", link_type: "Page", link_to: "vetedge-executive-dashboard" },
+		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor" },
+		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings" },
+	];
+	const state = {
+		loaded: true,
+		lifecycleSubscriptions: [],
+		observerActive: false,
+		lastMountResult: null,
+		lastTarget: null,
+	};
 	let fallbackEventsBound = false;
 	let lifecycleEventsBound = false;
 	let observer;
 	let scheduledMount;
+
+	function debugEnabled() {
+		return Boolean(
+			window.frappe?.boot?.developer_mode ||
+			window.localStorage?.getItem("vetedge_product_menu_debug") === "1"
+		);
+	}
+
+	function debug(event, detail) {
+		if (debugEnabled()) console.debug("[VetedgeProductMenu]", event, detail || "");
+	}
 
 	function canonicalSidebar() {
 		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
@@ -34,9 +58,6 @@
 			link_type: item.link_type,
 			link_to: item.link_to,
 			route: item.route || "",
-			display_depends_on: item.display_depends_on || "",
-			roles: item.roles || [],
-			feature_key: item.feature_key || "",
 			visible: item.hidden !== 1,
 		};
 	}
@@ -46,19 +67,16 @@
 		let section;
 		((canonicalSidebar() || {}).items || []).forEach((item) => {
 			if (item.type === "Section Break") {
-				section = {
-					label: item.label,
-					icon: item.icon || "",
-					collapsible: Boolean(item.collapsible),
-					keep_closed: Boolean(item.keep_closed),
-					items: [],
-				};
+				section = { label: item.label, icon: item.icon || "", items: [] };
 				sections.push(section);
-			} else if (item.type === "Link" && section) {
+			} else if (item.type === "Link" && section && item.hidden !== 1) {
 				section.items.push(normalizeItem(item));
 			}
 		});
-		return sections.filter((item) => item.items.length);
+		const populated = sections.filter((item) => item.items.length);
+		return populated.length
+			? populated
+			: [{ label: "Veterinary", icon: "apps", items: FALLBACK_ROUTES.map(normalizeItem) }];
 	}
 
 	function profile() {
@@ -68,7 +86,7 @@
 			name: boot.user?.full_name || boot.user?.name || user || "Veterinary User",
 			email: user,
 			company: boot.sysdefaults?.company || "",
-			branch: boot.edgesuite_product_menu?.branch || "",
+			branch: boot.edgesuite_product_menu?.branch || "All Branches",
 		};
 	}
 
@@ -84,20 +102,36 @@
 
 	function html(value) {
 		return String(value || "").replace(/[&<>"']/g, (character) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			'"': "&quot;",
-			"'": "&#39;",
+			"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 		})[character]);
 	}
 
+	function inspectTargets() {
+		return NAVBAR_TARGET_SELECTORS.map((selector) => {
+			const nodes = Array.from(document.querySelectorAll(selector));
+			return {
+				selector,
+				count: nodes.length,
+				connected: nodes.filter((node) => node.isConnected).length,
+				visible: nodes.filter((node) => {
+					if (!node.isConnected) return false;
+					const style = window.getComputedStyle?.(node);
+					return style?.display !== "none" && style?.visibility !== "hidden";
+				}).length,
+			};
+		});
+	}
+
 	function findNavbarTarget() {
-		for (const selector of NAVBAR_TARGET_SELECTORS) {
-			const candidates = Array.from(document.querySelectorAll(selector));
-			const connected = candidates.find((node) => node.isConnected);
-			if (connected) return { node: connected, selector };
+		for (const target of inspectTargets()) {
+			if (!target.connected) continue;
+			const node = Array.from(document.querySelectorAll(target.selector)).find((candidate) => candidate.isConnected);
+			if (node) {
+				state.lastTarget = { selector: target.selector, visible: target.visible > 0 };
+				return { node, selector: target.selector, visible: target.visible > 0 };
+			}
 		}
+		state.lastTarget = null;
 		return null;
 	}
 
@@ -112,18 +146,10 @@
 		const panel = document.getElementById(FALLBACK_PANEL);
 		if (!panel) return;
 		const identity = profile();
-		const initials = identity.name
-			.split(/\s+/)
-			.filter(Boolean)
-			.slice(0, 2)
-			.map((part) => part[0])
-			.join("")
-			.toUpperCase() || "V";
+		const initials = identity.name.split(/\s+/).filter(Boolean).slice(0, 2)
+			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
-		const menuContent = sections.length
-			? sections.map((section) => `<section class="vetedge-product-menu-section"><h3>${html(section.label)}</h3>${section.items.map((item) => `<button type="button" class="vetedge-product-menu-link ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon">${html(item.icon)}</span><span>${html(item.label)}</span></button>`).join("")}</section>`).join("")
-			: '<div class="vetedge-product-menu-empty">Veterinary navigation is loading…</div>';
-		panel.innerHTML = `<div class="vetedge-product-menu-profile"><span class="vetedge-product-menu-avatar">${html(initials)}</span><div><strong>${html(identity.name)}</strong><small>${html(identity.email)}</small>${identity.company ? `<small>${html(identity.company)}${identity.branch ? ` · ${html(identity.branch)}` : ""}</small>` : ""}</div><span class="vetedge-product-menu-product">Veterinary</span></div><div class="vetedge-product-menu-scroll">${menuContent}</div>`;
+		panel.innerHTML = `<div class="vetedge-product-menu-profile"><span class="vetedge-product-menu-avatar">${html(initials)}</span><div><strong>${html(identity.name)}</strong><small>${html(identity.email)}</small><small>${html(identity.company)} · ${html(identity.branch)}</small></div><span class="vetedge-product-menu-product">Veterinary</span></div><div class="vetedge-product-menu-scroll">${sections.map((section) => `<section class="vetedge-product-menu-section"><h3>${html(section.label)}</h3>${section.items.map((item) => `<button type="button" class="vetedge-product-menu-link ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon">${html(item.icon)}</span><span>${html(item.label)}</span></button>`).join("")}</section>`).join("")}</div>`;
 	}
 
 	function closeFallback() {
@@ -138,12 +164,8 @@
 		const trigger = document.getElementById(FALLBACK_TRIGGER);
 		if (!panel || !trigger) return;
 		const open = panel.hidden;
-		if (open) {
-			renderFallback();
-			panel.hidden = false;
-		} else {
-			panel.hidden = true;
-		}
+		if (open) renderFallback();
+		panel.hidden = !open;
 		trigger.setAttribute("aria-expanded", String(open));
 	}
 
@@ -153,23 +175,30 @@
 		});
 	}
 
+	function result(mounted, reason, selector, extra = {}) {
+		const value = { mounted, selector: selector || null, reason, ...extra };
+		state.lastMountResult = value;
+		debug("mount-result", value);
+		return value;
+	}
+
 	function mountFallback() {
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
-			return { mounted: true, existing: true, reason: "already-mounted" };
+			return result(true, "already-mounted", existing.closest(FALLBACK_SLOT)?.parentElement?.matches(".navbar-right") ? ".navbar-right" : state.lastTarget?.selector);
 		}
 		existing?.remove();
 		document.getElementById(FALLBACK_SLOT)?.remove();
 		document.getElementById(FALLBACK_PANEL)?.remove();
 
 		const target = findNavbarTarget();
-		if (!target) return { mounted: false, reason: "navbar-not-ready" };
+		debug("targets-checked", inspectTargets());
+		if (!target) return result(false, "no-navbar-target", null);
 
 		const slot = document.createElement(target.node.tagName === "UL" ? "li" : "div");
 		slot.id = FALLBACK_SLOT;
 		slot.className = "vetedge-product-menu-slot";
-
 		const trigger = document.createElement("button");
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
@@ -188,11 +217,7 @@
 		panel.setAttribute("role", "dialog");
 		panel.setAttribute("aria-label", "VetEdge product menu");
 		document.body.appendChild(panel);
-
-		trigger.addEventListener("click", (event) => {
-			event.stopPropagation();
-			toggleFallback();
-		});
+		trigger.addEventListener("click", (event) => { event.stopPropagation(); toggleFallback(); });
 		panel.addEventListener("click", (event) => {
 			const link = event.target.closest(".vetedge-product-menu-link");
 			if (!link) return;
@@ -205,44 +230,39 @@
 			document.addEventListener("click", (event) => {
 				const currentPanel = document.getElementById(FALLBACK_PANEL);
 				const currentTrigger = document.getElementById(FALLBACK_TRIGGER);
-				if (
-					currentPanel &&
-					currentTrigger &&
-					!currentPanel.hidden &&
-					!currentPanel.contains(event.target) &&
-					!currentTrigger.contains(event.target)
-				) closeFallback();
+				if (currentPanel && currentTrigger && !currentPanel.hidden &&
+					!currentPanel.contains(event.target) && !currentTrigger.contains(event.target)) closeFallback();
 			});
 			document.addEventListener("keydown", (event) => {
 				if (event.key === "Escape") {
 					closeFallback();
-					window.EdgeSuiteUI?.closeProductMenu?.();
-					window.EdgeUI?.closeProductMenu?.();
+					(window.EdgeSuiteUI || window.EdgeUI)?.closeProductMenu?.();
 				}
 			});
 		}
-
 		removeDuplicates(FALLBACK_TRIGGER, trigger);
-		return { mounted: true, existing: false, reason: "mounted", selector: target.selector };
+		debug("node-inserted", { selector: target.selector, visible: target.visible });
+		return result(true, "inserted", target.selector, { targetVisible: target.visible });
 	}
 
 	function registerEdgeUI() {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
-		if (!runtime?.registerProductMenu) return { registered: false, reason: "runtime-adapter-unavailable" };
+		if (!runtime?.registerProductMenu) return { registered: false, reason: "adapter-unavailable" };
 		runtime.registerProductMenu({
 			product: PRODUCT,
 			sections: normalizeSections(),
 			profile: profile(),
-			menu_source: "workspace_sidebar",
+			menu_source: canonicalSidebar() ? "workspace_sidebar" : "configured_routes",
 		});
 		return { registered: true };
 	}
 
 	function mount() {
+		debug("mount-invoked");
 		const edge = registerEdgeUI();
-		const fallback = mountFallback();
-		if (!fallback.mounted) scheduleMount(fallback.reason, 150);
-		return { mounted: fallback.mounted, edge, fallback };
+		const mounted = mountFallback();
+		if (!mounted.mounted) scheduleMount(mounted.reason, 250);
+		return { ...mounted, edge };
 	}
 
 	function unmount() {
@@ -254,17 +274,22 @@
 	}
 
 	function remount(reason = "manual") {
+		debug("remount-invoked", reason);
 		unmount();
-		const result = mount();
-		return { ...result, reason };
+		const mounted = mount();
+		return { ...mounted, remountReason: reason };
 	}
 
 	function scheduleMount(reason = "lifecycle", delay = 0) {
 		window.clearTimeout(scheduledMount);
 		scheduledMount = window.setTimeout(() => {
 			const trigger = document.getElementById(FALLBACK_TRIGGER);
-			if (!trigger?.isConnected) mount();
-			else renderFallback();
+			if (!trigger?.isConnected) {
+				debug("node-removed", reason);
+				mount();
+			} else {
+				renderFallback();
+			}
 		}, delay);
 		return { scheduled: true, reason };
 	}
@@ -275,18 +300,36 @@
 		LIFECYCLE_EVENTS.forEach((eventName) => {
 			if (window.jQuery) {
 				window.jQuery(document).on(`${eventName}.vetedge_product_menu`, () => scheduleMount(eventName));
+				state.lifecycleSubscriptions.push(`document:${eventName}`);
 			}
-			window.frappe?.events?.on?.(eventName, () => scheduleMount(eventName));
+			if (window.frappe?.events?.on) {
+				frappe.events.on(eventName, () => scheduleMount(eventName));
+				state.lifecycleSubscriptions.push(`frappe:${eventName}`);
+			}
 		});
-		window.frappe?.router?.on?.("change", () => scheduleMount("router-change"));
-
+		if (window.frappe?.router?.on) {
+			frappe.router.on("change", () => scheduleMount("router-change"));
+			state.lifecycleSubscriptions.push("router:change");
+		}
 		if (window.MutationObserver && document.body) {
 			observer = new MutationObserver(() => {
-				const trigger = document.getElementById(FALLBACK_TRIGGER);
-				if (!trigger?.isConnected) scheduleMount("navbar-mutation", 50);
+				if (!document.getElementById(FALLBACK_TRIGGER)?.isConnected) scheduleMount("navbar-mutation", 75);
 			});
 			observer.observe(document.body, { childList: true, subtree: true });
+			state.observerActive = true;
 		}
+	}
+
+	function diagnose() {
+		return {
+			loaded: state.loaded,
+			currentMenuNodeCount: document.querySelectorAll(`#${FALLBACK_TRIGGER}`).length,
+			selectedNavbarTarget: state.lastTarget,
+			targets: inspectTargets(),
+			lifecycleSubscriptions: state.lifecycleSubscriptions.slice(),
+			observerActive: state.observerActive,
+			lastMountResult: state.lastMountResult,
+		};
 	}
 
 	function initialize() {
@@ -299,6 +342,7 @@
 		unmount,
 		remount,
 		close: closeFallback,
+		diagnose,
 		selectors: NAVBAR_TARGET_SELECTORS.slice(),
 	});
 
