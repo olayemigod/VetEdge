@@ -500,9 +500,16 @@ export default {
   },
   mounted() {
     window.VetedgeProductMenu?.mount?.();
+    this.syncShellContext();
+    if (window.jQuery) {
+      window.jQuery(document).on('branch-change.vetedge_stock_shell session-defaults-changed.vetedge_stock_shell', this.syncShellContext);
+    }
     this.fetchMetadata();
     this.fetchData();
     this.fetchNotifications();
+  },
+  beforeUnmount() {
+    if (window.jQuery) window.jQuery(document).off('.vetedge_stock_shell');
   },
   computed: {
     filteredNotifications() {
@@ -519,6 +526,17 @@ export default {
     }
   },
   methods: {
+    syncShellContext() {
+      const boot = window.frappe?.boot || {};
+      const user = window.frappe?.session?.user || '';
+      this.userName = boot.user_info?.[user]?.fullname || user || 'Veterinary User';
+      this.tenantName = boot.sysdefaults?.company || 'Veterinary';
+      this.branchName =
+        boot.session_defaults?.branch ||
+        boot.edgesuite_product_menu?.branch ||
+        boot.user_info?.[user]?.branch ||
+        'All Branches';
+    },
     formatDate(dateStr) {
       if (!dateStr || typeof frappe === 'undefined') return dateStr;
       return frappe.datetime.str_to_user(dateStr);
