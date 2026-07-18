@@ -1,8 +1,3 @@
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "vue": ["../coreedge/coreedge/public/js/edgeui/vue-bridge.js"]
-    }
-  }
+  "compilerOptions": {}
 }
