@@ -50,6 +50,9 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("unmount()", content)
 		self.assertIn("current_visit_id", content)
 		self.assertIn("Stock Expiry Monitor failed to load", content)
+		self.assertIn("createAssetFailureTrace", content)
+		self.assertIn("execution failed before loader fallback", content)
+		self.assertIn("stockBundleTrace.error", content)
 		self.assertNotIn("coreedge", content.lower())
 
 	def test_product_bundle_mounts_with_edgesuite_runtime(self):
