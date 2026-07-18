@@ -87,6 +87,30 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("<circle", product_menu)
 		self.assertIn("target.node.prepend(slot)", product_menu)
 
+	def test_product_menu_is_an_isolated_responsive_mega_menu(self):
+		product_menu = self.read(PRODUCT_MENU)
+		styles = self.read(DASHBOARD_STYLES)
+		for contract in (
+			"vetedge-product-menu-quick-access",
+			"vetedge-product-menu-quick-grid",
+			"vetedge-product-menu-grid",
+			"vetedge-product-menu-section-links",
+			"Quick access",
+			"VetEdge workspace",
+		):
+			self.assertIn(contract, product_menu)
+		for contract in (
+			"Isolated Veterinary product mega menu",
+			"repeat(3, minmax(0, 1fr))",
+			"repeat(2, minmax(0, 1fr))",
+			"grid-template-columns: minmax(0, 1fr)",
+			".vetedge-product-menu-panel",
+		):
+			self.assertIn(contract, styles)
+		self.assertNotIn("vetedge-executive-dashboard-root", product_menu)
+		self.assertNotIn("vetedge-expiry-monitor-root", product_menu)
+		self.assertNotIn("coreedge/", product_menu.lower())
+
 	def test_product_menu_is_global_idempotent_and_lifecycle_aware(self):
 		product_menu = self.read(PRODUCT_MENU)
 		hooks = self.read(HOOKS)
