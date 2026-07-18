@@ -462,7 +462,13 @@ export default {
 	box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
 .vetedge-notification-icon { display: inline-grid; place-items: center; font-size: 1rem; line-height: 1; }
-.vetedge-executive-dashboard-content { display: grid; gap: 22px; padding-top: 20px; }
+.vetedge-executive-dashboard-content {
+	display: grid;
+	gap: 22px;
+	padding-top: 20px;
+	container-type: inline-size;
+	container-name: vetedge-executive-content;
+}
 .vetedge-executive-section {
 	padding: 20px;
 	border: 1px solid var(--edge-border);
@@ -480,6 +486,31 @@ export default {
 	gap: 14px;
 }
 .vetedge-executive-kpi-grid .edge-stat-card { min-width: 0; border-top: 3px solid var(--edge-primary); }
+@container vetedge-executive-content (min-width: 1180px) {
+	.vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+	}
+}
+@container vetedge-executive-content (min-width: 900px) and (max-width: 1179px) {
+	.vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+	}
+}
+@container vetedge-executive-content (min-width: 640px) and (max-width: 899px) {
+	.vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+	}
+}
+@container vetedge-executive-content (min-width: 480px) and (max-width: 639px) {
+	.vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+}
+@container vetedge-executive-content (max-width: 479px) {
+	.vetedge-executive-kpi-grid {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+}
 .vetedge-executive-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .vetedge-executive-chart-card { min-width: 0; padding: 16px; border: 1px solid var(--edge-border); border-radius: 10px; background: #fff; }
 .vetedge-executive-chart-card h3 { margin: 0 0 10px; color: var(--edge-text); font-size: .95rem; }
