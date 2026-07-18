@@ -98,6 +98,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("currentMenuNodeCount", product_menu)
 		self.assertIn("FALLBACK_ROUTES", product_menu)
 		self.assertIn("configured_routes", product_menu)
+		self.assertIn("vetedge-product-menu-slot--floating", product_menu)
+		self.assertIn('"navbar-became-visible"', product_menu)
 		self.assertIn('result(true, "inserted"', product_menu)
 		self.assertIn('result(false, "no-navbar-target"', product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
