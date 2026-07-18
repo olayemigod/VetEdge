@@ -9,6 +9,9 @@
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
 	const NAVBAR_TARGET_SELECTORS = [
+		".page-head .page-actions",
+		".page-head-content .page-actions",
+		".page-actions",
 		"header .navbar .navbar-right",
 		".navbar .navbar-right",
 		"header .navbar .navbar-nav.ms-auto",
@@ -213,11 +216,11 @@
 		const trigger = document.createElement("button");
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
-		trigger.className = "vetedge-product-menu-trigger";
+		trigger.className = "btn btn-default icon-btn vetedge-product-menu-trigger";
 		trigger.setAttribute("aria-label", "Open product menu");
 		trigger.setAttribute("aria-haspopup", "dialog");
 		trigger.setAttribute("aria-expanded", "false");
-		trigger.innerHTML = '<span aria-hidden="true">▦</span>';
+		trigger.innerHTML = '<svg class="vetedge-product-menu-waffle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4" cy="4" r="1.6"></circle><circle cx="10" cy="4" r="1.6"></circle><circle cx="16" cy="4" r="1.6"></circle><circle cx="4" cy="10" r="1.6"></circle><circle cx="10" cy="10" r="1.6"></circle><circle cx="16" cy="10" r="1.6"></circle><circle cx="4" cy="16" r="1.6"></circle><circle cx="10" cy="16" r="1.6"></circle><circle cx="16" cy="16" r="1.6"></circle></svg>';
 		slot.appendChild(trigger);
 		target.node.prepend(slot);
 
