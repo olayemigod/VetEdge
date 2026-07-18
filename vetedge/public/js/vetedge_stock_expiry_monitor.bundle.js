@@ -1,3 +1,4 @@
+import VetedgeEdgeSuiteShell from './vetedge_shell/VetedgeEdgeSuiteShell.vue';
 import VetedgeStockExpiryMonitor from './vetedge_stock_expiry_monitor/VetedgeStockExpiryMonitor.vue';
 
 export function mountVetedgeStockExpiryMonitor(target) {
@@ -7,7 +8,7 @@ export function mountVetedgeStockExpiryMonitor(target) {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
 
-	VetedgeStockExpiryMonitor.components = runtime.components;
+	VetedgeStockExpiryMonitor.components = { ...runtime.components, VetedgeEdgeSuiteShell };
 	const app = runtime.createEdgeApp(VetedgeStockExpiryMonitor);
 	app.mount(target);
 
