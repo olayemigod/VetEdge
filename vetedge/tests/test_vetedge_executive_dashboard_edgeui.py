@@ -28,6 +28,8 @@ STOCK_COMPONENT = (
 )
 HOOKS = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 SERVER_API = REPOSITORY_ROOT / "vetedge" / "services" / "reporting_logic_v4.py"
+DASHBOARD_STYLES = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "dashboard_shell.css"
+UNREAD_BADGE_STYLES = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "veterinary_unread_badge.css"
 
 
 class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
@@ -202,6 +204,78 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("def get_dashboard_payload", content)
 		self.assertIn("normalize_dashboard_filters(key, filters)", content)
 		self.assertIn('if key == "executive":', content)
+
+
+	def test_phase_two_fluid_layout_preserves_page_content_and_runtime_contract(self):
+		executive = self.read(COMPONENT)
+		stock = self.read(STOCK_COMPONENT)
+		styles = self.read(DASHBOARD_STYLES)
+		badge_styles = self.read(UNREAD_BADGE_STYLES)
+
+		for required in (
+			"EdgeFilterBar",
+			"payload.kpis",
+			"EdgeStatCard",
+			"payload.charts",
+			"payload.report_links",
+			"EdgeNotificationBell",
+			"EdgeNotificationDrawer",
+		):
+			self.assertIn(required, executive)
+
+		for required in (
+			"Warehouse",
+			"Item Group",
+			"Expiry Window",
+			"Days Threshold",
+			"Item Code",
+			"Apply / Refresh",
+			"summary-stats-grid",
+			'v-for="row in rows"',
+			"pagination-footer",
+			"EdgeLoadingState",
+			"EdgeEmptyState",
+			"EdgeErrorState",
+			"EdgeNotificationBell",
+			"EdgeNotificationDrawer",
+		):
+			self.assertIn(required, stock)
+
+		for contract in (
+			"box-sizing: border-box",
+			"width: 100%",
+			"max-width: none",
+			"min-width: 0",
+			"flex: 1 1 auto",
+		):
+			self.assertIn(contract, styles)
+		self.assertNotIn("calc(100% -", styles)
+
+		for columns in (
+			"repeat(5, minmax(0, 1fr))",
+			"repeat(4, minmax(0, 1fr))",
+			"repeat(3, minmax(0, 1fr))",
+			"repeat(2, minmax(0, 1fr))",
+			"grid-template-columns: minmax(0, 1fr)",
+		):
+			self.assertIn(columns, styles)
+
+		self.assertIn(
+			".vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid",
+			styles,
+		)
+		self.assertIn("grid-auto-flow: row", styles)
+		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", styles)
+		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", styles)
+
+		self.assertIn(".layout-side-section.collapsed", badge_styles)
+		self.assertIn(".veterinary-unread-bell-badge-label", badge_styles)
+		self.assertIn("display: none", badge_styles)
+
+		for path in (LOADER, BUNDLE, COMPONENT, STOCK_COMPONENT):
+			source = self.read(path).lower()
+			self.assertNotIn("coreedge/", source)
+			self.assertIn("edgeui", source)
 
 	def test_no_coreedge_frontend_dependency(self):
 		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU):
