@@ -110,15 +110,22 @@
 		})[character]);
 	}
 
+	const MENU_ICON_GLYPHS = {
+		dashboard: "▦",
+		stock: "◫",
+		settings: "⚙",
+		report: "▤",
+		"file-text": "▤",
+		bell: "●",
+		list: "≡",
+		home: "⌂",
+		user: "●",
+	};
+
 	function menuIcon(icon) {
-		const name = String(icon || "list").replace(/^icon-/, "");
-		try {
-			const rendered = window.frappe?.utils?.icon?.(name, "sm");
-			if (rendered) return rendered;
-		} catch (error) {
-			debug("icon-render-failed", { name, message: error?.message || String(error) });
-		}
-		return '<span class="vetedge-product-menu-icon-fallback" aria-hidden="true">•</span>';
+		const name = String(icon || "list").replace(/^icon-/, "").toLowerCase();
+		const glyph = MENU_ICON_GLYPHS[name] || MENU_ICON_GLYPHS.list;
+		return `<span class="vetedge-product-menu-icon-glyph" aria-hidden="true">${glyph}</span>`;
 	}
 
 	function inspectTargets() {
