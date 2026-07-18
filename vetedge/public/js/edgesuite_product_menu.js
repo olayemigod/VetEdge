@@ -15,8 +15,11 @@
 		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor" },
 		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings" },
 	];
-	// Compatibility name retained for callers and regression coverage.
-	const configured_routes = FALLBACK_ROUTES;
+	// Frappe installations may not populate route configuration in boot. Keep this
+	// local alias defined in every case; never read an undeclared global identifier.
+	const configured_routes = Array.isArray(window.configured_routes)
+		? window.configured_routes
+		: [];
 	const state = {
 		loaded: true,
 		lifecycleSubscriptions: [],
@@ -69,9 +72,10 @@
 			}
 		});
 		const populated = sections.filter((item) => item.items.length);
+		const fallbackRoutes = configured_routes.length ? configured_routes : FALLBACK_ROUTES;
 		return populated.length
 			? populated
-			: [{ label: "Veterinary", icon: "apps", items: FALLBACK_ROUTES.map(normalizeItem) }];
+			: [{ label: "Veterinary", icon: "apps", items: fallbackRoutes.map(normalizeItem) }];
 	}
 
 	function profile() {
@@ -161,7 +165,7 @@
 		const initials = identity.name.split(/\s+/).filter(Boolean).slice(0, 2)
 			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
-		const quickAccess = FALLBACK_ROUTES.slice(0, 2);
+		const quickAccess = (configured_routes.length ? configured_routes : FALLBACK_ROUTES).slice(0, 2);
 		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
 		panel.innerHTML = `
 			<div class="vetedge-product-menu-profile">
