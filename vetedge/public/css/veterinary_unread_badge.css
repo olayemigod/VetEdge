@@ -170,3 +170,9 @@ body.sidebar-collapsed #veterinary-unread-bell-badge {
 body.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label {
 	display: none;
 }
+
+
+/* EdgeSuite VetEdge pages provide their own bell and drawer. Avoid rendering a second legacy unread pill. */
+body:has([data-edge-product="vetedge"]) #veterinary-unread-bell-badge {
+	display: none !important;
+}
