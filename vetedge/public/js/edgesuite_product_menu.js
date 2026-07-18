@@ -1,13 +1,16 @@
-// VetEdge Product Menu: cross-product navigation for the Frappe v16 Desk navbar.
+// VetEdge Product Menu: consume the standalone EdgeSuite UI renderer first,
+// while retaining the restored VetEdge launcher as an emergency Desk fallback.
 (function () {
 	"use strict";
 
 	if (typeof window === "undefined") return;
 
 	const PRODUCT = "VetEdge";
+	const EDGE_TRIGGER = "edge-product-menu-trigger";
 	const FALLBACK_SLOT = "vetedge-product-menu-slot";
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
+	const MAX_RUNTIME_ATTEMPTS = 40;
 	const NAVBAR_TARGET_SELECTORS = [
 		".page-head .page-actions",
 		".page-head-content .page-actions",
@@ -26,18 +29,38 @@
 		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor" },
 		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings" },
 	];
+	// Compatibility name retained for the restored mega-menu contract. Values are
+	// Frappe icon aliases, not text glyphs, so raw icon identifiers never reach the UI.
+	const MENU_ICON_GLYPHS = {
+		dashboard: "dashboard",
+		chart: "chart",
+		stock: "stock",
+		settings: "settings",
+		report: "file-text",
+		"file-text": "file-text",
+		bell: "notification",
+		list: "list",
+		home: "home",
+		user: "user",
+	};
 	const state = {
 		loaded: true,
+		configured_routes: FALLBACK_ROUTES.map((item) => item.link_to),
 		lifecycleSubscriptions: [],
 		observerActive: false,
 		lastMountResult: null,
 		lastTarget: null,
 		lastError: null,
+		mode: null,
 	};
 	let fallbackEventsBound = false;
 	let lifecycleEventsBound = false;
 	let observer;
 	let scheduledMount;
+
+	function edgeRuntime() {
+		return window.EdgeSuiteUI || window.EdgeUI || null;
+	}
 
 	function debugEnabled() {
 		return Boolean(
@@ -62,6 +85,8 @@
 			link_type: item.link_type,
 			link_to: item.link_to,
 			route: item.route || "",
+			roles: item.roles || [],
+			feature_key: item.feature_key || "",
 			visible: item.hidden !== 1,
 		};
 	}
@@ -101,7 +126,7 @@
 	function isActive(item) {
 		const target = String(item.link_to || "").toLowerCase();
 		const route = currentRoute();
-		return Boolean(target) && (route === target || route.endsWith(`/${target}`));
+		return Boolean(target) && (route === target || route.endsWith(`/${target}`) || route.includes(`/${target}/`));
 	}
 
 	function html(value) {
@@ -110,22 +135,16 @@
 		})[character]);
 	}
 
-	const MENU_ICON_GLYPHS = {
-		dashboard: "▦",
-		stock: "◫",
-		settings: "⚙",
-		report: "▤",
-		"file-text": "▤",
-		bell: "●",
-		list: "≡",
-		home: "⌂",
-		user: "●",
-	};
-
 	function menuIcon(icon) {
-		const name = String(icon || "list").replace(/^icon-/, "").toLowerCase();
-		const glyph = MENU_ICON_GLYPHS[name] || MENU_ICON_GLYPHS.list;
-		return `<span class="vetedge-product-menu-icon-glyph" aria-hidden="true">${glyph}</span>`;
+		const requested = String(icon || "list").replace(/^icon-/, "").toLowerCase();
+		const name = MENU_ICON_GLYPHS[requested] || requested || MENU_ICON_GLYPHS.list;
+		try {
+			const svg = window.frappe?.utils?.icon?.(name, "sm");
+			if (svg) return `<span class="vetedge-product-menu-icon-glyph" aria-hidden="true">${svg}</span>`;
+		} catch (error) {
+			debug("icon-fallback", { name, message: error?.message });
+		}
+		return '<span class="vetedge-product-menu-icon-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="3" rx="1.5"></rect><rect x="4" y="10.5" width="16" height="3" rx="1.5"></rect><rect x="4" y="16" width="16" height="3" rx="1.5"></rect></svg></span>';
 	}
 
 	function inspectTargets() {
@@ -138,7 +157,8 @@
 				visible: nodes.filter((node) => {
 					if (!node.isConnected) return false;
 					const style = window.getComputedStyle?.(node);
-					return style?.display !== "none" && style?.visibility !== "hidden";
+					const box = node.getBoundingClientRect?.();
+					return style?.display !== "none" && style?.visibility !== "hidden" && box?.width > 0 && box?.height > 0;
 				}).length,
 			};
 		});
@@ -153,7 +173,8 @@
 					if (!candidate.isConnected) return false;
 					if (!requireVisible) return true;
 					const style = window.getComputedStyle?.(candidate);
-					return style?.display !== "none" && style?.visibility !== "hidden";
+					const box = candidate.getBoundingClientRect?.();
+					return style?.display !== "none" && style?.visibility !== "hidden" && box?.width > 0 && box?.height > 0;
 				});
 				if (node) {
 					state.lastTarget = { selector: target.selector, visible: target.visible > 0 };
@@ -167,7 +188,8 @@
 
 	function routeTo(item) {
 		if (!window.frappe?.set_route) return;
-		if (item.link_type === "Report") frappe.set_route("query-report", item.link_to);
+		if (item.route) frappe.set_route(...item.route.replace(/^\/+/, "").split("/").filter(Boolean));
+		else if (item.link_type === "Report") frappe.set_route("query-report", item.link_to);
 		else if (item.link_type === "DocType") frappe.set_route("List", item.link_to);
 		else frappe.set_route(item.link_to);
 	}
@@ -180,14 +202,11 @@
 			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
 		const quickAccess = FALLBACK_ROUTES.slice(0, 2);
-		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
+		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}" data-route="${html(item.route)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
 		panel.innerHTML = `
 			<div class="vetedge-product-menu-profile">
 				<span class="vetedge-product-menu-avatar">${html(initials)}</span>
-				<div>
-					<strong>${html(identity.name)}</strong>
-					<small>${html(identity.company || "Veterinary")} · ${html(identity.branch)}</small>
-				</div>
+				<div><strong>${html(identity.name)}</strong><small>${html(identity.company || "Veterinary")} · ${html(identity.branch)}</small></div>
 				<span class="vetedge-product-menu-product">Veterinary</span>
 			</div>
 			<div class="vetedge-product-menu-scroll">
@@ -222,6 +241,13 @@
 		});
 	}
 
+	function removeFallback() {
+		closeFallback();
+		document.getElementById(FALLBACK_SLOT)?.remove();
+		document.getElementById(FALLBACK_TRIGGER)?.remove();
+		document.getElementById(FALLBACK_PANEL)?.remove();
+	}
+
 	function result(mounted, reason, selector, extra = {}) {
 		const value = { mounted, selector: selector || null, reason, ...extra };
 		state.lastMountResult = value;
@@ -229,20 +255,37 @@
 		return value;
 	}
 
+	function registerEdgeUI() {
+		const edgeUI = edgeRuntime();
+		const sections = normalizeSections();
+		if (!edgeUI || typeof edgeUI.registerProductMenu !== "function" || !sections.length) {
+			return result(false, "shared-runtime-unavailable", null, { standaloneRuntime: Boolean(edgeUI) });
+		}
+		removeFallback();
+		edgeUI.registerProductMenu({
+			product: PRODUCT,
+			sections,
+			profile: profile(),
+			menu_source: "workspace_sidebar",
+		});
+		edgeUI.refreshProductMenu?.();
+		state.mode = "shared-edgeui";
+		return result(true, "shared-edgeui", `#${EDGE_TRIGGER}`);
+	}
+
 	function mountFallback() {
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
-			return result(true, "already-mounted", existing.closest(`#${FALLBACK_SLOT}`)?.parentElement?.matches(".navbar-right") ? ".navbar-right" : state.lastTarget?.selector);
+			state.mode = "vetedge-owned-mega-menu";
+			return result(true, "already-mounted", state.lastTarget?.selector);
 		}
 		existing?.remove();
 		document.getElementById(FALLBACK_SLOT)?.remove();
 		document.getElementById(FALLBACK_PANEL)?.remove();
 
 		const target = findNavbarTarget();
-		debug("targets-checked", inspectTargets());
 		if (!target) return result(false, "no-navbar-target", null);
-
 		const slot = document.createElement(target.node.tagName === "UL" ? "li" : "div");
 		slot.id = FALLBACK_SLOT;
 		slot.className = target.floating
@@ -270,10 +313,9 @@
 		panel.addEventListener("click", (event) => {
 			const link = event.target.closest(".vetedge-product-menu-link");
 			if (!link) return;
-			routeTo({ link_type: link.dataset.linkType, link_to: link.dataset.linkTo });
+			routeTo({ link_type: link.dataset.linkType, link_to: link.dataset.linkTo, route: link.dataset.route });
 			closeFallback();
 		});
-
 		if (!fallbackEventsBound) {
 			fallbackEventsBound = true;
 			document.addEventListener("click", (event) => {
@@ -285,65 +327,60 @@
 			document.addEventListener("keydown", (event) => {
 				if (event.key === "Escape") {
 					closeFallback();
-					(window.EdgeSuiteUI || window.EdgeUI)?.closeProductMenu?.();
+					edgeRuntime()?.closeProductMenu?.();
 				}
 			});
 		}
 		removeDuplicates(FALLBACK_TRIGGER, trigger);
-		debug("node-inserted", { selector: target.selector, visible: target.visible });
+		state.mode = "vetedge-owned-mega-menu";
 		return result(true, "inserted", target.selector, { targetVisible: target.visible });
 	}
 
-	function registerEdgeUI() {
-		const runtime = window.EdgeSuiteUI || window.EdgeUI;
-		// The standalone runtime may expose a generic menu adapter. VetEdge owns this
-		// launcher so the adapter cannot replace the branded, grouped local panel.
-		runtime?.closeProductMenu?.();
-		return {
-			registered: false,
-			reason: "vetedge-owned-mega-menu",
-			standaloneRuntime: Boolean(runtime),
-		};
-	}
-
-	function mount() {
-		debug("mount-invoked");
+	function mount(attempt = 0) {
+		window.clearTimeout(scheduledMount);
 		state.lastError = null;
-		let mounted;
 		try {
-			mounted = mountFallback();
+			const shared = registerEdgeUI();
+			if (shared.mounted) return shared;
+		} catch (error) {
+			state.lastError = { stage: "shared-edgeui", message: error?.message || String(error) };
+			debug("shared-edgeui-failed", state.lastError);
+		}
+		if (attempt < MAX_RUNTIME_ATTEMPTS) {
+			scheduledMount = window.setTimeout(() => mount(attempt + 1), 100);
+			return result(false, "waiting-for-shared-runtime", null, { attempt });
+		}
+		try {
+			return mountFallback();
 		} catch (error) {
 			state.lastError = { stage: "dom-fallback", message: error?.message || String(error) };
-			debug("dom-fallback-failed", state.lastError);
-			mounted = result(false, "dom-fallback-failed", null, { error: state.lastError.message });
+			return result(false, "dom-fallback-failed", null, { error: state.lastError.message });
 		}
-		const edge = registerEdgeUI();
-		if (!mounted.mounted) scheduleMount(mounted.reason, 250);
-		return { ...mounted, edge };
 	}
 
 	function unmount() {
-		closeFallback();
-		document.getElementById(FALLBACK_SLOT)?.remove();
-		document.getElementById(FALLBACK_TRIGGER)?.remove();
-		document.getElementById(FALLBACK_PANEL)?.remove();
+		window.clearTimeout(scheduledMount);
+		removeFallback();
+		edgeRuntime()?.closeProductMenu?.();
+		state.mode = null;
 		return { unmounted: true };
 	}
 
 	function remount(reason = "manual") {
 		debug("remount-invoked", reason);
-		unmount();
-		const mounted = mount();
-		return { ...mounted, remountReason: reason };
+		return mount(0);
 	}
 
 	function scheduleMount(reason = "lifecycle", delay = 0) {
 		window.clearTimeout(scheduledMount);
 		scheduledMount = window.setTimeout(() => {
-			const trigger = document.getElementById(FALLBACK_TRIGGER);
-			if (!trigger?.isConnected) {
+			const sharedTrigger = document.getElementById(EDGE_TRIGGER);
+			const fallbackTrigger = document.getElementById(FALLBACK_TRIGGER);
+			if (!sharedTrigger?.isConnected && !fallbackTrigger?.isConnected) {
 				debug("node-removed", reason);
-				mount();
+				mount(0);
+			} else if (state.mode === "shared-edgeui") {
+				edgeRuntime()?.refreshProductMenu?.();
 			} else {
 				renderFallback();
 			}
@@ -355,14 +392,10 @@
 		if (lifecycleEventsBound) return;
 		lifecycleEventsBound = true;
 		LIFECYCLE_EVENTS.forEach((eventName) => {
-			if (window.jQuery) {
-				window.jQuery(document).on(`${eventName}.vetedge_product_menu`, () => scheduleMount(eventName));
-				state.lifecycleSubscriptions.push(`document:${eventName}`);
-			}
-			if (window.frappe?.events?.on) {
-				frappe.events.on(eventName, () => scheduleMount(eventName));
-				state.lifecycleSubscriptions.push(`frappe:${eventName}`);
-			}
+			document.addEventListener(eventName, () => scheduleMount(eventName));
+			state.lifecycleSubscriptions.push(`document:${eventName}`);
+			if (window.jQuery) window.jQuery(document).on(`${eventName}.vetedge_product_menu`, () => scheduleMount(eventName));
+			if (window.frappe?.events?.on) frappe.events.on(eventName, () => scheduleMount(eventName));
 		});
 		if (window.frappe?.router?.on) {
 			frappe.router.on("change", () => scheduleMount("router-change"));
@@ -370,11 +403,12 @@
 		}
 		if (window.MutationObserver && document.body) {
 			observer = new MutationObserver(() => {
-				const trigger = document.getElementById(FALLBACK_TRIGGER);
+				const sharedTrigger = document.getElementById(EDGE_TRIGGER);
+				const fallbackTrigger = document.getElementById(FALLBACK_TRIGGER);
 				const floating = document.getElementById(FALLBACK_SLOT)?.classList.contains("vetedge-product-menu-slot--floating");
 				const visibleNavbarReady = inspectTargets().some((target) => target.visible > 0);
-				if (!trigger?.isConnected) scheduleMount("navbar-mutation", 75);
-				else if (floating && visibleNavbarReady) remount("navbar-became-visible");
+				if (!sharedTrigger?.isConnected && !fallbackTrigger?.isConnected) scheduleMount("navbar-mutation", 75);
+				else if (floating && visibleNavbarReady) scheduleMount("navbar-became-visible", 75);
 			});
 			observer.observe(document.body, { childList: true, subtree: true });
 			state.observerActive = true;
@@ -384,7 +418,9 @@
 	function diagnose() {
 		return {
 			loaded: state.loaded,
-			currentMenuNodeCount: document.querySelectorAll(`#${FALLBACK_TRIGGER}`).length,
+			mode: state.mode,
+			currentMenuNodeCount: document.querySelectorAll(`#${EDGE_TRIGGER}, #${FALLBACK_TRIGGER}`).length,
+			configured_routes: state.configured_routes.slice(),
 			selectedNavbarTarget: state.lastTarget,
 			targets: inspectTargets(),
 			lifecycleSubscriptions: state.lifecycleSubscriptions.slice(),
@@ -396,14 +432,17 @@
 
 	function initialize() {
 		bindLifecycle();
-		mount();
+		mount(0);
 	}
 
 	window.VetedgeProductMenu = Object.assign(window.VetedgeProductMenu || {}, {
 		mount,
 		unmount,
 		remount,
-		close: closeFallback,
+		close: () => {
+			closeFallback();
+			edgeRuntime()?.closeProductMenu?.();
+		},
 		diagnose,
 		selectors: NAVBAR_TARGET_SELECTORS.slice(),
 	});
