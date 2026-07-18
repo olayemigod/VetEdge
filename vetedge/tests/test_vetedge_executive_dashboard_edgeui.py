@@ -81,8 +81,11 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("window.VetedgeProductMenu", product_menu)
 		for public_method in ("mount,", "unmount,", "remount,"):
 			self.assertIn(public_method, product_menu)
-		self.assertIn('".page-head .page-actions"', product_menu)
-		self.assertIn('"header .navbar .navbar-right"', product_menu)
+		self.assertIn("PAGE_CONTEXT_SELECTOR", product_menu)
+		self.assertIn('[data-edge-product="vetedge"] .edge-topbar-context', product_menu)
+		self.assertIn("no-page-context", product_menu)
+		self.assertNotIn(".page-head .page-actions", product_menu)
+		self.assertNotIn("header .navbar .navbar-right", product_menu)
 		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
 		self.assertIn("<circle", product_menu)
 		self.assertIn("target.node.prepend(slot)", product_menu)
@@ -134,8 +137,10 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("currentMenuNodeCount", product_menu)
 		self.assertIn("FALLBACK_ROUTES", product_menu)
 		self.assertIn("configured_routes", product_menu)
-		self.assertIn("vetedge-product-menu-slot--floating", product_menu)
-		self.assertIn('"navbar-became-visible"', product_menu)
+		self.assertIn("vetedge-product-menu-slot--context", product_menu)
+		self.assertIn('"page-context-mutation"', product_menu)
+		self.assertNotIn("vetedge-product-menu-slot--floating", product_menu)
+		self.assertNotIn('"navbar-became-visible"', product_menu)
 		self.assertIn('result(true, "inserted"', product_menu)
 		self.assertIn('result(false, "no-navbar-target"', product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
@@ -159,6 +164,22 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertNotIn("coreedge/", component.lower())
 		self.assertIn("'All Branches'", stock)
 		self.assertIn("syncShellContext", stock)
+
+	def test_waffle_mounts_with_each_page_before_company_branch_user_context(self):
+		product_menu = self.read(PRODUCT_MENU)
+		executive = self.read(COMPONENT)
+		stock = self.read(STOCK_COMPONENT)
+		styles = self.read(DASHBOARD_STYLES)
+
+		for component in (executive, stock):
+			self.assertIn("mounted()", component)
+			self.assertIn("window.VetedgeProductMenu?.mount?.()", component)
+		self.assertIn("target.node.prepend(slot)", product_menu)
+		self.assertIn("bindLifecycle();", product_menu)
+		self.assertNotIn("bindLifecycle();\n\t\tmount();", product_menu)
+		self.assertIn('[data-edge-product="vetedge"] .edge-topbar-context', styles)
+		self.assertIn(".vetedge-product-menu-slot--context", styles)
+
 
 	def test_no_internal_navigation_and_empty_menu_uses_full_width(self):
 		executive = self.read(COMPONENT)
