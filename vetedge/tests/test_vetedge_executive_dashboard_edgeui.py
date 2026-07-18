@@ -62,7 +62,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 	def test_product_menu_and_notification_actions_are_present(self):
 		component = self.read(COMPONENT)
 		product_menu = self.read(PRODUCT_MENU)
-		self.assertIn(":menuItems="menuItems"", component)
+		self.assertIn(':menuItems="menuItems"', component)
 		self.assertIn("window.VetedgeProductMenu?.mount?.()", component)
 		self.assertIn("EdgeNotificationBell", component)
 		self.assertIn("EdgeNotificationDrawer", component)
