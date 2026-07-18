@@ -23,6 +23,29 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 		.text(__('Loading Executive Dashboard assets...'))
 		.appendTo(page.body);
 
+	const resolveAssetUrl = (asset) => frappe.boot?.assets_json?.[asset] || frappe.assets?.bundled_asset?.(asset) || asset;
+	const createAssetFailureTrace = (asset) => {
+		const url = resolveAssetUrl(asset);
+		let error = null;
+		const onError = (event) => {
+			const filename = String(event.filename || '');
+			if (filename && !filename.includes(asset) && !filename.includes(url)) return;
+			error = event.error || new Error(event.message || `Failed to execute ${asset}`);
+			console.error(`[VetEdge] ${asset} execution failed before loader fallback.`, error, {
+				asset: url,
+				filename,
+				line: event.lineno,
+				column: event.colno
+			});
+		};
+		window.addEventListener('error', onError, true);
+		return {
+			asset: url,
+			get error() { return error; },
+			stop() { window.removeEventListener('error', onError, true); }
+		};
+	};
+
 	const showFailure = (message) => {
 		$loading.remove();
 		$('<div class="alert alert-danger p-6 text-center"></div>')
@@ -44,7 +67,9 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 		'EdgeNotificationDrawer'
 	];
 
+	const edgeuiTrace = createAssetFailureTrace('edgeui.bundle.js');
 	frappe.require('edgeui.bundle.js', () => {
+		edgeuiTrace.stop();
 		if (wrapper.current_visit_id !== visitId) return;
 
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
@@ -52,6 +77,10 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 		const missing = requiredComponents.filter((name) => !components?.[name]);
 
 		if (!runtime?.createEdgeApp || missing.length) {
+			console.error('[VetEdge] edgeui.bundle.js did not expose the required runtime before loader fallback.', edgeuiTrace.error || new Error('EdgeSuite UI runtime unavailable'), {
+				asset: edgeuiTrace.asset,
+				missing
+			});
 			showFailure(
 				missing.length
 					? __('Missing EdgeSuite UI components: {0}', [missing.join(', ')])
@@ -60,9 +89,14 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 			return;
 		}
 
+		const dashboardBundleTrace = createAssetFailureTrace('vetedge_executive_dashboard.bundle.js');
 		frappe.require('vetedge_executive_dashboard.bundle.js', () => {
+			dashboardBundleTrace.stop();
 			if (wrapper.current_visit_id !== visitId) return;
 			if (!window.VetedgeExecutiveDashboard) {
+				console.error('[VetEdge] Executive Dashboard product bundle did not publish its component before loader fallback.', dashboardBundleTrace.error || new Error('Product bundle export unavailable'), {
+					asset: dashboardBundleTrace.asset
+				});
 				showFailure(__('The Executive Dashboard product bundle is unavailable.'));
 				return;
 			}
