@@ -15,7 +15,9 @@
 				:unreadCount="notificationUnreadCount"
 				title="Notifications"
 				@toggle="toggleNotificationDrawer"
-			/>
+			>
+				<template #icon><span class="vetedge-notification-icon" aria-hidden="true">🔔</span></template>
+			</EdgeNotificationBell>
 			<EdgeNotificationDrawer
 				product="vetedge"
 				title="Notifications"
@@ -470,6 +472,7 @@ export default {
 	color: var(--edge-text);
 	box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
+.vetedge-notification-icon { display: inline-grid; place-items: center; font-size: 1rem; line-height: 1; }
 .vetedge-executive-dashboard-content { display: grid; gap: 22px; padding-top: 20px; }
 .vetedge-executive-section {
 	padding: 20px;
