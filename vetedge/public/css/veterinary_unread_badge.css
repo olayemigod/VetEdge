@@ -146,8 +146,12 @@
 
 /* Frappe Desk keeps the badge action available in compact sidebars without a text pill overlapping page content. */
 .layout-side-section.collapsed #veterinary-unread-bell-badge,
+.layout-side-section .body-sidebar.collapsed #veterinary-unread-bell-badge,
 .body-sidebar.collapsed #veterinary-unread-bell-badge,
+.body-sidebar.sidebar-collapsed #veterinary-unread-bell-badge,
 .desk-sidebar.collapsed #veterinary-unread-bell-badge,
+.desk-sidebar.sidebar-collapsed #veterinary-unread-bell-badge,
+[data-sidebar-collapsed="true"] #veterinary-unread-bell-badge,
 body.sidebar-collapsed #veterinary-unread-bell-badge {
 	gap: 0;
 	min-width: 26px;
@@ -157,8 +161,12 @@ body.sidebar-collapsed #veterinary-unread-bell-badge {
 }
 
 .layout-side-section.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.layout-side-section .body-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
 .body-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.body-sidebar.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
 .desk-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.desk-sidebar.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+[data-sidebar-collapsed="true"] #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
 body.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label {
 	display: none;
 }
