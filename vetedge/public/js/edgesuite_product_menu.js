@@ -123,16 +123,24 @@
 	}
 
 	function findNavbarTarget() {
-		for (const target of inspectTargets()) {
-			if (!target.connected) continue;
-			const node = Array.from(document.querySelectorAll(target.selector)).find((candidate) => candidate.isConnected);
-			if (node) {
-				state.lastTarget = { selector: target.selector, visible: target.visible > 0 };
-				return { node, selector: target.selector, visible: target.visible > 0 };
+		const inspected = inspectTargets();
+		for (const requireVisible of [true, false]) {
+			for (const target of inspected) {
+				if (!target.connected || (requireVisible && !target.visible)) continue;
+				const node = Array.from(document.querySelectorAll(target.selector)).find((candidate) => {
+					if (!candidate.isConnected) return false;
+					if (!requireVisible) return true;
+					const style = window.getComputedStyle?.(candidate);
+					return style?.display !== "none" && style?.visibility !== "hidden";
+				});
+				if (node) {
+					state.lastTarget = { selector: target.selector, visible: target.visible > 0 };
+					return { node, selector: target.selector, visible: target.visible > 0 };
+				}
 			}
 		}
-		state.lastTarget = null;
-		return null;
+		state.lastTarget = { selector: "body", visible: true, floating: true };
+		return { node: document.body, selector: "body", visible: true, floating: true };
 	}
 
 	function routeTo(item) {
@@ -198,7 +206,9 @@
 
 		const slot = document.createElement(target.node.tagName === "UL" ? "li" : "div");
 		slot.id = FALLBACK_SLOT;
-		slot.className = "vetedge-product-menu-slot";
+		slot.className = target.floating
+			? "vetedge-product-menu-slot vetedge-product-menu-slot--floating"
+			: "vetedge-product-menu-slot";
 		const trigger = document.createElement("button");
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
@@ -313,7 +323,11 @@
 		}
 		if (window.MutationObserver && document.body) {
 			observer = new MutationObserver(() => {
-				if (!document.getElementById(FALLBACK_TRIGGER)?.isConnected) scheduleMount("navbar-mutation", 75);
+				const trigger = document.getElementById(FALLBACK_TRIGGER);
+				const floating = document.getElementById(FALLBACK_SLOT)?.classList.contains("vetedge-product-menu-slot--floating");
+				const visibleNavbarReady = inspectTargets().some((target) => target.visible > 0);
+				if (!trigger?.isConnected) scheduleMount("navbar-mutation", 75);
+				else if (floating && visibleNavbarReady) remount("navbar-became-visible");
 			});
 			observer.observe(document.body, { childList: true, subtree: true });
 			state.observerActive = true;
