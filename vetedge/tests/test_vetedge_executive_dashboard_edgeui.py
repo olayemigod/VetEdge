@@ -231,6 +231,30 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("#veterinary-unread-bell-badge", styles)
 		self.assertIn("sidebar-collapsed", styles)
 
+	def test_dashboard_content_is_preserved_inside_shared_shell(self):
+		content = self.read(COMPONENT)
+		shell = self.read(SHARED_SHELL)
+		for contract in (
+			"Veterinary performance",
+			"Branch",
+			"Period",
+			"From Date",
+			"To Date",
+			"Apply / Refresh",
+			'v-for="(card, index) in payload.kpis"',
+			"payload.charts?.length",
+			"new frappe.Chart",
+			"renderChartTable",
+			"payload.report_links?.length",
+			"EdgeLoadingState",
+			"EdgeEmptyState",
+			"EdgeErrorState",
+			"@retry=\"refresh\"",
+		):
+			self.assertIn(contract, content)
+		self.assertIn("<slot />", shell)
+		self.assertNotIn("v-if=\"$slots.default\"", shell)
+
 	def test_existing_api_report_chart_and_currency_workflows_are_preserved(self):
 		content = self.read(COMPONENT)
 		self.assertIn("vetedge.services.reporting_logic_v4.get_dashboard_payload", content)
