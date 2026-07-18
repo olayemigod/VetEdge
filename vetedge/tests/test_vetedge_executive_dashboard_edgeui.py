@@ -79,7 +79,10 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("window.VetedgeProductMenu", product_menu)
 		for public_method in ("mount,", "unmount,", "remount,"):
 			self.assertIn(public_method, product_menu)
+		self.assertIn('".page-head .page-actions"', product_menu)
 		self.assertIn('"header .navbar .navbar-right"', product_menu)
+		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
+		self.assertIn("<circle", product_menu)
 		self.assertIn("target.node.prepend(slot)", product_menu)
 
 	def test_product_menu_is_global_idempotent_and_lifecycle_aware(self):
