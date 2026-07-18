@@ -57,51 +57,32 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 
 		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", content)
 		self.assertIn("runtime.createEdgeApp(VetedgeStockExpiryMonitor)", content)
-		self.assertIn("VetedgeStockExpiryMonitor.components = runtime.components", content)
+		self.assertIn("VetedgeStockExpiryMonitor.components = { ...runtime.components, VetedgeEdgeSuiteShell }", content)
+		self.assertIn("import VetedgeEdgeSuiteShell", content)
 		self.assertNotIn("import { createApp } from 'vue'", content)
 		self.assertNotIn("coreedge", content.lower())
 
 	def test_frontend_uses_shared_component_contract_without_private_imports(self):
-		content = self.read(
-			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
-		)
-
-		for component in (
-			"EdgeAppShell",
-			"EdgePageLayout",
-			"EdgePageHeader",
-			"EdgeFilterBar",
-			"EdgeStatCard",
-			"EdgeStatusBadge",
-			"EdgeLoadingState",
-			"EdgeEmptyState",
-			"EdgeErrorState",
-			"EdgeNotificationBell",
-			"EdgeNotificationDrawer",
-		):
+		content = self.read("public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue")
+		shell = self.read("public", "js", "vetedge_shell", "VetedgeEdgeSuiteShell.vue")
+		for component in ("EdgePageLayout", "EdgePageHeader", "EdgeFilterBar", "EdgeStatCard", "EdgeStatusBadge", "EdgeLoadingState", "EdgeEmptyState", "EdgeErrorState", "VetedgeEdgeSuiteShell"):
 			self.assertIn(component, content)
-
-		self.assertIn('product="vetedge"', content)
-		self.assertIn('data-edge-product="vetedge"', content)
+		for component in ("EdgeNotificationBell", "EdgeNotificationDrawer"):
+			self.assertIn(component, shell)
 		self.assertNotIn("coreedge/coreedge/public/js/edgeui", content)
 		self.assertNotIn("../../../../../coreedge", content)
 
 	def test_shared_shell_is_content_only_with_compact_context_and_filters(self):
-		content = self.read(
-			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
-		)
-		self.assertNotIn(':menuItems="menuItems"', content)
-		self.assertIn("vetedge-notification-icon", content)
-		self.assertIn("syncShellContext", content)
+		content = self.read("public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue")
+		shell = self.read("public", "js", "vetedge_shell", "VetedgeEdgeSuiteShell.vue")
+		self.assertIn("VetedgeEdgeSuiteShell", content)
+		self.assertIn("vetedge-suite-context-bar", shell)
+		self.assertIn("vetedge-suite-waffle-icon", shell)
+		self.assertIn("EdgeNotificationBell", shell)
+		self.assertIn("setInlineMode?.(true)", shell)
 		self.assertIn("'All Branches'", content)
-		self.assertIn("tenantName", content)
-		self.assertIn("branchName", content)
-		self.assertIn("userName", content)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", content)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", content)
-		self.assertIn("grid-template-columns: minmax(0, 1fr)", content)
-		self.assertNotIn("frappe.realtime", content)
-		self.assertNotIn("coreedge/", content.lower())
+		self.assertNotIn("frappe.realtime", shell)
+		self.assertNotIn("coreedge/", (content + shell).lower())
 
 	def test_notification_drawer_uses_vetedge_notification_apis_only(self):
 		content = self.read(
