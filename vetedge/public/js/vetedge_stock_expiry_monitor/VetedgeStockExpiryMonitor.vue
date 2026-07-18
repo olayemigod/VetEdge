@@ -14,42 +14,25 @@
     </button>
   </div>
 
-  <EdgeAppShell
+  <VetedgeEdgeSuiteShell
     v-else
-    product="vetedge"
-    activeRoute="/app/stock-expiry-monitor"
-    title="Veterinary"
-    :tenantName="tenantName"
-    :branchName="branchName"
-    :userName="userName"
-    data-edge-product="vetedge"
+    :company="tenantName"
+    :branch="branchName || 'All Branches'"
+    :user="userName"
+    :notificationOpen="notificationDrawerOpen"
+    :notifications="filteredNotifications"
+    :unreadCount="notificationUnreadCount"
+    :notificationFilter="notificationFilter"
+    :notificationLoading="notificationLoading"
+    :notificationError="notificationError"
+    @toggle-notifications="toggleNotificationDrawer"
+    @close-notifications="notificationDrawerOpen = false"
+    @update-notification-filter="setNotificationFilter"
+    @refresh-notifications="fetchNotifications"
+    @mark-all-read="markAllNotificationsRead"
+    @notification-action="runNotificationAction"
+    @open-notification="openNotificationRoute"
   >
-    <template #notifications>
-      <EdgeNotificationBell
-        :unreadCount="notificationUnreadCount"
-        title="Notifications"
-        @toggle="toggleNotificationDrawer"
-      >
-        <template #icon><span class="vetedge-notification-icon" aria-hidden="true">🔔</span></template>
-      </EdgeNotificationBell>
-      <EdgeNotificationDrawer
-        product="vetedge"
-        title="Notifications"
-        :open="notificationDrawerOpen"
-        :notifications="filteredNotifications"
-        :unreadCount="notificationUnreadCount"
-        :filter="notificationFilter"
-        :loading="notificationLoading"
-        :error="notificationError"
-        @close="notificationDrawerOpen = false"
-        @update:filter="setNotificationFilter"
-        @retry="fetchNotifications"
-        @refresh="fetchNotifications"
-        @mark-all-read="markAllNotificationsRead"
-        @action="runNotificationAction"
-        @open="openNotificationRoute"
-      />
-    </template>
 
     <EdgePageLayout>
       <template #header>
@@ -242,7 +225,7 @@
         </div>
       </div>
     </EdgePageLayout>
-  </EdgeAppShell>
+  </VetedgeEdgeSuiteShell>
 </template>
 
 <script>
