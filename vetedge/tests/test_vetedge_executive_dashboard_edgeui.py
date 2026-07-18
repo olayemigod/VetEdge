@@ -276,6 +276,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn(".layout-side-section.collapsed", badge_styles)
 		self.assertIn(".body-sidebar.sidebar-collapsed", badge_styles)
 		self.assertIn('[data-sidebar-collapsed="true"]', badge_styles)
+		self.assertIn('body:has([data-edge-product="vetedge"])', badge_styles)
 		self.assertIn(".veterinary-unread-bell-badge-label", badge_styles)
 		self.assertIn("display: none", badge_styles)
 
