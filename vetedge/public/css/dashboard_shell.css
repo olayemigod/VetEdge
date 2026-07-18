@@ -686,3 +686,13 @@
 	background: var(--edge-primary, #1677ff);
 	color: #fff;
 }
+
+
+/* Stable local glyphs avoid relying on an optional Frappe icon sprite. */
+.vetedge-product-menu-icon-glyph {
+	display: block;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 1rem;
+	font-weight: 700;
+	line-height: 1;
+}
