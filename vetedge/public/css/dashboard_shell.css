@@ -519,3 +519,136 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+
+/* Isolated Veterinary product mega menu. It owns only the launcher panel, never page content. */
+.vetedge-product-menu-panel {
+	width: min(760px, calc(100vw - 28px));
+	border-radius: 14px;
+	background: var(--edge-surface, #fff);
+	box-shadow: 0 20px 50px rgba(15, 23, 42, .2);
+}
+
+.vetedge-product-menu-profile {
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--edge-primary, #1677ff) 13%, #fff), #fff 62%),
+		var(--edge-surface, #fff);
+}
+
+.vetedge-product-menu-scroll {
+	max-height: min(640px, calc(100vh - 150px));
+	padding: 16px;
+}
+
+.vetedge-product-menu-section-heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0 0 8px;
+	padding: 0 2px;
+}
+
+.vetedge-product-menu-section-heading h3 {
+	margin: 0;
+}
+
+.vetedge-product-menu-section-heading span {
+	color: var(--edge-text-muted, #667085);
+	font-size: .75rem;
+}
+
+.vetedge-product-menu-quick-access {
+	margin: 0 0 18px;
+	padding: 14px;
+	border: 1px solid var(--edge-border, #dfe5ef);
+	border-radius: 10px;
+	background: var(--edge-bg, #f7f9fc);
+}
+
+.vetedge-product-menu-quick-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.vetedge-product-menu-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 14px 18px;
+}
+
+.vetedge-product-menu-section {
+	min-width: 0;
+	margin: 0;
+}
+
+.vetedge-product-menu-section-links {
+	display: grid;
+	gap: 2px;
+}
+
+.vetedge-product-menu-link {
+	grid-template-columns: 30px minmax(0, 1fr);
+	min-height: 44px;
+	padding: 7px 8px;
+}
+
+.vetedge-product-menu-link-copy {
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+}
+
+.vetedge-product-menu-link-copy strong,
+.vetedge-product-menu-link-copy small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vetedge-product-menu-link-copy strong {
+	color: inherit;
+	font-size: .82rem;
+	font-weight: 600;
+}
+
+.vetedge-product-menu-link-copy small {
+	color: var(--edge-text-muted, #667085);
+	font-size: .69rem;
+}
+
+.vetedge-product-menu-quick-link {
+	min-height: 58px;
+	border: 1px solid var(--edge-border, #dfe5ef);
+	background: var(--edge-surface, #fff);
+}
+
+.vetedge-product-menu-quick-link:hover,
+.vetedge-product-menu-quick-link:focus-visible {
+	background: var(--edge-primary-soft, #e8f2ff);
+	border-color: var(--edge-primary, #1677ff);
+}
+
+@media (max-width: 720px) {
+	.vetedge-product-menu-panel {
+		top: 50px;
+		right: 8px;
+		width: calc(100vw - 16px);
+	}
+
+	.vetedge-product-menu-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 480px) {
+	.vetedge-product-menu-scroll {
+		padding: 12px;
+	}
+
+	.vetedge-product-menu-quick-grid,
+	.vetedge-product-menu-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
