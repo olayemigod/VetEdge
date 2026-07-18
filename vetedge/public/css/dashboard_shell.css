@@ -652,3 +652,37 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+
+/* Use Frappe's icon sprite when it is available; never show raw icon identifiers. */
+.vetedge-product-menu-link-icon {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--edge-primary, #1677ff) 9%, #fff);
+	color: var(--edge-primary, #1677ff);
+}
+
+.vetedge-product-menu-link-icon .icon {
+	width: 16px;
+	height: 16px;
+}
+
+.vetedge-product-menu-icon-fallback {
+	font-size: 1.15rem;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.vetedge-product-menu-quick-link .vetedge-product-menu-link-icon {
+	background: var(--edge-primary-soft, #e8f2ff);
+}
+
+.vetedge-product-menu-link:hover .vetedge-product-menu-link-icon,
+.vetedge-product-menu-link:focus-visible .vetedge-product-menu-link-icon,
+.vetedge-product-menu-active .vetedge-product-menu-link-icon {
+	background: var(--edge-primary, #1677ff);
+	color: #fff;
+}
