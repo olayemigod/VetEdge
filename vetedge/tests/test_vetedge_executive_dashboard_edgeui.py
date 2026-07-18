@@ -261,6 +261,9 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(columns, styles)
 
 		self.assertIn(".edge-page-layout-body", executive)
+		self.assertIn(".vetedge-executive-page", executive)
+		self.assertIn("width: 100% !important", executive)
+		self.assertIn("max-width: none !important", executive)
 		self.assertIn("container-type: inline-size", executive)
 		self.assertIn("@container vetedge-executive-content", executive)
 		self.assertIn(
