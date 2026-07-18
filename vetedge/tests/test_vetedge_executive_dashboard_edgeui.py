@@ -263,6 +263,10 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn(".edge-page-layout-body", executive)
 		self.assertIn("container-type: inline-size", executive)
 		self.assertIn("@container vetedge-executive-content", executive)
+		self.assertIn(
+			".vetedge-executive-dashboard-content .vetedge-executive-kpi-grid",
+			executive,
+		)
 		self.assertIn("repeat(5, minmax(0, 1fr))", executive)
 
 		self.assertIn(
