@@ -214,7 +214,9 @@ export default {
 			notificationFilter: 'all',
 			notificationItems: [],
 			notificationUnreadCount: 0,
-			chartInstances: []
+			chartInstances: [],
+			resizeObserver: null,
+			resizeFrame: null
 		};
 	},
 	computed: {
@@ -236,14 +238,30 @@ export default {
 	},
 	mounted() {
 		window.VetedgeProductMenu?.mount?.();
+		this.setupResizeObserver();
 		this.loadBranches();
 		this.fetchNotifications();
 		this.refresh();
 	},
 	beforeUnmount() {
+		this.resizeObserver?.disconnect();
+		if (this.resizeFrame) window.cancelAnimationFrame(this.resizeFrame);
 		this.destroyCharts();
 	},
 	methods: {
+		setupResizeObserver() {
+			if (!window.ResizeObserver) return;
+			const target = this.$el?.querySelector?.('.vetedge-suite-content') || this.$el;
+			if (!target) return;
+			this.resizeObserver = new ResizeObserver(() => {
+				if (this.resizeFrame) window.cancelAnimationFrame(this.resizeFrame);
+				this.resizeFrame = window.requestAnimationFrame(() => {
+					this.resizeFrame = null;
+					this.chartInstances.forEach((chart) => chart?.resize?.());
+				});
+			});
+			this.resizeObserver.observe(target);
+		},
 		call(method, args = {}) {
 			return new Promise((resolve, reject) => {
 				frappe.call({
@@ -458,8 +476,8 @@ export default {
 .vetedge-executive-section-heading h2 { margin: 3px 0 0; color: var(--edge-text); font-size: 1.05rem; }
 .vetedge-executive-section-heading small { color: var(--edge-text-muted); }
 .vetedge-executive-kpi-grid {
-	display: grid !important;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 	gap: 14px;
 }
 .vetedge-executive-kpi-grid .edge-stat-card { min-width: 0; border-top: 3px solid var(--edge-primary); }
