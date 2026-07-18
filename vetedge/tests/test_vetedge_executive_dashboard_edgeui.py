@@ -18,6 +18,15 @@ COMPONENT = (
 	/ "VetedgeExecutiveDashboard.vue"
 )
 PRODUCT_MENU = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "edgesuite_product_menu.js"
+STOCK_COMPONENT = (
+	REPOSITORY_ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_stock_expiry_monitor"
+	/ "VetedgeStockExpiryMonitor.vue"
+)
+HOOKS = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 SERVER_API = REPOSITORY_ROOT / "vetedge" / "services" / "reporting_logic_v4.py"
 
 
@@ -68,7 +77,36 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("EdgeNotificationDrawer", component)
 		self.assertIn("notificationApi", component)
 		self.assertIn("window.VetedgeProductMenu", product_menu)
-		self.assertIn("mount: () => mount(0)", product_menu)
+		for public_method in ("mount,", "unmount,", "remount,"):
+			self.assertIn(public_method, product_menu)
+		self.assertIn('"header .navbar .navbar-right"', product_menu)
+		self.assertIn("target.node.prepend(slot)", product_menu)
+
+	def test_product_menu_is_global_idempotent_and_lifecycle_aware(self):
+		product_menu = self.read(PRODUCT_MENU)
+		hooks = self.read(HOOKS)
+		self.assertIn("/assets/vetedge/js/edgesuite_product_menu.js", hooks)
+		self.assertIn("removeDuplicates", product_menu)
+		self.assertIn("already-mounted", product_menu)
+		self.assertIn("toolbar_setup", product_menu)
+		self.assertIn("page-change", product_menu)
+		self.assertIn("desktop_screen", product_menu)
+		self.assertIn("sidebar_setup", product_menu)
+		self.assertIn("MutationObserver", product_menu)
+		self.assertNotIn("frappe.realtime", product_menu)
+		self.assertNotIn("socket", product_menu.lower())
+
+	def test_shared_shell_contract_is_present_on_both_reference_pages(self):
+		executive = self.read(COMPONENT)
+		stock = self.read(STOCK_COMPONENT)
+		for component in (executive, stock):
+			self.assertIn("EdgeAppShell", component)
+			self.assertIn("EdgeNotificationBell", component)
+			self.assertIn("EdgeNotificationDrawer", component)
+			self.assertIn('product="vetedge"', component)
+			self.assertIn('data-edge-product="vetedge"', component)
+			self.assertIn("window.VetedgeProductMenu", component)
+			self.assertNotIn("coreedge/", component.lower())
 
 	def test_vetedge_theming_and_full_width_layout_contract(self):
 		content = self.read(COMPONENT)
