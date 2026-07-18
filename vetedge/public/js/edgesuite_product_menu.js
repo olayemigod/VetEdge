@@ -33,6 +33,7 @@
 		lastMountResult: null,
 		lastTarget: null,
 		lastError: null,
+		inlineMode: false,
 	};
 	let fallbackEventsBound = false;
 	let lifecycleEventsBound = false;
@@ -279,6 +280,7 @@
 
 	function mount() {
 		debug("mount-invoked");
+		if (state.inlineMode) return result(false, "inline-shell-managed", "vetedge-suite-context-bar");
 		state.lastError = null;
 		let mounted;
 		try {
@@ -309,6 +311,7 @@
 	}
 
 	function scheduleMount(reason = "lifecycle", delay = 0) {
+		if (state.inlineMode) return { scheduled: false, reason: "inline-shell-managed" };
 		window.clearTimeout(scheduledMount);
 		scheduledMount = window.setTimeout(() => {
 			const trigger = document.getElementById(FALLBACK_TRIGGER);
@@ -352,6 +355,21 @@
 		}
 	}
 
+	function setInlineMode(enabled) {
+		state.inlineMode = Boolean(enabled);
+		if (state.inlineMode) return unmount();
+		return mount();
+	}
+
+	function getSections() {
+		return normalizeSections();
+	}
+
+	function navigate(item) {
+		routeTo(item);
+		return { navigated: Boolean(item?.link_to), item };
+	}
+
 	function diagnose() {
 		return {
 			loaded: state.loaded,
@@ -360,6 +378,7 @@
 			targets: inspectTargets(),
 			lifecycleSubscriptions: state.lifecycleSubscriptions.slice(),
 			observerActive: state.observerActive,
+			inlineMode: state.inlineMode,
 			lastMountResult: state.lastMountResult,
 			lastError: state.lastError,
 		};
@@ -374,6 +393,9 @@
 		mount,
 		unmount,
 		remount,
+		setInlineMode,
+		getSections,
+		navigate,
 		close: closeFallback,
 		diagnose,
 		selectors: NAVBAR_TARGET_SELECTORS.slice(),
