@@ -443,6 +443,15 @@ export default {
 	--edge-bg: #f6f9fc;
 	background: linear-gradient(180deg, var(--edge-primary-soft) 0, #f8fbff 180px, var(--edge-bg) 420px);
 }
+.vetedge-executive-dashboard-root .vetedge-executive-page,
+.vetedge-executive-dashboard-root .edge-page-layout__content,
+.vetedge-executive-dashboard-root .edge-page-layout-body,
+.vetedge-executive-dashboard-root .edge-page-layout-body > * {
+	box-sizing: border-box;
+	width: 100% !important;
+	max-width: none !important;
+	min-width: 0 !important;
+}
 .vetedge-executive-dashboard-root .edge-page-layout__content { padding: 0 28px 32px; }
 .vetedge-executive-dashboard-root .edge-page-layout__header,
 .vetedge-executive-dashboard-root .edge-page-layout__filters { padding-left: 28px; padding-right: 28px; }
@@ -485,6 +494,13 @@ export default {
 	display: grid !important;
 	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
 	gap: 14px;
+}
+.vetedge-executive-kpi-grid,
+.vetedge-executive-kpi-grid > * {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
 }
 .vetedge-executive-kpi-grid .edge-stat-card { min-width: 0; border-top: 3px solid var(--edge-primary); }
 @container vetedge-executive-content (min-width: 1180px) {
