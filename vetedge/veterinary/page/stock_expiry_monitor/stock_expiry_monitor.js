@@ -32,6 +32,30 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		'</div>'
 	).appendTo(page.body);
 
+
+	const resolveAssetUrl = (asset) => frappe.boot?.assets_json?.[asset] || frappe.assets?.bundled_asset?.(asset) || asset;
+	const createAssetFailureTrace = (asset) => {
+		const url = resolveAssetUrl(asset);
+		let error = null;
+		const onError = (event) => {
+			const filename = String(event.filename || '');
+			if (filename && !filename.includes(asset) && !filename.includes(url)) return;
+			error = event.error || new Error(event.message || `Failed to execute ${asset}`);
+			console.error(`[VetEdge] ${asset} execution failed before loader fallback.`, error, {
+				asset: url,
+				filename,
+				line: event.lineno,
+				column: event.colno
+			});
+		};
+		window.addEventListener('error', onError, true);
+		return {
+			asset: url,
+			get error() { return error; },
+			stop() { window.removeEventListener('error', onError, true); }
+		};
+	};
+
 	const showLoadFailure = function(message) {
 		$loading.remove();
 
@@ -84,23 +108,33 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		return null;
 	};
 
+	const edgeuiTrace = createAssetFailureTrace('edgeui.bundle.js');
 	frappe.require('edgeui.bundle.js', () => {
+		edgeuiTrace.stop();
 		if (wrapper.current_visit_id !== visit_id) return;
 
 		const runtime = getEdgeSuiteRuntime();
 		const runtimeError = validateRuntime(runtime);
 
 		if (runtimeError) {
+			console.error('[VetEdge] edgeui.bundle.js did not expose the required runtime before loader fallback.', edgeuiTrace.error || new Error(runtimeError), {
+				asset: edgeuiTrace.asset
+			});
 			showLoadFailure(runtimeError);
 			return;
 		}
 
+		const stockBundleTrace = createAssetFailureTrace('vetedge_stock_expiry_monitor.bundle.js');
 		frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+			stockBundleTrace.stop();
 			if (wrapper.current_visit_id !== visit_id) return;
 
 			$loading.remove();
 
 			if (!window.VetedgeStockExpiryMonitor) {
+				console.error('[VetEdge] Stock Expiry Monitor product bundle did not publish its component before loader fallback.', stockBundleTrace.error || new Error('Product bundle export unavailable'), {
+					asset: stockBundleTrace.asset
+				});
 				showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
 				return;
 			}
