@@ -62,7 +62,7 @@
 				role="dialog"
 				aria-modal="true"
 				aria-label="VetEdge application menu"
-				@keydown.esc.prevent="closeMenu"
+				@keydown="handleMenuKeydown"
 			>
 				<aside class="vetedge-mega-account">
 					<div class="vetedge-mega-brand">
@@ -241,6 +241,12 @@ export default {
 			const route = (window.frappe?.get_route?.() || []).join('/').toLowerCase();
 			const target = String(item.link_to || '').toLowerCase();
 			return Boolean(target) && (route === target || route.endsWith('/' + target));
+		},
+		handleMenuKeydown(event) {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				this.closeMenu();
+			}
 		},
 		activate(item) {
 			if (item.action === 'logout') {
