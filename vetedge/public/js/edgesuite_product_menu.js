@@ -8,18 +8,7 @@
 	const FALLBACK_SLOT = "vetedge-product-menu-slot";
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
-	const NAVBAR_TARGET_SELECTORS = [
-		".page-head .page-actions",
-		".page-head-content .page-actions",
-		".page-actions",
-		"header .navbar .navbar-right",
-		".navbar .navbar-right",
-		"header .navbar .navbar-nav.ms-auto",
-		"header .navbar .navbar-nav.ml-auto",
-		"header .navbar .navbar-collapse .navbar-nav",
-		"header .navbar .navbar-collapse",
-		"header .navbar .container",
-	];
+	const PAGE_CONTEXT_SELECTOR = '[data-edge-product="vetedge"] .edge-topbar-context';
 	const LIFECYCLE_EVENTS = ["toolbar_setup", "page-change", "desktop_screen", "sidebar_setup"];
 	const FALLBACK_ROUTES = [
 		{ label: "Executive Dashboard", icon: "dashboard", link_type: "Page", link_to: "vetedge-executive-dashboard" },
@@ -129,40 +118,31 @@
 	}
 
 	function inspectTargets() {
-		return NAVBAR_TARGET_SELECTORS.map((selector) => {
-			const nodes = Array.from(document.querySelectorAll(selector));
-			return {
-				selector,
-				count: nodes.length,
-				connected: nodes.filter((node) => node.isConnected).length,
-				visible: nodes.filter((node) => {
-					if (!node.isConnected) return false;
-					const style = window.getComputedStyle?.(node);
-					return style?.display !== "none" && style?.visibility !== "hidden";
-				}).length,
-			};
-		});
+		const nodes = Array.from(document.querySelectorAll(PAGE_CONTEXT_SELECTOR));
+		return [{
+			selector: PAGE_CONTEXT_SELECTOR,
+			count: nodes.length,
+			connected: nodes.filter((node) => node.isConnected).length,
+			visible: nodes.filter((node) => {
+				if (!node.isConnected) return false;
+				const style = window.getComputedStyle?.(node);
+				return style?.display !== "none" && style?.visibility !== "hidden";
+			}).length,
+		}];
 	}
 
-	function findNavbarTarget() {
-		const inspected = inspectTargets();
-		for (const requireVisible of [true, false]) {
-			for (const target of inspected) {
-				if (!target.connected || (requireVisible && !target.visible)) continue;
-				const node = Array.from(document.querySelectorAll(target.selector)).find((candidate) => {
-					if (!candidate.isConnected) return false;
-					if (!requireVisible) return true;
-					const style = window.getComputedStyle?.(candidate);
-					return style?.display !== "none" && style?.visibility !== "hidden";
-				});
-				if (node) {
-					state.lastTarget = { selector: target.selector, visible: target.visible > 0 };
-					return { node, selector: target.selector, visible: target.visible > 0 };
-				}
-			}
+	function findPageContextTarget() {
+		const node = Array.from(document.querySelectorAll(PAGE_CONTEXT_SELECTOR)).find((candidate) => {
+			if (!candidate.isConnected) return false;
+			const style = window.getComputedStyle?.(candidate);
+			return style?.display !== "none" && style?.visibility !== "hidden";
+		});
+		if (!node) {
+			state.lastTarget = { selector: PAGE_CONTEXT_SELECTOR, visible: false };
+			return null;
 		}
-		state.lastTarget = { selector: "body", visible: true, floating: true };
-		return { node: document.body, selector: "body", visible: true, floating: true };
+		state.lastTarget = { selector: PAGE_CONTEXT_SELECTOR, visible: true };
+		return { node, selector: PAGE_CONTEXT_SELECTOR, visible: true };
 	}
 
 	function routeTo(item) {
@@ -233,21 +213,18 @@
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
-			return result(true, "already-mounted", existing.closest(`#${FALLBACK_SLOT}`)?.parentElement?.matches(".navbar-right") ? ".navbar-right" : state.lastTarget?.selector);
+			return result(true, "already-mounted", state.lastTarget?.selector || PAGE_CONTEXT_SELECTOR);
 		}
 		existing?.remove();
 		document.getElementById(FALLBACK_SLOT)?.remove();
 		document.getElementById(FALLBACK_PANEL)?.remove();
 
-		const target = findNavbarTarget();
-		debug("targets-checked", inspectTargets());
-		if (!target) return result(false, "no-navbar-target", null);
+		const target = findPageContextTarget();
+		if (!target) return result(false, "no-page-context", null);
 
 		const slot = document.createElement(target.node.tagName === "UL" ? "li" : "div");
 		slot.id = FALLBACK_SLOT;
-		slot.className = target.floating
-			? "vetedge-product-menu-slot vetedge-product-menu-slot--floating"
-			: "vetedge-product-menu-slot";
+		slot.className = "vetedge-product-menu-slot vetedge-product-menu-slot--context";
 		const trigger = document.createElement("button");
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
@@ -318,7 +295,7 @@
 			mounted = result(false, "dom-fallback-failed", null, { error: state.lastError.message });
 		}
 		const edge = registerEdgeUI();
-		if (!mounted.mounted) scheduleMount(mounted.reason, 250);
+		if (!mounted.mounted && mounted.reason !== "no-page-context") scheduleMount(mounted.reason, 250);
 		return { ...mounted, edge };
 	}
 
@@ -371,10 +348,9 @@
 		if (window.MutationObserver && document.body) {
 			observer = new MutationObserver(() => {
 				const trigger = document.getElementById(FALLBACK_TRIGGER);
-				const floating = document.getElementById(FALLBACK_SLOT)?.classList.contains("vetedge-product-menu-slot--floating");
-				const visibleNavbarReady = inspectTargets().some((target) => target.visible > 0);
-				if (!trigger?.isConnected) scheduleMount("navbar-mutation", 75);
-				else if (floating && visibleNavbarReady) remount("navbar-became-visible");
+				if (!trigger?.isConnected && findPageContextTarget()) {
+					scheduleMount("page-context-mutation", 75);
+				}
 			});
 			observer.observe(document.body, { childList: true, subtree: true });
 			state.observerActive = true;
@@ -396,7 +372,6 @@
 
 	function initialize() {
 		bindLifecycle();
-		mount();
 	}
 
 	window.VetedgeProductMenu = Object.assign(window.VetedgeProductMenu || {}, {
@@ -405,7 +380,7 @@
 		remount,
 		close: closeFallback,
 		diagnose,
-		selectors: NAVBAR_TARGET_SELECTORS.slice(),
+		selectors: [PAGE_CONTEXT_SELECTOR],
 	});
 
 	if (document.readyState === "loading") {
