@@ -73,5 +73,6 @@
 		if (attempt < 12) window.setTimeout(() => mount(attempt + 1), 100);
 	}
 	function initialize() { mount(0); if (window.frappe && frappe.router && frappe.router.on) frappe.router.on("change", () => window.requestAnimationFrame(() => mount(0))); }
+	window.VetedgeProductMenu = Object.assign(window.VetedgeProductMenu || {}, { mount: () => mount(0), close: closeFallback });
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true }); else initialize();
 })();
