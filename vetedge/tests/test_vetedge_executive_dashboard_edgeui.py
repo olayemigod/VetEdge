@@ -149,8 +149,9 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 
 	def test_vetedge_theming_and_full_width_layout_contract(self):
 		content = self.read(COMPONENT)
-		self.assertIn('product="vetedge"', content)
-		self.assertIn('data-edge-product="vetedge"', content)
+		shell = self.read(SHARED_SHELL)
+		self.assertIn('data-edge-product="vetedge"', shell)
+		self.assertIn('product="vetedge"', shell)
 		self.assertIn("--edge-primary:", content)
 		self.assertIn("--edge-primary-soft:", content)
 		self.assertIn("linear-gradient", content)
