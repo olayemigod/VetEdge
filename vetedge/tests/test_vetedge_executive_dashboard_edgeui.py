@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PAGE_DIRECTORY = (
 	REPOSITORY_ROOT
