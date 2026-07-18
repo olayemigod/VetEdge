@@ -142,3 +142,24 @@
 	font-size: 12px;
 	text-align: center;
 }
+
+/* EdgeSuite pages own notification presentation in their shared context bar. */
+body:has(.vetedge-suite-shell) #veterinary-unread-bell-badge,
+body:has(.vetedge-suite-shell) #veterinary-unread-badge-drawer {
+	display: none !important;
+}
+/* Never let the legacy sidebar label float over content while the Desk sidebar is collapsed. */
+.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+[data-sidebar-state="collapsed"] #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.body-sidebar:not(.expanded) #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label {
+	display: none !important;
+}
+.sidebar-collapsed #veterinary-unread-bell-badge,
+[data-sidebar-state="collapsed"] #veterinary-unread-bell-badge,
+.body-sidebar:not(.expanded) #veterinary-unread-bell-badge {
+	width: 30px;
+	min-width: 30px;
+	padding: 3px;
+	justify-content: center;
+	overflow: hidden;
+}
