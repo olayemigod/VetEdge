@@ -142,3 +142,37 @@
 	font-size: 12px;
 	text-align: center;
 }
+
+
+/* Frappe Desk keeps the badge action available in compact sidebars without a text pill overlapping page content. */
+.layout-side-section.collapsed #veterinary-unread-bell-badge,
+.layout-side-section .body-sidebar.collapsed #veterinary-unread-bell-badge,
+.body-sidebar.collapsed #veterinary-unread-bell-badge,
+.body-sidebar.sidebar-collapsed #veterinary-unread-bell-badge,
+.desk-sidebar.collapsed #veterinary-unread-bell-badge,
+.desk-sidebar.sidebar-collapsed #veterinary-unread-bell-badge,
+[data-sidebar-collapsed="true"] #veterinary-unread-bell-badge,
+body.sidebar-collapsed #veterinary-unread-bell-badge {
+	gap: 0;
+	min-width: 26px;
+	margin: 4px;
+	padding: 3px;
+	justify-content: center;
+}
+
+.layout-side-section.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.layout-side-section .body-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.body-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.body-sidebar.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.desk-sidebar.collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+.desk-sidebar.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+[data-sidebar-collapsed="true"] #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label,
+body.sidebar-collapsed #veterinary-unread-bell-badge .veterinary-unread-bell-badge-label {
+	display: none;
+}
+
+
+/* EdgeSuite VetEdge pages provide their own bell and drawer. Avoid rendering a second legacy unread pill. */
+body:has([data-edge-product="vetedge"]) #veterinary-unread-bell-badge {
+	display: none !important;
+}

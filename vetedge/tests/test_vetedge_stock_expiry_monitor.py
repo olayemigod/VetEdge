@@ -86,6 +86,23 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertNotIn("coreedge/coreedge/public/js/edgeui", content)
 		self.assertNotIn("../../../../../coreedge", content)
 
+	def test_shared_shell_is_content_only_with_compact_context_and_filters(self):
+		content = self.read(
+			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
+		)
+		self.assertNotIn(':menuItems="menuItems"', content)
+		self.assertIn("vetedge-notification-icon", content)
+		self.assertIn("syncShellContext", content)
+		self.assertIn("'All Branches'", content)
+		self.assertIn("tenantName", content)
+		self.assertIn("branchName", content)
+		self.assertIn("userName", content)
+		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", content)
+		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", content)
+		self.assertIn("grid-template-columns: minmax(0, 1fr)", content)
+		self.assertNotIn("frappe.realtime", content)
+		self.assertNotIn("coreedge/", content.lower())
+
 	def test_notification_drawer_uses_vetedge_notification_apis_only(self):
 		content = self.read(
 			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"

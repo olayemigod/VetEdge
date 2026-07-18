@@ -17,13 +17,11 @@
   <EdgeAppShell
     v-else
     product="vetedge"
-    :menuItems="menuItems"
     activeRoute="/app/stock-expiry-monitor"
     title="Veterinary"
     :tenantName="tenantName"
     :branchName="branchName"
     :userName="userName"
-    @navigate="handleNavigation"
     data-edge-product="vetedge"
   >
     <template #notifications>
@@ -31,7 +29,9 @@
         :unreadCount="notificationUnreadCount"
         title="Notifications"
         @toggle="toggleNotificationDrawer"
-      />
+      >
+        <template #icon><span class="vetedge-notification-icon" aria-hidden="true">🔔</span></template>
+      </EdgeNotificationBell>
       <EdgeNotificationDrawer
         product="vetedge"
         title="Notifications"
@@ -263,13 +263,6 @@ const EdgeAppShell = {
   props: ['product', 'menuItems', 'activeRoute', 'title', 'tenantName', 'branchName', 'userName'],
   emits: ['navigate'],
   render() {
-    const menu = (this.menuItems || []).map((item) =>
-      h('button', {
-        class: ['edge-sidebar-item', item.route === this.activeRoute ? 'active' : ''],
-        type: 'button',
-        onClick: () => this.$emit('navigate', item.route)
-      }, [h('span', { class: 'edge-sidebar-icon' }, item.icon || ''), h('span', item.label || '')])
-    );
     const context = [this.tenantName, this.branchName, this.userName].filter(Boolean).join(' · ');
     return h('div', { class: 'edge-app-shell', 'data-edge-product': this.product }, [
       h('div', { class: 'edge-topbar' }, [
@@ -277,8 +270,7 @@ const EdgeAppShell = {
         h('div', { class: 'edge-topbar-context' }, context),
         h('div', { class: 'edge-topbar-actions' }, this.$slots.notifications ? this.$slots.notifications() : [])
       ]),
-      h('div', { class: 'edge-shell-body' }, [
-        h('aside', { class: 'edge-sidebar' }, menu),
+      h('div', { class: 'edge-shell-body edge-shell-body--content-only' }, [
         h('main', { class: 'edge-shell-main' }, this.$slots.default ? this.$slots.default() : [])
       ])
     ]);
@@ -485,7 +477,7 @@ export default {
       itemGroups: [],
       currentPage: 1,
       tenantName: '',
-      branchName: '',
+      branchName: 'All Branches',
       userName: '',
       filters: {
         warehouse: '',
@@ -495,25 +487,29 @@ export default {
         item: '',
         limit: 50,
         offset: 0
-      },
-      menuItems: [
-        { label: 'Stock Expiry Monitor', route: '/app/stock-expiry-monitor', icon: '📦' },
-        { label: 'Veterinary Settings', route: '/app/veterinary-settings', icon: '⚙️' }
-      ]
+      }
     };
   },
   created() {
     const runtimeComponents =
-      typeof window !== 'undefined' && window.EdgeUI
-        ? (window.EdgeUI.components || window.EdgeUI)
+      typeof window !== 'undefined' && (window.EdgeSuiteUI || window.EdgeUI)
+        ? ((window.EdgeSuiteUI || window.EdgeUI).components || (window.EdgeSuiteUI || window.EdgeUI))
         : {};
     this.missingComponents = requiredEdgeUIComponents.filter((name) => !runtimeComponents[name]);
     this.edgeUIValid = this.missingComponents.length === 0;
   },
   mounted() {
+    window.VetedgeProductMenu?.mount?.();
+    this.syncShellContext();
+    if (window.jQuery) {
+      window.jQuery(document).on('branch-change.vetedge_stock_shell session-defaults-changed.vetedge_stock_shell', this.syncShellContext);
+    }
     this.fetchMetadata();
     this.fetchData();
     this.fetchNotifications();
+  },
+  beforeUnmount() {
+    if (window.jQuery) window.jQuery(document).off('.vetedge_stock_shell');
   },
   computed: {
     filteredNotifications() {
@@ -530,6 +526,17 @@ export default {
     }
   },
   methods: {
+    syncShellContext() {
+      const boot = window.frappe?.boot || {};
+      const user = window.frappe?.session?.user || '';
+      this.userName = boot.user_info?.[user]?.fullname || user || 'Veterinary User';
+      this.tenantName = boot.sysdefaults?.company || 'Veterinary';
+      this.branchName =
+        boot.session_defaults?.branch ||
+        boot.edgesuite_product_menu?.branch ||
+        boot.user_info?.[user]?.branch ||
+        'All Branches';
+    },
     formatDate(dateStr) {
       if (!dateStr || typeof frappe === 'undefined') return dateStr;
       return frappe.datetime.str_to_user(dateStr);
@@ -664,7 +671,11 @@ export default {
       if (frappe.boot) {
         this.userName = frappe.boot.user_info?.[frappe.session.user]?.fullname || frappe.session.user;
         this.tenantName = frappe.boot.sysdefaults?.company || 'Veterinary';
-        this.branchName = frappe.boot.user_info?.[frappe.session.user]?.branch || '';
+        this.branchName =
+          frappe.boot.session_defaults?.branch ||
+          frappe.boot.edgesuite_product_menu?.branch ||
+          frappe.boot.user_info?.[frappe.session.user]?.branch ||
+          'All Branches';
       }
 
       // Fetch warehouses
@@ -736,15 +747,6 @@ export default {
       this.currentPage += direction;
       this.fetchData();
     },
-    handleNavigation(route) {
-      if (typeof frappe !== 'undefined') {
-        if (route === '/app/stock-expiry-monitor') {
-          frappe.set_route('stock-expiry-monitor');
-        } else if (route === '/app/veterinary-settings') {
-          frappe.set_route('Form', 'Veterinary Settings', 'Veterinary Settings');
-        }
-      }
-    }
   }
 }
 </script>
@@ -752,7 +754,7 @@ export default {
 <style scoped>
 .edge-filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--edge-space-md, 16px);
   align-items: end;
 }
@@ -999,5 +1001,30 @@ export default {
 
 .empty-state-container {
   padding: var(--edge-space-xl) 0;
+}
+</style>
+
+<style>
+.vetedge-expiry-monitor-root .edge-sidebar,
+.vetedge-expiry-monitor-root .edge-shell-sidebar {
+  display: none !important;
+}
+.vetedge-expiry-monitor-root .edge-shell-body,
+.vetedge-expiry-monitor-root .edge-shell-main,
+.vetedge-expiry-monitor-root .edge-page-layout,
+.vetedge-expiry-monitor-root .edge-page-layout-body {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+@media (max-width: 991px) {
+  .vetedge-expiry-monitor-root .edge-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 575px) {
+  .vetedge-expiry-monitor-root .edge-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

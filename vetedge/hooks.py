@@ -30,7 +30,7 @@ app_include_css = [
 	"/assets/vetedge/css/veterinary_unread_badge.css",
 ]
 app_include_js = [
-	"/assets/vetedge/js/edgesuite_product_menu.js",
+	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
