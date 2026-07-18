@@ -98,7 +98,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			"Quick access",
 			"VetEdge workspace",
 			"function menuIcon(icon)",
-			"window.frappe?.utils?.icon?.(name, \"sm\")",
+			"MENU_ICON_GLYPHS",
+			"vetedge-product-menu-icon-glyph",
 			"vetedge-owned-mega-menu",
 		):
 			self.assertIn(contract, product_menu)
@@ -110,7 +111,7 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			"grid-template-columns: minmax(0, 1fr)",
 			".vetedge-product-menu-panel",
 			"never show raw icon identifiers",
-			".vetedge-product-menu-link-icon .icon",
+			".vetedge-product-menu-icon-glyph",
 		):
 			self.assertIn(contract, styles)
 		self.assertNotIn("vetedge-executive-dashboard-root", product_menu)
