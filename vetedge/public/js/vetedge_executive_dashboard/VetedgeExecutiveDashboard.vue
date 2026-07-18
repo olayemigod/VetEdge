@@ -1,39 +1,22 @@
 <template>
-	<EdgeAppShell
-		product="vetedge"
-		title="Veterinary"
-		activeRoute="/app/vetedge-executive-dashboard"
-		:tenantName="tenantName"
-		:branchName="filters.branch || 'All Branches'"
-		:userName="userName"
-		data-edge-product="vetedge"
+	<VetedgeEdgeSuiteShell
+		:company="tenantName"
+		:branch="filters.branch || 'All Branches'"
+		:user="userName"
+		:notificationOpen="notificationDrawerOpen"
+		:notifications="filteredNotifications"
+		:unreadCount="notificationUnreadCount"
+		:notificationFilter="notificationFilter"
+		:notificationLoading="notificationLoading"
+		:notificationError="notificationError"
+		@toggle-notifications="toggleNotificationDrawer"
+		@close-notifications="notificationDrawerOpen = false"
+		@update-notification-filter="setNotificationFilter"
+		@refresh-notifications="fetchNotifications"
+		@mark-all-read="markAllNotificationsRead"
+		@notification-action="runNotificationAction"
+		@open-notification="openNotificationRoute"
 	>
-		<template #notifications>
-			<EdgeNotificationBell
-				:unreadCount="notificationUnreadCount"
-				title="Notifications"
-				@toggle="toggleNotificationDrawer"
-			>
-				<template #icon><span class="vetedge-notification-icon" aria-hidden="true">🔔</span></template>
-			</EdgeNotificationBell>
-			<EdgeNotificationDrawer
-				product="vetedge"
-				title="Notifications"
-				:open="notificationDrawerOpen"
-				:notifications="filteredNotifications"
-				:unreadCount="notificationUnreadCount"
-				:filter="notificationFilter"
-				:loading="notificationLoading"
-				:error="notificationError"
-				@close="notificationDrawerOpen = false"
-				@update:filter="setNotificationFilter"
-				@retry="fetchNotifications"
-				@refresh="fetchNotifications"
-				@mark-all-read="markAllNotificationsRead"
-				@action="runNotificationAction"
-				@open="openNotificationRoute"
-			/>
-		</template>
 
 		<EdgePageLayout class="vetedge-executive-page">
 			<template #header>
@@ -153,7 +136,7 @@
 				</section>
 			</div>
 		</EdgePageLayout>
-	</EdgeAppShell>
+	</VetedgeEdgeSuiteShell>
 </template>
 
 <script>
