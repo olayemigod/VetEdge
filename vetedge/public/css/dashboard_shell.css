@@ -696,3 +696,27 @@
 	font-weight: 700;
 	line-height: 1;
 }
+
+/* The launcher is part of the EdgeSuite page context: [waffle] Company · Branch · User [bell]. */
+[data-edge-product="vetedge"] .edge-topbar-context {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+}
+
+.vetedge-product-menu-slot--context {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	margin-right: 8px;
+}
+
+.vetedge-product-menu-slot--context .vetedge-product-menu-trigger {
+	margin: 0;
+}
+
+@media (max-width: 576px) {
+	[data-edge-product="vetedge"] .edge-topbar-context {
+		gap: 4px;
+	}
+}
