@@ -423,3 +423,67 @@
 		padding-right: 12px;
 	}
 }
+
+/* Fluid EdgeSuite page contract: let Desk sidebar width participate in normal flex layout. */
+.page-container:has(.vetedge-suite-shell),
+.page-container:has(.vetedge-suite-shell) .page-content,
+.page-container:has(.vetedge-suite-shell) .page-body,
+.page-container:has(.vetedge-suite-shell) .layout-main,
+.page-container:has(.vetedge-suite-shell) .layout-main-section,
+.page-container:has(.vetedge-suite-shell) .page-wrapper,
+.vetedge-executive-dashboard-root,
+.vetedge-expiry-monitor-root,
+.vetedge-suite-shell,
+.vetedge-suite-content,
+.vetedge-suite-content > *,
+.vetedge-suite-shell .edge-page-layout,
+.vetedge-suite-shell .edge-page-layout__content,
+.vetedge-suite-shell .edge-page-layout-body {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+	flex: 1 1 auto;
+	box-sizing: border-box;
+}
+.vetedge-suite-shell .edge-sidebar,
+.vetedge-suite-shell .edge-shell-sidebar,
+.vetedge-suite-shell .edge-topbar {
+	display: none !important;
+}
+.vetedge-executive-section,
+.vetedge-expiry-monitor-root .edge-stat-grid {
+	container-type: inline-size;
+}
+.vetedge-executive-kpi-grid,
+.vetedge-expiry-monitor-root .summary-stats-grid {
+	display: grid !important;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+	gap: 14px;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+@container (min-width: 1040px) {
+	.vetedge-executive-kpi-grid,
+	.vetedge-expiry-monitor-root .summary-stats-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+	}
+}
+@container (min-width: 820px) and (max-width: 1039px) {
+	.vetedge-executive-kpi-grid,
+	.vetedge-expiry-monitor-root .summary-stats-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+	}
+}
+@container (min-width: 610px) and (max-width: 819px) {
+	.vetedge-executive-kpi-grid,
+	.vetedge-expiry-monitor-root .summary-stats-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+	}
+}
+@container (min-width: 390px) and (max-width: 609px) {
+	.vetedge-executive-kpi-grid,
+	.vetedge-expiry-monitor-root .summary-stats-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+}
