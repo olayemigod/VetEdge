@@ -36,12 +36,14 @@ jobs:
       - name: Ruff
         run: |
           ruff check \
-            vetedge/tests/test_edgesuite_ui_dependency_contract.py
+            vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py
 
       - name: Validate EdgeSuite UI dependency contract
         run: |
           python -m pytest -q \
-            vetedge/tests/test_edgesuite_ui_dependency_contract.py
+            vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py
 
   frontend:
     name: Frontend validation
@@ -54,13 +56,19 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Check Stock Expiry Monitor JavaScript
+      - name: Check migrated dashboard JavaScript
         run: |
           node --check \
             vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
 
           node --check \
             vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
+
+          node --check \
+            vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js
+
+          node --check \
+            vetedge/public/js/vetedge_executive_dashboard.bundle.js
 
   frappe-v16:
     name: Frappe v16 standalone integration
@@ -206,3 +214,10 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_vetedge_stock_expiry_monitor 
+
+      - name: Run Executive Dashboard migration tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_executive_dashboard_edgeui
