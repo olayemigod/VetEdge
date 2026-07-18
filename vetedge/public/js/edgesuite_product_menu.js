@@ -29,6 +29,7 @@
 		observerActive: false,
 		lastMountResult: null,
 		lastTarget: null,
+		lastError: null,
 	};
 	let fallbackEventsBound = false;
 	let lifecycleEventsBound = false;
@@ -258,19 +259,33 @@
 	function registerEdgeUI() {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		if (!runtime?.registerProductMenu) return { registered: false, reason: "adapter-unavailable" };
-		runtime.registerProductMenu({
-			product: PRODUCT,
-			sections: normalizeSections(),
-			profile: profile(),
-			menu_source: canonicalSidebar() ? "workspace_sidebar" : "configured_routes",
-		});
-		return { registered: true };
+		try {
+			runtime.registerProductMenu({
+				product: PRODUCT,
+				sections: normalizeSections(),
+				profile: profile(),
+				menu_source: canonicalSidebar() ? "workspace_sidebar" : "configured_routes",
+			});
+			return { registered: true };
+		} catch (error) {
+			state.lastError = { stage: "runtime-adapter", message: error?.message || String(error) };
+			debug("runtime-adapter-failed", state.lastError);
+			return { registered: false, reason: "adapter-failed", error: state.lastError.message };
+		}
 	}
 
 	function mount() {
 		debug("mount-invoked");
+		state.lastError = null;
+		let mounted;
+		try {
+			mounted = mountFallback();
+		} catch (error) {
+			state.lastError = { stage: "dom-fallback", message: error?.message || String(error) };
+			debug("dom-fallback-failed", state.lastError);
+			mounted = result(false, "dom-fallback-failed", null, { error: state.lastError.message });
+		}
 		const edge = registerEdgeUI();
-		const mounted = mountFallback();
 		if (!mounted.mounted) scheduleMount(mounted.reason, 250);
 		return { ...mounted, edge };
 	}
@@ -343,6 +358,7 @@
 			lifecycleSubscriptions: state.lifecycleSubscriptions.slice(),
 			observerActive: state.observerActive,
 			lastMountResult: state.lastMountResult,
+			lastError: state.lastError,
 		};
 	}
 
