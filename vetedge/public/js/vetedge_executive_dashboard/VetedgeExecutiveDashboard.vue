@@ -2,12 +2,10 @@
 	<EdgeAppShell
 		product="vetedge"
 		title="Veterinary"
-		:menuItems="menuItems"
 		activeRoute="/app/vetedge-executive-dashboard"
 		:tenantName="tenantName"
 		:branchName="filters.branch || 'All Branches'"
 		:userName="userName"
-		@navigate="handleNavigation"
 		data-edge-product="vetedge"
 	>
 		<template #notifications>
@@ -227,11 +225,6 @@ export default {
 			},
 			tenantName: frappe.boot.sysdefaults?.company || 'Veterinary',
 			userName: frappe.boot.user_info?.[frappe.session.user]?.fullname || frappe.session.user,
-			menuItems: [
-				{ label: 'Executive Dashboard', route: '/app/vetedge-executive-dashboard', icon: '▦' },
-				{ label: 'Stock Expiry Monitor', route: '/app/stock-expiry-monitor', icon: '📦' },
-				{ label: 'Veterinary Settings', route: '/app/veterinary-settings', icon: '⚙' }
-			],
 			notificationDrawerOpen: false,
 			notificationLoading: false,
 			notificationError: '',
@@ -380,10 +373,6 @@ export default {
 		openReport(report) {
 			frappe.route_options = { ...this.filters };
 			frappe.set_route('query-report', report);
-		},
-		handleNavigation(route) {
-			const parts = String(route || '').replace(/^\/app\//, '').split('/').filter(Boolean);
-			if (parts.length) frappe.set_route(parts);
 		},
 		toggleNotificationDrawer() {
 			this.notificationDrawerOpen = !this.notificationDrawerOpen;
