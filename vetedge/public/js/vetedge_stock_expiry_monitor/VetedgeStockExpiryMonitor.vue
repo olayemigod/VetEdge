@@ -504,13 +504,14 @@ export default {
   },
   created() {
     const runtimeComponents =
-      typeof window !== 'undefined' && window.EdgeUI
-        ? (window.EdgeUI.components || window.EdgeUI)
+      typeof window !== 'undefined' && (window.EdgeSuiteUI || window.EdgeUI)
+        ? ((window.EdgeSuiteUI || window.EdgeUI).components || (window.EdgeSuiteUI || window.EdgeUI))
         : {};
     this.missingComponents = requiredEdgeUIComponents.filter((name) => !runtimeComponents[name]);
     this.edgeUIValid = this.missingComponents.length === 0;
   },
   mounted() {
+    window.VetedgeProductMenu?.mount?.();
     this.fetchMetadata();
     this.fetchData();
     this.fetchNotifications();
