@@ -9,6 +9,9 @@
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
 	const PAGE_CONTEXT_SELECTOR = '[data-edge-product="vetedge"] .edge-topbar-context';
+	// Kept as an array for the public menu API. The current target remains page-local
+	// so VetEdge does not inject into unstable Frappe navbar DOM.
+	const NAVBAR_TARGET_SELECTORS = [PAGE_CONTEXT_SELECTOR];
 	const LIFECYCLE_EVENTS = ["toolbar_setup", "page-change", "desktop_screen", "sidebar_setup"];
 	const FALLBACK_ROUTES = [
 		{ label: "Executive Dashboard", icon: "dashboard", link_type: "Page", link_to: "vetedge-executive-dashboard" },
@@ -124,7 +127,7 @@
 	}
 
 	function inspectTargets() {
-		const nodes = Array.from(document.querySelectorAll(PAGE_CONTEXT_SELECTOR));
+		const nodes = Array.from(document.querySelectorAll(NAVBAR_TARGET_SELECTORS.join(", ")));
 		return [{
 			selector: PAGE_CONTEXT_SELECTOR,
 			count: nodes.length,
@@ -138,7 +141,7 @@
 	}
 
 	function findPageContextTarget() {
-		const node = Array.from(document.querySelectorAll(PAGE_CONTEXT_SELECTOR)).find((candidate) => {
+		const node = Array.from(document.querySelectorAll(NAVBAR_TARGET_SELECTORS.join(", "))).find((candidate) => {
 			if (!candidate.isConnected) return false;
 			const style = window.getComputedStyle?.(candidate);
 			return style?.display !== "none" && style?.visibility !== "hidden";
@@ -386,7 +389,7 @@
 		remount,
 		close: closeFallback,
 		diagnose,
-		selectors: [PAGE_CONTEXT_SELECTOR],
+		selectors: NAVBAR_TARGET_SELECTORS.slice(),
 	});
 
 	if (document.readyState === "loading") {
