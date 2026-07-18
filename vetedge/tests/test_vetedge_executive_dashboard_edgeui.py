@@ -61,6 +61,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		):
 			self.assertIn(required, content)
 		self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_executive_dashboard.bundle.js"))
+		self.assertIn("window.mountVetedgeExecutiveDashboard(root[0])", content)
+		self.assertNotIn("runtime.createEdgeApp(window.VetedgeExecutiveDashboard)", content)
 		self.assertNotIn("dashboard_shell.js", content)
 		self.assertNotIn("coreedge", content.lower())
 
