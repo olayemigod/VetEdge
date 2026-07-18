@@ -423,3 +423,99 @@
 		padding-right: 12px;
 	}
 }
+
+
+/* Phase 2: fluid Desk content safeguards. Page components retain ownership of content. */
+.vetedge-executive-dashboard-root,
+.vetedge-expiry-monitor-root,
+.vetedge-executive-dashboard-root .edge-app-shell,
+.vetedge-expiry-monitor-root .edge-app-shell,
+.vetedge-executive-dashboard-root .edge-shell-body,
+.vetedge-expiry-monitor-root .edge-shell-body,
+.vetedge-executive-dashboard-root .edge-shell-main,
+.vetedge-expiry-monitor-root .edge-shell-main,
+.vetedge-executive-dashboard-root .edge-page-layout,
+.vetedge-expiry-monitor-root .edge-page-layout,
+.vetedge-executive-dashboard-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout-body {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+.vetedge-executive-dashboard-root .edge-shell-body,
+.vetedge-expiry-monitor-root .edge-shell-body,
+.vetedge-executive-dashboard-root .edge-shell-main,
+.vetedge-expiry-monitor-root .edge-shell-main {
+	flex: 1 1 auto;
+}
+
+.vetedge-executive-dashboard-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout__content,
+.vetedge-expiry-monitor-root .edge-page-layout-body,
+.vetedge-expiry-monitor-root .edge-table-card,
+.vetedge-expiry-monitor-root .table-responsive {
+	min-width: 0;
+	width: 100%;
+	max-width: none;
+}
+
+/* The dashboard has room for five KPI cards on wide Desk canvases, then steps down cleanly. */
+.vetedge-executive-dashboard-root .vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
+	grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 1439px) {
+	.vetedge-executive-dashboard-root .vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+	}
+}
+
+@media (max-width: 1179px) {
+	.vetedge-executive-dashboard-root .vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+	}
+}
+
+@media (max-width: 899px) {
+	.vetedge-executive-dashboard-root .vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+}
+
+@media (max-width: 575px) {
+	.vetedge-executive-dashboard-root .vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+}
+
+/* Keep all monitor fields—including Item Code and Apply / Refresh—in the responsive filter flow. */
+.vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-auto-flow: row;
+	align-items: end;
+	gap: var(--edge-space-md, 16px);
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+.vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid > * {
+	min-width: 0;
+}
+
+@media (max-width: 991px) {
+	.vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 575px) {
+	.vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
