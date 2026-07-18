@@ -86,6 +86,38 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertNotIn("frappe.realtime", shell)
 		self.assertNotIn("coreedge/", (content + shell).lower())
 
+	def test_monitor_results_and_states_survive_shared_shell(self):
+		content = self.read("public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue")
+		shell = self.read("public", "js", "vetedge_shell", "VetedgeEdgeSuiteShell.vue")
+		for contract in (
+			"Warehouse",
+			"Item Group",
+			"Expiry Window",
+			"Days Threshold",
+			"Apply / Refresh",
+			"Expired Batches",
+			"Expiring Soon",
+			"Affected Total Qty",
+			'Affected Warehouses',
+			'v-for="row in rows"',
+			"row.item_code",
+			"row.warehouse",
+			"row.qty",
+			"row.expiry_date",
+			"row.days_to_expiry",
+			"row.expiry_status",
+			"EdgeStatusBadge",
+			"EdgeLoadingState",
+			"EdgeEmptyState",
+			"EdgeErrorState",
+			'@retry="fetchData"',
+			"changePage",
+			"openDoc",
+		):
+			self.assertIn(contract, content)
+		self.assertIn("<slot />", shell)
+		self.assertNotIn("v-if=\"$slots.default\"", shell)
+
 	def test_notification_drawer_uses_vetedge_notification_apis_only(self):
 		content = self.read(
 			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
