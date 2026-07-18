@@ -31,6 +31,7 @@ STOCK_COMPONENT = (
 )
 HOOKS = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 SERVER_API = REPOSITORY_ROOT / "vetedge" / "services" / "reporting_logic_v4.py"
+TSCONFIG = REPOSITORY_ROOT / "tsconfig.json"
 
 
 class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
@@ -71,6 +72,22 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("runtime.createEdgeApp(VetedgeExecutiveDashboard)", content)
 		self.assertNotIn("import { createApp } from 'vue'", content)
 		self.assertNotIn("coreedge", content.lower())
+
+
+	def test_vue_build_resolves_without_coreedge_bridge(self):
+		tsconfig = self.read(TSCONFIG)
+		shell = self.read(SHARED_SHELL)
+		bundle = self.read(BUNDLE)
+		self.assertNotIn("coreedge", tsconfig.lower())
+		self.assertNotIn("vue-bridge", tsconfig.lower())
+		self.assertNotIn("@keydown.esc", shell)
+		self.assertNotIn("@keyup.esc", shell)
+		self.assertIn('@keydown="handleMenuKeydown"', shell)
+		self.assertIn("handleMenuKeydown(event)", shell)
+		self.assertIn("event.key === 'Escape'", shell)
+		self.assertIn("event.preventDefault()", shell)
+		self.assertIn("this.closeMenu()", shell)
+		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", bundle)
 
 	def test_product_menu_and_notification_actions_are_present(self):
 		component = self.read(COMPONENT)
