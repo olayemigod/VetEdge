@@ -186,7 +186,7 @@
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
-			return result(true, "already-mounted", existing.closest(FALLBACK_SLOT)?.parentElement?.matches(".navbar-right") ? ".navbar-right" : state.lastTarget?.selector);
+			return result(true, "already-mounted", existing.closest(`#${FALLBACK_SLOT}`)?.parentElement?.matches(".navbar-right") ? ".navbar-right" : state.lastTarget?.selector);
 		}
 		existing?.remove();
 		document.getElementById(FALLBACK_SLOT)?.remove();
