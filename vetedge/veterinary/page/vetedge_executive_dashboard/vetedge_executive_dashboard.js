@@ -62,8 +62,8 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 
 		frappe.require('vetedge_executive_dashboard.bundle.js', () => {
 			if (wrapper.current_visit_id !== visitId) return;
-			if (!window.VetedgeExecutiveDashboard) {
-				showFailure(__('The Executive Dashboard product bundle is unavailable.'));
+			if (typeof window.mountVetedgeExecutiveDashboard !== 'function') {
+				showFailure(__('The Executive Dashboard product bundle mount function is unavailable.'));
 				return;
 			}
 
@@ -71,8 +71,7 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 				$loading.remove();
 				const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
 					.appendTo(page.body);
-				wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
-				wrapper.vue_app.mount(root[0]);
+				wrapper.vue_app = window.mountVetedgeExecutiveDashboard(root[0]);
 			} catch (error) {
 				console.error('Error mounting Executive Dashboard:', error);
 				showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
