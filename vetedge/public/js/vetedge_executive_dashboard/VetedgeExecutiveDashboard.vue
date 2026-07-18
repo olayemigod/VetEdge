@@ -488,27 +488,27 @@ export default {
 }
 .vetedge-executive-kpi-grid .edge-stat-card { min-width: 0; border-top: 3px solid var(--edge-primary); }
 @container vetedge-executive-content (min-width: 1180px) {
-	.vetedge-executive-kpi-grid {
+	.vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
 		grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
 	}
 }
 @container vetedge-executive-content (min-width: 900px) and (max-width: 1179px) {
-	.vetedge-executive-kpi-grid {
+	.vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
 		grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
 	}
 }
 @container vetedge-executive-content (min-width: 640px) and (max-width: 899px) {
-	.vetedge-executive-kpi-grid {
+	.vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 	}
 }
 @container vetedge-executive-content (min-width: 480px) and (max-width: 639px) {
-	.vetedge-executive-kpi-grid {
+	.vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 	}
 }
 @container vetedge-executive-content (max-width: 479px) {
-	.vetedge-executive-kpi-grid {
+	.vetedge-executive-dashboard-content .vetedge-executive-kpi-grid {
 		grid-template-columns: minmax(0, 1fr) !important;
 	}
 }
