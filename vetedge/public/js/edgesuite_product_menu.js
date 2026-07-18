@@ -110,6 +110,17 @@
 		})[character]);
 	}
 
+	function menuIcon(icon) {
+		const name = String(icon || "list").replace(/^icon-/, "");
+		try {
+			const rendered = window.frappe?.utils?.icon?.(name, "sm");
+			if (rendered) return rendered;
+		} catch (error) {
+			debug("icon-render-failed", { name, message: error?.message || String(error) });
+		}
+		return '<span class="vetedge-product-menu-icon-fallback" aria-hidden="true">•</span>';
+	}
+
 	function inspectTargets() {
 		return NAVBAR_TARGET_SELECTORS.map((selector) => {
 			const nodes = Array.from(document.querySelectorAll(selector));
@@ -162,7 +173,7 @@
 			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
 		const quickAccess = FALLBACK_ROUTES.slice(0, 2);
-		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${html(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
+		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
 		panel.innerHTML = `
 			<div class="vetedge-product-menu-profile">
 				<span class="vetedge-product-menu-avatar">${html(initials)}</span>
@@ -278,20 +289,14 @@
 
 	function registerEdgeUI() {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
-		if (!runtime?.registerProductMenu) return { registered: false, reason: "adapter-unavailable" };
-		try {
-			runtime.registerProductMenu({
-				product: PRODUCT,
-				sections: normalizeSections(),
-				profile: profile(),
-				menu_source: canonicalSidebar() ? "workspace_sidebar" : "configured_routes",
-			});
-			return { registered: true };
-		} catch (error) {
-			state.lastError = { stage: "runtime-adapter", message: error?.message || String(error) };
-			debug("runtime-adapter-failed", state.lastError);
-			return { registered: false, reason: "adapter-failed", error: state.lastError.message };
-		}
+		// The standalone runtime may expose a generic menu adapter. VetEdge owns this
+		// launcher so the adapter cannot replace the branded, grouped local panel.
+		runtime?.closeProductMenu?.();
+		return {
+			registered: false,
+			reason: "vetedge-owned-mega-menu",
+			standaloneRuntime: Boolean(runtime),
+		};
 	}
 
 	function mount() {
