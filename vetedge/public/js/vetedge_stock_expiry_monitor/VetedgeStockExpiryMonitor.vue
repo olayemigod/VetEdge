@@ -31,7 +31,9 @@
         :unreadCount="notificationUnreadCount"
         title="Notifications"
         @toggle="toggleNotificationDrawer"
-      />
+      >
+        <template #icon><span class="vetedge-notification-icon" aria-hidden="true">🔔</span></template>
+      </EdgeNotificationBell>
       <EdgeNotificationDrawer
         product="vetedge"
         title="Notifications"
