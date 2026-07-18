@@ -334,6 +334,7 @@
 #edge-product-menu-dropdown .vetedge-product-menu-active { background: #e8f2ff; color: var(--edge-primary); font-weight: 600; }
 @media (max-width: 576px) { #edge-product-menu-dropdown { max-width: calc(100vw - 16px); max-height: calc(100vh - 72px); overflow-y: auto; } }
 /* VetEdge-owned Product Menu fallback when the optional CoreEdge EdgeUI runtime is unavailable. */
+.vetedge-product-menu-slot { display: inline-flex; align-items: center; margin: 0; padding: 0; list-style: none; }
 .vetedge-product-menu-trigger { display: inline-grid; place-items: center; width: 34px; height: 34px; margin: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--edge-text, #1e293b); font-size: 22px; line-height: 1; cursor: pointer; z-index: 1031; }
 .vetedge-product-menu-trigger:hover, .vetedge-product-menu-trigger:focus-visible { background: var(--edge-bg, #f7f9fc); color: var(--edge-primary, #1677ff); outline: 2px solid var(--edge-primary, #1677ff); outline-offset: 2px; }
 .vetedge-product-menu-panel { position: fixed; top: 56px; right: 14px; z-index: 1055; width: min(440px, calc(100vw - 20px)); max-height: calc(100vh - 72px); overflow: hidden; background: #fff; border: 1px solid var(--edge-border, #dfe5ef); border-radius: 10px; box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }
