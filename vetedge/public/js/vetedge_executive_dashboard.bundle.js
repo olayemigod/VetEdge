@@ -1,3 +1,4 @@
+import VetedgeEdgeSuiteShell from './vetedge_shell/VetedgeEdgeSuiteShell.vue';
 import VetedgeExecutiveDashboard from './vetedge_executive_dashboard/VetedgeExecutiveDashboard.vue';
 
 export function mountVetedgeExecutiveDashboard(target) {
@@ -7,7 +8,7 @@ export function mountVetedgeExecutiveDashboard(target) {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
 
-	VetedgeExecutiveDashboard.components = runtime.components;
+	VetedgeExecutiveDashboard.components = { ...runtime.components, VetedgeEdgeSuiteShell };
 	const app = runtime.createEdgeApp(VetedgeExecutiveDashboard);
 	app.mount(target);
 	return app;
