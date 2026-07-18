@@ -35,10 +35,13 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 		'EdgePageLayout',
 		'EdgePageHeader',
 		'EdgeFilterBar',
+		'EdgeDashboardLayout',
 		'EdgeStatCard',
 		'EdgeLoadingState',
 		'EdgeEmptyState',
-		'EdgeErrorState'
+		'EdgeErrorState',
+		'EdgeNotificationBell',
+		'EdgeNotificationDrawer'
 	];
 
 	frappe.require('edgeui.bundle.js', () => {
