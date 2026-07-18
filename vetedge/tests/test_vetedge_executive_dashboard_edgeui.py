@@ -260,6 +260,10 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		):
 			self.assertIn(columns, styles)
 
+		self.assertIn("container-type: inline-size", executive)
+		self.assertIn("@container vetedge-executive-content", executive)
+		self.assertIn("repeat(5, minmax(0, 1fr))", executive)
+
 		self.assertIn(
 			".vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid",
 			styles,
@@ -269,6 +273,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", styles)
 
 		self.assertIn(".layout-side-section.collapsed", badge_styles)
+		self.assertIn(".body-sidebar.sidebar-collapsed", badge_styles)
+		self.assertIn('[data-sidebar-collapsed="true"]', badge_styles)
 		self.assertIn(".veterinary-unread-bell-badge-label", badge_styles)
 		self.assertIn("display: none", badge_styles)
 
