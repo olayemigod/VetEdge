@@ -100,8 +100,8 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 
 			$loading.remove();
 
-			if (!window.VetedgeStockExpiryMonitor) {
-				showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
+			if (typeof window.mountVetedgeStockExpiryMonitor !== 'function') {
+				showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle mount function.'));
 				return;
 			}
 
@@ -110,11 +110,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 					'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
 				).appendTo(page.body);
 
-				wrapper.vue_app = runtime.createEdgeApp(
-					window.VetedgeStockExpiryMonitor
-				);
-
-				wrapper.vue_app.mount(root[0]);
+				wrapper.vue_app = window.mountVetedgeStockExpiryMonitor(root[0]);
 			} catch (error) {
 				console.error('Error mounting Stock Expiry Monitor:', error);
 				showLoadFailure(
