@@ -161,7 +161,24 @@
 		const initials = identity.name.split(/\s+/).filter(Boolean).slice(0, 2)
 			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
-		panel.innerHTML = `<div class="vetedge-product-menu-profile"><span class="vetedge-product-menu-avatar">${html(initials)}</span><div><strong>${html(identity.name)}</strong><small>${html(identity.email)}</small><small>${html(identity.company)} · ${html(identity.branch)}</small></div><span class="vetedge-product-menu-product">Veterinary</span></div><div class="vetedge-product-menu-scroll">${sections.map((section) => `<section class="vetedge-product-menu-section"><h3>${html(section.label)}</h3>${section.items.map((item) => `<button type="button" class="vetedge-product-menu-link ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon">${html(item.icon)}</span><span>${html(item.label)}</span></button>`).join("")}</section>`).join("")}</div>`;
+		const quickAccess = FALLBACK_ROUTES.slice(0, 2);
+		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${html(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
+		panel.innerHTML = `
+			<div class="vetedge-product-menu-profile">
+				<span class="vetedge-product-menu-avatar">${html(initials)}</span>
+				<div>
+					<strong>${html(identity.name)}</strong>
+					<small>${html(identity.company || "Veterinary")} · ${html(identity.branch)}</small>
+				</div>
+				<span class="vetedge-product-menu-product">Veterinary</span>
+			</div>
+			<div class="vetedge-product-menu-scroll">
+				<section class="vetedge-product-menu-quick-access" aria-label="Quick access">
+					<div class="vetedge-product-menu-section-heading"><h3>Quick access</h3><span>VetEdge workspace</span></div>
+					<div class="vetedge-product-menu-quick-grid">${quickAccess.map((item) => menuLink(item, "vetedge-product-menu-quick-link")).join("")}</div>
+				</section>
+				<div class="vetedge-product-menu-grid">${sections.map((section) => `<section class="vetedge-product-menu-section"><h3>${html(section.label)}</h3><div class="vetedge-product-menu-section-links">${section.items.map((item) => menuLink(item)).join("")}</div></section>`).join("")}</div>
+			</div>`;
 	}
 
 	function closeFallback() {
