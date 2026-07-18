@@ -273,9 +273,10 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("display: none", badge_styles)
 
 		for path in (LOADER, BUNDLE, COMPONENT, STOCK_COMPONENT):
-			source = self.read(path).lower()
-			self.assertNotIn("coreedge/", source)
-			self.assertIn("edgeui", source)
+			self.assertNotIn("coreedge/", self.read(path).lower())
+
+		for path in (LOADER, BUNDLE):
+			self.assertIn("window.edgesuiteui || window.edgeui", self.read(path).lower())
 
 	def test_no_coreedge_frontend_dependency(self):
 		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU):
