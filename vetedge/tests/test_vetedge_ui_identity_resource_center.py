@@ -51,6 +51,8 @@ def test_boot_identity_separates_clinic_and_deployment_product_branding():
 def test_vetedge_registers_shared_notification_and_navigation_adapters():
 	content = read(BRIDGE)
 	for contract in (
+		"supportsSharedContracts",
+		"EdgeSuite UI 0.3 or newer",
 		"notifications:vetedge",
 		"notifications:veterinary",
 		"navigation:vetedge",
