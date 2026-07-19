@@ -61,7 +61,7 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 			return;
 		}
 
-		frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1', () => {
+		const loadDashboard = () => {
 			if (wrapper.current_visit_id !== visitId) return;
 			const professionalUI = window.VetEdgeProfessionalUI?.install?.();
 			if (!professionalUI?.installed) {
@@ -90,6 +90,12 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 					showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
 				}
 			});
-		});
+		};
+
+		if (window.VetEdgeProfessionalUI?.install) {
+			loadDashboard();
+		} else {
+			frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', loadDashboard);
+		}
 	});
 };
