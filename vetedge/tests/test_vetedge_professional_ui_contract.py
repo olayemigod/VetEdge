@@ -91,9 +91,14 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			self.assertIn("window.VetEdgeProfessionalUI?.install?.()", content)
 			self.assertIn("if (window.VetEdgeProfessionalUI?.install)", content)
 			self.assertIn(f"const {loader_function} = () =>", content)
+			self.assertIn(
+				f"frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', {loader_function})",
+				content,
+			)
+			self.assertIn(f"\t\t\t{loader_function}();", content)
+			self.assertIn(product_bundle, content)
 			self.assertIn("EdgeSuite UI 0.2 or newer", content)
-			self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_professional_ui.js"))
-			self.assertLess(content.index("vetedge_professional_ui.js"), content.index(product_bundle))
+			self.assertLess(content.index("edgeui.bundle.js"), content.index(f"const {loader_function}"))
 			self.assertNotIn(
 				"frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=",
 				content,
