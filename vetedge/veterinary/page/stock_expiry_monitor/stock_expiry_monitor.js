@@ -53,6 +53,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 
 	const requiredComponents = [
 		'EdgeAppShell',
+		'EdgeIcon',
 		'EdgePageLayout',
 		'EdgePageHeader',
 		'EdgeFilterBar',
@@ -95,34 +96,46 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			return;
 		}
 
-		frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+		frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1', () => {
 			if (wrapper.current_visit_id !== visit_id) return;
-
-			$loading.remove();
-
-			if (!window.VetedgeStockExpiryMonitor) {
-				showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
+			const professionalUI = window.VetEdgeProfessionalUI?.install?.();
+			if (!professionalUI?.installed) {
+				showLoadFailure(
+					professionalUI?.message ||
+					__('VetEdge requires EdgeSuite UI 0.2 or newer for the professional product shell.')
+				);
 				return;
 			}
 
-			try {
-				const root = $(
-					'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
-				).appendTo(page.body);
+			frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+				if (wrapper.current_visit_id !== visit_id) return;
 
-				wrapper.vue_app = runtime.createEdgeApp(
-					window.VetedgeStockExpiryMonitor
-				);
+				$loading.remove();
 
-				wrapper.vue_app.mount(root[0]);
-			} catch (error) {
-				console.error('Error mounting Stock Expiry Monitor:', error);
-				showLoadFailure(
-					__('Error mounting Stock Expiry Monitor: {0}', [
-						error.message || String(error)
-					])
-				);
-			}
+				if (!window.VetedgeStockExpiryMonitor) {
+					showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
+					return;
+				}
+
+				try {
+					const root = $(
+						'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
+					).appendTo(page.body);
+
+					wrapper.vue_app = runtime.createEdgeApp(
+						window.VetedgeStockExpiryMonitor
+					);
+
+					wrapper.vue_app.mount(root[0]);
+				} catch (error) {
+					console.error('Error mounting Stock Expiry Monitor:', error);
+					showLoadFailure(
+						__('Error mounting Stock Expiry Monitor: {0}', [
+							error.message || String(error)
+						])
+					);
+				}
+			});
 		});
 	});
 };
