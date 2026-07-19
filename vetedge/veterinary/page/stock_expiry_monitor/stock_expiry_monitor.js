@@ -96,7 +96,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			return;
 		}
 
-		frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1', () => {
+		const loadMonitor = () => {
 			if (wrapper.current_visit_id !== visit_id) return;
 			const professionalUI = window.VetEdgeProfessionalUI?.install?.();
 			if (!professionalUI?.installed) {
@@ -136,6 +136,12 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 					);
 				}
 			});
-		});
+		};
+
+		if (window.VetEdgeProfessionalUI?.install) {
+			loadMonitor();
+		} else {
+			frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', loadMonitor);
+		}
 	});
 };
