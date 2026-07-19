@@ -75,12 +75,13 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			(executive_loader, 'vetedge_executive_dashboard.bundle.js', 'VetedgeExecutiveDashboard'),
 			(stock_loader, 'vetedge_stock_expiry_monitor.bundle.js', 'VetedgeStockExpiryMonitor'),
 		):
-			self.assertIn(f"const productBundle = '{bundle_name}';", loader)
-			self.assertIn('frappe.assets.bundled_asset(productBundle)', loader)
-			self.assertIn('requestedPath: productBundle', loader)
-			self.assertIn('resolvedPath: resolvedProductBundle', loader)
+			self.assertIn('const resolveAssetUrl = (asset)', loader)
+			self.assertIn('frappe.boot?.assets_json?.[asset]', loader)
+			self.assertIn('const createAssetFailureTrace = (asset)', loader)
+			self.assertIn(f"createAssetFailureTrace('{bundle_name}')", loader)
+			self.assertIn('execution failed before loader fallback', loader)
 			self.assertIn(f'window.{product_name}', loader)
-			self.assertIn('product bundle callback', loader)
+			self.assertIn('did not publish its component before loader fallback', loader)
 
 	def test_bundle_mounts_component_through_edgesuite_ui(self):
 		content = self.read(BUNDLE)
