@@ -149,7 +149,7 @@ def _meta_fields(meta) -> list:
 		and field.fieldtype in SUPPORTED_FIELDTYPES
 		and not field.hidden
 		and not field.read_only
-		and not field.virtual
+		and not getattr(field, "virtual", False)
 	]
 
 
@@ -216,7 +216,7 @@ def _branch_filters(meta) -> dict:
 		return {}
 	try:
 		branch = get_current_vetedge_branch()
-	 except Exception:
+	except Exception:
 		branch = None
 	if branch and str(branch).strip().lower() not in {"all", "all branches"}:
 		return {"branch": branch}
@@ -251,6 +251,17 @@ def _column_schema(meta, fields: list[str]) -> list[dict]:
 	return columns
 
 
+def _permission_aware_count(doctype: str, filters: dict, or_filters: list | None) -> int:
+	rows = frappe.get_list(
+		doctype,
+		fields=["count(name) as total"],
+		filters=filters,
+		or_filters=or_filters,
+		limit_page_length=1,
+	)
+	return cint(rows[0].get("total")) if rows else 0
+
+
 @frappe.whitelist()
 def get_resource_page(
 	resource: str,
@@ -283,9 +294,13 @@ def get_resource_page(
 		start=start,
 		page_length=page_length,
 	)
-	total = frappe.db.count(doctype, filters=filters)
+	total = _permission_aware_count(doctype, filters, or_filters)
 	unsupported = _unsupported_required_fields(meta)
 	can_create = bool(config["allow_create"] and frappe.has_permission(doctype, "create") and not unsupported)
+	can_quick_edit = bool(
+		config["allow_edit"] and frappe.has_permission(doctype, "write") and not unsupported
+	)
+	can_delete = bool(config["allow_delete"] and frappe.has_permission(doctype, "delete"))
 
 	return {
 		"resource": config["key"],
@@ -298,8 +313,8 @@ def get_resource_page(
 		"page_length": page_length,
 		"total": total,
 		"can_create": can_create,
-		"can_quick_edit": bool(config["allow_edit"] and not unsupported),
-		"can_delete": bool(config["allow_delete"]),
+		"can_quick_edit": can_quick_edit,
+		"can_delete": can_delete,
 		"unsupported_required_fields": unsupported,
 		"full_form_route": _full_form_route(doctype),
 	}
@@ -319,11 +334,12 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 			)
 		)
 
+	fields = _editor_fields(meta)
 	if name:
 		doc = frappe.get_doc(doctype, name)
 		doc.check_permission("read")
 		can_save = bool(config["allow_edit"] and doc.docstatus == 0 and doc.has_permission("write"))
-		values = {field["fieldname"]: doc.get(field["fieldname"]) for field in _editor_fields(meta)}
+		values = {field["fieldname"]: doc.get(field["fieldname"]) for field in fields}
 	else:
 		if not config["allow_create"] or not frappe.has_permission(doctype, "create"):
 			frappe.throw(_("You are not permitted to create {0}.").format(doctype), frappe.PermissionError)
@@ -337,7 +353,7 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 		"doctype": doctype,
 		"name": name,
 		"title": _("Update {0}").format(config["title"]) if name else _("Add {0}").format(config["title"]),
-		"fields": _editor_fields(meta),
+		"fields": fields,
 		"values": values,
 		"can_save": can_save,
 		"full_form_route": _full_form_route(doctype, name),
