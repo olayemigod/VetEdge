@@ -81,17 +81,23 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			self.assertNotIn(forbidden, content)
 
 	def test_reference_page_loaders_require_edgeui_0_2_adapter_before_product_bundles(self):
-		for loader, product_bundle in (
-			(EXECUTIVE_LOADER, "vetedge_executive_dashboard.bundle.js"),
-			(STOCK_LOADER, "vetedge_stock_expiry_monitor.bundle.js"),
+		for loader, product_bundle, loader_function in (
+			(EXECUTIVE_LOADER, "vetedge_executive_dashboard.bundle.js", "loadDashboard"),
+			(STOCK_LOADER, "vetedge_stock_expiry_monitor.bundle.js", "loadMonitor"),
 		):
 			content = self.read(loader)
 			self.assertIn("'EdgeIcon'", content)
-			self.assertIn("vetedge_professional_ui.js?v=20260719-1", content)
+			self.assertIn("/assets/vetedge/js/vetedge_professional_ui.js", content)
 			self.assertIn("window.VetEdgeProfessionalUI?.install?.()", content)
+			self.assertIn("if (window.VetEdgeProfessionalUI?.install)", content)
+			self.assertIn(f"const {loader_function} = () =>", content)
 			self.assertIn("EdgeSuite UI 0.2 or newer", content)
 			self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_professional_ui.js"))
 			self.assertLess(content.index("vetedge_professional_ui.js"), content.index(product_bundle))
+			self.assertNotIn(
+				"frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=",
+				content,
+			)
 			self.assertNotIn("coreedge/", content.lower())
 
 	def test_professional_css_restores_shared_sidebar_without_narrowing_page_content(self):
