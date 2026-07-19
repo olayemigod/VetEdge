@@ -42,6 +42,13 @@
 		return window.EdgeSuiteUI || window.EdgeUI || null;
 	}
 
+	function supportsSharedContracts(version) {
+		const parts = String(version || "0.0.0")
+			.split(".")
+			.map((value) => Number.parseInt(value, 10) || 0);
+		return parts[0] > 0 || (parts[0] === 0 && parts[1] >= 3);
+	}
+
 	function call(method, args) {
 		if (!window.frappe?.call) return Promise.reject(new Error("Frappe Desk is not ready."));
 		return window.frappe.call(method, args || {});
@@ -165,7 +172,13 @@
 	function install() {
 		state.lastError = null;
 		const edgeUI = runtime();
+		state.runtimeVersion = edgeUI?.version || "";
 		if (!edgeUI?.registerAdapter) return false;
+		if (!supportsSharedContracts(edgeUI.version)) {
+			state.installed = false;
+			state.lastError = `VetEdge requires EdgeSuite UI 0.3 or newer; found ${edgeUI.version || "unknown"}.`;
+			return false;
+		}
 
 		try {
 			edgeUI.registerAdapter("navigation:vetedge", navigationAdapter(), { replace: true });
@@ -176,6 +189,7 @@
 			state.runtimeVersion = edgeUI.version || "";
 			return true;
 		} catch (error) {
+			state.installed = false;
 			state.lastError = error?.message || String(error);
 			return false;
 		}
