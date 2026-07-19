@@ -37,13 +37,15 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
-            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py
+            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_professional_ui_contract.py
 
       - name: Validate EdgeSuite UI dependency contract
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
-            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py
+            vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_professional_ui_contract.py
 
   frontend:
     name: Frontend validation
@@ -58,6 +60,9 @@ jobs:
 
       - name: Check migrated dashboard JavaScript
         run: |
+          node --check \
+            vetedge/public/js/vetedge_professional_ui.js
+
           node --check \
             vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
 
@@ -133,10 +138,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out private EdgeSuite UI
+      - name: Check out private EdgeSuite UI 0.2 branch
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
+          ref: agent/fix-waffle-product-menu
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -208,12 +214,19 @@ jobs:
             --app vetedge \
             --module vetedge.tests.test_coreedge_adapter
 
+      - name: Run professional EdgeSuite UI contract tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_professional_ui_contract
+
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
         run: |
           bench --site ci.localhost run-tests \
             --app vetedge \
-            --module vetedge.tests.test_vetedge_stock_expiry_monitor 
+            --module vetedge.tests.test_vetedge_stock_expiry_monitor
 
       - name: Run Executive Dashboard migration tests
         working-directory: frappe-bench
