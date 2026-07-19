@@ -1,38 +1,90 @@
-// VetEdge product bundles must use the Vue instance that EdgeSuite UI mounted.
-// Loading a second Vue runtime breaks resolveComponent() because its render context differs.
+// VetEdge product bundles must use the Vue instance EdgeSuite UI has already loaded.
+// A second runtime breaks resolveComponent() because its render context differs.
+const REQUIRED_SFC_HELPERS = [
+	'vModelText',
+	'vModelCheckbox',
+	'vModelRadio',
+	'vModelSelect',
+	'withDirectives',
+	'resolveComponent',
+	'resolveDirective',
+	'createVNode',
+	'createBlock',
+	'openBlock',
+];
+
+function helperAvailability(candidate) {
+	return Object.fromEntries(
+		REQUIRED_SFC_HELPERS.map((helper) => [helper, typeof candidate?.[helper] === 'function'])
+	);
+}
+
 function getVue() {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
-	const vue = runtime?.Vue || window.Vue;
-	if (!vue) throw new Error('EdgeSuite UI Vue runtime is unavailable.');
+	const candidates = [runtime?.Vue, window.Vue].filter(Boolean);
+	const diagnostics = candidates.map((candidate) => helperAvailability(candidate));
+	console.info('[VetEdge Vue bridge] evaluating shared Vue runtime', diagnostics);
+
+	const vue = candidates.find((candidate) =>
+		REQUIRED_SFC_HELPERS.every((helper) => typeof candidate[helper] === 'function')
+	);
+	if (!vue) {
+		const error = new Error('EdgeSuite UI Vue runtime is missing required SFC helpers.');
+		console.error('[VetEdge Vue bridge] first bundle evaluation exception', {
+			diagnostics,
+			stack: error.stack
+		});
+		throw error;
+	}
 	return vue;
 }
 
-export const createApp = (...args) => getVue().createApp(...args);
-export const defineComponent = (...args) => getVue().defineComponent(...args);
-export const h = (...args) => getVue().h(...args);
-export const ref = (...args) => getVue().ref(...args);
-export const reactive = (...args) => getVue().reactive(...args);
-export const computed = (...args) => getVue().computed(...args);
-export const watch = (...args) => getVue().watch(...args);
-export const nextTick = (...args) => getVue().nextTick(...args);
-export const onMounted = (...args) => getVue().onMounted(...args);
-export const onBeforeUnmount = (...args) => getVue().onBeforeUnmount(...args);
+window.setTimeout(() => {
+	console.info('[VetEdge Vue bridge] product globals after bundle evaluation', {
+		executiveDashboard: window.VetedgeExecutiveDashboard,
+		stockExpiryMonitor: window.VetedgeStockExpiryMonitor,
+		executiveDashboardApp: window.VetedgeExecutiveDashboardApp,
+		stockExpiryMonitorApp: window.VetedgeStockExpiryMonitorApp
+	});
+}, 0);
 
-export const createElementVNode = (...args) => getVue().createElementVNode(...args);
-export const createVNode = (...args) => getVue().createVNode(...args);
-export const createBlock = (...args) => getVue().createBlock(...args);
-export const createCommentVNode = (...args) => getVue().createCommentVNode(...args);
-export const createElementBlock = (...args) => getVue().createElementBlock(...args);
-export const openBlock = (...args) => getVue().openBlock(...args);
-export const resolveComponent = (...args) => getVue().resolveComponent(...args);
-export const withCtx = (...args) => getVue().withCtx(...args);
-export const withDirectives = (...args) => getVue().withDirectives(...args);
-export const withModifiers = (...args) => getVue().withModifiers(...args);
-export const normalizeClass = (...args) => getVue().normalizeClass(...args);
-export const pushScopeId = (...args) => getVue().pushScopeId(...args);
-export const popScopeId = (...args) => getVue().popScopeId(...args);
-export const renderList = (...args) => getVue().renderList(...args);
-export const toDisplayString = (...args) => getVue().toDisplayString(...args);
-export const vModelSelect = (...args) => getVue().vModelSelect(...args);
-export const vModelText = (...args) => getVue().vModelText(...args);
-export const Fragment = getVue().Fragment;
+// Export the verified EdgeSuite runtime itself for product code that needs the full API.
+const Vue = getVue();
+export { Vue };
+export default Vue;
+
+// Static named exports are required for Vue SFC compiler output. Each is a direct
+// reference to the verified shared runtime, not a separately bundled Vue copy.
+export const createApp = Vue.createApp;
+export const defineComponent = Vue.defineComponent;
+export const h = Vue.h;
+export const ref = Vue.ref;
+export const reactive = Vue.reactive;
+export const computed = Vue.computed;
+export const watch = Vue.watch;
+export const nextTick = Vue.nextTick;
+export const onMounted = Vue.onMounted;
+export const onUnmounted = Vue.onUnmounted;
+export const onBeforeUnmount = Vue.onBeforeUnmount;
+
+export const createElementVNode = Vue.createElementVNode;
+export const createVNode = Vue.createVNode;
+export const createBlock = Vue.createBlock;
+export const createCommentVNode = Vue.createCommentVNode;
+export const createElementBlock = Vue.createElementBlock;
+export const openBlock = Vue.openBlock;
+export const resolveComponent = Vue.resolveComponent;
+export const resolveDirective = Vue.resolveDirective;
+export const withCtx = Vue.withCtx;
+export const withDirectives = Vue.withDirectives;
+export const withModifiers = Vue.withModifiers;
+export const normalizeClass = Vue.normalizeClass;
+export const pushScopeId = Vue.pushScopeId;
+export const popScopeId = Vue.popScopeId;
+export const renderList = Vue.renderList;
+export const toDisplayString = Vue.toDisplayString;
+export const vModelText = Vue.vModelText;
+export const vModelCheckbox = Vue.vModelCheckbox;
+export const vModelRadio = Vue.vModelRadio;
+export const vModelSelect = Vue.vModelSelect;
+export const Fragment = Vue.Fragment;

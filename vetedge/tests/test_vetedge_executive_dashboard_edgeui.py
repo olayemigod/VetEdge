@@ -65,6 +65,23 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("dashboardBundleTrace.error", content)
 		self.assertNotIn("coreedge", content.lower())
 
+	def test_product_loaders_resolve_and_diagnose_vetedge_bundle_urls(self):
+		executive_loader = self.read(LOADER)
+		stock_loader = self.read(
+			REPOSITORY_ROOT / 'vetedge' / 'veterinary' / 'page' / 'stock_expiry_monitor' / 'stock_expiry_monitor.js'
+		)
+
+		for loader, bundle_name, product_name in (
+			(executive_loader, 'vetedge_executive_dashboard.bundle.js', 'VetedgeExecutiveDashboard'),
+			(stock_loader, 'vetedge_stock_expiry_monitor.bundle.js', 'VetedgeStockExpiryMonitor'),
+		):
+			self.assertIn(f"const productBundle = '{bundle_name}';", loader)
+			self.assertIn('frappe.assets.bundled_asset(productBundle)', loader)
+			self.assertIn('requestedPath: productBundle', loader)
+			self.assertIn('resolvedPath: resolvedProductBundle', loader)
+			self.assertIn(f'window.{product_name}', loader)
+			self.assertIn('product bundle callback', loader)
+
 	def test_bundle_mounts_component_through_edgesuite_ui(self):
 		content = self.read(BUNDLE)
 		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", content)
@@ -242,8 +259,43 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn('VetedgeExecutiveDashboard.components = runtime.components', bundle)
 		bridge = self.read(REPOSITORY_ROOT / 'vetedge' / 'public' / 'js' / 'edgesuite_vue_bridge.js')
 		self.assertIn('const runtime = window.EdgeSuiteUI || window.EdgeUI;', bridge)
-		self.assertIn('export const resolveComponent', bridge)
-		self.assertIn('export const Fragment = getVue().Fragment;', bridge)
+		self.assertIn('const Vue = getVue();', bridge)
+		self.assertIn('export default Vue;', bridge)
+		for helper in (
+			'createApp',
+			'h',
+			'ref',
+			'reactive',
+			'computed',
+			'watch',
+			'onMounted',
+			'onUnmounted',
+			'resolveComponent',
+			'resolveDirective',
+			'withDirectives',
+			'createVNode',
+			'openBlock',
+			'createBlock',
+			'vModelText',
+			'vModelSelect',
+			'vModelCheckbox',
+			'vModelRadio',
+		):
+			self.assertIn(f'export const {helper} = Vue.{helper};', bridge)
+		self.assertIn('export const Fragment = Vue.Fragment;', bridge)
+		self.assertIn('[VetEdge Vue bridge] evaluating shared Vue runtime', bridge)
+		self.assertIn('[VetEdge Vue bridge] first bundle evaluation exception', bridge)
+		self.assertIn('[VetEdge Vue bridge] product globals after bundle evaluation', bridge)
+		for global_name in (
+			'VetedgeExecutiveDashboard',
+			'VetedgeStockExpiryMonitor',
+			'VetedgeExecutiveDashboardApp',
+			'VetedgeStockExpiryMonitorApp',
+		):
+			self.assertIn(global_name, bridge)
+		stock_loader = self.read(REPOSITORY_ROOT / 'vetedge' / 'veterinary' / 'page' / 'stock_expiry_monitor' / 'stock_expiry_monitor.js')
+		self.assertIn('runtime.createEdgeApp', loader)
+		self.assertIn('runtime.createEdgeApp', stock_loader)
 		self.assertIn('v-for="(card, index) in payload.kpis"', component)
 		self.assertIn('data-testid="vetedge-executive-kpi-card"', component)
 		self.assertIn('data-testid="vetedge-executive-kpi-grid"', component)
