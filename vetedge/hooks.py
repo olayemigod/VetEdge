@@ -33,6 +33,7 @@ app_include_css = [
 app_include_js = [
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
+	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-1",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
@@ -46,7 +47,10 @@ get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website
 
 after_install = "vetedge.install.after_install"
 after_migrate = "vetedge.install.after_migrate"
-boot_session = ["vetedge.coreedge_adapter.filter_bootinfo_for_coreedge_platform"]
+boot_session = [
+	"vetedge.coreedge_adapter.filter_bootinfo_for_coreedge_platform",
+	"vetedge.ui_identity.extend_bootinfo",
+]
 
 permission_query_conditions = {
 	"Veterinary Patient": "vetedge.services.permissions.get_veterinary_patient_query",
