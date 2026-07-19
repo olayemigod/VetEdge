@@ -32,6 +32,7 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 
 	const requiredComponents = [
 		'EdgeAppShell',
+		'EdgeIcon',
 		'EdgePageLayout',
 		'EdgePageHeader',
 		'EdgeFilterBar',
@@ -60,23 +61,35 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 			return;
 		}
 
-		frappe.require('vetedge_executive_dashboard.bundle.js', () => {
+		frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1', () => {
 			if (wrapper.current_visit_id !== visitId) return;
-			if (!window.VetedgeExecutiveDashboard) {
-				showFailure(__('The Executive Dashboard product bundle is unavailable.'));
+			const professionalUI = window.VetEdgeProfessionalUI?.install?.();
+			if (!professionalUI?.installed) {
+				showFailure(
+					professionalUI?.message ||
+					__('VetEdge requires EdgeSuite UI 0.2 or newer for the professional product shell.')
+				);
 				return;
 			}
 
-			try {
-				$loading.remove();
-				const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
-					.appendTo(page.body);
-				wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
-				wrapper.vue_app.mount(root[0]);
-			} catch (error) {
-				console.error('Error mounting Executive Dashboard:', error);
-				showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
-			}
+			frappe.require('vetedge_executive_dashboard.bundle.js', () => {
+				if (wrapper.current_visit_id !== visitId) return;
+				if (!window.VetedgeExecutiveDashboard) {
+					showFailure(__('The Executive Dashboard product bundle is unavailable.'));
+					return;
+				}
+
+				try {
+					$loading.remove();
+					const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
+						.appendTo(page.body);
+					wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
+					wrapper.vue_app.mount(root[0]);
+				} catch (error) {
+					console.error('Error mounting Executive Dashboard:', error);
+					showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
+				}
+			});
 		});
 	});
 };
