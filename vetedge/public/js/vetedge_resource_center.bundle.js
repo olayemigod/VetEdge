@@ -12,7 +12,7 @@ export function mountVetEdgeResourceCenter(target) {
 
 	const quickHost = document.createElement('div');
 	quickHost.className = 'vetedge-appointment-quick-create-host';
-	target.appendChild(quickHost);
+	document.body.appendChild(quickHost);
 
 	let resourceView = null;
 	const quickApp = runtime.createEdgeApp(VetEdgeAppointmentQuickCreate, {
