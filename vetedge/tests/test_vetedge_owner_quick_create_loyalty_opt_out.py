@@ -41,6 +41,5 @@ def test_appointment_owner_quick_create_keeps_loyalty_out_of_scope():
 	assert 'doc.__dict__["set_loyalty_program"] = lambda: None' in safety
 	assert "doc.loyalty_program = None" in safety
 
-	# The already-built client retains dormant backward-compatible markup, but
-	# the server bootstrap always returns an empty list so this field never renders.
-	assert 'v-if="bootstrap.owner_loyalty_programs.length"' in component
+	assert "owner_loyalty_programs" not in component
+	assert "Loyalty Program" not in component
