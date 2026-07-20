@@ -39,6 +39,7 @@ jobs:
             vetedge/tests/test_company_context_regressions.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
+            vetedge/tests/test_vetedge_owner_quick_create_loyalty_opt_out.py \
             vetedge/tests/test_vetedge_branch_home.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
@@ -52,6 +53,9 @@ jobs:
 
       - name: Appointment EdgeSuite contracts
         run: python -m pytest -q vetedge/tests/test_vetedge_appointment_edgeui.py
+
+      - name: Appointment owner loyalty opt-out contracts
+        run: python -m pytest -q vetedge/tests/test_vetedge_owner_quick_create_loyalty_opt_out.py
 
       - name: Working branch and Home contracts
         run: python -m pytest -q vetedge/tests/test_vetedge_branch_home.py
@@ -222,6 +226,10 @@ jobs:
       - name: Run appointment EdgeSuite UI tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_appointment_edgeui
+
+      - name: Run appointment owner loyalty opt-out tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_owner_quick_create_loyalty_opt_out
 
       - name: Run company context regression tests
         working-directory: frappe-bench
