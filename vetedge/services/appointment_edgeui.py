@@ -7,6 +7,11 @@ from frappe import _
 from frappe.utils import cint, cstr, get_datetime
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.services.appointment_quick_create_safety import (
+	get_owner_quick_create_context,
+	resolve_owner_loyalty_program,
+	validate_patient_quick_create_context,
+)
 from vetedge.services.company_context import (
 	apply_customer_company_restriction,
 	customer_is_allowed_for_company,
@@ -231,19 +236,42 @@ def _search_practitioners(txt: str, context: dict[str, Any], start: int, page_le
 	]
 
 
+def _patient_create_readiness(company: str, branch: str | None) -> dict[str, Any]:
+	try:
+		context = validate_patient_quick_create_context(company, branch)
+		return {"ready": True, "warning": "", **context}
+	except (frappe.ValidationError, frappe.PermissionError) as exc:
+		return {"ready": False, "warning": cstr(exc), "company": company, "company_currency": "", "selling_price_list": ""}
+
+
 @frappe.whitelist()
 def get_appointment_form_bootstrap() -> dict[str, Any]:
 	_require_login()
 	default_branch = get_current_vetedge_branch()
 	if default_branch and _clean(default_branch).lower() in {"all", "all branches"}:
 		default_branch = None
+	company = validate_vetedge_company(get_active_vetedge_company())
+	owner_context = get_owner_quick_create_context(company, default_branch)
+	patient_context = _patient_create_readiness(company, default_branch)
+	owner_permission = bool(frappe.has_permission("Customer", "create"))
+	patient_permission = bool(frappe.has_permission("Veterinary Patient", "create"))
 	return {
-		"active_company": validate_vetedge_company(get_active_vetedge_company()),
+		"active_company": company,
 		"default_branch": default_branch,
 		"appointment_types": list(APPOINTMENT_TYPES),
-		"can_create_owner": bool(frappe.has_permission("Customer", "create")),
-		"can_create_patient": bool(frappe.has_permission("Veterinary Patient", "create")),
+		"can_create_owner": bool(owner_permission and owner_context.get("ready")),
+		"can_create_patient": bool(patient_permission and patient_context.get("ready")),
 		"can_create_appointment": bool(frappe.has_permission("Veterinary Appointment", "create")),
+		"owner_create_warning": "" if owner_permission else _("You do not have permission to create Pet Owners."),
+		"patient_create_warning": "" if patient_permission else _("You do not have permission to create Veterinary Patients."),
+		"company_currency": owner_context.get("company_currency") or patient_context.get("company_currency") or "",
+		"owner_loyalty_programs": owner_context.get("loyalty_programs") or [],
+		"owner_requires_loyalty_program": bool(owner_context.get("requires_loyalty_program")),
+		"owner_default_loyalty_program": owner_context.get("default_loyalty_program") or "",
+		"owner_default_price_list": owner_context.get("default_price_list") or "",
+		"registration_selling_price_list": patient_context.get("selling_price_list") or "",
+		"owner_create_warning": owner_context.get("warning") or ("" if owner_permission else _("You do not have permission to create Pet Owners.")),
+		"patient_create_warning": patient_context.get("warning") or ("" if patient_permission else _("You do not have permission to create Veterinary Patients.")),
 	}
 
 
@@ -329,10 +357,12 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 	if duplicate:
 		frappe.throw(_("An owner already exists with this mobile number or email: {0}").format(duplicate), frappe.DuplicateEntryError)
 
-	customer_group = get_default_customer_group()
-	territory = get_default_territory()
-	if not customer_group or not territory:
-		frappe.throw(_("Configure a default Customer Group and Territory before creating owners."), frappe.ValidationError)
+	context = get_owner_quick_create_context(company, payload.get("branch"))
+	if not context.get("ready"):
+		frappe.throw(_(context.get("warning") or "Pet Owner quick creation is not configured."), frappe.ValidationError)
+	customer_group = context.get("customer_group") or get_default_customer_group()
+	territory = context.get("territory") or get_default_territory()
+	loyalty_program = resolve_owner_loyalty_program(context, payload.get("loyalty_program"))
 
 	doc = frappe.get_doc(
 		{
@@ -343,6 +373,9 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 			"territory": territory,
 			"mobile_no": mobile_no,
 			"email_id": email_id,
+			"default_currency": context.get("company_currency") or None,
+			"default_price_list": context.get("default_price_list") or None,
+			"loyalty_program": loyalty_program or None,
 		}
 	)
 	apply_customer_company_restriction(doc, company)
@@ -352,6 +385,7 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 		doc.customer_name,
 		" · ".join(filter(None, [doc.mobile_no, doc.email_id])),
 		company=company,
+		loyalty_program=doc.loyalty_program,
 	)
 
 
@@ -396,6 +430,7 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 	if not patient_name or not owner or not species:
 		frappe.throw(_("Patient Name, Primary Owner and Species are required."), frappe.ValidationError)
 	validate_customer_company(owner, company)
+	validate_patient_quick_create_context(company, branch)
 	if branch:
 		can_access_branch_data(frappe.session.user, branch, raise_exception=True)
 	if not frappe.db.exists("Veterinary Species", species):
