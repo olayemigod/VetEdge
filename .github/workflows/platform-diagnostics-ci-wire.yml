@@ -1,0 +1,95 @@
+name: Platform Diagnostics CI Wiring
+
+on:
+  pull_request:
+    branches:
+      - feat/vetedge-remote-coreedge-adapter-v1
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.head_ref == 'feat/vetedge-coreedge-connection-diagnostics'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/vetedge-coreedge-connection-diagnostics
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Add diagnostic files to existing CI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/ci.yml')
+          content = path.read_text()
+
+          old_ruff = '''            vetedge/platform_client.py \\
+            vetedge/services/platform_access.py \\
+            vetedge/tests/test_remote_platform_client.py \\
+          '''
+          new_ruff = '''            vetedge/platform_client.py \\
+            vetedge/services/platform_access.py \\
+            vetedge/services/platform_diagnostics.py \\
+            vetedge/tests/test_remote_platform_client.py \\
+            vetedge/tests/test_platform_diagnostics.py \\
+          '''
+          if old_ruff not in content:
+              raise SystemExit('Ruff file-list anchor not found')
+          content = content.replace(old_ruff, new_ruff, 1)
+
+          old_tests = '''          bench --site ci.localhost run-tests \\
+            --app vetedge \\
+            --module vetedge.tests.test_remote_platform_client
+
+          bench --site ci.localhost run-tests \\
+            --app vetedge \\
+            --module vetedge.services.test_platform_access
+          '''
+          new_tests = '''          bench --site ci.localhost run-tests \\
+            --app vetedge \\
+            --module vetedge.tests.test_remote_platform_client
+
+          bench --site ci.localhost run-tests \\
+            --app vetedge \\
+            --module vetedge.tests.test_platform_diagnostics
+
+          bench --site ci.localhost run-tests \\
+            --app vetedge \\
+            --module vetedge.services.test_platform_access
+          '''
+          if old_tests not in content:
+              raise SystemExit('Frappe test-list anchor not found')
+          path.write_text(content.replace(old_tests, new_tests, 1))
+          PY
+
+      - name: Apply and verify focused Ruff fixes
+        run: |
+          python -m pip install --upgrade ruff
+          ruff check --fix \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+          ruff check \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+          python -m compileall -q \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+
+      - name: Commit CI wiring and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/platform-diagnostics-ci-wire.yml
+          git add \
+            .github/workflows/ci.yml \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+          git commit -m "test(vetedge): validate platform connection diagnostics"
+          git push origin HEAD:feat/vetedge-coreedge-connection-diagnostics
