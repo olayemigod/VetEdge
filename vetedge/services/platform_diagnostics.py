@@ -42,9 +42,9 @@ def run_remote_platform_diagnostic() -> dict:
 			allow_cached_on_error=False,
 			action="operator_connection_diagnostic",
 		)
-		except platform_client.RemotePlatformConfigurationError as exc:
+	except platform_client.RemotePlatformConfigurationError as exc:
 		_update_failure(result, "Misconfigured", "CONFIGURATION_ERROR", exc)
-	 except platform_client.RemotePlatformAuthenticationError as exc:
+	except platform_client.RemotePlatformAuthenticationError as exc:
 		_update_failure(result, "Authentication Failed", "AUTHENTICATION_ERROR", exc)
 	except platform_client.RemotePlatformUnavailableError as exc:
 		_update_failure(result, "Unavailable", "SERVICE_UNAVAILABLE", exc)
@@ -55,7 +55,7 @@ def run_remote_platform_diagnostic() -> dict:
 	finally:
 		result["duration_ms"] = round((time.perf_counter() - started) * 1000, 2)
 
-	if not result.get("live_response") and not result.get("success"):
+	if not result.get("success"):
 		return result
 
 	live_response = _sanitize_gateway_response(response)
@@ -87,7 +87,11 @@ def _build_static_diagnostic() -> dict:
 		_check("service_url", bool(config.get("service_url")), _("CoreEdge service URL is valid.")),
 		_check("api_key", bool(config.get("api_key")), _("CoreEdge API key is configured.")),
 		_check("api_secret", bool(config.get("api_secret")), _("CoreEdge API secret is configured.")),
-		_check("site_identifier", bool(config.get("site_identifier")), _("Product-site identifier is configured.")),
+		_check(
+			"site_identifier",
+			bool(config.get("site_identifier")),
+			_("Product-site identifier is configured."),
+		),
 		_check("product_app", bool(config.get("product_app")), _("Product app identity is configured.")),
 	]
 	return {
