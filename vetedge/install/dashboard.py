@@ -8,7 +8,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
-VETEDGE_DESK_ROUTE = "/app/vetedge"
+VETEDGE_DESK_ROUTE = "/app/vetedge-home"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -17,6 +17,34 @@ OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Access Decision Log",
 	"CoreEdge Branch Session",
 	"CoreEdge Context Switch Log",
+}
+
+VETERINARY_HOME_ITEM = {
+	"child": 1,
+	"collapsible": 0,
+	"indent": 0,
+	"keep_closed": 0,
+	"label": "Veterinary Home",
+	"link_to": "vetedge-home",
+	"link_type": "Page",
+	"show_arrow": 0,
+	"type": "Link",
+	"icon": "home",
+	"display_depends_on": (
+		"eval: frappe.user.has_role('System Manager') || "
+		"frappe.user.has_role('VetEdge Administrator') || "
+		"frappe.user.has_role('VetEdge Doctor') || "
+		"frappe.user.has_role('VetEdge Nurse') || "
+		"frappe.user.has_role('Veterinary Nurse') || "
+		"frappe.user.has_role('VetEdge Front Desk') || "
+		"frappe.user.has_role('VetEdge Groomer') || "
+		"frappe.user.has_role('Dispensary User') || "
+		"frappe.user.has_role('Lab Technician') || "
+		"frappe.user.has_role('Branch Manager') || "
+		"frappe.user.has_role('Accounts/Cashier') || "
+		"frappe.user.has_role('Accounts Manager') || "
+		"frappe.user.has_role('Accounts User')"
+	),
 }
 
 
@@ -58,6 +86,24 @@ def _should_keep_sidebar_item(item) -> bool:
 
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
+
+
+def _with_veterinary_home(items: list[dict]) -> list[dict]:
+	cleaned = [item for item in items if item.get("link_to") != "vetedge-home"]
+	result: list[dict] = []
+	inserted = False
+	for item in cleaned:
+		result.append(item)
+		if (
+			not inserted
+			and item.get("type") == "Section Break"
+			and item.get("label") in {"Dashboard", "Overview"}
+		):
+			result.append(dict(VETERINARY_HOME_ITEM))
+			inserted = True
+	if not inserted:
+		result.insert(0, dict(VETERINARY_HOME_ITEM))
+	return result
 
 
 FINANCIAL_DASHBOARD_FILES = (
@@ -128,7 +174,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc["title"] = "Veterinary"
 
 	standard_items = standard_doc.get("items") or []
-	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
+	kept_items = _with_veterinary_home([item for item in standard_items if _should_keep_sidebar_item(item)])
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
@@ -164,6 +210,7 @@ def ensure_vetedge_desktop_icon() -> None:
 		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	from vetedge.services.branding import get_branding
+
 	branding = get_branding()
 	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
 
