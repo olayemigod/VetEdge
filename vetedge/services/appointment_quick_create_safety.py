@@ -119,10 +119,7 @@ def get_owner_quick_create_context(company: str, branch: str | None = None) -> d
 def resolve_owner_loyalty_program(context: dict[str, Any], selected: str | None) -> str:
 	"""Opt appointment quick-created Pet Owners out of automatic loyalty enrolment.
 
-	The normal ERPNext Customer form remains unchanged. In this focused flow we
-	must not surface or enforce messages such as "The selected Loyalty Program is
-	not applicable" or "Select a Loyalty Program for this Pet Owner" because the
-	user did not initiate a loyalty workflow.
+	The normal ERPNext Customer form remains unchanged. This focused flow must not surface "The selected Loyalty Program is not applicable" or "Select a Loyalty Program for this Pet Owner" because no loyalty workflow was initiated.
 	"""
 	_ = context, selected
 	frappe.flags.vetedge_skip_customer_loyalty_auto_enrollment = True
