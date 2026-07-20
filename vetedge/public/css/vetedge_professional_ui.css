@@ -1,0 +1,98 @@
+/* VetEdge consumer refinements for the standalone EdgeSuite UI 0.2 professional shell. */
+body.edge-suite-product-vetedge,
+.vetedge-executive-dashboard-root,
+.vetedge-expiry-monitor-root {
+	--edge-primary: #1769aa;
+	--edge-primary-strong: #0f568f;
+	--edge-primary-soft: #e8f3fb;
+	--edge-accent: #1f9d72;
+	--edge-accent-soft: #e9f8f2;
+	--edge-success: #1f9d72;
+	--edge-focus-ring: rgba(23, 105, 170, 0.24);
+}
+
+/* PR #6 intentionally used a content-only shell. EdgeSuite UI 0.2 now owns the
+   professional product navigation on the two migrated VetEdge pages. */
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell__sidebar.edge-sidebar,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell__sidebar.edge-sidebar {
+	display: flex !important;
+	flex: 0 0 var(--edge-sidebar-width, 17rem);
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-shell-body,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-shell-body {
+	display: flex !important;
+	align-items: stretch;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-shell-main,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-shell-main {
+	flex: 1 1 auto !important;
+	width: auto !important;
+	max-width: none !important;
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-page-layout,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-page-layout,
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-page-layout__content,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-page-layout__content,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-page-layout-body {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .edge-sidebar__brand,
+body.edge-suite-product-vetedge .edge-topbar__brand {
+	color: var(--edge-primary);
+}
+
+body.edge-suite-product-vetedge .edge-sidebar-item.active,
+body.edge-suite-product-vetedge .edge-sidebar-item[aria-current="page"] {
+	border-color: rgba(23, 105, 170, 0.18);
+	background: linear-gradient(90deg, var(--edge-primary-soft), var(--edge-accent-soft));
+	color: var(--edge-primary-strong);
+}
+
+body.edge-suite-product-vetedge .edge-sidebar__section-toggle:focus-visible,
+body.edge-suite-product-vetedge .edge-sidebar-item:focus-visible,
+body.edge-suite-product-vetedge .edge-product-menu__trigger:focus-visible {
+	outline: 3px solid var(--edge-focus-ring);
+	outline-offset: 2px;
+}
+
+.vetedge-notification-icon {
+	display: inline-grid;
+	place-items: center;
+	width: 1.125rem;
+	height: 1.125rem;
+	font-size: 0;
+	line-height: 1;
+}
+
+.vetedge-notification-icon svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+@media (max-width: 991.98px) {
+	body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell__sidebar.edge-sidebar,
+	body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell__sidebar.edge-sidebar {
+		display: flex !important;
+		flex-basis: auto;
+	}
+}
+
+@media (max-width: 575.98px) {
+	body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-page-layout__content,
+	body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-page-layout__content,
+	body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-page-layout-body {
+		padding-inline: 0.75rem;
+	}
+}
