@@ -60,6 +60,12 @@ def get_compatible_selling_price_list(currency: str, branch: str | None = None) 
 
 
 def get_applicable_loyalty_programs(customer_group: str, territory: str) -> list[str]:
+	"""Return ERPNext-applicable programs for full Customer workflows.
+
+	Appointment Pet Owner quick-create deliberately does not call this helper or
+	auto-enrol the new Customer. Loyalty is a separate business decision and must
+	not block appointment registration.
+	"""
 	if not frappe.db.exists("DocType", "Loyalty Program"):
 		return []
 	from erpnext.selling.doctype.customer.customer import get_loyalty_programs
@@ -87,6 +93,8 @@ def get_owner_quick_create_context(company: str, branch: str | None = None) -> d
 		"territory": territory or "",
 		"company_currency": "",
 		"default_price_list": "",
+		# Loyalty is intentionally outside appointment quick-create. Keeping these
+		# keys empty preserves backward compatibility with an already-built client.
 		"loyalty_programs": [],
 		"requires_loyalty_program": False,
 		"default_loyalty_program": "",
@@ -98,7 +106,6 @@ def get_owner_quick_create_context(company: str, branch: str | None = None) -> d
 		}
 	try:
 		currency = get_company_currency(company)
-		programs = get_applicable_loyalty_programs(customer_group, territory)
 	except (frappe.ValidationError, frappe.PermissionError) as exc:
 		return {**base, "warning": cstr(exc)}
 	return {
@@ -106,23 +113,51 @@ def get_owner_quick_create_context(company: str, branch: str | None = None) -> d
 		"ready": True,
 		"company_currency": currency,
 		"default_price_list": get_compatible_selling_price_list(currency, branch),
-		"loyalty_programs": [{"value": name, "label": name} for name in programs],
-		"requires_loyalty_program": len(programs) > 1,
-		"default_loyalty_program": programs[0] if len(programs) == 1 else "",
 	}
 
 
 def resolve_owner_loyalty_program(context: dict[str, Any], selected: str | None) -> str:
-	selected = _clean(selected)
-	programs = [row.get("value") if isinstance(row, dict) else row for row in context.get("loyalty_programs") or []]
-	programs = [_clean(name) for name in programs if _clean(name)]
-	if selected and selected not in programs:
-		frappe.throw(_("The selected Loyalty Program is not applicable to this Pet Owner."), frappe.ValidationError)
-	if len(programs) == 1:
-		return programs[0]
-	if len(programs) > 1 and not selected:
-		frappe.throw(_("Select a Loyalty Program for this Pet Owner."), frappe.ValidationError)
-	return selected
+	"""Opt appointment quick-created Pet Owners out of automatic loyalty enrolment.
+
+	The normal ERPNext Customer form remains unchanged. In this focused flow we
+	must not surface or enforce messages such as "The selected Loyalty Program is
+	not applicable" or "Select a Loyalty Program for this Pet Owner" because the
+	user did not initiate a loyalty workflow.
+	"""
+	_ = context, selected
+	frappe.flags.vetedge_skip_customer_loyalty_auto_enrollment = True
+	return ""
+
+
+def disable_customer_loyalty_auto_enrollment_for_quick_create(doc, method: str | None = None) -> None:
+	"""Disable ERPNext Customer.set_loyalty_program for one VetEdge quick insert.
+
+	This is request-local and document-local. It does not monkeypatch ERPNext's
+	Customer class, suppress unrelated messages, or affect normal Customer forms.
+	"""
+	_ = method
+	if not getattr(frappe.flags, "vetedge_skip_customer_loyalty_auto_enrollment", False):
+		return
+
+	# Consume the one-shot request flag before validation continues.
+	frappe.flags.vetedge_skip_customer_loyalty_auto_enrollment = False
+	if doc.get("doctype") != "Customer":
+		return
+
+	doc.loyalty_program = None
+	doc.flags.vetedge_loyalty_auto_enrollment_suppressed = True
+	# Customer.validate calls self.set_loyalty_program() directly. Frappe supports
+	# callable methods stored in the document __dict__; this shadows only this
+	# document instance during this insert and avoids a process-global monkeypatch.
+	doc.__dict__["set_loyalty_program"] = lambda: None
+
+
+def restore_customer_loyalty_auto_enrollment_after_quick_create(doc, method: str | None = None) -> None:
+	_ = method
+	if not doc.flags.get("vetedge_loyalty_auto_enrollment_suppressed"):
+		return
+	doc.__dict__.pop("set_loyalty_program", None)
+	doc.flags.vetedge_loyalty_auto_enrollment_suppressed = False
 
 
 def validate_patient_quick_create_context(company: str, branch: str | None = None) -> dict[str, str]:
