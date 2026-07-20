@@ -20,3 +20,5 @@ vetedge.patches.backfill_hospitalisation_patient_name
 vetedge.patches.normalize_website_settings_branding
 vetedge.patches.backfill_veterinary_company_context
 vetedge.patches.repair_veterinary_company_schema
+vetedge.patches.ensure_veterinary_branch_context_fields
+vetedge.patches.backfill_veterinary_company_from_branch
