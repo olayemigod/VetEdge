@@ -12,7 +12,6 @@ from vetedge.services.financial_component_insights import (
 )
 from vetedge.services.financial_dataset import build_financial_dataset
 
-
 INCOME_CATEGORY_OPTIONS = (
 	CONSULTATION_SERVICE_INCOME,
 	TREATMENT_INCOME,
