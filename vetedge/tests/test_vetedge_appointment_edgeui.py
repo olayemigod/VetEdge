@@ -179,7 +179,8 @@ def test_quick_owner_creation_keeps_loyalty_outside_appointment_flow():
 	assert '"loyalty_programs": []' in owner_context
 	assert '"requires_loyalty_program": False' in owner_context
 	assert "get_applicable_loyalty_programs(" not in owner_context
-	assert 'v-if="bootstrap.owner_loyalty_programs.length"' in component
+	assert "owner_loyalty_programs" not in component
+	assert "Loyalty Program" not in component
 	assert "ignore_permissions" not in safety
 
 
