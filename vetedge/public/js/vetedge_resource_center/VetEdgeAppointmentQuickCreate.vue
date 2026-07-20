@@ -206,7 +206,8 @@ export default {
 			this.labels.patient = "";
 		},
 		onBranchSelected(option) {
-			const changed = this.form.branch && this.form.branch !== option.value;
+			const previousBranchLabel = this.labels.branch;
+			const changed = Boolean(previousBranchLabel && previousBranchLabel !== option.label);
 			this.form.branch = option.value;
 			this.labels.branch = option.label;
 			this.clearPractitioner();
