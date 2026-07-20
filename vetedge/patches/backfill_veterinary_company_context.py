@@ -32,10 +32,13 @@ def execute():
 
 	companies = frappe.get_all("Company", pluck="name")
 	single_site_company = companies[0] if len(companies) == 1 else None
-	patients = frappe.get_all(
-		"Veterinary Patient",
-		filters={"company": ["in", ["", None]]},
-		fields=["name", "primary_owner"],
+	patients = frappe.db.sql(
+		"""
+		SELECT name, primary_owner
+		FROM `tabVeterinary Patient`
+		WHERE IFNULL(company, '') = ''
+		""",
+		as_dict=True,
 	)
 	for patient in patients:
 		company = _single_allowed_customer_company(patient.primary_owner) or single_site_company
