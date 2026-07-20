@@ -1,5 +1,5 @@
-from vetedge.services.reporting_logic_v3 import execute_structured_report
+from vetedge.services.financial_component_report import execute_revenue_summary
 
 
 def execute(filters=None):
-    return execute_structured_report("Revenue Summary", filters)
+	return execute_revenue_summary(filters)
