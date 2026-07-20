@@ -37,7 +37,7 @@
   {"fieldname": "identity_section", "fieldtype": "Section Break", "label": "Identity"},
   {"fieldname": "patient_name", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Patient Name", "reqd": 1},
   {"fieldname": "primary_owner", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "label": "Primary Owner", "options": "Customer", "reqd": 1},
-  {"default": ":Company", "description": "Company that owns this Veterinary patient record. New appointments and company-scoped searches must use the same Company.", "fieldname": "company", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Company", "options": "Company"},
+  {"description": "Company that owns this Veterinary patient record. EdgeSuite creation assigns the active Company explicitly.", "fieldname": "company", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Company", "options": "Company", "reqd": 1},
   {"default": "Active", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "no_copy": 1, "options": "Active\nInactive\nDeceased", "reqd": 1},
   {"default": "Registered", "fieldname": "registration_status", "fieldtype": "Data", "in_list_view": 1, "label": "Registration Status", "no_copy": 1, "read_only": 1},
   {"fieldname": "default_branch", "fieldtype": "Link", "in_list_view": 1, "label": "Default Branch", "options": "Branch"},
