@@ -36,6 +36,7 @@ jobs:
       - name: Ruff
         run: |
           ruff check \
+            vetedge/tests/test_company_context_regressions.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_branch_home.py \
@@ -46,6 +47,7 @@ jobs:
       - name: Validate EdgeSuite UI dependency contract
         run: |
           python -m pytest -q \
+            vetedge/tests/test_company_context_regressions.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_branch_home.py \
@@ -210,6 +212,10 @@ jobs:
       - name: Run appointment EdgeSuite UI tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_appointment_edgeui
+
+      - name: Run company context regression tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_company_context_regressions
 
       - name: Run working branch and Veterinary Home tests
         working-directory: frappe-bench
