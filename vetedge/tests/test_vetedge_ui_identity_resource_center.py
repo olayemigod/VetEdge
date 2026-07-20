@@ -32,7 +32,7 @@ APPOINTMENT_COMPONENT = (
 	/ "public"
 	/ "js"
 	/ "vetedge_resource_center"
-	/ "VetEdgeAppointmentQuickCreate.vue"
+	/ "VetEdgeAppointmentFlow.vue"
 )
 
 
@@ -147,7 +147,7 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "frappe.ui.Dialog" in component
 
 
-def test_appointment_quick_create_uses_shared_links_and_server_safety():
+def test_appointment_flow_uses_shared_links_and_server_safety():
 	api = read(APPOINTMENT_API)
 	component = read(APPOINTMENT_COMPONENT)
 	bundle = read(RESOURCE_BUNDLE)
@@ -170,17 +170,25 @@ def test_appointment_quick_create_uses_shared_links_and_server_safety():
 	assert "doc.submit(" not in api
 
 	for contract in (
+		"EdgeModal",
 		"EdgeLinkField",
+		"Create New Pet Owner",
+		"Create New Veterinary Patient",
 		"createOwnerFromQuery",
 		"createPatientFromQuery",
+		"beginInlineCreate",
 		"this.clearPatient()",
 		"this.clearPractitioner()",
 		"create_edgeui_appointment",
 	):
 		assert contract in component
 
-	assert "VetEdgeAppointmentQuickCreate" in bundle
-	assert "quickApp.unmount()" in bundle
+	assert "frappe.ui.Dialog" not in component
+	assert "window.open" not in component
+	assert "VetEdgeAppointmentFlow" in bundle
+	assert "flowApp.unmount()" in bundle
+	assert "New Appointment" in bundle
+	assert "interceptAppointmentAction" in bundle
 	assert "EdgeLinkField" in loader
 	assert "EdgeSuite UI 0.4.0 or newer" in loader
 
