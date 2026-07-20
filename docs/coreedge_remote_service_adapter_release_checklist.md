@@ -9,6 +9,7 @@ This checklist is the merge and rollout gate for the VetEdge V3.0B reference ada
 - `vetedge.tests.test_remote_platform_client` passes.
 - `vetedge.services.test_platform_access` passes.
 - `vetedge.tests.test_coreedge_adapter` passes.
+- Scheduled heartbeat failures remain visible even while an unexpired allowed access decision is cached.
 - The existing VetEdge Frappe v16 integration suite remains green without CoreEdge installed locally.
 
 ## Central dependency
@@ -26,8 +27,9 @@ This checklist is the merge and rollout gate for the VetEdge V3.0B reference ada
 4. Confirm an allowed decision permits protected VetEdge operations.
 5. Confirm tenant or activation suspension blocks protected operations.
 6. Confirm an outage uses only an unexpired allowed cache decision and fails closed after expiry.
-7. Confirm local CoreEdge controls are absent from VetEdge boot data in remote mode.
-8. Remove local CoreEdge from the reference site only after the complete end-to-end checklist passes.
+7. Confirm the scheduled heartbeat reports an outage instead of masking it with the access-decision cache.
+8. Confirm local CoreEdge controls are absent from VetEdge boot data in remote mode.
+9. Remove local CoreEdge from the reference site only after the complete end-to-end checklist passes.
 
 ## Rollback
 
