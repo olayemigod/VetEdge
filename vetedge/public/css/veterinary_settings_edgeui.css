@@ -1,0 +1,99 @@
+.veterinary-settings-edgeui-header {
+	margin: 0 0 1.25rem;
+}
+
+.veterinary-settings-edgeui-surface {
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #dfe5ef);
+	border-radius: var(--edge-radius-lg, 12px);
+	padding: 1.25rem;
+}
+
+.veterinary-settings-edgeui-brand {
+	align-items: center;
+	background: var(--subtle-fg, #f7f9fc);
+	border: 1px solid var(--border-color, #dfe5ef);
+	border-radius: var(--edge-radius-md, 10px);
+	display: flex;
+	gap: .9rem;
+	margin-top: 1rem;
+	padding: .9rem 1rem;
+}
+
+.veterinary-settings-edgeui-brand > div:last-child {
+	display: grid;
+	gap: .18rem;
+}
+
+.veterinary-settings-edgeui-brand small {
+	color: var(--text-muted);
+}
+
+.veterinary-settings-edgeui-logo {
+	align-items: center;
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #dfe5ef);
+	border-radius: 10px;
+	display: flex;
+	font-size: 1rem;
+	font-weight: 700;
+	height: 3rem;
+	justify-content: center;
+	overflow: hidden;
+	width: 3rem;
+}
+
+.veterinary-settings-edgeui-logo img {
+	height: 100%;
+	object-fit: contain;
+	width: 100%;
+}
+
+.veterinary-settings-edgeui-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+	margin-top: .9rem;
+}
+
+.veterinary-settings-edgeui-form .form-tabs-list {
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #dfe5ef);
+	border-radius: var(--edge-radius-md, 10px);
+	padding: .3rem;
+}
+
+.veterinary-settings-edgeui-form .form-section.card-section,
+.veterinary-settings-edgeui-form .form-dashboard-section {
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #dfe5ef);
+	border-radius: var(--edge-radius-lg, 12px);
+	box-shadow: none;
+	margin-bottom: 1rem;
+	padding: .5rem .75rem;
+}
+
+.veterinary-settings-edgeui-form .section-head {
+	color: var(--heading-color);
+	font-weight: 700;
+}
+
+.veterinary-settings-edgeui-form .control-label {
+	color: var(--text-color);
+	font-weight: 600;
+}
+
+.veterinary-settings-edgeui-form .help-box,
+.veterinary-settings-edgeui-form .form-text {
+	color: var(--text-muted);
+}
+
+@media (max-width: 47.99rem) {
+	.veterinary-settings-edgeui-surface {
+		padding: .9rem;
+	}
+
+	.veterinary-settings-edgeui-brand {
+		align-items: flex-start;
+	}
+}
