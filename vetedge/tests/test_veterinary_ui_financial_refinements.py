@@ -81,7 +81,7 @@ def test_home_menu_descriptions_and_branding_identity_are_veterinary_facing():
 	assert "description: menuDescription(item)" in menu
 	assert "html(menuDescription(item))" in menu
 	assert 'html(item.link_type || "Workspace")' not in menu
-	assert 'portal_logo' in identity
+	assert "portal_logo" in identity
 	assert 'settings_brand.get("logo")' in identity
 	assert 'tenant_logo = settings_brand.get("logo")' in identity
 	assert '"product_name": "Veterinary"' in identity
@@ -160,13 +160,13 @@ if FrappeTestCase is not None:
 					"TREAT": Counter({"Treatment Income": 1}),
 				}
 			}
-		item_map = {
+			item_map = {
 				"INV-TEST": [
 					{"item_code": "CONSULT", "net_amount": 20},
 					{"item_code": "TREAT", "net_amount": 80},
 				]
 			}
-		components = _allocate_revenue_components(
+			components = _allocate_revenue_components(
 				"INV-TEST",
 				"Consultation",
 				110,
