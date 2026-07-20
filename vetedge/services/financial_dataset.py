@@ -5,7 +5,6 @@ from collections import Counter, defaultdict
 import frappe
 from frappe.utils import cint, cstr, flt
 
-
 SOURCE_TYPE_TO_INCOME = {
 	"Consultation Fee": "Consultation Service Income",
 	"Treatment": "Treatment Income",
