@@ -84,7 +84,6 @@
 					<span>Notes</span>
 					<textarea v-model.trim="form.notes" class="form-control" rows="3" placeholder="Reason for visit or front-desk notes"></textarea>
 				</label>
-				<p v-if="bootstrap.patient_create_warning" class="vetedge-appointment-flow-hint">{{ bootstrap.patient_create_warning }} Existing patients can still be booked.</p>
 			</form>
 
 			<form v-show="screen === 'patient'" class="vetedge-appointment-flow-form" @submit.prevent="savePatient">
@@ -172,7 +171,7 @@
 
 					<label class="vetedge-appointment-flow-field">
 						<span>Date of Birth</span>
-						<input v-model="patientDraft.date_of_birth" :max="todayDate" type="date" class="form-control" />
+						<input v-model="patientDraft.date_of_birth" type="date" class="form-control" :max="todayDate" />
 					</label>
 
 					<label class="vetedge-appointment-flow-field">
@@ -208,14 +207,6 @@
 					<label class="vetedge-appointment-flow-field"><span>Company</span><input :value="bootstrap.active_company" class="form-control" readonly /></label>
 					<label class="vetedge-appointment-flow-field"><span>Mobile Number</span><input v-model.trim="ownerDraft.mobile_no" type="tel" class="form-control" /></label>
 					<label class="vetedge-appointment-flow-field"><span>Email</span><input v-model.trim="ownerDraft.email_id" type="email" class="form-control" /></label>
-					<label v-if="bootstrap.owner_loyalty_programs.length" class="vetedge-appointment-flow-field">
-						<span>Loyalty Program <b v-if="bootstrap.owner_requires_loyalty_program">*</b></span>
-						<select v-model="ownerDraft.loyalty_program" class="form-control" :required="bootstrap.owner_requires_loyalty_program">
-							<option value="">Select Loyalty Program</option>
-							<option v-for="program in bootstrap.owner_loyalty_programs" :key="program.value" :value="program.value">{{ program.label }}</option>
-						</select>
-						<small v-if="bootstrap.owner_requires_loyalty_program">More than one program applies. Select the correct one.</small>
-					</label>
 				</div>
 				<p class="vetedge-appointment-flow-hint">Provide at least a mobile number or email. Existing owners are checked before creation.</p>
 				<p v-if="bootstrap.owner_create_warning" class="vetedge-appointment-flow-hint">{{ bootstrap.owner_create_warning }}</p>
@@ -278,7 +269,7 @@ function calculateAgeLabel(value) {
 	const parts = [];
 	if (years) parts.push(formatAgeUnit(years, "year"));
 	if (months) parts.push(formatAgeUnit(months, "month"));
-	if (!parts.length) parts.push(formatAgeUnit(days, "day"));
+	if (!years && !months) parts.push(formatAgeUnit(Math.max(days, 0), "day"));
 	return parts.join(" ");
 }
 
@@ -288,12 +279,8 @@ export default {
 	data() {
 		return {
 			openState: false, screen: "appointment", loading: false, saving: false, error: "",
-			bootstrap: {
-				active_company: "", default_branch: "", appointment_types: ["Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other"],
-				can_create_owner: false, can_create_patient: false, can_create_appointment: false, owner_create_warning: "", patient_create_warning: "",
-				owner_loyalty_programs: [], owner_requires_loyalty_program: false, owner_default_loyalty_program: "", company_currency: "",
-			},
-			form: emptyForm(), labels: emptyLabels(), ownerDraft: { owner_name: "", mobile_no: "", email_id: "", company: "", branch: "", loyalty_program: "" },
+			bootstrap: { active_company: "", default_branch: "", appointment_types: ["Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other"], can_create_owner: false, can_create_patient: false, can_create_appointment: false, owner_create_warning: "", patient_create_warning: "" },
+			form: emptyForm(), labels: emptyLabels(), ownerDraft: { owner_name: "", mobile_no: "", email_id: "", company: "" },
 			patientDraft: emptyPatientDraft(), patientLabels: { owner: "", branch: "", species: "", breed: "" }, patientCreateResolve: null, ownerCreateResolve: null,
 		};
 	},
@@ -308,8 +295,8 @@ export default {
 			if (this.screen === "patient") return "Complete the patient registration and return directly to the appointment.";
 			return "Search the patient first. The linked owner is filled automatically.";
 		},
-		patientAge() { return calculateAgeLabel(this.patientDraft.date_of_birth); },
 		todayDate() { return new Date().toISOString().slice(0, 10); },
+		patientAge() { return calculateAgeLabel(this.patientDraft.date_of_birth); },
 	},
 	methods: {
 		async open() {
@@ -328,19 +315,15 @@ export default {
 		resolvePatientCreate(value) { const resolve = this.patientCreateResolve; this.patientCreateResolve = null; if (resolve) resolve(value || null); },
 		resolveOwnerCreate(value) { const resolve = this.ownerCreateResolve; this.ownerCreateResolve = null; if (resolve) resolve(value || null); },
 		createPatientFromQuery(query) {
-			if (!this.bootstrap.can_create_patient) { this.error = this.bootstrap.patient_create_warning || __("New patient registration is temporarily unavailable."); return Promise.resolve(null); }
+			if (!this.bootstrap.can_create_patient) { this.error = this.bootstrap.patient_create_warning || __("New Patient registration is temporarily unavailable. Existing patients can still be booked."); return Promise.resolve(null); }
 			this.resolvePatientCreate(null); this.error = "";
 			this.patientDraft = { ...emptyPatientDraft(), patient_name: query || "", company: this.bootstrap.active_company, default_branch: this.form.branch || this.bootstrap.default_branch || "" };
 			this.patientLabels = { owner: "", branch: this.labels.branch || this.form.branch || this.bootstrap.default_branch || "", species: "", breed: "" };
 			this.screen = "patient"; return new Promise((resolve) => { this.patientCreateResolve = resolve; });
 		},
 		createOwnerForPatientFromQuery(query) {
-			if (!this.bootstrap.can_create_owner) { this.error = this.bootstrap.owner_create_warning || __("New Pet Owner creation is temporarily unavailable."); return Promise.resolve(null); }
-			this.resolveOwnerCreate(null); this.error = "";
-			this.ownerDraft = {
-				owner_name: query || "", mobile_no: "", email_id: "", company: this.bootstrap.active_company,
-				branch: this.form.branch || this.bootstrap.default_branch || "", loyalty_program: this.bootstrap.owner_default_loyalty_program || "",
-			};
+			if (!this.bootstrap.can_create_owner) { this.error = this.bootstrap.owner_create_warning || __("New Pet Owner creation is temporarily unavailable. Existing patients can still be booked."); return Promise.resolve(null); }
+			this.resolveOwnerCreate(null); this.error = ""; this.ownerDraft = { owner_name: query || "", mobile_no: "", email_id: "", company: this.bootstrap.active_company };
 			this.screen = "owner"; return new Promise((resolve) => { this.ownerCreateResolve = resolve; });
 		},
 		cancelPatientCreate() { if (this.saving) return; this.resolvePatientCreate(null); this.error = ""; this.screen = "appointment"; },
@@ -379,9 +362,7 @@ export default {
 		clearBreed() { this.patientDraft.breed = ""; this.patientLabels.breed = ""; },
 		handleFieldError(error) { this.error = error?.message || __("A linked record could not be loaded."); },
 		async saveOwner() {
-			this.error = "";
-			if (!this.ownerDraft.owner_name || (!this.ownerDraft.mobile_no && !this.ownerDraft.email_id)) { this.error = __("Owner Name and either Mobile Number or Email are required."); return; }
-			if (this.bootstrap.owner_requires_loyalty_program && !this.ownerDraft.loyalty_program) { this.error = __("Select a Loyalty Program for this Pet Owner."); return; }
+			this.error = ""; if (!this.ownerDraft.owner_name || (!this.ownerDraft.mobile_no && !this.ownerDraft.email_id)) { this.error = __("Owner Name and either Mobile Number or Email are required."); return; }
 			this.saving = true;
 			try {
 				const response = await frappe.call("vetedge.services.appointment_edgeui.create_appointment_owner", { values: { ...this.ownerDraft, company: this.bootstrap.active_company } });
@@ -392,7 +373,7 @@ export default {
 		async savePatient() {
 			this.error = "";
 			if (!this.patientDraft.primary_owner || !this.patientDraft.default_branch || !this.patientDraft.patient_name || !this.patientDraft.species) { this.error = __("Patient Name, Pet Owner, Branch and Species are required."); return; }
-			if (this.patientDraft.date_of_birth && !this.patientAge) { this.error = __("Date of Birth cannot be in the future."); return; }
+			if (this.patientDraft.date_of_birth && this.patientDraft.date_of_birth > this.todayDate) { this.error = __("Date of Birth cannot be in the future."); return; }
 			this.saving = true;
 			try {
 				const response = await frappe.call("vetedge.services.appointment_patient_quick_create.create_full_appointment_patient", { values: { ...this.patientDraft, company: this.bootstrap.active_company } });
