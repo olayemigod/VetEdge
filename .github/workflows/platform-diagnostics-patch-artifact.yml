@@ -1,0 +1,80 @@
+name: Platform Diagnostics Patch Artifact
+
+on:
+  pull_request:
+    branches:
+      - feat/vetedge-remote-coreedge-adapter-v1
+
+permissions:
+  contents: read
+
+jobs:
+  build-patch:
+    if: github.head_ref == 'feat/vetedge-coreedge-connection-diagnostics'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/vetedge-coreedge-connection-diagnostics
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Patch CI and apply Ruff
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/ci.yml')
+          content = path.read_text()
+          insertions = (
+              (
+                  "            vetedge/services/platform_access.py \\\n",
+                  "            vetedge/services/platform_access.py \\\n            vetedge/services/platform_diagnostics.py \\\n",
+                  "vetedge/services/platform_diagnostics.py",
+              ),
+              (
+                  "            vetedge/tests/test_remote_platform_client.py \\\n",
+                  "            vetedge/tests/test_remote_platform_client.py \\\n            vetedge/tests/test_platform_diagnostics.py \\\n",
+                  "vetedge/tests/test_platform_diagnostics.py",
+              ),
+              (
+                  "            --module vetedge.tests.test_remote_platform_client\n",
+                  "            --module vetedge.tests.test_remote_platform_client\n\n          bench --site ci.localhost run-tests \\\n            --app vetedge \\\n            --module vetedge.tests.test_platform_diagnostics\n",
+                  "--module vetedge.tests.test_platform_diagnostics",
+              ),
+          )
+          for anchor, replacement, marker in insertions:
+              if marker not in content:
+                  if anchor not in content:
+                      raise SystemExit(f'CI anchor not found for {marker}')
+                  content = content.replace(anchor, replacement, 1)
+          path.write_text(content)
+          PY
+
+          python -m pip install --upgrade ruff
+          ruff check --fix \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+          ruff check \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+          python -m compileall -q \
+            vetedge/services/platform_diagnostics.py \
+            vetedge/tests/test_platform_diagnostics.py
+
+      - name: Stage artifact files
+        run: |
+          mkdir -p /tmp/platform-diagnostics-patch/.github/workflows
+          mkdir -p /tmp/platform-diagnostics-patch/vetedge/services
+          mkdir -p /tmp/platform-diagnostics-patch/vetedge/tests
+          cp .github/workflows/ci.yml /tmp/platform-diagnostics-patch/.github/workflows/ci.yml
+          cp vetedge/services/platform_diagnostics.py /tmp/platform-diagnostics-patch/vetedge/services/platform_diagnostics.py
+          cp vetedge/tests/test_platform_diagnostics.py /tmp/platform-diagnostics-patch/vetedge/tests/test_platform_diagnostics.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platform-diagnostics-patch
+          path: /tmp/platform-diagnostics-patch
+          retention-days: 2
