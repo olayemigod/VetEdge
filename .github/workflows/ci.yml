@@ -38,7 +38,9 @@ jobs:
           ruff check \
             vetedge/platform_client.py \
             vetedge/services/platform_access.py \
+            vetedge/services/platform_diagnostics.py \
             vetedge/tests/test_remote_platform_client.py \
+            vetedge/tests/test_platform_diagnostics.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
@@ -231,6 +233,10 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_remote_platform_client
+
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_platform_diagnostics
 
           bench --site ci.localhost run-tests \
             --app vetedge \
