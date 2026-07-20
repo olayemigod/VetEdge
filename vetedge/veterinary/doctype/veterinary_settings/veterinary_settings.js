@@ -20,6 +20,7 @@ function apply_veterinary_settings_labels(frm) {
 
 function mount_veterinary_settings_edgeui(frm) {
 	apply_veterinary_settings_labels(frm);
+	frappe.require("/assets/vetedge/css/veterinary_settings_edgeui.css");
 	const $wrapper = $(frm.wrapper);
 	$wrapper.addClass("veterinary-settings-edgeui-form");
 
