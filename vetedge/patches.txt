@@ -23,3 +23,4 @@ vetedge.patches.repair_veterinary_company_schema
 vetedge.patches.ensure_veterinary_branch_context_fields
 vetedge.patches.backfill_veterinary_company_from_branch
 vetedge.patches.reconcile_veterinary_company_context_v2
+vetedge.patches.backfill_veterinary_patient_age_v1
