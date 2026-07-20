@@ -8,7 +8,7 @@ COMPONENT = (
 	/ "public"
 	/ "js"
 	/ "vetedge_resource_center"
-	/ "VetEdgeAppointmentQuickCreate.vue"
+	/ "VetEdgeAppointmentFlow.vue"
 )
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_resource_center.bundle.js"
 LOADER = (
@@ -64,7 +64,7 @@ def test_create_new_owner_and_patient_keep_erpnext_and_vetedge_truth():
 	):
 		assert contract in content
 
-	assert "frappe.get_doc({\"doctype\": \"DocType\"" not in content
+	assert 'frappe.get_doc({"doctype": "DocType"' not in content
 	assert "ignore_permissions" not in content
 
 
@@ -88,39 +88,51 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 	assert "Payment Entry" not in content
 
 
-def test_quick_create_uses_shared_link_field_and_cascading_clear_rules():
+def test_appointment_flow_uses_edgesuite_forms_for_owner_and_patient_creation():
 	content = read(COMPONENT)
 
 	for contract in (
+		"EdgeModal",
 		"EdgeLinkField",
-		"createOwnerFromQuery",
-		"createPatientFromQuery",
-		"searchOwner",
-		"searchPatient",
-		"searchBranch",
-		"searchPractitioner",
-		"this.clearPatient()",
-		"this.clearPractitioner()",
+		"Create New Pet Owner",
+		"Create New Veterinary Patient",
+		"beginInlineCreate",
+		"resolvePendingCreate",
+		'v-show="screen === \'appointment\'"',
+		'v-show="screen === \'owner\'"',
+		'v-show="screen === \'patient\'"',
 		"create_appointment_owner",
 		"create_appointment_patient",
 		"create_edgeui_appointment",
-		"Veterinary Breed",
-		"filters: { species:",
+		"searchSpecies",
+		"searchBreed",
+		"this.clearPatient()",
+		"this.clearPractitioner()",
+		"Back to Appointment",
 	):
 		assert contract in content
 
+	assert "frappe.ui.Dialog" not in content
+	assert "frappe.new_doc" not in content
+	assert "window.open" not in content
 
-def test_resource_center_mounts_and_cleans_up_quick_create_consumer():
+
+def test_resource_center_exposes_new_appointment_action_and_blocks_generic_editor():
 	bundle = read(BUNDLE)
 	loader = read(LOADER)
 
 	for contract in (
-		"VetEdgeAppointmentQuickCreate",
+		"VetEdgeAppointmentFlow",
 		"runtime.components?.EdgeLinkField",
-		"quickApp.unmount()",
-		"quickHost.remove()",
+		"flowApp.unmount()",
+		"flowHost.remove()",
 		"this.resource === 'appointments'",
-		"quickView?.open?.()",
+		"flowView?.open?.()",
+		"New Appointment",
+		"interceptAppointmentAction",
+		"stopImmediatePropagation",
+		"MutationObserver",
+		"target.addEventListener('click', interceptAppointmentAction, true)",
 	):
 		assert contract in bundle
 
