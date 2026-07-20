@@ -1,4 +1,4 @@
-import VetEdgeAppointmentFlow from './vetedge_resource_center/VetEdgeAppointmentFlow.vue';
+import VetEdgeAppointmentFlow from './vetedge_resource_center/VetEdgeAppointmentFlowV2.vue';
 import VetEdgeResourceCenter from './vetedge_resource_center/VetEdgeResourceCenter.vue';
 
 export function mountVetEdgeResourceCenter(target) {
