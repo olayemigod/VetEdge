@@ -36,6 +36,7 @@
 		installed: false,
 		lastError: null,
 		runtimeVersion: "",
+		productMenuPatched: false,
 	};
 
 	function runtime() {
@@ -54,6 +55,14 @@
 		return window.frappe.call(method, args || {});
 	}
 
+	function slug(value) {
+		return String(value || "")
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "");
+	}
+
 	function normalizePath(route) {
 		const raw = String(route || "").trim();
 		if (!raw) return "";
@@ -63,6 +72,21 @@
 		} catch (_error) {
 			return raw.split("?")[0].replace(/\/$/, "");
 		}
+	}
+
+	function menuItemRoute(item) {
+		if (item?.route) {
+			const route = String(item.route).trim();
+			if (!route) return "";
+			if (route.startsWith("/")) return route;
+			return `/app/${route.replace(/^\/+/, "")}`;
+		}
+		const target = String(item?.link_to || item?.linkTo || "").trim();
+		if (!target) return "";
+		const type = String(item?.link_type || item?.linkType || "Page");
+		if (type === "Report") return `/app/query-report/${encodeURIComponent(target)}`;
+		if (type === "DocType") return `/app/${slug(target)}`;
+		return `/app/${target.replace(/^\/+/, "")}`;
 	}
 
 	function openSameTab(route) {
@@ -93,6 +117,41 @@
 		};
 	}
 
+	function patchProductMenu(edgeUI, adapter) {
+		if (edgeUI.__vetedgeProductMenuNavigationPatched) {
+			state.productMenuPatched = true;
+			return;
+		}
+		if (typeof edgeUI.registerProductMenu !== "function") return;
+
+		const originalRegister = edgeUI.registerProductMenu.bind(edgeUI);
+		edgeUI.registerProductMenu = function (config) {
+			const product = String(config?.product || "").trim().toLowerCase();
+			if (!["vetedge", "veterinary"].includes(product)) {
+				return originalRegister(config);
+			}
+
+			const suppliedNavigate = typeof config.navigate === "function" ? config.navigate : null;
+			return originalRegister({
+				...config,
+				navigate(item) {
+					const route = menuItemRoute(item);
+					if (route && adapter.open(route) === true) return;
+					if (suppliedNavigate) {
+						suppliedNavigate(item);
+						return;
+					}
+					if (route) openSameTab(route);
+				},
+			});
+		};
+
+		edgeUI.__vetedgeProductMenuNavigationPatched = true;
+		state.productMenuPatched = true;
+		const currentConfig = edgeUI.getProductMenuConfig?.();
+		if (currentConfig) edgeUI.registerProductMenu(currentConfig);
+	}
+
 	function notificationActions(item) {
 		const status = item.status || "Unread";
 		return [
@@ -110,11 +169,8 @@
 	function targetForItem(item) {
 		if (item.action_url) return item.action_url;
 		if (item.reference_doctype && item.reference_name) {
-			const slug = String(item.reference_doctype)
-				.trim()
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, "-");
-			return `/app/${slug}/${encodeURIComponent(item.reference_name)}`;
+			const documentSlug = slug(item.reference_doctype);
+			return `/app/${documentSlug}/${encodeURIComponent(item.reference_name)}`;
 		}
 		return item.name ? `/app/veterinary-notification-item/${encodeURIComponent(item.name)}` : "";
 	}
@@ -181,10 +237,12 @@
 		}
 
 		try {
-			edgeUI.registerAdapter("navigation:vetedge", navigationAdapter(), { replace: true });
-			edgeUI.registerAdapter("navigation:veterinary", navigationAdapter(), { replace: true });
+			const navigation = navigationAdapter();
+			edgeUI.registerAdapter("navigation:vetedge", navigation, { replace: true });
+			edgeUI.registerAdapter("navigation:veterinary", navigation, { replace: true });
 			edgeUI.registerAdapter("notifications:vetedge", notificationAdapter(), { replace: true });
 			edgeUI.registerAdapter("notifications:veterinary", notificationAdapter(), { replace: true });
+			patchProductMenu(edgeUI, navigation);
 			state.installed = true;
 			state.runtimeVersion = edgeUI.version || "";
 			return true;
@@ -200,6 +258,7 @@
 			installed: state.installed,
 			runtimeVersion: state.runtimeVersion,
 			lastError: state.lastError,
+			productMenuPatched: state.productMenuPatched,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
 		};
 	}
