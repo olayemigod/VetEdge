@@ -158,28 +158,28 @@ def test_complete_patient_create_keeps_vetedge_validation_and_system_billing_tru
 	assert "ignore_permissions" not in content
 
 
-def test_quick_owner_creation_resolves_applicable_loyalty_programs_server_side():
+def test_quick_owner_creation_keeps_loyalty_outside_appointment_flow():
 	api = read(API)
 	safety = read(QUICK_CREATE_SAFETY)
 	component = read(COMPONENT)
 	for contract in (
-		"get_applicable_loyalty_programs",
-		"get_loyalty_programs",
 		"resolve_owner_loyalty_program",
-		"The selected Loyalty Program is not applicable",
-		"Select a Loyalty Program for this Pet Owner",
-		'"loyalty_program": loyalty_program or None',
+		"vetedge_skip_customer_loyalty_auto_enrollment",
+		"disable_customer_loyalty_auto_enrollment_for_quick_create",
+		"restore_customer_loyalty_auto_enrollment_after_quick_create",
+		'doc.__dict__["set_loyalty_program"] = lambda: None',
+		'doc.loyalty_program = None',
 		'"default_currency": context.get("company_currency") or None',
 		'"default_price_list": context.get("default_price_list") or None',
 	):
 		assert contract in api or contract in safety
-	for contract in (
-		"Loyalty Program",
-		"owner_loyalty_programs",
-		"owner_requires_loyalty_program",
-		"owner_default_loyalty_program",
-	):
-		assert contract in component
+	owner_context = safety.split("def get_owner_quick_create_context", 1)[1].split(
+		"def resolve_owner_loyalty_program", 1
+	)[0]
+	assert '"loyalty_programs": []' in owner_context
+	assert '"requires_loyalty_program": False' in owner_context
+	assert "get_applicable_loyalty_programs(" not in owner_context
+	assert 'v-if="bootstrap.owner_loyalty_programs.length"' in component
 	assert "ignore_permissions" not in safety
 
 
