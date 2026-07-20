@@ -1,0 +1,51 @@
+name: Remote Adapter Ruff Autofix
+
+on:
+  push:
+    branches:
+      - feat/vetedge-remote-coreedge-adapter-v1
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/vetedge-remote-coreedge-adapter-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install Ruff
+        run: python -m pip install --upgrade ruff
+
+      - name: Apply safe Ruff fixes
+        run: |
+          ruff check --fix \
+            vetedge/platform_client.py \
+            vetedge/services/platform_access.py \
+            vetedge/tests/test_remote_platform_client.py
+
+      - name: Verify Ruff
+        run: |
+          ruff check \
+            vetedge/platform_client.py \
+            vetedge/services/platform_access.py \
+            vetedge/tests/test_remote_platform_client.py
+
+      - name: Commit fixes and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/remote-adapter-ruff-autofix.yml
+          git add \
+            vetedge/platform_client.py \
+            vetedge/services/platform_access.py \
+            vetedge/tests/test_remote_platform_client.py
+          git commit -m "style(vetedge): apply remote adapter ruff fixes"
+          git push origin HEAD:feat/vetedge-remote-coreedge-adapter-v1
