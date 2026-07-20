@@ -86,6 +86,21 @@ def test_selected_patient_owner_is_resolved_server_side_for_active_company():
 	assert "option?.raw?.raw" not in bundle
 
 
+def test_active_company_is_visible_and_locked_across_the_appointment_flow():
+	bundle = read(BUNDLE)
+
+	for contract in (
+		"Active Company: ${company}",
+		"company: this.bootstrap.active_company",
+		"this.patientDraft.company = this.bootstrap.active_company",
+		"this.ownerDraft.company = this.bootstrap.active_company",
+		"originalAppointmentPayload",
+		"originalCreatePatientFromQuery",
+		"originalCreateOwnerForPatientFromQuery",
+	):
+		assert contract in bundle
+
+
 def test_company_context_filters_restricted_customers_and_assigns_new_owners():
 	content = read(COMPANY_CONTEXT)
 	api = read(API)
@@ -175,6 +190,7 @@ def test_company_backfill_is_idempotent_and_safe_for_multi_company_sites():
 	for contract in (
 		"_single_allowed_customer_company",
 		"single_site_company = companies[0] if len(companies) == 1 else None",
+		"WHERE IFNULL(company, '') = ''",
 		'frappe.db.set_value("Veterinary Patient"',
 		"INNER JOIN `tabVeterinary Patient`",
 		"WHERE (a.company IS NULL OR a.company = '')",
