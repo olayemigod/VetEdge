@@ -91,6 +91,16 @@ doc_events = {
 	"Branch": {
 		"on_update": "vetedge.services.company_context_compat.sync_branch_company_context",
 	},
+	"Customer": {
+		"before_validate": (
+			"vetedge.services.appointment_quick_create_safety."
+			"disable_customer_loyalty_auto_enrollment_for_quick_create"
+		),
+		"after_insert": (
+			"vetedge.services.appointment_quick_create_safety."
+			"restore_customer_loyalty_auto_enrollment_after_quick_create"
+		),
+	},
 	"Sales Invoice": {
 		"before_validate": [
 			"vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
