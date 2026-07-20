@@ -24,6 +24,22 @@ def _company_identity(company: str | None) -> dict:
 	}
 
 
+def _settings_brand_identity() -> dict:
+	"""Read clinic identity configured in the Veterinary Settings branding tab."""
+	try:
+		if not frappe.db.exists("DocType", "Veterinary Settings"):
+			return {"name": "", "logo": ""}
+		settings = frappe.get_single("Veterinary Settings")
+		meta = frappe.get_meta("Veterinary Settings")
+		return {
+			"name": settings.get("portal_brand_name") if meta.has_field("portal_brand_name") else "",
+			"logo": settings.get("portal_logo") if meta.has_field("portal_logo") else "",
+		}
+	except Exception:
+		# Boot must remain available during install and schema migration.
+		return {"name": "", "logo": ""}
+
+
 def _fallback_company() -> str | None:
 	try:
 		return get_current_vetedge_company()
@@ -41,10 +57,16 @@ def build_vetedge_ui_identity() -> dict:
 	branding = get_branding()
 	mode = get_edge_platform_mode()
 	company = _company_identity(_fallback_company())
+	settings_brand = _settings_brand_identity()
 
-	tenant_name = company.get("label") or branding.get("company_name") or branding.get("brand_name") or "Veterinary Clinic"
-	tenant_logo = company.get("logo") or branding.get("logo") or ""
+	if branding.get("source") == "coreedge" and branding.get("enabled"):
+		tenant_name = branding.get("company_name") or branding.get("brand_name") or company.get("label")
+		tenant_logo = branding.get("logo") or settings_brand.get("logo") or company.get("logo") or ""
+	else:
+		tenant_name = settings_brand.get("name") or company.get("label") or branding.get("company_name") or branding.get("brand_name")
+		tenant_logo = settings_brand.get("logo") or branding.get("logo") or company.get("logo") or ""
 
+	tenant_name = tenant_name or "Veterinary Clinic"
 	is_saas = mode == "shared_hosted"
 	product_name = "VetEdge" if is_saas else "Veterinary"
 	product_logo = VETEDGE_LOGO if is_saas else ""
