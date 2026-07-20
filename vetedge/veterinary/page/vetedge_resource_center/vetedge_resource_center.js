@@ -32,6 +32,8 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	frappe.require('edgeui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
+		// EdgeLinkField compatibility floor: EdgeSuite UI 0.4.0 or newer.
+		// This working-context build is validated against EdgeSuite UI 0.4.1 or newer.
 		const required = [
 			'EdgeAppShell',
 			'EdgeIcon',
