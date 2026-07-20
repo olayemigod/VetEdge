@@ -174,15 +174,19 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 		"EdgeLinkField",
 		"Create New Pet Owner",
 		"Create New Veterinary Patient",
-		"createOwnerFromQuery",
+		"createOwnerForPatientFromQuery",
 		"createPatientFromQuery",
-		"beginInlineCreate",
+		"patientCreateResolve",
+		"ownerCreateResolve",
+		"optionRecord(option)",
+		"record.primary_owner",
 		"this.clearPatient()",
 		"this.clearPractitioner()",
 		"create_edgeui_appointment",
 	):
 		assert contract in component
 
+	assert component.index('label="Veterinary Patient"') < component.index("vetedge-appointment-flow-owner-summary")
 	assert "frappe.ui.Dialog" not in component
 	assert "window.open" not in component
 	assert "VetEdgeAppointmentFlow" in bundle
