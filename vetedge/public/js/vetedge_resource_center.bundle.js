@@ -16,7 +16,52 @@ export function mountVetEdgeResourceCenter(target) {
 
 	let resourceView = null;
 	let syncActionLabels = () => {};
-	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
+	const AppointmentFlowRoot = {
+		...VetEdgeAppointmentFlow,
+		components: { ...runtime.components, ...(VetEdgeAppointmentFlow.components || {}) },
+		methods: {
+			...(VetEdgeAppointmentFlow.methods || {}),
+			searchPatient(query) {
+				return this.searchLink('patient', query, {
+					branch: this.form.branch,
+					company: this.bootstrap.active_company,
+				});
+			},
+			searchOwner(query) {
+				return this.searchLink('owner', query, { company: this.bootstrap.active_company });
+			},
+			async onPatientSelected(option) {
+				this.error = '';
+				this.form.patient = option.value;
+				this.labels.patient = option.label;
+				this.form.owner = '';
+				this.labels.owner = '';
+				try {
+					const response = await frappe.call(
+						'vetedge.services.appointment_edgeui.get_patient_selection_context',
+						{
+							patient: option.value,
+							company: this.bootstrap.active_company,
+						}
+					);
+					const context = response.message || {};
+					this.form.owner = context.primary_owner || '';
+					this.labels.owner = context.primary_owner_label || context.primary_owner || '';
+					if (!this.form.branch && context.default_branch) {
+						this.form.branch = context.default_branch;
+						this.labels.branch = context.default_branch;
+					}
+					if (!this.form.owner) {
+						throw new Error(__('The selected patient does not have a linked Pet Owner.'));
+					}
+				} catch (error) {
+					this.clearPatient();
+					this.error = error?.message || __('The patient could not be used for the active Company.');
+				}
+			},
+		},
+	};
+	const flowApp = runtime.createEdgeApp(AppointmentFlowRoot, {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
 			syncActionLabels();
