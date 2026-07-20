@@ -262,12 +262,7 @@ def get_appointment_form_bootstrap() -> dict[str, Any]:
 		"can_create_owner": bool(owner_permission and owner_context.get("ready")),
 		"can_create_patient": bool(patient_permission and patient_context.get("ready")),
 		"can_create_appointment": bool(frappe.has_permission("Veterinary Appointment", "create")),
-		"owner_create_warning": "" if owner_permission else _("You do not have permission to create Pet Owners."),
-		"patient_create_warning": "" if patient_permission else _("You do not have permission to create Veterinary Patients."),
 		"company_currency": owner_context.get("company_currency") or patient_context.get("company_currency") or "",
-		"owner_loyalty_programs": owner_context.get("loyalty_programs") or [],
-		"owner_requires_loyalty_program": bool(owner_context.get("requires_loyalty_program")),
-		"owner_default_loyalty_program": owner_context.get("default_loyalty_program") or "",
 		"owner_default_price_list": owner_context.get("default_price_list") or "",
 		"registration_selling_price_list": patient_context.get("selling_price_list") or "",
 		"owner_create_warning": owner_context.get("warning") or ("" if owner_permission else _("You do not have permission to create Pet Owners.")),
@@ -362,7 +357,10 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 		frappe.throw(_(context.get("warning") or "Pet Owner quick creation is not configured."), frappe.ValidationError)
 	customer_group = context.get("customer_group") or get_default_customer_group()
 	territory = context.get("territory") or get_default_territory()
-	loyalty_program = resolve_owner_loyalty_program(context, payload.get("loyalty_program"))
+	# Loyalty is deliberately outside this workflow. This call arms a one-shot,
+	# request-local guard that prevents ERPNext Customer.validate from auto-enrolling
+	# or showing the multiple-program selection message for this new Pet Owner only.
+	resolve_owner_loyalty_program(context, None)
 
 	doc = frappe.get_doc(
 		{
@@ -375,17 +373,19 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 			"email_id": email_id,
 			"default_currency": context.get("company_currency") or None,
 			"default_price_list": context.get("default_price_list") or None,
-			"loyalty_program": loyalty_program or None,
 		}
 	)
 	apply_customer_company_restriction(doc, company)
-	doc.insert()
+	try:
+		doc.insert()
+	finally:
+		# Avoid leaking the one-shot flag if insertion fails before before_validate.
+		frappe.flags.vetedge_skip_customer_loyalty_auto_enrollment = False
 	return _option(
 		doc.name,
 		doc.customer_name,
 		" · ".join(filter(None, [doc.mobile_no, doc.email_id])),
 		company=company,
-		loyalty_program=doc.loyalty_program,
 	)
 
 
