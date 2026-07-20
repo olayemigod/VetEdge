@@ -22,14 +22,6 @@ DEFAULT_TIMEOUT_SECONDS = 5
 MAX_TIMEOUT_SECONDS = 30
 MAX_CACHE_TTL_SECONDS = 300
 DEFAULT_HEARTBEAT_SECONDS = 300
-_REMOTE_CONFIG_KEYS = (
-	"coreedge_service_url",
-	"coreedge_api_key",
-	"coreedge_api_secret",
-	"coreedge_site_identifier",
-)
-
-
 class RemotePlatformError(Exception):
 	"""Base error for CoreEdge remote service operations."""
 
@@ -59,7 +51,15 @@ class RemotePlatformAccessDenied(RemotePlatformError):
 
 
 def get_platform_authority_mode() -> str:
-	"""Resolve operator-controlled authority without consulting a tenant-facing DocType."""
+	"""Resolve operator-controlled authority without consulting a tenant-facing DocType.
+
+	`coreedge_remote_required` is the non-bypassable operator policy. Connection
+	credentials alone never activate remote authority, allowing them to be provisioned
+	and tested before the controlled cutover.
+	"""
+	if _conf_bool("coreedge_remote_required"):
+		return REMOTE_MODE
+
 	raw_mode = _conf_text("coreedge_authority_mode")
 	if raw_mode:
 		mode = raw_mode.lower().replace("-", "_")
@@ -68,10 +68,6 @@ def get_platform_authority_mode() -> str:
 		_log_warning(
 			f"Unsupported coreedge_authority_mode '{raw_mode}'. Failing safe to remote authority."
 		)
-		return REMOTE_MODE
-	if _conf_bool("coreedge_remote_required"):
-		return REMOTE_MODE
-	if any(_conf_text(key) for key in _REMOTE_CONFIG_KEYS):
 		return REMOTE_MODE
 	return LEGACY_MODE
 

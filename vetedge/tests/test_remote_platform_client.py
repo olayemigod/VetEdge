@@ -92,8 +92,16 @@ class TestRemotePlatformClient(unittest.TestCase):
 		self.assertEqual(client.get_platform_authority_mode(), "legacy_auto")
 		self.assertFalse(client.is_remote_platform_requested())
 
-	def test_remote_configuration_selects_remote_authority(self):
+	def test_remote_configuration_does_not_activate_authority_before_cutover(self):
 		frappe.conf.coreedge_service_url = "https://platform.example.com"
+		frappe.conf.coreedge_api_key = "api-key"
+		frappe.conf.coreedge_api_secret = "api-secret"
+		frappe.conf.coreedge_site_identifier = "vet.example.com"
+		self.assertEqual(client.get_platform_authority_mode(), "legacy_auto")
+
+	def test_remote_required_overrides_explicit_legacy_mode(self):
+		frappe.conf.coreedge_authority_mode = "legacy_auto"
+		frappe.conf.coreedge_remote_required = 1
 		self.assertEqual(client.get_platform_authority_mode(), "remote")
 
 	def test_unknown_explicit_authority_fails_safe_to_remote(self):
