@@ -7,7 +7,7 @@
  "field_order": ["diagnosis", "diagnosis_type", "notes"],
  "fields": [
   {"fieldname": "diagnosis", "fieldtype": "Link", "in_list_view": 1, "label": "Diagnosis", "options": "Veterinary Diagnosis", "reqd": 1},
-  {"fieldname": "diagnosis_type", "fieldtype": "Select", "in_list_view": 1, "label": "Diagnosis Type", "options": "\nPrimary\nDifferential\nRule Out\nResolved"},
+  {"fieldname": "diagnosis_type", "fieldtype": "Select", "in_list_view": 1, "label": "Diagnosis Type", "options": "\nDifferential\nConfirmed/Definitive\nWorking\nPresumptive\nRuled Out\nOthers"},
   {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
  ],
  "istable": 1,
