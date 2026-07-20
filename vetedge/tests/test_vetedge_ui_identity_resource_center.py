@@ -113,6 +113,12 @@ def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
 	assert "Payment Entry" not in content
 
 
+def test_resource_center_count_uses_frappe_v16_aggregate_field_syntax():
+	content = read(RESOURCE_API)
+	assert 'fields=[{"COUNT": "*", "as": "total"}]' in content
+	assert 'count(name) as total' not in content
+
+
 def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT):
 		assert path.exists(), path
