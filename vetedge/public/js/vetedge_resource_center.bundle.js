@@ -16,9 +16,21 @@ export function mountVetEdgeResourceCenter(target) {
 
 	let resourceView = null;
 	let syncActionLabels = () => {};
+	const originalModalSubtitle = VetEdgeAppointmentFlow.computed?.modalSubtitle;
+	const originalCreatePatientFromQuery = VetEdgeAppointmentFlow.methods?.createPatientFromQuery;
+	const originalCreateOwnerForPatientFromQuery = VetEdgeAppointmentFlow.methods?.createOwnerForPatientFromQuery;
+	const originalAppointmentPayload = VetEdgeAppointmentFlow.methods?.appointmentPayload;
 	const AppointmentFlowRoot = {
 		...VetEdgeAppointmentFlow,
 		components: { ...runtime.components, ...(VetEdgeAppointmentFlow.components || {}) },
+		computed: {
+			...(VetEdgeAppointmentFlow.computed || {}),
+			modalSubtitle() {
+				const base = originalModalSubtitle?.call(this) || '';
+				const company = this.bootstrap?.active_company || '';
+				return company ? `${base} Active Company: ${company}.` : base;
+			},
+		},
 		methods: {
 			...(VetEdgeAppointmentFlow.methods || {}),
 			searchPatient(query) {
@@ -29,6 +41,22 @@ export function mountVetEdgeResourceCenter(target) {
 			},
 			searchOwner(query) {
 				return this.searchLink('owner', query, { company: this.bootstrap.active_company });
+			},
+			createPatientFromQuery(query) {
+				const pending = originalCreatePatientFromQuery?.call(this, query) || Promise.resolve(null);
+				this.patientDraft.company = this.bootstrap.active_company;
+				return pending;
+			},
+			createOwnerForPatientFromQuery(query) {
+				const pending = originalCreateOwnerForPatientFromQuery?.call(this, query) || Promise.resolve(null);
+				this.ownerDraft.company = this.bootstrap.active_company;
+				return pending;
+			},
+			appointmentPayload() {
+				return {
+					...(originalAppointmentPayload?.call(this) || {}),
+					company: this.bootstrap.active_company,
+				};
 			},
 			async onPatientSelected(option) {
 				this.error = '';
