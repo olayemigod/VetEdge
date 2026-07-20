@@ -81,7 +81,7 @@ permission_query_conditions = {
 has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
-	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_permission",
+	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
 	"Pet Grooming Appointment": "vetedge.services.permissions.has_pet_grooming_appointment_permission",
 	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
