@@ -3,7 +3,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
 PATIENT_CREATE_API = ROOT / "vetedge" / "services" / "appointment_patient_quick_create.py"
+QUICK_CREATE_SAFETY = ROOT / "vetedge" / "services" / "appointment_quick_create_safety.py"
 COMPANY_CONTEXT = ROOT / "vetedge" / "services" / "company_context.py"
+HOOKS = ROOT / "vetedge" / "hooks.py"
+PATIENT_CONTROLLER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_patient"
+	/ "veterinary_patient.py"
+)
 COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -39,6 +49,7 @@ APPOINTMENT_DOCTYPE = (
 )
 BACKFILL_PATCH = ROOT / "vetedge" / "patches" / "backfill_veterinary_company_context.py"
 SCHEMA_PATCH = ROOT / "vetedge" / "patches" / "repair_veterinary_company_schema.py"
+AGE_PATCH = ROOT / "vetedge" / "patches" / "backfill_veterinary_patient_age_v1.py"
 PATCHES = ROOT / "vetedge" / "patches.txt"
 
 
@@ -128,6 +139,7 @@ def test_complete_patient_create_keeps_vetedge_validation_and_system_billing_tru
 		'frappe.has_permission("Veterinary Patient", "create")',
 		'frappe.db.has_column("Veterinary Patient", "company")',
 		"validate_customer_company(owner, company)",
+		"validate_patient_quick_create_context(company, branch)",
 		"_find_patient_duplicate",
 		"Breed must belong to the selected Species",
 		'"company": company',
@@ -144,6 +156,54 @@ def test_complete_patient_create_keeps_vetedge_validation_and_system_billing_tru
 	assert "registration_billed" not in content
 	assert "registration_fee_amount" not in content
 	assert "ignore_permissions" not in content
+
+
+def test_quick_owner_creation_resolves_applicable_loyalty_programs_server_side():
+	api = read(API)
+	safety = read(QUICK_CREATE_SAFETY)
+	component = read(COMPONENT)
+	for contract in (
+		"get_applicable_loyalty_programs",
+		"get_loyalty_programs",
+		"resolve_owner_loyalty_program",
+		"The selected Loyalty Program is not applicable",
+		"Select a Loyalty Program for this Pet Owner",
+		'"loyalty_program": loyalty_program or None',
+		'"default_currency": context.get("company_currency") or None',
+		'"default_price_list": context.get("default_price_list") or None',
+	):
+		assert contract in api or contract in safety
+	for contract in (
+		"Loyalty Program",
+		"owner_loyalty_programs",
+		"owner_requires_loyalty_program",
+		"owner_default_loyalty_program",
+	):
+		assert contract in component
+	assert "ignore_permissions" not in safety
+
+
+def test_registration_invoice_currency_is_scoped_to_patient_company_and_draft_only():
+	safety = read(QUICK_CREATE_SAFETY)
+	hooks = read(HOOKS)
+	controller = read(PATIENT_CONTROLLER)
+	for contract in (
+		"registration_invoice_context",
+		"vetedge_registration_invoice_context",
+		"align_registration_invoice_company_currency",
+		'int(doc.get("docstatus") or 0) != 0',
+		"doc.company = company",
+		"doc.currency = currency",
+		"doc.conversion_rate = 1",
+		"doc.price_list_currency = currency",
+		"doc.plc_conversion_rate = 1",
+		"get_compatible_selling_price_list",
+	):
+		assert contract in safety
+	assert "appointment_quick_create_safety.align_registration_invoice_company_currency" in hooks
+	assert "with registration_invoice_context(self):" in controller
+	assert "Currency Exchange" not in safety
+	assert "doc.submit(" not in safety
 
 
 def test_appointment_creation_reuses_existing_validation_and_company_truth():
@@ -204,6 +264,21 @@ def test_company_schema_repair_is_new_idempotent_migration_step():
 	assert "vetedge.patches.repair_veterinary_company_schema" in patches
 
 
+def test_existing_site_age_patch_is_idempotent_and_accounting_safe():
+	patch = read(AGE_PATCH)
+	patches = read(PATCHES)
+	for contract in (
+		"calculate_age_label",
+		'frappe.db.set_value(',
+		'"approximate_age"',
+		"update_modified=False",
+	):
+		assert contract in patch
+	assert "vetedge.patches.backfill_veterinary_patient_age_v1" in patches
+	assert "Sales Invoice" not in patch
+	assert "Payment Entry" not in patch
+
+
 def test_patient_create_form_contains_all_operational_registration_fields():
 	component = read(COMPONENT)
 	for contract in (
@@ -216,6 +291,10 @@ def test_patient_create_form_contains_all_operational_registration_fields():
 		"Sex",
 		"Neuter Status",
 		"Date of Birth",
+		"Age",
+		"patientAge",
+		"calculateAgeLabel",
+		"Date of Birth cannot be in the future",
 		"Baseline Weight",
 		"Colour / Markings",
 		"Microchip ID",
@@ -247,6 +326,7 @@ def test_appointment_flow_is_patient_first_and_owner_creation_stays_inside_edges
 		'v-show="screen === \'owner\'"',
 		"onPatientOwnerSelected",
 		"Back to Patient",
+		"Existing patients can still be booked",
 	):
 		assert contract in component
 	assert 'return this.searchLink("patient", query, { owner:' not in component
