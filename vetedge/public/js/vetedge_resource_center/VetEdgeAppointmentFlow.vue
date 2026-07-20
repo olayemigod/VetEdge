@@ -15,19 +15,31 @@
 			<form v-show="screen === 'appointment'" class="vetedge-appointment-flow-form" @submit.prevent="submitAppointment">
 				<div class="vetedge-appointment-flow-grid">
 					<EdgeLinkField
-						v-model="form.owner"
-						:selected-label="labels.owner"
-						label="Pet Owner"
-						placeholder="Search by owner name, phone or email"
-						:searcher="searchOwner"
-						:creator="bootstrap.can_create_owner ? createOwnerFromQuery : null"
-						:can-create="bootstrap.can_create_owner"
-						create-label="Create New Pet Owner"
+						v-model="form.patient"
+						:selected-label="labels.patient"
+						label="Veterinary Patient"
+						placeholder="Search by patient name, ID, microchip or owner"
+						:searcher="searchPatient"
+						:creator="bootstrap.can_create_patient ? createPatientFromQuery : null"
+						:can-create="bootstrap.can_create_patient"
+						:context="{ branch: form.branch }"
+						create-label="Create New Veterinary Patient"
 						required
-						@select="onOwnerSelected"
-						@clear="clearOwner"
+						@select="onPatientSelected"
+						@clear="clearPatient"
 						@search-error="handleFieldError"
 					/>
+
+					<label class="vetedge-appointment-flow-field vetedge-appointment-flow-owner-summary">
+						<span>Pet Owner</span>
+						<input
+							:value="labels.owner || form.owner"
+							class="form-control"
+							placeholder="Automatically filled from the selected patient"
+							readonly
+						/>
+						<small>The owner comes from the Veterinary Patient record.</small>
+					</label>
 
 					<EdgeLinkField
 						v-model="form.branch"
@@ -38,23 +50,6 @@
 						required
 						@select="onBranchSelected"
 						@clear="clearBranch"
-						@search-error="handleFieldError"
-					/>
-
-					<EdgeLinkField
-						v-model="form.patient"
-						:selected-label="labels.patient"
-						label="Veterinary Patient"
-						placeholder="Search the selected owner's patients"
-						:searcher="searchPatient"
-						:creator="canCreatePatient ? createPatientFromQuery : null"
-						:can-create="canCreatePatient"
-						:context="{ owner: form.owner, branch: form.branch }"
-						:disabled="!form.owner || !form.branch"
-						create-label="Create New Veterinary Patient"
-						required
-						@select="onPatientSelected"
-						@clear="clearPatient"
 						@search-error="handleFieldError"
 					/>
 
@@ -91,34 +86,39 @@
 				</label>
 			</form>
 
-			<form v-show="screen === 'owner'" class="vetedge-appointment-flow-form" @submit.prevent="saveOwner">
-				<div class="vetedge-appointment-flow-grid">
-					<label class="vetedge-appointment-flow-field">
-						<span>Owner Name <b>*</b></span>
-						<input v-model.trim="ownerDraft.owner_name" class="form-control" required />
-					</label>
-					<label class="vetedge-appointment-flow-field">
-						<span>Mobile Number</span>
-						<input v-model.trim="ownerDraft.mobile_no" type="tel" class="form-control" />
-					</label>
-					<label class="vetedge-appointment-flow-field">
-						<span>Email</span>
-						<input v-model.trim="ownerDraft.email_id" type="email" class="form-control" />
-					</label>
-				</div>
-				<p class="vetedge-appointment-flow-hint">Provide at least a mobile number or email. Existing owners are checked before creation.</p>
-			</form>
-
 			<form v-show="screen === 'patient'" class="vetedge-appointment-flow-form" @submit.prevent="savePatient">
-				<div class="vetedge-appointment-flow-context">
-					<div><span>Owner</span><strong>{{ labels.owner || form.owner }}</strong></div>
-					<div><span>Branch</span><strong>{{ labels.branch || form.branch }}</strong></div>
-				</div>
 				<div class="vetedge-appointment-flow-grid">
 					<label class="vetedge-appointment-flow-field">
 						<span>Patient Name <b>*</b></span>
 						<input v-model.trim="patientDraft.patient_name" class="form-control" required />
 					</label>
+
+					<EdgeLinkField
+						v-model="patientDraft.primary_owner"
+						:selected-label="patientLabels.owner"
+						label="Pet Owner"
+						placeholder="Search by owner name, phone or email"
+						:searcher="searchOwner"
+						:creator="bootstrap.can_create_owner ? createOwnerForPatientFromQuery : null"
+						:can-create="bootstrap.can_create_owner"
+						create-label="Create New Pet Owner"
+						required
+						@select="onPatientOwnerSelected"
+						@clear="clearPatientOwner"
+						@search-error="handleFieldError"
+					/>
+
+					<EdgeLinkField
+						v-model="patientDraft.default_branch"
+						:selected-label="patientLabels.branch"
+						label="Branch"
+						placeholder="Search permitted branches"
+						:searcher="searchBranch"
+						required
+						@select="onPatientBranchSelected"
+						@clear="clearPatientBranch"
+						@search-error="handleFieldError"
+					/>
 
 					<EdgeLinkField
 						v-model="patientDraft.species"
@@ -166,6 +166,24 @@
 					</label>
 				</div>
 			</form>
+
+			<form v-show="screen === 'owner'" class="vetedge-appointment-flow-form" @submit.prevent="saveOwner">
+				<div class="vetedge-appointment-flow-grid">
+					<label class="vetedge-appointment-flow-field">
+						<span>Owner Name <b>*</b></span>
+						<input v-model.trim="ownerDraft.owner_name" class="form-control" required />
+					</label>
+					<label class="vetedge-appointment-flow-field">
+						<span>Mobile Number</span>
+						<input v-model.trim="ownerDraft.mobile_no" type="tel" class="form-control" />
+					</label>
+					<label class="vetedge-appointment-flow-field">
+						<span>Email</span>
+						<input v-model.trim="ownerDraft.email_id" type="email" class="form-control" />
+					</label>
+				</div>
+				<p class="vetedge-appointment-flow-hint">Provide at least a mobile number or email. Existing owners are checked before creation.</p>
+			</form>
 		</div>
 
 		<template #footer>
@@ -175,10 +193,16 @@
 					{{ saving ? 'Creating...' : 'Create Appointment' }}
 				</button>
 			</template>
+			<template v-else-if="screen === 'patient'">
+				<button type="button" class="edge-button" :disabled="saving" @click="cancelPatientCreate">Back to Appointment</button>
+				<button type="button" class="edge-button edge-button--primary" :disabled="saving" @click="savePatient">
+					{{ saving ? 'Saving...' : 'Create Patient' }}
+				</button>
+			</template>
 			<template v-else>
-				<button type="button" class="edge-button" :disabled="saving" @click="cancelInlineCreate">Back to Appointment</button>
-				<button type="button" class="edge-button edge-button--primary" :disabled="saving" @click="screen === 'owner' ? saveOwner() : savePatient()">
-					{{ saving ? 'Saving...' : screen === 'owner' ? 'Create Owner' : 'Create Patient' }}
+				<button type="button" class="edge-button" :disabled="saving" @click="cancelOwnerCreate">Back to Patient</button>
+				<button type="button" class="edge-button edge-button--primary" :disabled="saving" @click="saveOwner">
+					{{ saving ? 'Saving...' : 'Create Owner' }}
 				</button>
 			</template>
 		</template>
@@ -205,12 +229,18 @@ function emptyLabels() {
 function emptyPatientDraft() {
 	return {
 		patient_name: "",
+		primary_owner: "",
+		default_branch: "",
 		species: "",
 		breed: "",
 		sex: "",
 		microchip_id: "",
 		color_markings: "",
 	};
+}
+
+function optionRecord(option) {
+	return option?.raw?.raw || option?.raw || {};
 }
 
 export default {
@@ -234,30 +264,31 @@ export default {
 			labels: emptyLabels(),
 			ownerDraft: { owner_name: "", mobile_no: "", email_id: "" },
 			patientDraft: emptyPatientDraft(),
-			patientLabels: { species: "", breed: "" },
-			pendingCreateResolve: null,
+			patientLabels: { owner: "", branch: "", species: "", breed: "" },
+			patientCreateResolve: null,
+			ownerCreateResolve: null,
 		};
 	},
 	computed: {
-		canCreatePatient() {
-			return Boolean(this.bootstrap.can_create_patient && this.form.owner && this.form.branch);
-		},
 		modalTitle() {
 			if (this.screen === "owner") return "Create Pet Owner";
 			if (this.screen === "patient") return "Create Veterinary Patient";
 			return "New Veterinary Appointment";
 		},
 		modalSubtitle() {
-			if (this.screen === "owner") return "Create the owner record and return directly to the appointment.";
-			if (this.screen === "patient") return "Create the patient for the selected owner and branch without leaving Veterinary.";
-			return "Search existing records or create an owner and patient without leaving Veterinary.";
+			if (this.screen === "owner") return "Create the owner and return directly to the new patient.";
+			if (this.screen === "patient") return "Create the patient, search or create the owner, and return to the appointment.";
+			return "Search the patient first. The linked owner is filled automatically.";
 		},
 	},
 	methods: {
 		async open() {
-			this.resolvePendingCreate(null);
+			this.resolvePatientCreate(null);
+			this.resolveOwnerCreate(null);
 			this.form = emptyForm();
 			this.labels = emptyLabels();
+			this.patientDraft = emptyPatientDraft();
+			this.patientLabels = { owner: "", branch: "", species: "", breed: "" };
 			this.screen = "appointment";
 			this.error = "";
 			this.openState = true;
@@ -280,41 +311,62 @@ export default {
 		},
 		close() {
 			if (this.saving) return;
-			this.resolvePendingCreate(null);
+			this.resolveOwnerCreate(null);
+			this.resolvePatientCreate(null);
 			this.screen = "appointment";
 			this.openState = false;
 		},
-		resolvePendingCreate(value) {
-			const resolve = this.pendingCreateResolve;
-			this.pendingCreateResolve = null;
+		resolvePatientCreate(value) {
+			const resolve = this.patientCreateResolve;
+			this.patientCreateResolve = null;
 			if (resolve) resolve(value || null);
 		},
-		beginInlineCreate(screen, query) {
-			this.resolvePendingCreate(null);
+		resolveOwnerCreate(value) {
+			const resolve = this.ownerCreateResolve;
+			this.ownerCreateResolve = null;
+			if (resolve) resolve(value || null);
+		},
+		createPatientFromQuery(query) {
+			if (!this.bootstrap.can_create_patient) return Promise.resolve(null);
+			this.resolvePatientCreate(null);
 			this.error = "";
-			this.screen = screen;
-			if (screen === "owner") {
-				this.ownerDraft = { owner_name: query || "", mobile_no: "", email_id: "" };
-			} else {
-				this.patientDraft = { ...emptyPatientDraft(), patient_name: query || "" };
-				this.patientLabels = { species: "", breed: "" };
-			}
+			this.patientDraft = {
+				...emptyPatientDraft(),
+				patient_name: query || "",
+				default_branch: this.form.branch || this.bootstrap.default_branch || "",
+			};
+			this.patientLabels = {
+				owner: "",
+				branch: this.labels.branch || this.form.branch || this.bootstrap.default_branch || "",
+				species: "",
+				breed: "",
+			};
+			this.screen = "patient";
 			return new Promise((resolve) => {
-				this.pendingCreateResolve = resolve;
+				this.patientCreateResolve = resolve;
 			});
 		},
-		cancelInlineCreate() {
+		createOwnerForPatientFromQuery(query) {
+			if (!this.bootstrap.can_create_owner) return Promise.resolve(null);
+			this.resolveOwnerCreate(null);
+			this.error = "";
+			this.ownerDraft = { owner_name: query || "", mobile_no: "", email_id: "" };
+			this.screen = "owner";
+			return new Promise((resolve) => {
+				this.ownerCreateResolve = resolve;
+			});
+		},
+		cancelPatientCreate() {
 			if (this.saving) return;
-			this.resolvePendingCreate(null);
+			this.resolvePatientCreate(null);
 			this.error = "";
 			this.screen = "appointment";
 		},
-		createOwnerFromQuery(query) {
-			return this.beginInlineCreate("owner", query);
-		},
-		createPatientFromQuery(query) {
-			if (!this.canCreatePatient) return Promise.resolve(null);
-			return this.beginInlineCreate("patient", query);
+		cancelOwnerCreate() {
+			if (this.saving) return;
+			this.resolveOwnerCreate(null);
+			this.error = "";
+			this.screen = "patient";
 		},
 		async searchLink(field, query, context = {}) {
 			const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", {
@@ -326,11 +378,11 @@ export default {
 			});
 			return response.message || [];
 		},
+		searchPatient(query) {
+			return this.searchLink("patient", query, { branch: this.form.branch });
+		},
 		searchOwner(query) {
 			return this.searchLink("owner", query);
-		},
-		searchPatient(query) {
-			return this.searchLink("patient", query, { owner: this.form.owner, branch: this.form.branch });
 		},
 		searchBranch(query) {
 			return this.searchLink("branch", query);
@@ -344,23 +396,25 @@ export default {
 		searchBreed(query) {
 			return this.searchLink("breed", query, { species: this.patientDraft.species });
 		},
-		onOwnerSelected(option) {
-			this.form.owner = option.value;
-			this.labels.owner = option.label;
-			this.clearPatient();
-		},
-		clearOwner() {
-			this.form.owner = "";
-			this.labels.owner = "";
-			this.clearPatient();
-		},
 		onPatientSelected(option) {
+			const record = optionRecord(option);
 			this.form.patient = option.value;
 			this.labels.patient = option.label;
+			this.form.owner = record.primary_owner || record.owner || "";
+			this.labels.owner = record.primary_owner_label || record.owner_label || this.form.owner;
+			if (!this.form.branch && (record.default_branch || record.branch)) {
+				this.form.branch = record.default_branch || record.branch;
+				this.labels.branch = this.form.branch;
+			}
+			if (!this.form.owner) {
+				this.error = __("The selected patient does not have a linked Pet Owner.");
+			}
 		},
 		clearPatient() {
 			this.form.patient = "";
 			this.labels.patient = "";
+			this.form.owner = "";
+			this.labels.owner = "";
 		},
 		onBranchSelected(option) {
 			const changed = Boolean(this.form.branch && this.form.branch !== option.value);
@@ -382,6 +436,22 @@ export default {
 		clearPractitioner() {
 			this.form.practitioner = "";
 			this.labels.practitioner = "";
+		},
+		onPatientOwnerSelected(option) {
+			this.patientDraft.primary_owner = option.value;
+			this.patientLabels.owner = option.label;
+		},
+		clearPatientOwner() {
+			this.patientDraft.primary_owner = "";
+			this.patientLabels.owner = "";
+		},
+		onPatientBranchSelected(option) {
+			this.patientDraft.default_branch = option.value;
+			this.patientLabels.branch = option.label;
+		},
+		clearPatientBranch() {
+			this.patientDraft.default_branch = "";
+			this.patientLabels.branch = "";
 		},
 		onSpeciesSelected(option) {
 			this.patientDraft.species = option.value;
@@ -416,9 +486,9 @@ export default {
 					values: this.ownerDraft,
 				});
 				const created = response.message || null;
-				this.screen = "appointment";
+				this.screen = "patient";
 				await this.$nextTick();
-				this.resolvePendingCreate(created);
+				this.resolveOwnerCreate(created);
 			} catch (error) {
 				this.error = error?.message || __("The owner could not be created.");
 			} finally {
@@ -427,23 +497,35 @@ export default {
 		},
 		async savePatient() {
 			this.error = "";
-			if (!this.form.owner || !this.form.branch || !this.patientDraft.patient_name || !this.patientDraft.species) {
-				this.error = __("Owner, Branch, Patient Name and Species are required.");
+			if (
+				!this.patientDraft.primary_owner ||
+				!this.patientDraft.default_branch ||
+				!this.patientDraft.patient_name ||
+				!this.patientDraft.species
+			) {
+				this.error = __("Patient Name, Pet Owner, Branch and Species are required.");
 				return;
 			}
 			this.saving = true;
 			try {
 				const response = await frappe.call("vetedge.services.appointment_edgeui.create_appointment_patient", {
-					values: {
-						...this.patientDraft,
-						primary_owner: this.form.owner,
-						default_branch: this.form.branch,
-					},
+					values: this.patientDraft,
 				});
 				const created = response.message || null;
+				const selected = created
+					? {
+						...created,
+						raw: {
+							...(created.raw || {}),
+							primary_owner: this.patientDraft.primary_owner,
+							primary_owner_label: this.patientLabels.owner || this.patientDraft.primary_owner,
+							default_branch: this.patientDraft.default_branch,
+						},
+					}
+					: null;
 				this.screen = "appointment";
 				await this.$nextTick();
-				this.resolvePendingCreate(created);
+				this.resolvePatientCreate(selected);
 			} catch (error) {
 				this.error = error?.message || __("The patient could not be created.");
 			} finally {
@@ -467,8 +549,8 @@ export default {
 				this.error = __("You do not have permission to create Veterinary Appointments.");
 				return;
 			}
-			if (!this.form.owner || !this.form.patient || !this.form.branch || !this.form.practitioner || !this.form.appointment_datetime) {
-				this.error = __("Owner, Patient, Branch, Practitioner and Appointment Date/Time are required.");
+			if (!this.form.patient || !this.form.owner || !this.form.branch || !this.form.practitioner || !this.form.appointment_datetime) {
+				this.error = __("Patient, linked Pet Owner, Branch, Practitioner and Appointment Date/Time are required.");
 				return;
 			}
 			this.saving = true;
@@ -508,15 +590,23 @@ export default {
 	min-width: 0;
 }
 
-.vetedge-appointment-flow-field > span,
-.vetedge-appointment-flow-context span {
+.vetedge-appointment-flow-field > span {
 	color: var(--edge-color-ink-700, #415469);
 	font-size: .75rem;
 	font-weight: 700;
 }
 
+.vetedge-appointment-flow-field small {
+	color: var(--edge-color-ink-500, #6b7d90);
+	font-size: .7rem;
+}
+
 .vetedge-appointment-flow-field--wide {
 	grid-column: 1 / -1;
+}
+
+.vetedge-appointment-flow-owner-summary input[readonly] {
+	background: var(--edge-color-surface-soft, #f7fafc);
 }
 
 .vetedge-appointment-flow-error {
@@ -541,29 +631,8 @@ export default {
 	margin: 0;
 }
 
-.vetedge-appointment-flow-context {
-	display: grid;
-	gap: .75rem;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.vetedge-appointment-flow-context > div {
-	background: var(--edge-color-surface-soft, #f7fafc);
-	border: 1px solid var(--edge-color-border, #dce5ef);
-	border-radius: .7rem;
-	display: grid;
-	gap: .2rem;
-	padding: .7rem .8rem;
-}
-
-.vetedge-appointment-flow-context strong {
-	font-size: .85rem;
-	overflow-wrap: anywhere;
-}
-
 @media (max-width: 47.99rem) {
-	.vetedge-appointment-flow-grid,
-	.vetedge-appointment-flow-context {
+	.vetedge-appointment-flow-grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
