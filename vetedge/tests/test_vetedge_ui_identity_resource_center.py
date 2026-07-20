@@ -81,6 +81,10 @@ def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 		assert route in content
 	assert 'if (path.startsWith("/app/")) return openNewTab(route)' in content
 	assert "PRODUCT_ROUTES.has(path)" in content
+	assert "patchProductMenu" in content
+	assert "menuItemRoute" in content
+	assert "__vetedgeProductMenuNavigationPatched" in content
+	assert "productMenuPatched" in content
 
 
 def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
