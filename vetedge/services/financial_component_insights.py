@@ -10,7 +10,6 @@ from frappe.utils import add_days, cstr, flt, getdate, nowdate
 from vetedge.services.financial_dataset import build_financial_dataset
 from vetedge.services.financial_insights import _build_trend, get_financial_insights
 
-
 CONSULTATION_SERVICE_INCOME = "Consultation Service Income"
 TREATMENT_INCOME = "Treatment Income"
 
