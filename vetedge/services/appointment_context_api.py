@@ -162,6 +162,19 @@ def search_appointment_link(
 
 
 @frappe.whitelist()
+def get_patient_selection_context(patient: str) -> dict[str, Any]:
+	branch_context = get_active_veterinary_branch_context()
+	company = (branch_context.get("current_branch") or {}).get("company") or branch_context.get("active_company") or ""
+	if not patient_is_available_for_company(patient, company):
+		frappe.throw(
+			_("The selected patient is not available for active Company {0}.").format(company),
+			frappe.ValidationError,
+		)
+	resolved_company = repair_patient_company(patient, company)
+	return base.get_patient_selection_context(patient, resolved_company)
+
+
+@frappe.whitelist()
 def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	payload = base._parse_values(values)
 	branch = validate_working_branch(payload.get("branch"), company=payload.get("company"))
