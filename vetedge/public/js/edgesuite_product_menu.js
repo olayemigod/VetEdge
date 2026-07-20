@@ -1,5 +1,5 @@
 // VetEdge Product Menu: consume the standalone EdgeSuite UI renderer first,
-// while retaining the restored VetEdge launcher as an emergency Desk fallback.
+// while retaining the restored Veterinary launcher as an emergency Desk fallback.
 (function () {
 	"use strict";
 
@@ -24,10 +24,44 @@
 		"header .navbar .container",
 	];
 	const LIFECYCLE_EVENTS = ["toolbar_setup", "page-change", "desktop_screen", "sidebar_setup"];
+	const MENU_DESCRIPTIONS = Object.freeze({
+		"Veterinary Home": "Working branch and daily operations",
+		"Executive Dashboard": "Management overview and performance",
+		"Clinical Dashboard": "Clinical activity and outcomes",
+		"Financial Dashboard": "Revenue, receivables, and collections",
+		"Inventory / Dispensary Dashboard": "Dispensary and inventory activity",
+		"Lab Dashboard": "Laboratory workload and status",
+		"Vaccination Dashboard": "Vaccination activity and due care",
+		"Boarding Dashboard": "Boarding activity and occupancy",
+		"Grooming Dashboard": "Grooming bookings and performance",
+		"Practitioner Performance Dashboard": "Veterinary practitioner activity and outcomes",
+		"Branch Performance Dashboard": "Branch operations and financial performance",
+		"Appointment Queue": "Today's Veterinary clinic queue",
+		Patients: "Patient registration and records",
+		Appointments: "Bookings and appointment records",
+		"Guest Booking Requests": "Registration requests from the public portal",
+		"Missed Appointments": "Follow-up and resolution",
+		Customer: "Pet Owner and customer accounts",
+		"Sales Invoice": "ERPNext accounting invoices",
+		"Payment Entry": "ERPNext payment allocation",
+		Consultations: "Clinical consultations and medical history",
+		"Medical History": "Longitudinal Veterinary patient records",
+		"Lab Orders": "Requests, results, and review",
+		Vaccinations: "Vaccination history and due care",
+		Hospitalisations: "Admissions, inpatient care, and discharge",
+		Grooming: "Grooming bookings and sessions",
+		Boarding: "Boarding bookings and stays",
+		Kennels: "Kennels and care locations",
+		"Stock Expiry Monitor": "Expiry risk and stock action",
+		"Veterinary Settings": "Veterinary workflow, billing, and branding controls",
+		Branches: "Company and operational defaults",
+		"Role Bundles": "Role-based Veterinary access",
+	});
 	const FALLBACK_ROUTES = [
-		{ label: "Executive Dashboard", icon: "dashboard", link_type: "Page", link_to: "vetedge-executive-dashboard" },
-		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor" },
-		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings" },
+		{ label: "Veterinary Home", icon: "home", link_type: "Page", link_to: "vetedge-home", description: MENU_DESCRIPTIONS["Veterinary Home"] },
+		{ label: "Executive Dashboard", icon: "dashboard", link_type: "Page", link_to: "vetedge-executive-dashboard", description: MENU_DESCRIPTIONS["Executive Dashboard"] },
+		{ label: "Stock Expiry Monitor", icon: "stock", link_type: "Page", link_to: "stock-expiry-monitor", description: MENU_DESCRIPTIONS["Stock Expiry Monitor"] },
+		{ label: "Veterinary Settings", icon: "settings", link_type: "DocType", link_to: "Veterinary Settings", description: MENU_DESCRIPTIONS["Veterinary Settings"] },
 	];
 	// Compatibility name retained for the restored mega-menu contract. Values are
 	// Frappe icon aliases, not text glyphs, so raw icon identifiers never reach the UI.
@@ -70,12 +104,16 @@
 	}
 
 	function debug(event, detail) {
-		if (debugEnabled()) console.debug("[VetedgeProductMenu]", event, detail || "");
+		if (debugEnabled()) console.debug("[VeterinaryProductMenu]", event, detail || "");
 	}
 
 	function canonicalSidebar() {
 		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
 		return sidebars && (sidebars.vetedge || sidebars.veterinary);
+	}
+
+	function menuDescription(item) {
+		return String(item?.description || MENU_DESCRIPTIONS[item?.label] || "Open Veterinary workspace item");
 	}
 
 	function normalizeItem(item) {
@@ -85,6 +123,7 @@
 			link_type: item.link_type,
 			link_to: item.link_to,
 			route: item.route || "",
+			description: menuDescription(item),
 			roles: item.roles || [],
 			feature_key: item.feature_key || "",
 			visible: item.hidden !== 1,
@@ -202,7 +241,7 @@
 			.map((part) => part[0]).join("").toUpperCase() || "V";
 		const sections = normalizeSections();
 		const quickAccess = FALLBACK_ROUTES.slice(0, 2);
-		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}" data-route="${html(item.route)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(item.link_type || "Workspace")}</small></span></button>`;
+		const menuLink = (item, variant = "") => `<button type="button" class="vetedge-product-menu-link ${variant} ${isActive(item) ? "vetedge-product-menu-active" : ""}" data-link-type="${html(item.link_type)}" data-link-to="${html(item.link_to)}" data-route="${html(item.route)}"><span class="vetedge-product-menu-link-icon" aria-hidden="true">${menuIcon(item.icon)}</span><span class="vetedge-product-menu-link-copy"><strong>${html(item.label)}</strong><small>${html(menuDescription(item))}</small></span></button>`;
 		panel.innerHTML = `
 			<div class="vetedge-product-menu-profile">
 				<span class="vetedge-product-menu-avatar">${html(initials)}</span>
@@ -211,7 +250,7 @@
 			</div>
 			<div class="vetedge-product-menu-scroll">
 				<section class="vetedge-product-menu-quick-access" aria-label="Quick access">
-					<div class="vetedge-product-menu-section-heading"><h3>Quick access</h3><span>VetEdge workspace</span></div>
+					<div class="vetedge-product-menu-section-heading"><h3>Quick access</h3><span>Veterinary workspace</span></div>
 					<div class="vetedge-product-menu-quick-grid">${quickAccess.map((item) => menuLink(item, "vetedge-product-menu-quick-link")).join("")}</div>
 				</section>
 				<div class="vetedge-product-menu-grid">${sections.map((section) => `<section class="vetedge-product-menu-section"><h3>${html(section.label)}</h3><div class="vetedge-product-menu-section-links">${section.items.map((item) => menuLink(item)).join("")}</div></section>`).join("")}</div>
@@ -277,7 +316,7 @@
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
-			state.mode = "vetedge-owned-mega-menu";
+			state.mode = "veterinary-owned-mega-menu";
 			return result(true, "already-mounted", state.lastTarget?.selector);
 		}
 		existing?.remove();
@@ -295,7 +334,7 @@
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
 		trigger.className = "btn btn-default icon-btn vetedge-product-menu-trigger";
-		trigger.setAttribute("aria-label", "Open product menu");
+		trigger.setAttribute("aria-label", "Open Veterinary product menu");
 		trigger.setAttribute("aria-haspopup", "dialog");
 		trigger.setAttribute("aria-expanded", "false");
 		trigger.innerHTML = '<svg class="vetedge-product-menu-waffle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4" cy="4" r="1.6"></circle><circle cx="10" cy="4" r="1.6"></circle><circle cx="16" cy="4" r="1.6"></circle><circle cx="4" cy="10" r="1.6"></circle><circle cx="10" cy="10" r="1.6"></circle><circle cx="16" cy="10" r="1.6"></circle><circle cx="4" cy="16" r="1.6"></circle><circle cx="10" cy="16" r="1.6"></circle><circle cx="16" cy="16" r="1.6"></circle></svg>';
@@ -307,7 +346,7 @@
 		panel.className = "vetedge-product-menu-panel";
 		panel.hidden = true;
 		panel.setAttribute("role", "dialog");
-		panel.setAttribute("aria-label", "VetEdge product menu");
+		panel.setAttribute("aria-label", "Veterinary product menu");
 		document.body.appendChild(panel);
 		trigger.addEventListener("click", (event) => { event.stopPropagation(); toggleFallback(); });
 		panel.addEventListener("click", (event) => {
@@ -332,7 +371,7 @@
 			});
 		}
 		removeDuplicates(FALLBACK_TRIGGER, trigger);
-		state.mode = "vetedge-owned-mega-menu";
+		state.mode = "veterinary-owned-mega-menu";
 		return result(true, "inserted", target.selector, { targetVisible: target.visible });
 	}
 
