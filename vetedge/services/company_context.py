@@ -13,10 +13,21 @@ def _clean(value: Any) -> str:
 	return cstr(value or "").strip()
 
 
+def _working_branch_company(user: str | None = None) -> str:
+	try:
+		from vetedge.services.branch_context import get_working_company
+
+		return _clean(get_working_company(user=user))
+	except (ImportError, ModuleNotFoundError, RuntimeError):
+		return ""
+
+
 def get_active_vetedge_company(user: str | None = None) -> str:
-	company = _clean(get_current_vetedge_company(user))
+	company = _working_branch_company(user)
 	if not company:
-		company = _clean(frappe.defaults.get_user_default("Company"))
+		company = _clean(get_current_vetedge_company(user))
+	if not company:
+		company = _clean(frappe.defaults.get_user_default("Company", user=user))
 	return company
 
 
@@ -24,8 +35,10 @@ def get_allowed_vetedge_companies(user: str | None = None) -> list[str]:
 	context = get_current_vetedge_context(user)
 	allowed = [_clean(value) for value in (context.get("allowed_companies") or []) if _clean(value)]
 	active = _clean(context.get("active_company"))
-	if active and active not in allowed:
-		allowed.append(active)
+	working = _working_branch_company(user)
+	for value in (active, working):
+		if value and value not in allowed:
+			allowed.append(value)
 	if allowed:
 		return allowed
 	if not frappe.has_permission("Company", "read"):
