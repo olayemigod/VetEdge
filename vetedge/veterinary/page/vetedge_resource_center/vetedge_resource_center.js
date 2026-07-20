@@ -34,6 +34,8 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		// EdgeLinkField compatibility floor: EdgeSuite UI 0.4.0 or newer.
 		// This working-context build is validated against EdgeSuite UI 0.4.1 or newer.
+		// The legacy vetedge_resource_center.bundle.js entry was replaced by the
+		// context-aware bundle below; it remains documented for deployment audits.
 		const required = [
 			'EdgeAppShell',
 			'EdgeIcon',
