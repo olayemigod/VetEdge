@@ -36,6 +36,11 @@ jobs:
       - name: Ruff
         run: |
           ruff check \
+            vetedge/patches/normalize_consultation_diagnosis_types_v1.py \
+            vetedge/services/financial_dataset.py \
+            vetedge/services/financial_component_insights.py \
+            vetedge/services/financial_component_report.py \
+            vetedge/services/reporting_logic_v5.py \
             vetedge/tests/test_company_context_regressions.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
@@ -43,7 +48,8 @@ jobs:
             vetedge/tests/test_vetedge_branch_home.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
-            vetedge/tests/test_vetedge_ui_identity_resource_center.py
+            vetedge/tests/test_vetedge_ui_identity_resource_center.py \
+            vetedge/tests/test_veterinary_ui_financial_refinements.py
 
       - name: Company context contracts
         run: python -m pytest -q vetedge/tests/test_company_context_regressions.py
@@ -69,6 +75,9 @@ jobs:
       - name: Identity and Resource Center contracts
         run: python -m pytest -q vetedge/tests/test_vetedge_ui_identity_resource_center.py
 
+      - name: Veterinary UI and financial refinement contracts
+        run: python -m pytest -q vetedge/tests/test_veterinary_ui_financial_refinements.py
+
   frontend:
     name: Frontend validation
     runs-on: ubuntu-24.04
@@ -82,8 +91,13 @@ jobs:
 
       - name: Check migrated dashboard JavaScript
         run: |
+          node --check vetedge/public/js/edgesuite_product_menu.js
           node --check vetedge/public/js/vetedge_professional_ui.js
           node --check vetedge/public/js/vetedge_ui_bridge.js
+          node --check vetedge/public/js/veterinary_settings_edgeui.bundle.js
+          node --check vetedge/veterinary/doctype/veterinary_settings/veterinary_settings.js
+          node --check vetedge/veterinary/report/revenue_summary/revenue_summary.js
+          node --check vetedge/veterinary/page/veterinary_financial_dashboard/veterinary_financial_dashboard.js
           node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
           node --check vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
           node --check vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js
@@ -238,6 +252,10 @@ jobs:
       - name: Run working branch and Veterinary Home tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_branch_home
+
+      - name: Run Veterinary UI and financial refinement tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_veterinary_ui_financial_refinements
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
