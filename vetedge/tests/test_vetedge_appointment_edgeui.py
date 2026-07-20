@@ -88,27 +88,52 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 	assert "Payment Entry" not in content
 
 
-def test_appointment_flow_uses_edgesuite_forms_for_owner_and_patient_creation():
+def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
+	content = read(COMPONENT)
+
+	patient_field = content.index('label="Veterinary Patient"')
+	owner_summary = content.index("vetedge-appointment-flow-owner-summary")
+	assert patient_field < owner_summary
+
+	for contract in (
+		"Search the patient first",
+		"optionRecord(option)",
+		"option?.raw?.raw || option?.raw",
+		"record.primary_owner",
+		"Automatically filled from the selected patient",
+		'return this.searchLink("patient", query, { branch: this.form.branch })',
+		"this.form.owner = record.primary_owner",
+		"this.clearPatient()",
+		"this.clearPractitioner()",
+	):
+		assert contract in content
+
+	assert 'return this.searchLink("patient", query, { owner:' not in content
+	assert ':disabled="!form.owner' not in content
+
+
+def test_new_patient_can_search_or_create_owner_without_leaving_edgesuite():
 	content = read(COMPONENT)
 
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
-		"Create New Pet Owner",
 		"Create New Veterinary Patient",
-		"beginInlineCreate",
-		"resolvePendingCreate",
-		'v-show="screen === \'appointment\'"',
-		'v-show="screen === \'owner\'"',
+		"Create New Pet Owner",
+		"createPatientFromQuery",
+		"createOwnerForPatientFromQuery",
+		"patientCreateResolve",
+		"ownerCreateResolve",
 		'v-show="screen === \'patient\'"',
+		'v-show="screen === \'owner\'"',
+		"onPatientOwnerSelected",
+		"primary_owner: this.patientDraft.primary_owner",
+		"Back to Patient",
 		"create_appointment_owner",
 		"create_appointment_patient",
 		"create_edgeui_appointment",
 		"searchSpecies",
 		"searchBreed",
-		"this.clearPatient()",
-		"this.clearPractitioner()",
-		"Back to Appointment",
 	):
 		assert contract in content
 
