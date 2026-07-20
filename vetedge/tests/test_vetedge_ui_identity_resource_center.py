@@ -135,5 +135,5 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
-	assert "vetedge_ui_bridge.js?v=20260720-1" in content
+	assert "vetedge_ui_bridge.js?v=20260720-2" in content
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
