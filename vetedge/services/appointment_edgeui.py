@@ -7,6 +7,13 @@ from frappe import _
 from frappe.utils import cint, cstr, get_datetime
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.services.company_context import (
+	apply_customer_company_restriction,
+	customer_is_allowed_for_company,
+	get_active_vetedge_company,
+	validate_customer_company,
+	validate_vetedge_company,
+)
 from vetedge.services.guest_booking import get_default_customer_group, get_default_territory
 from vetedge.services.permissions import (
 	can_access_branch_data,
@@ -27,7 +34,16 @@ SEARCH_FIELDS = {
 	},
 	"patient": {
 		"doctype": "Veterinary Patient",
-		"fields": ["name", "patient_name", "primary_owner", "species", "breed", "microchip_id", "default_branch"],
+		"fields": [
+			"name",
+			"patient_name",
+			"primary_owner",
+			"company",
+			"species",
+			"breed",
+			"microchip_id",
+			"default_branch",
+		],
 		"search_fields": ["name", "patient_name", "primary_owner", "microchip_id"],
 		"label_field": "patient_name",
 	},
@@ -92,17 +108,29 @@ def _permission_filtered_branches() -> list[str] | None:
 	return assigned or None
 
 
+def _owner_label(owner: str | None) -> str:
+	owner = _clean(owner)
+	if not owner:
+		return ""
+	return _clean(frappe.db.get_value("Customer", owner, "customer_name")) or owner
+
+
 def _search_standard(field: str, txt: str, context: dict[str, Any], start: int, page_length: int) -> list[dict]:
 	config = SEARCH_FIELDS[field]
 	doctype = config["doctype"]
 	if not frappe.has_permission(doctype, "read"):
 		return []
 
+	company = ""
+	if field in {"owner", "patient"}:
+		company = validate_vetedge_company(context.get("company"))
+
 	filters: dict[str, Any] = {}
 	if field == "owner":
 		filters["disabled"] = ["!=", 1]
 	if field == "patient":
 		filters["status"] = ["!=", "Deceased"]
+		filters["company"] = company
 		if context.get("owner"):
 			filters["primary_owner"] = context["owner"]
 		if context.get("branch"):
@@ -123,27 +151,63 @@ def _search_standard(field: str, txt: str, context: dict[str, Any], start: int, 
 		pattern = f"%{txt}%"
 		or_filters = [[doctype, fieldname, "like", pattern] for fieldname in config["search_fields"]]
 
+	fetch_length = page_length
+	fetch_start = start
+	if field == "owner":
+		fetch_length = min(max(page_length * 5, page_length), 250)
+		fetch_start = 0
+
 	rows = frappe.get_list(
 		doctype,
 		fields=config["fields"],
 		filters=filters,
 		or_filters=or_filters,
 		order_by=f"{config['label_field']} asc",
-		start=start,
-		page_length=page_length,
+		start=fetch_start,
+		page_length=fetch_length,
 	)
 
 	options = []
 	for row in rows:
 		if field == "owner":
+			if not customer_is_allowed_for_company(row.get("name"), company):
+				continue
 			description = " · ".join(filter(None, [row.get("mobile_no"), row.get("email_id")]))
+			options.append(
+				_option(
+					row.get("name"),
+					row.get(config["label_field"]),
+					description,
+					company=company,
+				)
+			)
 		elif field == "patient":
-			description = " · ".join(filter(None, [row.get("primary_owner"), row.get("species"), row.get("breed")]))
+			owner = _clean(row.get("primary_owner"))
+			if not owner or not customer_is_allowed_for_company(owner, company):
+				continue
+			description = " · ".join(filter(None, [_owner_label(owner), row.get("species"), row.get("breed")]))
+			options.append(
+				_option(
+					row.get("name"),
+					row.get(config["label_field"]),
+					description,
+					primary_owner=owner,
+					primary_owner_label=_owner_label(owner),
+					company=row.get("company"),
+					default_branch=row.get("default_branch"),
+					species=row.get("species"),
+					breed=row.get("breed"),
+					microchip_id=row.get("microchip_id"),
+				)
+			)
 		elif field == "breed":
 			description = " · ".join(filter(None, [row.get("species"), row.get("description")]))
+			options.append(_option(row.get("name"), row.get(config["label_field"]), description, raw=row))
 		else:
 			description = row.get("description") or ""
-		options.append(_option(row.get("name"), row.get(config["label_field"]), description, raw=row))
+			options.append(_option(row.get("name"), row.get(config["label_field"]), description, raw=row))
+		if len(options) >= page_length:
+			break
 	return options
 
 
@@ -174,6 +238,7 @@ def get_appointment_form_bootstrap() -> dict[str, Any]:
 	if default_branch and _clean(default_branch).lower() in {"all", "all branches"}:
 		default_branch = None
 	return {
+		"active_company": validate_vetedge_company(get_active_vetedge_company()),
 		"default_branch": default_branch,
 		"appointment_types": list(APPOINTMENT_TYPES),
 		"can_create_owner": bool(frappe.has_permission("Customer", "create")),
@@ -202,6 +267,36 @@ def search_appointment_link(
 	return _search_standard(field, _clean(txt), context_values, start, page_length)
 
 
+@frappe.whitelist()
+def get_patient_selection_context(patient: str, company: str | None = None) -> dict[str, Any]:
+	_require_login()
+	company = validate_vetedge_company(company)
+	rows = frappe.get_list(
+		"Veterinary Patient",
+		filters={"name": _clean(patient), "company": company, "status": ["!=", "Deceased"]},
+		fields=["name", "patient_name", "primary_owner", "company", "default_branch", "species", "breed"],
+		page_length=1,
+	)
+	if not rows:
+		frappe.throw(
+			_("The selected patient is not assigned to active Company {0}.").format(company),
+			frappe.ValidationError,
+		)
+	row = rows[0]
+	owner = _clean(row.get("primary_owner"))
+	if not owner:
+		frappe.throw(_("The selected patient does not have a linked Pet Owner."), frappe.ValidationError)
+	validate_customer_company(owner, company)
+	return {
+		"patient": row.get("name"),
+		"patient_label": row.get("patient_name") or row.get("name"),
+		"primary_owner": owner,
+		"primary_owner_label": _owner_label(owner),
+		"company": company,
+		"default_branch": row.get("default_branch"),
+	}
+
+
 def _find_owner_duplicate(mobile_no: str, email_id: str) -> str | None:
 	or_filters = []
 	if mobile_no:
@@ -221,6 +316,7 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 		frappe.throw(_("You are not permitted to create pet owners."), frappe.PermissionError)
 
 	payload = _parse_values(values)
+	company = validate_vetedge_company(payload.get("company"))
 	owner_name = _clean(payload.get("owner_name") or payload.get("customer_name"))
 	mobile_no = _clean(payload.get("mobile_no"))
 	email_id = _clean(payload.get("email_id")).lower()
@@ -249,16 +345,22 @@ def create_appointment_owner(values: str | dict) -> dict[str, Any]:
 			"email_id": email_id,
 		}
 	)
+	apply_customer_company_restriction(doc, company)
 	doc.insert()
-	return _option(doc.name, doc.customer_name, " · ".join(filter(None, [doc.mobile_no, doc.email_id])))
+	return _option(
+		doc.name,
+		doc.customer_name,
+		" · ".join(filter(None, [doc.mobile_no, doc.email_id])),
+		company=company,
+	)
 
 
-def _find_patient_duplicate(owner: str, patient_name: str, microchip_id: str) -> str | None:
+def _find_patient_duplicate(company: str, owner: str, patient_name: str, microchip_id: str) -> str | None:
 	if microchip_id:
 		duplicate = frappe.get_list(
 			"Veterinary Patient",
 			fields=["name"],
-			filters={"microchip_id": microchip_id},
+			filters={"company": company, "microchip_id": microchip_id},
 			page_length=1,
 		)
 		if duplicate:
@@ -266,7 +368,12 @@ def _find_patient_duplicate(owner: str, patient_name: str, microchip_id: str) ->
 	rows = frappe.get_list(
 		"Veterinary Patient",
 		fields=["name"],
-		filters={"primary_owner": owner, "patient_name": patient_name, "status": ["!=", "Deceased"]},
+		filters={
+			"company": company,
+			"primary_owner": owner,
+			"patient_name": patient_name,
+			"status": ["!=", "Deceased"],
+		},
 		page_length=1,
 	)
 	return rows[0].name if rows else None
@@ -279,6 +386,7 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 		frappe.throw(_("You are not permitted to create Veterinary Patients."), frappe.PermissionError)
 
 	payload = _parse_values(values)
+	company = validate_vetedge_company(payload.get("company"))
 	patient_name = _clean(payload.get("patient_name"))
 	owner = _clean(payload.get("primary_owner"))
 	branch = _clean(payload.get("default_branch") or get_current_vetedge_branch())
@@ -287,8 +395,7 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 	microchip_id = _clean(payload.get("microchip_id"))
 	if not patient_name or not owner or not species:
 		frappe.throw(_("Patient Name, Primary Owner and Species are required."), frappe.ValidationError)
-	if not frappe.db.exists("Customer", owner):
-		frappe.throw(_("Primary Owner is not a valid Customer."), frappe.ValidationError)
+	validate_customer_company(owner, company)
 	if branch:
 		can_access_branch_data(frappe.session.user, branch, raise_exception=True)
 	if not frappe.db.exists("Veterinary Species", species):
@@ -298,7 +405,7 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 		if not breed_species or breed_species != species:
 			frappe.throw(_("Breed must belong to the selected Species."), frappe.ValidationError)
 
-	duplicate = _find_patient_duplicate(owner, patient_name, microchip_id)
+	duplicate = _find_patient_duplicate(company, owner, patient_name, microchip_id)
 	if duplicate:
 		frappe.throw(_("A matching Veterinary Patient already exists: {0}").format(duplicate), frappe.DuplicateEntryError)
 
@@ -307,6 +414,7 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 			"doctype": "Veterinary Patient",
 			"patient_name": patient_name,
 			"primary_owner": owner,
+			"company": company,
 			"default_branch": branch,
 			"species": species,
 			"breed": breed,
@@ -317,7 +425,15 @@ def create_appointment_patient(values: str | dict) -> dict[str, Any]:
 		}
 	)
 	doc.insert()
-	return _option(doc.name, doc.patient_name, " · ".join(filter(None, [doc.primary_owner, doc.species, doc.breed])))
+	return _option(
+		doc.name,
+		doc.patient_name,
+		" · ".join(filter(None, [_owner_label(doc.primary_owner), doc.species, doc.breed])),
+		primary_owner=doc.primary_owner,
+		primary_owner_label=_owner_label(doc.primary_owner),
+		company=doc.company,
+		default_branch=doc.default_branch,
+	)
 
 
 @frappe.whitelist()
@@ -327,6 +443,7 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 		frappe.throw(_("You are not permitted to create Veterinary Appointments."), frappe.PermissionError)
 
 	payload = _parse_values(values)
+	company = validate_vetedge_company(payload.get("company"))
 	patient = _clean(payload.get("patient"))
 	branch = _clean(payload.get("branch"))
 	practitioner = _clean(payload.get("practitioner"))
@@ -340,11 +457,22 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	patient_values = frappe.db.get_value(
 		"Veterinary Patient",
 		patient,
-		["primary_owner", "status", "default_branch"],
+		["primary_owner", "company", "status", "default_branch"],
 		as_dict=True,
 	)
 	if not patient_values or patient_values.status == "Deceased":
 		frappe.throw(_("Select an active Veterinary Patient."), frappe.ValidationError)
+	if not patient_values.company:
+		frappe.throw(_("The selected patient is not assigned to a Company."), frappe.ValidationError)
+	if patient_values.company != company:
+		frappe.throw(
+			_("The selected patient belongs to Company {0}, not active Company {1}.").format(
+				patient_values.company,
+				company,
+			),
+			frappe.ValidationError,
+		)
+	validate_customer_company(patient_values.primary_owner, company)
 	can_access_branch_data(frappe.session.user, branch, raise_exception=True)
 	validate_doctor_user(practitioner)
 	get_datetime(appointment_datetime)
@@ -352,6 +480,7 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	doc = frappe.get_doc(
 		{
 			"doctype": "Veterinary Appointment",
+			"company": company,
 			"patient": patient,
 			"primary_owner": patient_values.primary_owner,
 			"branch": branch,
