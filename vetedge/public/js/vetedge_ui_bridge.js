@@ -27,6 +27,7 @@
 	});
 
 	const PRODUCT_ROUTES = new Set([
+		"/app/vetedge-home",
 		"/app/vetedge-executive-dashboard",
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
@@ -232,7 +233,7 @@
 		if (!edgeUI?.registerAdapter) return false;
 		if (!supportsSharedContracts(edgeUI.version)) {
 			state.installed = false;
-			state.lastError = `VetEdge requires EdgeSuite UI 0.3 or newer; found ${edgeUI.version || "unknown"}.`;
+			state.lastError = `Veterinary requires EdgeSuite UI 0.3 or newer; found ${edgeUI.version || "unknown"}.`;
 			return false;
 		}
 
