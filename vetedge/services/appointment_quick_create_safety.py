@@ -46,9 +46,12 @@ def get_compatible_selling_price_list(currency: str, branch: str | None = None) 
 	for price_list in candidates:
 		if frappe.db.get_value("Price List", price_list, "currency") == currency:
 			return price_list
+	filters: dict[str, Any] = {"selling": 1, "currency": currency}
+	if frappe.get_meta("Price List").has_field("enabled"):
+		filters["enabled"] = 1
 	rows = frappe.get_all(
 		"Price List",
-		filters={"selling": 1, "enabled": 1, "currency": currency},
+		filters=filters,
 		pluck="name",
 		order_by="modified desc",
 		limit=1,
@@ -77,25 +80,30 @@ def get_owner_quick_create_context(company: str, branch: str | None = None) -> d
 	company = _clean(company)
 	customer_group = get_default_customer_group()
 	territory = get_default_territory()
+	base = {
+		"ready": False,
+		"warning": "",
+		"customer_group": customer_group or "",
+		"territory": territory or "",
+		"company_currency": "",
+		"default_price_list": "",
+		"loyalty_programs": [],
+		"requires_loyalty_program": False,
+		"default_loyalty_program": "",
+	}
 	if not customer_group or not territory:
 		return {
-			"ready": False,
+			**base,
 			"warning": _("Configure a default Customer Group and Territory before creating Pet Owners."),
-			"customer_group": customer_group or "",
-			"territory": territory or "",
-			"company_currency": "",
-			"default_price_list": "",
-			"loyalty_programs": [],
-			"requires_loyalty_program": False,
-			"default_loyalty_program": "",
 		}
-	currency = get_company_currency(company)
-	programs = get_applicable_loyalty_programs(customer_group, territory)
+	try:
+		currency = get_company_currency(company)
+		programs = get_applicable_loyalty_programs(customer_group, territory)
+	except (frappe.ValidationError, frappe.PermissionError) as exc:
+		return {**base, "warning": cstr(exc)}
 	return {
+		**base,
 		"ready": True,
-		"warning": "",
-		"customer_group": customer_group,
-		"territory": territory,
 		"company_currency": currency,
 		"default_price_list": get_compatible_selling_price_list(currency, branch),
 		"loyalty_programs": [{"value": name, "label": name} for name in programs],
