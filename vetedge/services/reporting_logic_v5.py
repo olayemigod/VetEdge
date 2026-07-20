@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import frappe
 from frappe import _
 from frappe.utils import cstr, flt
 
@@ -27,6 +28,7 @@ def _income_source_chart(composition: list[dict]) -> dict:
 	)
 
 
+@frappe.whitelist()
 def get_dashboard_payload(dashboard_key: str, filters=None):
 	"""Return V4 dashboards with component-aware Veterinary financial metrics."""
 	key = cstr(dashboard_key or "").strip()
