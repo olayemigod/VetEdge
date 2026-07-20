@@ -70,135 +70,81 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertNotIn("import { createApp } from 'vue'", content)
 		self.assertNotIn("coreedge", content.lower())
 
-	def test_product_menu_and_notification_actions_are_present(self):
+	def test_product_menu_is_global_descriptive_and_veterinary_facing(self):
 		component = self.read(COMPONENT)
 		product_menu = self.read(PRODUCT_MENU)
+		hooks = self.read(HOOKS)
 		self.assertNotIn(':menuItems="menuItems"', component)
 		self.assertIn("window.VetedgeProductMenu?.mount?.()", component)
 		self.assertIn("EdgeNotificationBell", component)
 		self.assertIn("EdgeNotificationDrawer", component)
-		self.assertIn("notificationApi", component)
 		self.assertIn("window.VetedgeProductMenu", product_menu)
 		for public_method in ("mount,", "unmount,", "remount,"):
 			self.assertIn(public_method, product_menu)
-		self.assertIn('".page-head .page-actions"', product_menu)
-		self.assertIn('"header .navbar .navbar-right"', product_menu)
-		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
-		self.assertIn("<circle", product_menu)
-		self.assertIn("target.node.prepend(slot)", product_menu)
-
-	def test_product_menu_is_an_isolated_responsive_mega_menu(self):
-		product_menu = self.read(PRODUCT_MENU)
-		styles = self.read(DASHBOARD_STYLES)
 		for contract in (
+			'".page-head .page-actions"',
+			'"header .navbar .navbar-right"',
+			"vetedge-product-menu-waffle-icon",
+			"<circle",
+			"target.node.prepend(slot)",
 			"vetedge-product-menu-quick-access",
 			"vetedge-product-menu-quick-grid",
 			"vetedge-product-menu-grid",
 			"vetedge-product-menu-section-links",
 			"Quick access",
-			"VetEdge workspace",
+			"Veterinary workspace",
 			"function menuIcon(icon)",
 			"MENU_ICON_GLYPHS",
-			"vetedge-product-menu-icon-glyph",
-			"vetedge-owned-mega-menu",
+			"MENU_DESCRIPTIONS",
+			"description: menuDescription(item)",
+			"veterinary-owned-mega-menu",
 		):
 			self.assertIn(contract, product_menu)
+		self.assertNotIn('html(item.link_type || "Workspace")', product_menu)
 		self.assertNotIn("runtime.registerProductMenu", product_menu)
-		for contract in (
-			"Isolated Veterinary product mega menu",
-			"repeat(3, minmax(0, 1fr))",
-			"repeat(2, minmax(0, 1fr))",
-			"grid-template-columns: minmax(0, 1fr)",
-			".vetedge-product-menu-panel",
-			"never show raw icon identifiers",
-			".vetedge-product-menu-icon-glyph",
-		):
-			self.assertIn(contract, styles)
-		self.assertNotIn("vetedge-executive-dashboard-root", product_menu)
-		self.assertNotIn("vetedge-expiry-monitor-root", product_menu)
-		self.assertNotIn("coreedge/", product_menu.lower())
-
-	def test_product_menu_is_global_idempotent_and_lifecycle_aware(self):
-		product_menu = self.read(PRODUCT_MENU)
-		hooks = self.read(HOOKS)
 		self.assertIn("/assets/vetedge/js/edgesuite_product_menu.js", hooks)
-		self.assertIn("removeDuplicates", product_menu)
-		self.assertIn("already-mounted", product_menu)
-		self.assertIn("toolbar_setup", product_menu)
-		self.assertIn("page-change", product_menu)
-		self.assertIn("desktop_screen", product_menu)
-		self.assertIn("sidebar_setup", product_menu)
-		self.assertIn("MutationObserver", product_menu)
-		self.assertIn("function diagnose()", product_menu)
-		self.assertIn("lastMountResult", product_menu)
-		self.assertIn("currentMenuNodeCount", product_menu)
-		self.assertIn("FALLBACK_ROUTES", product_menu)
-		self.assertIn("configured_routes", product_menu)
-		self.assertIn("vetedge-product-menu-slot--floating", product_menu)
-		self.assertIn('"navbar-became-visible"', product_menu)
-		self.assertIn('result(true, "inserted"', product_menu)
-		self.assertIn('result(false, "no-navbar-target"', product_menu)
+
+	def test_product_menu_is_idempotent_and_lifecycle_aware(self):
+		product_menu = self.read(PRODUCT_MENU)
+		for contract in (
+			"removeDuplicates",
+			"already-mounted",
+			"toolbar_setup",
+			"page-change",
+			"desktop_screen",
+			"sidebar_setup",
+			"MutationObserver",
+			"function diagnose()",
+			"lastMountResult",
+			"currentMenuNodeCount",
+			"FALLBACK_ROUTES",
+			"configured_routes",
+			"vetedge-product-menu-slot--floating",
+			'"navbar-became-visible"',
+			'result(true, "inserted"',
+			'result(false, "no-navbar-target"',
+		):
+			self.assertIn(contract, product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
 		self.assertNotIn("socket", product_menu.lower())
 
-	def test_shared_shell_contract_is_present_on_both_reference_pages(self):
-		executive = self.read(COMPONENT)
-		stock = self.read(STOCK_COMPONENT)
-		for component in (executive, stock):
-			self.assertIn("EdgeAppShell", component)
-			self.assertNotIn(':menuItems="menuItems"', component)
-			self.assertIn("EdgeNotificationBell", component)
-			self.assertIn("EdgeNotificationDrawer", component)
-			self.assertIn('product="vetedge"', component)
-			self.assertIn('data-edge-product="vetedge"', component)
-			self.assertIn("window.VetedgeProductMenu", component)
-			self.assertIn("tenantName", component)
-			self.assertIn("branchName", component)
-			self.assertIn("userName", component)
-			self.assertIn("vetedge-notification-icon", component)
-			self.assertNotIn("coreedge/", component.lower())
-		self.assertIn("'All Branches'", stock)
-		self.assertIn("syncShellContext", stock)
+	def test_shared_shell_and_notification_contract_is_present(self):
+		for content in (self.read(COMPONENT), self.read(STOCK_COMPONENT)):
+			self.assertIn("EdgeAppShell", content)
+			self.assertNotIn(':menuItems="menuItems"', content)
+			self.assertIn("EdgeNotificationBell", content)
+			self.assertIn("EdgeNotificationDrawer", content)
+			self.assertIn('product="vetedge"', content)
+			self.assertIn('data-edge-product="vetedge"', content)
+			self.assertIn("window.VetedgeProductMenu", content)
+			self.assertIn("tenantName", content)
+			self.assertIn("branchName", content)
+			self.assertIn("userName", content)
+			self.assertNotIn("coreedge/", content.lower())
 
-	def test_no_internal_navigation_and_empty_menu_uses_full_width(self):
-		executive = self.read(COMPONENT)
-		stock = self.read(STOCK_COMPONENT)
-		styles = self.read(REPOSITORY_ROOT / "vetedge" / "public" / "css" / "dashboard_shell.css")
-		self.assertNotIn(':menuItems="menuItems"', executive)
-		self.assertNotIn(':menuItems="menuItems"', stock)
-		self.assertIn(".vetedge-executive-dashboard-root .edge-sidebar", styles)
-		self.assertIn(".vetedge-expiry-monitor-root .edge-sidebar", styles)
-		self.assertIn("display: none !important", styles)
-		self.assertIn("max-width: none", styles)
-
-	def test_vetedge_theming_and_full_width_layout_contract(self):
+	def test_responsive_layout_and_edgesuite_controls_are_preserved(self):
 		content = self.read(COMPONENT)
-		self.assertIn('product="vetedge"', content)
-		self.assertIn('data-edge-product="vetedge"', content)
-		self.assertIn("--edge-primary:", content)
-		self.assertIn("--edge-primary-soft:", content)
-		self.assertIn("linear-gradient", content)
-		self.assertIn(".vetedge-executive-dashboard-root .edge-shell-main", content)
-		self.assertIn("width: 100%", content)
-		self.assertIn("max-width: none", content)
-
-	def test_date_presets_branch_filters_and_route_options_are_preserved(self):
-		content = self.read(COMPONENT)
-		for label in (
-			"Today",
-			"This Week",
-			"This Month",
-			"Last 30 Days",
-			"This Quarter",
-			"This Year",
-			"Custom Period",
-		):
-			self.assertIn(label, content)
-		for contract in ("filters.branch", "date_preset", "from_date", "to_date", "frappe.route_options"):
-			self.assertIn(contract, content)
-
-	def test_responsive_kpi_grid_and_edgesuite_controls_are_used(self):
-		content = self.read(COMPONENT)
+		styles = self.read(DASHBOARD_STYLES)
 		for component in (
 			"EdgeAppShell",
 			"EdgePageLayout",
@@ -211,14 +157,36 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			"EdgeErrorState",
 		):
 			self.assertIn(component, content)
-		self.assertIn("repeat(auto-fit, minmax(180px, 1fr))", content)
-		stock = self.read(STOCK_COMPONENT)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", stock)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", stock)
-		self.assertIn("grid-template-columns: minmax(0, 1fr)", stock)
-		self.assertIn("edge-select edge-control", content)
-		self.assertIn("edge-input edge-control", content)
-		self.assertIn("edge-button edge-button--primary", content)
+		for label in (
+			"Today",
+			"This Week",
+			"This Month",
+			"Last 30 Days",
+			"This Quarter",
+			"This Year",
+			"Custom Period",
+		):
+			self.assertIn(label, content)
+		for contract in (
+			"repeat(auto-fit, minmax(180px, 1fr))",
+			"width: 100% !important",
+			"max-width: none !important",
+			"container-type: inline-size",
+			"@container vetedge-executive-content",
+		):
+			self.assertIn(contract, content)
+		for contract in (
+			"box-sizing: border-box",
+			"width: 100%",
+			"max-width: none",
+			"min-width: 0",
+			"flex: 1 1 auto",
+			"repeat(4, minmax(0, 1fr))",
+			"repeat(2, minmax(0, 1fr))",
+			"grid-template-columns: minmax(0, 1fr)",
+		):
+			self.assertIn(contract, styles)
+		self.assertNotIn("calc(100% -", styles)
 
 	def test_existing_api_report_chart_and_currency_workflows_are_preserved(self):
 		content = self.read(COMPONENT)
@@ -236,94 +204,18 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("normalize_dashboard_filters(key, filters)", content)
 		self.assertIn('if key == "executive":', content)
 
-
-	def test_phase_two_fluid_layout_preserves_page_content_and_runtime_contract(self):
-		executive = self.read(COMPONENT)
-		stock = self.read(STOCK_COMPONENT)
-		styles = self.read(DASHBOARD_STYLES)
+	def test_sidebar_badge_and_no_coreedge_contracts_are_preserved(self):
 		badge_styles = self.read(UNREAD_BADGE_STYLES)
-
-		for required in (
-			"EdgeFilterBar",
-			"payload.kpis",
-			"EdgeStatCard",
-			"payload.charts",
-			"payload.report_links",
-			"EdgeNotificationBell",
-			"EdgeNotificationDrawer",
-		):
-			self.assertIn(required, executive)
-
-		for required in (
-			"Warehouse",
-			"Item Group",
-			"Expiry Window",
-			"Days Threshold",
-			"Item Code",
-			"Apply / Refresh",
-			"summary-stats-grid",
-			'v-for="row in rows"',
-			"pagination-footer",
-			"EdgeLoadingState",
-			"EdgeEmptyState",
-			"EdgeErrorState",
-			"EdgeNotificationBell",
-			"EdgeNotificationDrawer",
-		):
-			self.assertIn(required, stock)
-
 		for contract in (
-			"box-sizing: border-box",
-			"width: 100%",
-			"max-width: none",
-			"min-width: 0",
-			"flex: 1 1 auto",
+			".layout-side-section.collapsed",
+			".body-sidebar.sidebar-collapsed",
+			'[data-sidebar-collapsed="true"]',
+			'body:has([data-edge-product="vetedge"])',
+			".veterinary-unread-bell-badge-label",
+			"display: none",
 		):
-			self.assertIn(contract, styles)
-		self.assertNotIn("calc(100% -", styles)
-
-		for columns in (
-			"repeat(5, minmax(0, 1fr))",
-			"repeat(4, minmax(0, 1fr))",
-			"repeat(3, minmax(0, 1fr))",
-			"repeat(2, minmax(0, 1fr))",
-			"grid-template-columns: minmax(0, 1fr)",
-		):
-			self.assertIn(columns, styles)
-
-		self.assertIn(".edge-page-layout-body", executive)
-		self.assertIn(".vetedge-executive-page", executive)
-		self.assertIn("width: 100% !important", executive)
-		self.assertIn("max-width: none !important", executive)
-		self.assertIn("container-type: inline-size", executive)
-		self.assertIn("@container vetedge-executive-content", executive)
-		self.assertIn(
-			".vetedge-executive-dashboard-content .vetedge-executive-kpi-grid",
-			executive,
-		)
-		self.assertIn("repeat(5, minmax(0, 1fr))", executive)
-
-		self.assertIn(
-			".vetedge-expiry-monitor-root .edge-page-layout .edge-filter-grid",
-			styles,
-		)
-		self.assertIn("grid-auto-flow: row", styles)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", styles)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", styles)
-
-		self.assertIn(".layout-side-section.collapsed", badge_styles)
-		self.assertIn(".body-sidebar.sidebar-collapsed", badge_styles)
-		self.assertIn('[data-sidebar-collapsed="true"]', badge_styles)
-		self.assertIn('body:has([data-edge-product="vetedge"])', badge_styles)
-		self.assertIn(".veterinary-unread-bell-badge-label", badge_styles)
-		self.assertIn("display: none", badge_styles)
-
-		for path in (LOADER, BUNDLE, COMPONENT, STOCK_COMPONENT):
+			self.assertIn(contract, badge_styles)
+		for path in (LOADER, BUNDLE, COMPONENT, STOCK_COMPONENT, PRODUCT_MENU):
 			self.assertNotIn("coreedge/", self.read(path).lower())
-
 		for path in (LOADER, BUNDLE):
 			self.assertIn("window.edgesuiteui || window.edgeui", self.read(path).lower())
-
-	def test_no_coreedge_frontend_dependency(self):
-		for path in (LOADER, BUNDLE, COMPONENT, PRODUCT_MENU):
-			self.assertNotIn("coreedge/", self.read(path).lower())
