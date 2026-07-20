@@ -5,7 +5,7 @@ app_description = "VetEdge is a veterinary operations system built as a custom F
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
-app_home = "/app/vetedge"
+app_home = "/app/vetedge-home"
 
 # The standalone EdgeSuite UI app must be installed before VetEdge so shared
 # product pages never depend on CoreEdge for their browser runtime.
@@ -52,6 +52,12 @@ boot_session = [
 	"vetedge.ui_identity.extend_bootinfo",
 ]
 
+override_whitelisted_methods = {
+	"vetedge.services.medical_history.get_patient_medical_history_view": (
+		"vetedge.services.medical_history_context.get_patient_medical_history_view"
+	),
+}
+
 permission_query_conditions = {
 	"Veterinary Patient": "vetedge.services.permissions.get_veterinary_patient_query",
 	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
@@ -82,6 +88,9 @@ has_permission = {
 }
 
 doc_events = {
+	"Branch": {
+		"on_update": "vetedge.services.company_context_compat.sync_branch_company_context",
+	},
 	"Sales Invoice": {
 		"before_validate": "vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
 		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_invoice_branch",
