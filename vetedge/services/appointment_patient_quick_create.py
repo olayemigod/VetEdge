@@ -14,6 +14,7 @@ from vetedge.services.appointment_edgeui import (
 	_owner_label,
 	_parse_values,
 )
+from vetedge.services.appointment_quick_create_safety import validate_patient_quick_create_context
 from vetedge.services.company_context import validate_customer_company, validate_vetedge_company
 from vetedge.services.permissions import can_access_branch_data
 
@@ -52,6 +53,7 @@ def create_full_appointment_patient(values: str | dict) -> dict[str, Any]:
 	if not patient_name or not owner or not species:
 		frappe.throw(_("Patient Name, Primary Owner and Species are required."), frappe.ValidationError)
 	validate_customer_company(owner, company)
+	validate_patient_quick_create_context(company, branch)
 	if branch:
 		can_access_branch_data(frappe.session.user, branch, raise_exception=True)
 	if not frappe.db.exists("Veterinary Species", species):
