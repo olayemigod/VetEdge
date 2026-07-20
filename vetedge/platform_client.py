@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import hashlib
@@ -379,7 +378,7 @@ def _validate_gateway_response(body, config: dict) -> dict:
 
 
 def _response_ttl(response: dict) -> int:
-	allowed = bool(((response.get("access") or {}).get("allowed")))
+	allowed = bool((response.get("access") or {}).get("allowed"))
 	fieldname = "allowed_ttl_seconds" if allowed else "blocked_ttl_seconds"
 	return _bounded_int(
 		(response.get("cache_policy") or {}).get(fieldname),
