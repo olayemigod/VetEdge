@@ -254,7 +254,7 @@ def _column_schema(meta, fields: list[str]) -> list[dict]:
 def _permission_aware_count(doctype: str, filters: dict, or_filters: list | None) -> int:
 	rows = frappe.get_list(
 		doctype,
-		fields=["count(name) as total"],
+		fields=[{"COUNT": "*", "as": "total"}],
 		filters=filters,
 		or_filters=or_filters,
 		limit_page_length=1,
