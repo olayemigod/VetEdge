@@ -37,6 +37,7 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
@@ -45,6 +46,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
@@ -238,6 +240,13 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_vetedge_ui_identity_resource_center
+
+      - name: Run appointment EdgeSuite UI tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_appointment_edgeui
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
