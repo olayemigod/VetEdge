@@ -8,6 +8,17 @@ from vetedge.services.company_context_compat import validate_patient_history_acc
 from vetedge.services.portal_access import require_internal_user
 
 
+def _prepare_history_request(
+	patient: str,
+	from_date: str | None,
+	to_date: str | None,
+) -> tuple[str, str]:
+	require_internal_user()
+	validate_patient_history_access(patient)
+	base.validate_patient_context(patient)
+	return base.normalize_date_range(from_date, to_date)
+
+
 def _get_vitals_trend(
 	patient: str,
 	fieldname: str,
@@ -64,10 +75,7 @@ def get_patient_medical_history_view(
 	vitals, laboratory orders and vaccinations remain linked by patient and branch;
 	they are not required to carry a newly introduced Company field.
 	"""
-	require_internal_user()
-	validate_patient_history_access(patient)
-	base.validate_patient_context(patient)
-	from_date, to_date = base.normalize_date_range(from_date, to_date)
+	from_date, to_date = _prepare_history_request(patient, from_date, to_date)
 	limit = cint(limit) or 100
 
 	return {
@@ -84,3 +92,41 @@ def get_patient_medical_history_view(
 		"vaccinations": base.get_vaccination_history(patient, limit, from_date, to_date),
 		"trends": _get_vitals_trends(patient, from_date, to_date),
 	}
+
+
+@frappe.whitelist()
+def get_patient_medical_history(
+	patient: str,
+	limit: int = 50,
+	from_date: str | None = None,
+	to_date: str | None = None,
+) -> list[dict]:
+	from_date, to_date = _prepare_history_request(patient, from_date, to_date)
+	limit = cint(limit) or 50
+	events: list[dict] = []
+	if frappe.has_permission(base.CONSULTATION_DOCTYPE, "read"):
+		events.extend(base.get_consultation_history(patient, limit, from_date, to_date))
+	if frappe.has_permission(base.VITALS_DOCTYPE, "read"):
+		events.extend(base.get_vitals_history(patient, limit, from_date, to_date))
+	if frappe.has_permission("Veterinary Lab Order", "read"):
+		events.extend(base.get_lab_history(patient, limit, from_date, to_date))
+	if frappe.has_permission("Veterinary Vaccination Record", "read"):
+		events.extend(base.get_vaccination_history(patient, limit, from_date, to_date))
+	events.sort(key=lambda event: event.get("timestamp") or "", reverse=True)
+	return events[:limit]
+
+
+@frappe.whitelist()
+def get_patient_vitals_trend(
+	patient: str,
+	fieldname: str,
+	limit: int = 100,
+	from_date: str | None = None,
+	to_date: str | None = None,
+) -> list[dict]:
+	from_date, to_date = _prepare_history_request(patient, from_date, to_date)
+	if fieldname not in base.CHARTABLE_VITAL_FIELDS:
+		frappe.throw(f"Unsupported vitals trend field: {fieldname}", frappe.ValidationError)
+	if not frappe.has_permission(base.VITALS_DOCTYPE, "read"):
+		frappe.throw("Not permitted to read Veterinary Vital Signs.", frappe.PermissionError)
+	return _get_vitals_trend(patient, fieldname, from_date, to_date, limit)
