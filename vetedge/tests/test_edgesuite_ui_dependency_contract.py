@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_PATH = REPOSITORY_ROOT / "vetedge" / "hooks.py"
+TSCONFIG_PATH = REPOSITORY_ROOT / "tsconfig.json"
 STOCK_EXPIRY_LOADER = (
 	REPOSITORY_ROOT
 	/ "vetedge"
@@ -47,6 +49,14 @@ def test_vetedge_requires_edgesuite_ui_but_not_coreedge():
 
 	assert "edgesuite_ui" in required_apps
 	assert "coreedge" not in required_apps
+
+
+def test_typescript_config_does_not_alias_vue_to_coreedge():
+	config = json.loads(TSCONFIG_PATH.read_text(encoding="utf-8"))
+	paths = config.get("compilerOptions", {}).get("paths", {})
+
+	assert "vue" not in paths
+	assert "coreedge" not in json.dumps(config).lower()
 
 
 def test_stock_expiry_loader_uses_standalone_edgesuite_ui_runtime():
