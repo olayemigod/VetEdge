@@ -77,4 +77,5 @@ jobs:
         with:
           name: platform-diagnostics-patch
           path: /tmp/platform-diagnostics-patch
+          include-hidden-files: true
           retention-days: 2
