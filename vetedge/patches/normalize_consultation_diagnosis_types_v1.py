@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import frappe
 
-
 LEGACY_DIAGNOSIS_TYPE_MAP = {
 	"Primary": "Working",
 	"Rule Out": "Ruled Out",
