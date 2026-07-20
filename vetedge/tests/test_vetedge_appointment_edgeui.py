@@ -181,6 +181,7 @@ def test_quick_owner_creation_keeps_loyalty_outside_appointment_flow():
 	assert "get_applicable_loyalty_programs(" not in owner_context
 	assert "owner_loyalty_programs" not in component
 	assert "Loyalty Program" not in component
+	assert '"loyalty_program":' not in api
 	assert "ignore_permissions" not in safety
 
 
