@@ -122,6 +122,7 @@ def get_remote_access_response(
 	*,
 	force_refresh: bool = False,
 	force_handshake: bool = False,
+	allow_cached_on_error: bool = True,
 	action: str | None = None,
 	reference_doctype: str | None = None,
 	reference_name: str | None = None,
@@ -148,7 +149,9 @@ def get_remote_access_response(
 	try:
 		response = _post_gateway(config, method, payload)
 	except RemotePlatformError:
-		if cached and bool(((cached.get("response") or {}).get("access") or {}).get("allowed")):
+		if allow_cached_on_error and cached and bool(
+			((cached.get("response") or {}).get("access") or {}).get("allowed")
+		):
 			return cached["response"]
 		raise
 
@@ -264,6 +267,7 @@ def refresh_remote_platform_heartbeat() -> None:
 		get_remote_access_response(
 			force_refresh=True,
 			force_handshake=True,
+			allow_cached_on_error=False,
 			action="scheduled_heartbeat",
 		)
 	except RemotePlatformError as exc:

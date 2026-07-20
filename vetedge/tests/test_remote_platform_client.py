@@ -273,6 +273,24 @@ class TestRemotePlatformClient(unittest.TestCase):
 		with self.assertRaises(frappe.PermissionError):
 			require_vetedge_platform_access(action="create_consultation")
 
+	def test_heartbeat_logs_network_failure_even_with_valid_access_cache(self):
+		self._configure_remote()
+		entry = {
+			"response": self._gateway_response(),
+			"expires_at_epoch": time.time() + 30,
+		}
+		with (
+			patch("vetedge.platform_client._cache_get", return_value=entry),
+			patch(
+				"vetedge.platform_client.requests.post",
+				side_effect=requests.ConnectionError("offline"),
+			),
+			patch("vetedge.platform_client._log_warning") as warning,
+		):
+			client.refresh_remote_platform_heartbeat()
+		warning.assert_called_once()
+		self.assertIn("Remote platform heartbeat failed", warning.call_args.args[0])
+
 	def test_heartbeat_is_noop_in_legacy_mode(self):
 		with patch("vetedge.platform_client.get_remote_access_response") as request:
 			client.refresh_remote_platform_heartbeat()
