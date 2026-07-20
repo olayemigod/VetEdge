@@ -25,6 +25,15 @@ RESOURCE_COMPONENT = (
 	/ "vetedge_resource_center"
 	/ "VetEdgeResourceCenter.vue"
 )
+APPOINTMENT_API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
+APPOINTMENT_COMPONENT = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_resource_center"
+	/ "VetEdgeAppointmentQuickCreate.vue"
+)
 
 
 def read(path: Path) -> str:
@@ -136,6 +145,44 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "delete_resource_record" in component
 	assert '"_blank", "noopener,noreferrer"' in component
 	assert "frappe.ui.Dialog" in component
+
+
+def test_appointment_quick_create_uses_shared_links_and_server_safety():
+	api = read(APPOINTMENT_API)
+	component = read(APPOINTMENT_COMPONENT)
+	bundle = read(RESOURCE_BUNDLE)
+	loader = read(RESOURCE_LOADER)
+
+	for contract in (
+		"search_appointment_link",
+		"create_appointment_owner",
+		"create_appointment_patient",
+		"create_edgeui_appointment",
+		"frappe.get_list(",
+		"get_assigned_branches",
+		"get_veterinary_doctor_users",
+		"can_access_branch_data",
+		"validate_doctor_user",
+	):
+		assert contract in api
+	assert "ignore_permissions" not in api
+	assert "frappe.db.sql(" not in api
+	assert "doc.submit(" not in api
+
+	for contract in (
+		"EdgeLinkField",
+		"createOwnerFromQuery",
+		"createPatientFromQuery",
+		"this.clearPatient()",
+		"this.clearPractitioner()",
+		"create_edgeui_appointment",
+	):
+		assert contract in component
+
+	assert "VetEdgeAppointmentQuickCreate" in bundle
+	assert "quickApp.unmount()" in bundle
+	assert "EdgeLinkField" in loader
+	assert "EdgeSuite UI 0.4.0 or newer" in loader
 
 
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
