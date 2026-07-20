@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
+COMPANY_CONTEXT = ROOT / "vetedge" / "services" / "company_context.py"
 COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -19,13 +20,31 @@ LOADER = (
 	/ "vetedge_resource_center"
 	/ "vetedge_resource_center.js"
 )
+PATIENT_DOCTYPE = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_patient"
+	/ "veterinary_patient.json"
+)
+APPOINTMENT_DOCTYPE = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_appointment"
+	/ "veterinary_appointment.json"
+)
+PATCH = ROOT / "vetedge" / "patches" / "backfill_veterinary_company_context.py"
+PATCHES = ROOT / "vetedge" / "patches.txt"
 
 
 def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def test_appointment_links_are_permission_and_context_aware():
+def test_appointment_links_are_permission_company_and_context_aware():
 	content = read(API)
 
 	for contract in (
@@ -34,6 +53,8 @@ def test_appointment_links_are_permission_and_context_aware():
 		"frappe.get_list(",
 		'filters["primary_owner"] = context["owner"]',
 		'filters["default_branch"]',
+		'filters["company"] = company',
+		"customer_is_allowed_for_company",
 		"get_assigned_branches",
 		"get_veterinary_doctor_users",
 		"Branch Practitioner Assignment",
@@ -43,6 +64,48 @@ def test_appointment_links_are_permission_and_context_aware():
 
 	assert "ignore_permissions=True" not in content
 	assert "frappe.db.sql(" not in content
+
+
+def test_selected_patient_owner_is_resolved_server_side_for_active_company():
+	api = read(API)
+	bundle = read(BUNDLE)
+
+	for contract in (
+		"get_patient_selection_context",
+		'filters={"name": _clean(patient), "company": company',
+		"validate_customer_company(owner, company)",
+		'"primary_owner_label": _owner_label(owner)',
+		"get_patient_selection_context'",
+		"this.bootstrap.active_company",
+		"this.form.owner = context.primary_owner",
+		"this.labels.owner = context.primary_owner_label",
+		"this.clearPatient()",
+	):
+		assert contract in api or contract in bundle
+
+	assert "option?.raw?.raw" not in bundle
+
+
+def test_company_context_filters_restricted_customers_and_assigns_new_owners():
+	content = read(COMPANY_CONTEXT)
+	api = read(API)
+
+	for contract in (
+		"get_active_vetedge_company",
+		"get_allowed_vetedge_companies",
+		"validate_vetedge_company",
+		"customer_is_allowed_for_company",
+		'values.get("restrict_to_companies")',
+		'"Company Restriction"',
+		'"parentfield": "allowed_companies"',
+		"apply_customer_company_restriction",
+		'doc.restrict_to_companies = 1',
+		'doc.append("allowed_companies", {"company": company})',
+	):
+		assert contract in content
+
+	assert "apply_customer_company_restriction(doc, company)" in api
+	assert "validate_customer_company(owner, company)" in api
 
 
 def test_create_new_owner_and_patient_keep_erpnext_and_vetedge_truth():
@@ -59,6 +122,7 @@ def test_create_new_owner_and_patient_keep_erpnext_and_vetedge_truth():
 		'frappe.has_permission("Veterinary Patient", "create")',
 		"_find_patient_duplicate",
 		"Breed must belong to the selected Species",
+		'"company": company',
 		'"status": "Active"',
 		"doc.insert()",
 	):
@@ -68,7 +132,7 @@ def test_create_new_owner_and_patient_keep_erpnext_and_vetedge_truth():
 	assert "ignore_permissions" not in content
 
 
-def test_appointment_creation_reuses_existing_validation_and_permissions():
+def test_appointment_creation_reuses_existing_validation_and_company_truth():
 	content = read(API)
 
 	for contract in (
@@ -80,6 +144,9 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 		'"status": "Scheduled"',
 		'"created_from": "Manual"',
 		'"primary_owner": patient_values.primary_owner',
+		'"company": company',
+		"patient_values.company != company",
+		"validate_customer_company(patient_values.primary_owner, company)",
 	):
 		assert contract in content
 
@@ -88,36 +155,45 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 	assert "Payment Entry" not in content
 
 
-def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
-	content = read(COMPONENT)
+def test_patient_and_appointment_doctypes_persist_company_context():
+	patient = read(PATIENT_DOCTYPE)
+	appointment = read(APPOINTMENT_DOCTYPE)
 
-	patient_field = content.index('label="Veterinary Patient"')
-	owner_summary = content.index("vetedge-appointment-flow-owner-summary")
+	for content in (patient, appointment):
+		assert '"fieldname": "company"' in content
+		assert '"options": "Company"' in content
+		assert '"default": ":Company"' in content
+
+	assert '"search_fields": "patient_name,primary_owner,company' in patient
+	assert '"search_fields": "patient,primary_owner,company' in appointment
+
+
+def test_company_backfill_is_idempotent_and_safe_for_multi_company_sites():
+	patch = read(PATCH)
+	patches = read(PATCHES)
+
+	for contract in (
+		"_single_allowed_customer_company",
+		"single_site_company = companies[0] if len(companies) == 1 else None",
+		'frappe.db.set_value("Veterinary Patient"',
+		"INNER JOIN `tabVeterinary Patient`",
+		"WHERE (a.company IS NULL OR a.company = '')",
+	):
+		assert contract in patch
+
+	assert "vetedge.patches.backfill_veterinary_company_context" in patches
+
+
+def test_appointment_flow_is_patient_first_and_owner_creation_stays_inside_edgesuite():
+	component = read(COMPONENT)
+
+	patient_field = component.index('label="Veterinary Patient"')
+	owner_summary = component.index("vetedge-appointment-flow-owner-summary")
 	assert patient_field < owner_summary
 
 	for contract in (
 		"Search the patient first",
-		"optionRecord(option)",
-		"option?.raw?.raw || option?.raw",
-		"record.primary_owner",
 		"Automatically filled from the selected patient",
-		'return this.searchLink("patient", query, { branch: this.form.branch })',
-		"this.form.owner = record.primary_owner",
-		"this.clearPatient()",
-		"this.clearPractitioner()",
-	):
-		assert contract in content
-
-	assert 'return this.searchLink("patient", query, { owner:' not in content
-	assert ':disabled="!form.owner' not in content
-
-
-def test_new_patient_can_search_or_create_owner_without_leaving_edgesuite():
-	content = read(COMPONENT)
-
-	for contract in (
-		"EdgeModal",
-		"EdgeLinkField",
 		"Create New Veterinary Patient",
 		"Create New Pet Owner",
 		"createPatientFromQuery",
@@ -135,11 +211,13 @@ def test_new_patient_can_search_or_create_owner_without_leaving_edgesuite():
 		"searchSpecies",
 		"searchBreed",
 	):
-		assert contract in content
+		assert contract in component
 
-	assert "frappe.ui.Dialog" not in content
-	assert "frappe.new_doc" not in content
-	assert "window.open" not in content
+	assert 'return this.searchLink("patient", query, { owner:' not in component
+	assert ':disabled="!form.owner' not in component
+	assert "frappe.ui.Dialog" not in component
+	assert "frappe.new_doc" not in component
+	assert "window.open" not in component
 
 
 def test_resource_center_exposes_new_appointment_action_and_blocks_generic_editor():
@@ -148,6 +226,7 @@ def test_resource_center_exposes_new_appointment_action_and_blocks_generic_edito
 
 	for contract in (
 		"VetEdgeAppointmentFlow",
+		"AppointmentFlowRoot",
 		"runtime.components?.EdgeLinkField",
 		"flowApp.unmount()",
 		"flowHost.remove()",
