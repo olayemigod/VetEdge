@@ -51,11 +51,12 @@ def test_vetedge_requires_edgesuite_ui_but_not_coreedge():
 	assert "coreedge" not in required_apps
 
 
-def test_typescript_config_does_not_alias_vue_to_coreedge():
+def test_typescript_config_aliases_vue_to_edgesuite_ui_not_coreedge():
 	config = json.loads(TSCONFIG_PATH.read_text(encoding="utf-8"))
 	paths = config.get("compilerOptions", {}).get("paths", {})
+	vue_paths = paths.get("vue", [])
 
-	assert "vue" not in paths
+	assert vue_paths == ["../edgesuite_ui/edgesuite_ui/public/js/edgeui/vue-bridge.js"]
 	assert "coreedge" not in json.dumps(config).lower()
 
 
