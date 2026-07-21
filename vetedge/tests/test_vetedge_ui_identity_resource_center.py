@@ -46,7 +46,7 @@ def test_boot_identity_separates_clinic_and_deployment_product_branding():
 		"company_logo",
 		"tenant_name",
 		"tenant_logo",
-		'get_edge_platform_mode()',
+		"get_edge_platform_mode()",
 		'mode == "shared_hosted"',
 		'product_name = "VetEdge" if is_saas else "Veterinary"',
 		'product_icon": "stethoscope"',
@@ -90,6 +90,7 @@ def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 		assert route in content
 	assert 'if (path.startsWith("/app/")) return openNewTab(route)' in content
 	assert "PRODUCT_ROUTES.has(path)" in content
+	assert '"/app/veterinary-settings-center"' in content
 	assert "patchProductMenu" in content
 	assert "menuItemRoute" in content
 	assert "__vetedgeProductMenuNavigationPatched" in content
@@ -99,12 +100,12 @@ def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
 	content = read(RESOURCE_API)
 	for contract in (
-		"frappe.has_permission(doctype, \"read\")",
-		"frappe.has_permission(doctype, \"create\")",
-		"frappe.has_permission(doctype, \"write\")",
-		"frappe.has_permission(doctype, \"delete\")",
-		"doc.check_permission(\"write\")",
-		"doc.check_permission(\"delete\")",
+		'frappe.has_permission(doctype, "read")',
+		'frappe.has_permission(doctype, "create")',
+		'frappe.has_permission(doctype, "write")',
+		'frappe.has_permission(doctype, "delete")',
+		'doc.check_permission("write")',
+		'doc.check_permission("delete")',
 		"doc.docstatus != 0",
 		"_permission_aware_count",
 		"frappe.get_list(",
@@ -197,8 +198,11 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	assert "EdgeSuite UI 0.4.0 or newer" in loader
 
 
-def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
+def test_hooks_load_menu_contract_bridge_and_identity_in_safe_order():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
-	assert "vetedge_ui_bridge.js?v=20260720-2" in content
+	assert "vetedge_product_menu_config.js?v=20260721-1" in content
+	assert "edgesuite_product_menu.js?v=20260721-1" in content
+	assert "vetedge_ui_bridge.js?v=20260721-1" in content
+	assert content.index("vetedge_product_menu_config.js") < content.index("edgesuite_product_menu.js")
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
