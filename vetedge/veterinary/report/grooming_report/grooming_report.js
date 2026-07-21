@@ -1,9 +1,16 @@
 frappe.query_reports["Grooming Report"] = {
 	onload(report) {
+		window.vetedgeReportEdgeUI?.register("Grooming Report", {
+			eyebrow: __("Grooming Operations"),
+			title: __("Grooming Report"),
+			subtitle: __("Review bookings, assigned staff, payment state, work in progress, completed sessions, service value, and cancelled appointments."),
+			emptyDescription: __("Adjust the date, branch, assigned staff, status, patient, or owner filters and refresh the report."),
+		});
 		window.vetedgeReportVisibility?.apply(report, "Grooming Report");
+		window.vetedgeReportEdgeUI?.attach(report, "Grooming Report");
 	},
 	filters: [
-		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.add_days(frappe.datetime.get_today(), -30) },
+		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.month_start() },
 		{ fieldname: "to_date", label: __("To Date"), fieldtype: "Date", default: frappe.datetime.get_today() },
 		{ fieldname: "branch", label: __("Branch"), fieldtype: "Link", options: "Branch" },
 		{ fieldname: "assigned_staff", label: __("Assigned Staff"), fieldtype: "Link", options: "User" },
