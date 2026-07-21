@@ -7,8 +7,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cstr, flt, getdate, nowdate
 
-from vetedge.services.financial_dataset import build_financial_dataset
 from vetedge.services.financial_insights import _build_trend, get_financial_insights
+from vetedge.services.financial_reporting_dataset import build_financial_dataset
 
 CONSULTATION_SERVICE_INCOME = "Consultation Service Income"
 TREATMENT_INCOME = "Treatment Income"
@@ -67,7 +67,7 @@ def _income_card(
 		"secondary_value": _("Separated from other clinical income"),
 		"trend": _build_trend(value, previous_value),
 		"action": {"type": "report", "target": "Revenue Summary", "filters": filters},
-		"tooltip": _("Submitted invoice revenue allocated from Veterinary billing source lines."),
+		"tooltip": _("Submitted invoice revenue allocated from Veterinary invoice items and service links."),
 		"severity": "info",
 		"category": "income_source",
 	}
