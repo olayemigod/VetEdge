@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/vetedge-appointment-link-create]
   push:
     branches: [main]
   workflow_dispatch:
