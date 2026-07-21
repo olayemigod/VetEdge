@@ -1,0 +1,139 @@
+.vetedge-edgeui-report-page .layout-main-section {
+	background: var(--edge-page-bg, var(--bg-color));
+}
+
+.vetedge-report-edgeui-host {
+	margin-bottom: 1rem;
+}
+
+.vetedge-report-edgeui-surface {
+	display: grid;
+	gap: 1rem;
+}
+
+.vetedge-report-edgeui-context {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.vetedge-report-edgeui-card {
+	border-radius: var(--edge-radius-lg, 12px);
+	min-width: 0;
+}
+
+.vetedge-report-edgeui-card.is-clickable {
+	cursor: pointer;
+	outline: none;
+	transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.vetedge-report-edgeui-card.is-clickable:hover,
+.vetedge-report-edgeui-card.is-clickable:focus-visible {
+	box-shadow: var(--edge-shadow-sm, 0 6px 18px rgba(15, 23, 42, 0.08));
+	transform: translateY(-1px);
+}
+
+.vetedge-report-edgeui-recommendations,
+.vetedge-report-edgeui-empty {
+	background: var(--card-bg);
+	border: 1px solid var(--border-color);
+	border-radius: var(--edge-radius-lg, 12px);
+	padding: 1rem;
+}
+
+.vetedge-report-edgeui-section-heading {
+	display: grid;
+	gap: 0.15rem;
+	margin-bottom: 0.75rem;
+}
+
+.vetedge-report-edgeui-section-heading h2 {
+	font-size: 1rem;
+	margin: 0;
+}
+
+.vetedge-report-edgeui-recommendation-list {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.vetedge-report-edgeui-recommendation {
+	align-items: flex-start;
+	border-top: 1px solid var(--border-color);
+	display: grid;
+	gap: 0.75rem;
+	grid-template-columns: auto minmax(0, 1fr);
+	padding-top: 0.75rem;
+}
+
+.vetedge-report-edgeui-recommendation:first-child {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.vetedge-report-edgeui-recommendation p {
+	color: var(--text-muted);
+	margin: 0.2rem 0 0;
+}
+
+.vetedge-report-edgeui-suggestions {
+	color: var(--text-muted);
+	margin: 0.75rem auto 0;
+	max-width: 42rem;
+	padding-left: 1.25rem;
+}
+
+.vetedge-edgeui-report-page .page-form {
+	align-items: flex-end;
+	background: var(--card-bg);
+	border: 1px solid var(--border-color);
+	border-radius: var(--edge-radius-lg, 12px);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+	margin-bottom: 1rem;
+	padding: 0.85rem;
+}
+
+.vetedge-edgeui-report-page .page-form .form-group {
+	margin-bottom: 0;
+}
+
+.vetedge-edgeui-report-page .edgesuite-date-presets-wrapper {
+	margin: 0 !important;
+	vertical-align: bottom !important;
+}
+
+.vetedge-edgeui-report-page .edgesuite-date-presets-select {
+	border-color: var(--border-color) !important;
+	border-radius: var(--edge-radius-md, 8px) !important;
+	height: var(--input-height, 36px) !important;
+	max-width: 11rem !important;
+}
+
+.vetedge-edgeui-report-page .datatable-container,
+.vetedge-edgeui-report-page .chart-container,
+.vetedge-edgeui-report-page .report-summary {
+	background: var(--card-bg);
+	border: 1px solid var(--border-color);
+	border-radius: var(--edge-radius-lg, 12px);
+	overflow: hidden;
+}
+
+.vetedge-edgeui-report-page .datatable .dt-header .dt-cell {
+	font-weight: 600;
+}
+
+@media (max-width: 47.99rem) {
+	.vetedge-edgeui-report-page .page-form {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.vetedge-edgeui-report-page .edgesuite-date-presets-select {
+		max-width: none !important;
+		width: 100%;
+	}
+}
