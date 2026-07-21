@@ -8,6 +8,7 @@ from frappe.utils import cint, cstr
 
 SETTINGS_DOCTYPE = "Veterinary Settings"
 LAYOUT_TYPES = {"Tab Break", "Section Break", "Column Break", "HTML", "Button"}
+LOCKED_FIELDS = {"enable_vetedge"}
 SUPPORTED_TYPES = {
 	"Check",
 	"Data",
@@ -45,7 +46,7 @@ def _field_payload(field) -> dict:
 		"mandatory_depends_on": field.mandatory_depends_on or "",
 		"read_only_depends_on": field.read_only_depends_on or "",
 		"reqd": cint(field.reqd),
-		"read_only": cint(field.read_only),
+		"read_only": cint(field.read_only or field.fieldname in LOCKED_FIELDS),
 		"permlevel": cint(field.permlevel),
 		"precision": field.precision,
 	}
@@ -126,6 +127,10 @@ def _values(doc) -> dict:
 	return values
 
 
+def _modified(doc) -> str:
+	return cstr(getattr(doc, "modified", "") or "")
+
+
 @frappe.whitelist()
 def get_veterinary_settings_page() -> dict:
 	_require_permission("read")
@@ -135,7 +140,7 @@ def get_veterinary_settings_page() -> dict:
 		"schema": _schema(),
 		"values": _values(doc),
 		"can_write": frappe.has_permission(SETTINGS_DOCTYPE, ptype="write"),
-		"modified": doc.modified,
+		"modified": _modified(doc),
 	}
 
 
@@ -144,7 +149,10 @@ def _clean_child_rows(field, rows) -> list[dict]:
 	allowed = {
 		child_field.fieldname
 		for child_field in child_meta.fields
-		if child_field.fieldname and child_field.fieldtype not in LAYOUT_TYPES and not child_field.read_only
+		if child_field.fieldname
+		and child_field.fieldtype not in LAYOUT_TYPES
+		and not child_field.read_only
+		and child_field.fieldname not in LOCKED_FIELDS
 	}
 	cleaned = []
 	for row in rows if isinstance(rows, list) else []:
@@ -163,7 +171,7 @@ def save_veterinary_settings_page(values=None, expected_modified: str | None = N
 		frappe.throw(_("Invalid Veterinary Settings payload."))
 
 	doc = frappe.get_single(SETTINGS_DOCTYPE)
-	if expected_modified and cstr(doc.modified) != cstr(expected_modified):
+	if expected_modified and _modified(doc) != cstr(expected_modified):
 		frappe.throw(
 			_("Veterinary Settings changed after this page was opened. Refresh before saving."),
 			frappe.TimestampMismatchError,
@@ -172,7 +180,13 @@ def save_veterinary_settings_page(values=None, expected_modified: str | None = N
 	meta = frappe.get_meta(SETTINGS_DOCTYPE)
 	for fieldname, value in values.items():
 		field = meta.get_field(fieldname)
-		if not field or field.hidden or field.read_only or field.fieldtype in LAYOUT_TYPES:
+		if (
+			not field
+			or field.hidden
+			or field.read_only
+			or field.fieldname in LOCKED_FIELDS
+			or field.fieldtype in LAYOUT_TYPES
+		):
 			continue
 		if field.fieldtype == "Password" and value in (None, "", "********"):
 			continue
@@ -187,7 +201,7 @@ def save_veterinary_settings_page(values=None, expected_modified: str | None = N
 	return {
 		"message": _("Veterinary Settings saved."),
 		"values": _values(doc),
-		"modified": doc.modified,
+		"modified": _modified(doc),
 	}
 
 
