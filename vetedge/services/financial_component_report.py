@@ -10,19 +10,31 @@ from vetedge.services.financial_component_insights import (
 	CONSULTATION_SERVICE_INCOME,
 	TREATMENT_INCOME,
 )
-from vetedge.services.financial_dataset import build_financial_dataset
+from vetedge.services.financial_reporting_dataset import build_financial_dataset
 
 INCOME_CATEGORY_OPTIONS = (
 	CONSULTATION_SERVICE_INCOME,
 	TREATMENT_INCOME,
 	"Laboratory Income",
 	"Vaccination Income",
-	"Boarding Income",
 	"Grooming Income",
+	"Boarding Income",
+	"Hospitalisation Income",
 	"Dispensary Income",
 	"Registration Income",
-	"General Income",
 	"Other Income",
+)
+REPORT_COMPONENTS = (
+	(CONSULTATION_SERVICE_INCOME, "consultation_service_income"),
+	(TREATMENT_INCOME, "treatment_income"),
+	("Laboratory Income", "laboratory_income"),
+	("Vaccination Income", "vaccination_income"),
+	("Grooming Income", "grooming_income"),
+	("Boarding Income", "boarding_income"),
+	("Hospitalisation Income", "hospitalisation_income"),
+	("Dispensary Income", "dispensary_income"),
+	("Registration Income", "registration_income"),
+	("Other Income", "other_income"),
 )
 
 
@@ -48,6 +60,11 @@ def _columns() -> list[dict]:
 		{"label": _("Treatment Income"), "fieldname": "treatment_income", "fieldtype": "Currency", "width": 130},
 		{"label": _("Laboratory Income"), "fieldname": "laboratory_income", "fieldtype": "Currency", "width": 130},
 		{"label": _("Vaccination Income"), "fieldname": "vaccination_income", "fieldtype": "Currency", "width": 135},
+		{"label": _("Grooming Income"), "fieldname": "grooming_income", "fieldtype": "Currency", "width": 125},
+		{"label": _("Boarding Income"), "fieldname": "boarding_income", "fieldtype": "Currency", "width": 125},
+		{"label": _("Hospitalisation Income"), "fieldname": "hospitalisation_income", "fieldtype": "Currency", "width": 150},
+		{"label": _("Dispensary Income"), "fieldname": "dispensary_income", "fieldtype": "Currency", "width": 130},
+		{"label": _("Registration Income"), "fieldname": "registration_income", "fieldtype": "Currency", "width": 135},
 		{"label": _("Other Income"), "fieldname": "other_income", "fieldtype": "Currency", "width": 120},
 		{"label": _("Total Revenue"), "fieldname": "grand_total", "fieldtype": "Currency", "width": 130},
 		{"label": _("Paid Amount"), "fieldname": "paid_amount", "fieldtype": "Currency", "width": 120},
@@ -73,34 +90,27 @@ def _data(filters: frappe._dict) -> list[dict]:
 		if int(row.get("docstatus") or 0) != 1 or not _row_matches_filters(row, filters):
 			continue
 		labels = row.get("revenue_component_labels") or []
-		rows.append(
-			{
-				"invoice": row.get("sales_invoice"),
-				"posting_date": row.get("posting_date"),
-				"customer": row.get("customer"),
-				"branch": row.get("branch"),
-				"service_category": ", ".join(labels) or row.get("service_source") or _("General Income"),
-				"consultation_service_income": flt(row.get("consultation_service_income")),
-				"treatment_income": flt(row.get("treatment_income")),
-				"laboratory_income": flt(row.get("laboratory_income")),
-				"vaccination_income": flt(row.get("vaccination_income")),
-				"other_income": flt(row.get("other_income")),
-				"grand_total": flt(row.get("grand_total")),
-				"paid_amount": flt(row.get("paid_amount")),
-				"outstanding_amount": flt(row.get("outstanding_amount")),
-				"status": row.get("payment_status"),
-			}
-		)
+		row_data = {
+			"invoice": row.get("sales_invoice"),
+			"posting_date": row.get("posting_date"),
+			"customer": row.get("customer"),
+			"branch": row.get("branch"),
+			"service_category": ", ".join(labels) or row.get("service_source") or _("Other Income"),
+			"grand_total": flt(row.get("grand_total")),
+			"paid_amount": flt(row.get("paid_amount")),
+			"outstanding_amount": flt(row.get("outstanding_amount")),
+			"status": row.get("payment_status"),
+		}
+		for _, fieldname in REPORT_COMPONENTS:
+			row_data[fieldname] = flt(row.get(fieldname))
+		rows.append(row_data)
 	return rows
 
 
 def _component_totals(data: list[dict]) -> dict[str, float]:
 	return {
-		CONSULTATION_SERVICE_INCOME: sum(flt(row.get("consultation_service_income")) for row in data),
-		TREATMENT_INCOME: sum(flt(row.get("treatment_income")) for row in data),
-		"Laboratory Income": sum(flt(row.get("laboratory_income")) for row in data),
-		"Vaccination Income": sum(flt(row.get("vaccination_income")) for row in data),
-		"Other Income": sum(flt(row.get("other_income")) for row in data),
+		label: sum(flt(row.get(fieldname)) for row in data)
+		for label, fieldname in REPORT_COMPONENTS
 	}
 
 
