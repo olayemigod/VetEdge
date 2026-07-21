@@ -106,6 +106,16 @@
 	vertical-align: bottom !important;
 }
 
+.vetedge-edgeui-report-page .edgesuite-date-presets-wrapper label {
+	clip: rect(0, 0, 0, 0);
+	clip-path: inset(50%);
+	height: 1px;
+	overflow: hidden;
+	position: absolute;
+	white-space: nowrap;
+	width: 1px;
+}
+
 .vetedge-edgeui-report-page .edgesuite-date-presets-select {
 	border-color: var(--border-color) !important;
 	border-radius: var(--edge-radius-md, 8px) !important;
