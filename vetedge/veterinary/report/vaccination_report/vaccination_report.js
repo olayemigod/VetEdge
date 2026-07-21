@@ -1,9 +1,16 @@
 frappe.query_reports["Vaccination Report"] = {
 	onload(report) {
+		window.vetedgeReportEdgeUI?.register("Vaccination Report", {
+			eyebrow: __("Preventive Care"),
+			title: __("Vaccination Report"),
+			subtitle: __("Review scheduled, administered, due-soon, overdue, payment-pending, and cancelled vaccination activity across the selected branch."),
+			emptyDescription: __("Adjust the date, branch, vaccine, status, due status, patient, owner, or practitioner filters."),
+		});
 		window.vetedgeReportVisibility?.apply(report, "Vaccination Report");
+		window.vetedgeReportEdgeUI?.attach(report, "Vaccination Report");
 	},
 	filters: [
-		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.add_days(frappe.datetime.get_today(), -30) },
+		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.month_start() },
 		{ fieldname: "to_date", label: __("To Date"), fieldtype: "Date", default: frappe.datetime.get_today() },
 		{ fieldname: "branch", label: __("Branch"), fieldtype: "Link", options: "Branch" },
 		{ fieldname: "vaccine", label: __("Vaccine"), fieldtype: "Link", options: "Veterinary Vaccine" },
