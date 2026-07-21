@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 
 import frappe
 from frappe.utils import cstr, flt
+
 from vetedge.services.financial_dataset import build_financial_dataset as build_legacy_financial_dataset
 
 CONSULTATION_SERVICE_INCOME = "Consultation Service Income"
