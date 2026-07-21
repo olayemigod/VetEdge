@@ -6,6 +6,7 @@ from datetime import timedelta
 import frappe
 from frappe import _
 from frappe.utils import add_days, cstr, flt, getdate, nowdate
+
 from vetedge.services.financial_insights import _build_trend, get_financial_insights
 from vetedge.services.financial_reporting_dataset import build_financial_dataset
 
