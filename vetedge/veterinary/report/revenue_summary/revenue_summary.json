@@ -8,7 +8,7 @@
   {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
   {"fieldname": "cost_center", "fieldtype": "Link", "label": "Cost Center", "options": "Cost Center"},
   {"fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer"},
-  {"fieldname": "income_category", "fieldtype": "Select", "label": "Income Category", "options": "\nConsultation Service Income\nTreatment Income\nLaboratory Income\nVaccination Income\nBoarding Income\nGrooming Income\nDispensary Income\nRegistration Income\nGeneral Income\nOther Income"},
+  {"fieldname": "income_category", "fieldtype": "Select", "label": "Income Category", "options": "\nConsultation Service Income\nTreatment Income\nLaboratory Income\nVaccination Income\nGrooming Income\nBoarding Income\nHospitalisation Income\nDispensary Income\nRegistration Income\nOther Income"},
   {"fieldname": "status", "fieldtype": "Data", "label": "Status"},
   {"fieldname": "service_category", "fieldtype": "Data", "label": "Legacy Service Source"}
  ],
