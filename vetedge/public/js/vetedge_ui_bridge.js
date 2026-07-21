@@ -31,6 +31,7 @@
 		"/app/vetedge-executive-dashboard",
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
+		"/app/veterinary-settings-center",
 	]);
 
 	const state = {
