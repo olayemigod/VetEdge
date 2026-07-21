@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, feature/vetedge-appointment-link-create]
+    branches: [main, "feature/vetedge-*"]
   push:
     branches: [main]
   workflow_dispatch:
@@ -53,6 +53,7 @@ jobs:
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_report_edgeui_phase1.py \
+            vetedge/tests/test_vetedge_report_edgeui_phase2.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py \
             vetedge/tests/test_veterinary_ui_financial_refinements.py
 
@@ -79,6 +80,9 @@ jobs:
 
       - name: Priority report EdgeSuite contracts
         run: python -m pytest -q vetedge/tests/test_vetedge_report_edgeui_phase1.py
+
+      - name: Service report EdgeSuite contracts
+        run: python -m pytest -q vetedge/tests/test_vetedge_report_edgeui_phase2.py
 
       - name: Identity and Resource Center contracts
         run: python -m pytest -q vetedge/tests/test_vetedge_ui_identity_resource_center.py
@@ -111,6 +115,10 @@ jobs:
           node --check vetedge/veterinary/report/branch_performance_report/branch_performance_report.js
           node --check vetedge/veterinary/report/consultation_register/consultation_register.js
           node --check vetedge/veterinary/report/planned_treatment/planned_treatment.js
+          node --check vetedge/veterinary/report/lab_order_report/lab_order_report.js
+          node --check vetedge/veterinary/report/vaccination_report/vaccination_report.js
+          node --check vetedge/veterinary/report/boarding_report/boarding_report.js
+          node --check vetedge/veterinary/report/grooming_report/grooming_report.js
           node --check vetedge/veterinary/report/revenue_summary/revenue_summary.js
           node --check vetedge/veterinary/page/veterinary_financial_dashboard/veterinary_financial_dashboard.js
           node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
@@ -275,6 +283,10 @@ jobs:
       - name: Run priority report EdgeSuite tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_report_edgeui_phase1
+
+      - name: Run service report EdgeSuite tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_report_edgeui_phase2
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
