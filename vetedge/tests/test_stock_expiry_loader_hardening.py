@@ -35,10 +35,11 @@ class TestStockExpiryLoaderHardening(FrappeTestCase):
 		content = self._controller()
 		active_content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
 		active_content = re.sub(r"//.*?\n", "\n", active_content)
-		position = 0
-		while True:
-			index = active_content.find("} catch (", position)
-			if index == -1:
-				break
-			self.assertNotIn("frappe.require", active_content[index : index + 500])
-			position = index + 1
+		catch_bodies = re.findall(
+			r"catch\s*\([^)]*\)\s*\{(.*?)\n\s*\}",
+			active_content,
+			flags=re.DOTALL,
+		)
+		self.assertTrue(catch_bodies, "No catch blocks found")
+		for body in catch_bodies:
+			self.assertNotIn("frappe.require", body)
