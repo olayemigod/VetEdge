@@ -91,6 +91,8 @@
 </template>
 
 <script>
+const VETERINARY_SETTINGS_CENTER = "/app/veterinary-settings-center";
+
 function emptyContext() {
 	return {
 		tenant_name: "",
@@ -128,18 +130,27 @@ export default {
 	methods: {
 		defaultLabel(label, value) { return value ? `${label}: ${value}` : `${label}: Not configured`; },
 		menuItem(route) { return (this.context.menu_items || []).find((item) => item.route === route) || {}; },
+		settingsRoute(route) {
+			return String(route || "").replace(/\/$/, "") === "/app/veterinary-settings"
+				? VETERINARY_SETTINGS_CENTER
+				: route;
+		},
 		openRoute(route) {
+			const target = this.settingsRoute(route);
+			if (target === VETERINARY_SETTINGS_CENTER) { window.location.href = target; return; }
 			const item = this.menuItem(route);
-			if (item.native) { this.openNative(route); return; }
-			window.location.href = route;
+			if (item.native) { this.openNative(target); return; }
+			window.location.href = target;
 		},
 		openNative(route) {
 			const opened = window.open(route, "_blank", "noopener,noreferrer");
 			if (opened) opened.opener = null;
 		},
 		openModule(module) {
-			if (module.native) this.openNative(module.route);
-			else window.location.href = module.route;
+			const target = this.settingsRoute(module.route);
+			if (target === VETERINARY_SETTINGS_CENTER) { window.location.href = target; return; }
+			if (module.native) this.openNative(target);
+			else window.location.href = target;
 		},
 		async loadContext() {
 			this.loading = true;
