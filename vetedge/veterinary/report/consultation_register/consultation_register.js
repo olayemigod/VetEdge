@@ -1,6 +1,13 @@
 frappe.query_reports["Consultation Register"] = {
 	onload(report) {
+		window.vetedgeReportEdgeUI?.register("Consultation Register", {
+			eyebrow: __("Clinical Operations"),
+			title: __("Consultation Register"),
+			subtitle: __("Review consultation activity, workflow status, billing state, treatment value, vaccination links, and follow-up requirements."),
+			emptyDescription: __("Adjust the date, branch, practitioner, consultation type, patient, owner, or workflow filters."),
+		});
 		window.vetedgeReportVisibility?.apply(report, "Consultation Register");
+		window.vetedgeReportEdgeUI?.attach(report, "Consultation Register");
 	},
 	filters: [
 		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.month_start() },
