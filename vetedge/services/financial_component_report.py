@@ -5,6 +5,7 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import cstr, flt
+
 from vetedge.services.financial_component_insights import (
 	CONSULTATION_SERVICE_INCOME,
 	TREATMENT_INCOME,
