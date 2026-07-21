@@ -29,6 +29,7 @@ app_include_css = [
 	"/assets/vetedge/css/dashboard_shell.css",
 	"/assets/vetedge/css/veterinary_unread_badge.css",
 	"/assets/vetedge/css/vetedge_professional_ui.css?v=20260719-1",
+	"/assets/vetedge/css/vetedge_report_edgeui.css?v=20260721-1",
 ]
 app_include_js = [
 	"/assets/vetedge/js/vetedge_product_menu_config.js?v=20260721-1",
@@ -40,7 +41,8 @@ app_include_js = [
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/billing_modal.js",
 	"/assets/vetedge/js/report_pdf_patch.js",
-	"/assets/vetedge/js/report_visibility.js",
+	"/assets/vetedge/js/vetedge_report_edgeui.js?v=20260721-1",
+	"/assets/vetedge/js/report_visibility.js?v=20260721-1",
 	"/assets/vetedge/js/veterinary_unread_badge.js",
 ]
 
@@ -118,27 +120,6 @@ doc_events = {
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
 			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
 		],
-		"on_update_after_submit": [
-			"vetedge.services.registration_billing.update_registration_status_from_invoice",
-			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
-			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
-			"vetedge.services.grooming.update_grooming_status_from_invoice",
-			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
-		],
-		"on_submit": [
-			"vetedge.services.registration_billing.update_registration_status_from_invoice",
-			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
-			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
-			"vetedge.services.grooming.update_grooming_status_from_invoice",
-			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
-		],
-		"on_cancel": [
-			"vetedge.services.registration_billing.update_registration_status_from_invoice",
-			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
-			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
-			"vetedge.services.grooming.update_grooming_status_from_invoice",
-			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
-		],
 	},
 	"Payment Entry": {
 		"on_submit": [
@@ -156,75 +137,60 @@ doc_events = {
 			"vetedge.services.billing_core.update_billing_sessions_from_payment_entry",
 		],
 	},
-	"Stock Entry": {
-		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_stock_entry_branch",
-		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",
-	},
 	"Veterinary Consultation": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		"on_update": [
+			"vetedge.services.consultation.update_consultation_related_appointments",
+			"vetedge.services.billing_core.sync_consultation_billing_session",
 		],
 	},
 	"Veterinary Lab Order": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
-		],
+		"on_update": "vetedge.services.billing_core.sync_lab_billing_session",
 	},
 	"Veterinary Vaccination Record": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
-		],
+		"on_update": "vetedge.services.billing_core.sync_vaccination_billing_session",
 	},
-	"Veterinary Appointment": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
-		],
+	"Veterinary Hospitalisation": {
+		"on_update": "vetedge.services.billing_core.sync_hospitalisation_billing_session",
 	},
 	"Pet Grooming Appointment": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
-		],
-	},
-	"Pet Grooming Session": {
-		"before_save": [
-			"vetedge.services.branch_integrity.enforce_branch_integrity",
-			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
-		],
+		"on_update": "vetedge.services.billing_core.sync_grooming_billing_session",
 	},
 	"Pet Boarding Booking": {
-		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
-	},
-	"Pet Boarding Stay": {
-		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
-	},
-	"Pet Boarding Care Record": {
-		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
-	},
-	"Kennel": {
-		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+		"on_update": "vetedge.services.billing_core.sync_boarding_billing_session",
 	},
 }
 
 scheduler_events = {
-	"cron": {
-		"*/5 * * * *": [
-			"vetedge.services.appointment_notifications.run_appointment_notification_checks",
-		],
-	},
 	"hourly": [
-		"vetedge.services.notifications.send_due_appointment_reminders",
-		"vetedge.services.appointment_flow.sync_missed_appointments",
+		"vetedge.services.appointment.sync_missed_appointments",
+		"vetedge.services.stock_expiry_monitor.generate_internal_expiry_notifications",
 	],
 	"daily": [
-		"vetedge.services.notifications.send_due_vaccination_notifications",
-		"vetedge.services.notifications.send_payment_pending_reminders",
+		"vetedge.services.notification_dispatch.run_scheduled_veterinary_notifications",
 	],
 }
 
-before_tests = "vetedge.install.before_tests"
-before_request = ["vetedge.services.portal_access.block_owner_portal_desk_access"]
+after_request = [
+	"vetedge.services.appointment_quick_create_safety.restore_pending_customer_loyalty_state",
+]
+
+fixtures = [
+	{
+		"doctype": "Role",
+		"filters": [
+			["name", "in", [
+				"VetEdge Administrator",
+				"VetEdge Doctor",
+				"VetEdge Nurse",
+				"Veterinary Nurse",
+				"VetEdge Front Desk",
+				"VetEdge Groomer",
+				"VetEdge Portal User",
+				"VetEdge Lab Technician",
+				"VetEdge Dispensary User",
+				"VetEdge Accounts/Cashier",
+				"VetEdge Branch Manager",
+			]],
+		],
+	},
+]
