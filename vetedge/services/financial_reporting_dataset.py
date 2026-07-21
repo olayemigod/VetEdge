@@ -143,15 +143,20 @@ def _component_basis(
 		if not amount:
 			continue
 
+		if is_consultation_invoice and consultation_item and item_code == consultation_item:
+			# The configured consultation item is authoritative for professional
+			# consultation-service income, including older invoices whose source
+			# metadata may be missing or ambiguous.
+			basis[CONSULTATION_SERVICE_INCOME] += amount
+			continue
+
 		if _add_explicit_basis(basis, amount, sources.get(item_code)):
 			continue
 
-		if is_consultation_invoice and consultation_item and item_code == consultation_item:
-			basis[CONSULTATION_SERVICE_INCOME] += amount
-		elif is_consultation_invoice:
-			# The consultation item is the professional consultation service.
-			# Every other line on a consultation invoice is treatment income unless
-			# an explicit billing-source row classified it above.
+		if is_consultation_invoice:
+			# Every remaining line on a consultation invoice is treatment income
+			# unless an explicit source row classified it above as lab, vaccination,
+			# grooming, boarding, hospitalisation, or another service.
 			basis[TREATMENT_INCOME] += amount
 		else:
 			basis[_linked_service_category(row)] += amount
