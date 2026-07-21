@@ -15,6 +15,10 @@ const appendStockExpiryFailure = function(wrapper, message) {
 	wrapper.appendChild(failure);
 };
 
+const loadVetEdgeProfessionalUI = function(callback) {
+	frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', callback);
+};
+
 try {
 	frappe.pages['stock-expiry-monitor'].on_page_load = function(wrapper) {
 		console.log('[BOOT] Stock Expiry Monitor on_page_load');
@@ -77,11 +81,11 @@ try {
 				return __('The standalone EdgeSuite UI runtime is unavailable.');
 			}
 
-			if (!runtime.createEdgeApp) {
+			if (!runtime?.createEdgeApp) {
 				return __('EdgeSuite UI does not expose createEdgeApp.');
 			}
 
-			const components = runtime.components || runtime;
+			const components = runtime?.components || runtime;
 			const missing = requiredComponents.filter((name) => !components[name]);
 			if (missing.length) {
 				return __('Missing EdgeSuite UI components: {0}', [missing.join(', ')]);
@@ -142,7 +146,7 @@ try {
 			if (window.VetEdgeProfessionalUI?.install) {
 				loadMonitor();
 			} else {
-				frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', loadMonitor);
+				loadVetEdgeProfessionalUI(loadMonitor);
 			}
 		});
 	};
