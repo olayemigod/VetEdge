@@ -9,6 +9,13 @@ from frappe.utils import cint, cstr
 SETTINGS_DOCTYPE = "Veterinary Settings"
 LAYOUT_TYPES = {"Tab Break", "Section Break", "Column Break", "HTML", "Button"}
 LOCKED_FIELDS = {"enable_vetedge"}
+SERVICE_ITEM_FIELDS = {
+	"consultation_item",
+	"default_registration_item",
+	"default_laboratory_service_item",
+	"hospitalisation_admission_fee_item",
+	"default_boarding_billing_item",
+}
 SUPPORTED_TYPES = {
 	"Check",
 	"Data",
@@ -205,6 +212,14 @@ def save_veterinary_settings_page(values=None, expected_modified: str | None = N
 	}
 
 
+def _link_filters(fieldname: str, target_doctype: str) -> dict:
+	if target_doctype == "Item" and fieldname in SERVICE_ITEM_FIELDS:
+		return {"disabled": 0, "is_sales_item": 1, "is_stock_item": 0}
+	if target_doctype == "Price List":
+		return {"enabled": 1, "selling": 1}
+	return {}
+
+
 @frappe.whitelist()
 def search_veterinary_settings_link(fieldname: str, txt: str = "") -> list[dict]:
 	_require_permission("read")
@@ -216,8 +231,17 @@ def search_veterinary_settings_link(fieldname: str, txt: str = "") -> list[dict]
 	fields = ["name"]
 	if target_meta.title_field and target_meta.title_field != "name":
 		fields.append(target_meta.title_field)
-	filters = {"name": ("like", f"%{cstr(txt).strip()}%")}
-	rows = frappe.get_list(field.options, filters=filters, fields=fields, limit_page_length=20)
+	search_text = f"%{cstr(txt).strip()}%"
+	or_filters = [["name", "like", search_text]]
+	if target_meta.title_field and target_meta.title_field != "name":
+		or_filters.append([target_meta.title_field, "like", search_text])
+	rows = frappe.get_list(
+		field.options,
+		filters=_link_filters(fieldname, field.options),
+		or_filters=or_filters,
+		fields=fields,
+		limit_page_length=20,
+	)
 	return [
 		{
 			"value": row.get("name"),
