@@ -265,17 +265,6 @@
 		return instance;
 	}
 
-	function attach(report, reportName) {
-		if (!reportConfig(reportName)) return false;
-		const mount = () => ensureInstance(report, reportName);
-		if (supportsRuntime(getRuntime())) {
-			mount();
-			return true;
-		}
-		frappe.require("edgeui.bundle.js", mount);
-		return true;
-	}
-
 	function renderSummary(report, reportName, metadata, cards) {
 		if (!reportConfig(reportName)) return false;
 		const instance = ensureInstance(report, reportName);
@@ -284,6 +273,42 @@
 		instance.state.cards = Array.isArray(cards) ? cards : [];
 		instance.state.rowCount = Array.isArray(report.data) ? report.data.length : 0;
 		instance.state.empty = instance.state.rowCount === 0;
+		return true;
+	}
+
+	function patchSummaryRenderer(report, reportName) {
+		if (report.__vetedgeEdgeUIReportName === reportName) return;
+		const fallback = typeof report.show_and_render_summary === "function"
+			? report.show_and_render_summary.bind(report)
+			: null;
+
+		report.show_and_render_summary = function (summary) {
+			if (!Array.isArray(summary)) {
+				return fallback ? fallback(summary) : undefined;
+			}
+			const cards = [...summary];
+			const metadataIndex = cards.findIndex((item) => item?.is_edgesuite_metadata);
+			if (metadataIndex === -1) {
+				return fallback ? fallback(summary) : undefined;
+			}
+			const metadata = cards.splice(metadataIndex, 1)[0];
+			if (!renderSummary(report, reportName, metadata, cards)) {
+				return fallback ? fallback(summary) : undefined;
+			}
+			return undefined;
+		};
+		report.__vetedgeEdgeUIReportName = reportName;
+	}
+
+	function attach(report, reportName) {
+		if (!reportConfig(reportName)) return false;
+		patchSummaryRenderer(report, reportName);
+		const mount = () => ensureInstance(report, reportName);
+		if (supportsRuntime(getRuntime())) {
+			mount();
+			return true;
+		}
+		frappe.require("edgeui.bundle.js", mount);
 		return true;
 	}
 
