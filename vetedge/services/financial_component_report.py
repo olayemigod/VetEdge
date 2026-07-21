@@ -5,7 +5,6 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import cstr, flt
-
 from vetedge.services.financial_component_insights import (
 	CONSULTATION_SERVICE_INCOME,
 	TREATMENT_INCOME,
@@ -101,7 +100,7 @@ def _data(filters: frappe._dict) -> list[dict]:
 			"outstanding_amount": flt(row.get("outstanding_amount")),
 			"status": row.get("payment_status"),
 		}
-		for _, fieldname in REPORT_COMPONENTS:
+		for _label, fieldname in REPORT_COMPONENTS:
 			row_data[fieldname] = flt(row.get(fieldname))
 		rows.append(row_data)
 	return rows
