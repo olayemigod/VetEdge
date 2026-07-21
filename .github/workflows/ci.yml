@@ -38,9 +38,11 @@ jobs:
           ruff check \
             vetedge/patches/normalize_consultation_diagnosis_types_v1.py \
             vetedge/services/financial_dataset.py \
+            vetedge/services/financial_reporting_dataset.py \
             vetedge/services/financial_component_insights.py \
             vetedge/services/financial_component_report.py \
             vetedge/services/reporting_logic_v5.py \
+            vetedge/services/settings_page.py \
             vetedge/tests/test_company_context_regressions.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
@@ -91,11 +93,14 @@ jobs:
 
       - name: Check migrated dashboard JavaScript
         run: |
+          node --check vetedge/public/js/vetedge_product_menu_config.js
           node --check vetedge/public/js/edgesuite_product_menu.js
           node --check vetedge/public/js/vetedge_professional_ui.js
           node --check vetedge/public/js/vetedge_ui_bridge.js
           node --check vetedge/public/js/veterinary_settings_edgeui.bundle.js
+          node --check vetedge/public/js/veterinary_settings_center.bundle.js
           node --check vetedge/veterinary/doctype/veterinary_settings/veterinary_settings.js
+          node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
           node --check vetedge/veterinary/report/revenue_summary/revenue_summary.js
           node --check vetedge/veterinary/page/veterinary_financial_dashboard/veterinary_financial_dashboard.js
           node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
@@ -171,11 +176,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out released EdgeSuite UI 0.4
+      - name: Check out EdgeSuite UI primary menu contract
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: main
+          ref: fix/product-menu-primary-item
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
