@@ -1,0 +1,305 @@
+/* EdgeSuite treatment for VetEdge native Frappe Desk screens.
+   Scoped to Veterinary module list/forms so ERPNext business behaviour remains unchanged. */
+body.vetedge-edge-desk {
+	--vetedge-edge-primary: var(--edge-primary, #1769aa);
+	--vetedge-edge-primary-strong: var(--edge-primary-strong, #0f568f);
+	--vetedge-edge-primary-soft: var(--edge-primary-soft, #e8f3fb);
+	--vetedge-edge-accent: var(--edge-accent, #1f9d72);
+	--vetedge-edge-surface: var(--edge-color-surface, #ffffff);
+	--vetedge-edge-surface-soft: var(--edge-color-surface-soft, #f7fafc);
+	--vetedge-edge-border: var(--edge-color-border, #dce5ef);
+	--vetedge-edge-ink: var(--edge-color-ink-950, #122033);
+	--vetedge-edge-muted: var(--edge-color-ink-500, #6b7d90);
+	--vetedge-edge-radius: var(--edge-radius-lg, 1rem);
+	--vetedge-edge-shadow: var(--edge-shadow-xs, 0 1px 2px rgb(18 32 51 / 6%));
+	background: var(--vetedge-edge-surface-soft);
+}
+
+body.vetedge-edge-desk .vetedge-edge-page {
+	background: transparent;
+}
+
+body.vetedge-edge-desk .vetedge-edge-page-head {
+	background: color-mix(in srgb, var(--vetedge-edge-surface) 94%, var(--vetedge-edge-primary-soft));
+	border-bottom: 1px solid var(--vetedge-edge-border);
+	box-shadow: 0 1px 0 rgb(18 32 51 / 3%);
+}
+
+body.vetedge-edge-desk .vetedge-edge-title-area {
+	min-width: min(100%, 34rem);
+}
+
+body.vetedge-edge-desk .vetedge-edge-eyebrow {
+	color: var(--vetedge-edge-primary-strong);
+	font-size: .68rem;
+	font-weight: 800;
+	letter-spacing: .08em;
+	line-height: 1.2;
+	margin-bottom: .2rem;
+	text-transform: uppercase;
+}
+
+body.vetedge-edge-desk .vetedge-edge-subtitle {
+	color: var(--vetedge-edge-muted);
+	font-size: .76rem;
+	font-weight: 450;
+	line-height: 1.45;
+	margin-top: .22rem;
+	max-width: 50rem;
+}
+
+body.vetedge-edge-desk .vetedge-edge-primary-action,
+body.vetedge-edge-desk .page-head .btn-primary,
+body.vetedge-edge-desk .modal .btn-primary {
+	background: var(--vetedge-edge-primary) !important;
+	border-color: var(--vetedge-edge-primary) !important;
+	border-radius: .65rem;
+	box-shadow: 0 1px 2px rgb(15 86 143 / 18%);
+	font-weight: 700;
+}
+
+body.vetedge-edge-desk .vetedge-edge-primary-action:hover,
+body.vetedge-edge-desk .page-head .btn-primary:hover,
+body.vetedge-edge-desk .modal .btn-primary:hover {
+	background: var(--vetedge-edge-primary-strong) !important;
+	border-color: var(--vetedge-edge-primary-strong) !important;
+}
+
+body.vetedge-edge-desk .vetedge-edge-surface {
+	background: transparent;
+}
+
+body.vetedge-edge-desk .vetedge-edge-list-view,
+body.vetedge-edge-desk .vetedge-edge-form-layout,
+body.vetedge-edge-desk .vetedge-edge-form-dashboard,
+body.vetedge-edge-desk .vetedge-edge-timeline {
+	border-radius: var(--vetedge-edge-radius);
+}
+
+body.vetedge-edge-list .vetedge-edge-list-view {
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	box-shadow: var(--vetedge-edge-shadow);
+	overflow: clip;
+}
+
+body.vetedge-edge-list .vetedge-edge-filter-area {
+	background: var(--vetedge-edge-surface-soft);
+	border-color: var(--vetedge-edge-border) !important;
+}
+
+body.vetedge-edge-list .vetedge-edge-list-head {
+	background: var(--vetedge-edge-surface-soft);
+	border-color: var(--vetedge-edge-border) !important;
+	color: var(--vetedge-edge-muted);
+	font-size: .7rem;
+	font-weight: 800;
+	letter-spacing: .025em;
+}
+
+body.vetedge-edge-list .vetedge-edge-list-row {
+	border-color: var(--vetedge-edge-border) !important;
+	transition: background-color .15s ease, box-shadow .15s ease;
+}
+
+body.vetedge-edge-list .vetedge-edge-list-row:hover {
+	background: color-mix(in srgb, var(--vetedge-edge-primary-soft) 65%, white);
+	box-shadow: inset 3px 0 0 var(--vetedge-edge-primary);
+}
+
+body.vetedge-edge-list .vetedge-edge-list-row .level-item a,
+body.vetedge-edge-list .vetedge-edge-list-row .list-subject a {
+	color: var(--vetedge-edge-ink);
+	font-weight: 680;
+}
+
+body.vetedge-edge-list .vetedge-edge-list-sidebar {
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: var(--vetedge-edge-radius);
+	box-shadow: var(--vetedge-edge-shadow);
+	padding-block: .65rem;
+}
+
+body.vetedge-edge-list .vetedge-edge-pagination {
+	border-color: var(--vetedge-edge-border) !important;
+}
+
+body.vetedge-edge-desk .vetedge-edge-status,
+body.vetedge-edge-desk .indicator-pill {
+	border-radius: 999px;
+	font-size: .68rem;
+	font-weight: 750;
+	letter-spacing: .01em;
+}
+
+body.vetedge-edge-form .vetedge-edge-form-layout,
+body.vetedge-edge-settings .vetedge-edge-form-layout {
+	background: transparent;
+}
+
+body.vetedge-edge-form .vetedge-edge-form-dashboard,
+body.vetedge-edge-settings .vetedge-edge-form-dashboard {
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	box-shadow: var(--vetedge-edge-shadow);
+	margin-bottom: 1rem;
+	overflow: clip;
+}
+
+body.vetedge-edge-form .vetedge-edge-form-section,
+body.vetedge-edge-settings .vetedge-edge-form-section {
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: var(--vetedge-edge-radius);
+	box-shadow: var(--vetedge-edge-shadow);
+	margin-bottom: .85rem;
+	padding: .15rem .85rem .75rem;
+}
+
+body.vetedge-edge-form .vetedge-edge-section-head,
+body.vetedge-edge-settings .vetedge-edge-section-head {
+	border-bottom: 1px solid var(--vetedge-edge-border);
+	color: var(--vetedge-edge-ink);
+	font-size: .78rem;
+	font-weight: 800;
+	margin-bottom: .65rem;
+	padding: .75rem .1rem .55rem;
+}
+
+body.vetedge-edge-form .vetedge-edge-tabs,
+body.vetedge-edge-settings .vetedge-edge-tabs {
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: .85rem;
+	box-shadow: var(--vetedge-edge-shadow);
+	gap: .2rem;
+	padding: .25rem;
+}
+
+body.vetedge-edge-form .vetedge-edge-tabs .nav-link,
+body.vetedge-edge-settings .vetedge-edge-tabs .nav-link {
+	border-radius: .65rem;
+	color: var(--vetedge-edge-muted);
+	font-weight: 700;
+}
+
+body.vetedge-edge-form .vetedge-edge-tabs .nav-link.active,
+body.vetedge-edge-settings .vetedge-edge-tabs .nav-link.active {
+	background: var(--vetedge-edge-primary-soft);
+	color: var(--vetedge-edge-primary-strong);
+}
+
+body.vetedge-edge-form .vetedge-edge-grid,
+body.vetedge-edge-settings .vetedge-edge-grid {
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: .8rem;
+	overflow: clip;
+}
+
+body.vetedge-edge-form .vetedge-edge-grid-row,
+body.vetedge-edge-settings .vetedge-edge-grid-row {
+	border-color: var(--vetedge-edge-border) !important;
+}
+
+body.vetedge-edge-form .vetedge-edge-grid-row:hover,
+body.vetedge-edge-settings .vetedge-edge-grid-row:hover {
+	background: var(--vetedge-edge-primary-soft);
+}
+
+body.vetedge-edge-desk .vetedge-edge-workflow-action {
+	font-weight: 680;
+}
+
+body.vetedge-edge-desk .workflow-button.btn-primary,
+body.vetedge-edge-desk .workflow-button.btn-default {
+	border-radius: .65rem;
+}
+
+body.vetedge-edge-settings .vetedge-edge-settings-intro {
+	align-items: flex-start;
+	background: linear-gradient(135deg, var(--vetedge-edge-primary-soft), color-mix(in srgb, var(--vetedge-edge-primary-soft) 35%, white));
+	border: 1px solid color-mix(in srgb, var(--vetedge-edge-primary) 22%, var(--vetedge-edge-border));
+	border-radius: var(--vetedge-edge-radius);
+	display: flex;
+	gap: .8rem;
+	margin: 0 0 1rem;
+	padding: .9rem 1rem;
+}
+
+body.vetedge-edge-settings .vetedge-edge-settings-intro__icon {
+	align-items: center;
+	background: var(--vetedge-edge-surface);
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: .75rem;
+	color: var(--vetedge-edge-primary-strong);
+	display: inline-flex;
+	flex: 0 0 2.3rem;
+	font-size: 1.05rem;
+	height: 2.3rem;
+	justify-content: center;
+}
+
+body.vetedge-edge-settings .vetedge-edge-settings-intro strong {
+	color: var(--vetedge-edge-ink);
+	font-size: .86rem;
+}
+
+body.vetedge-edge-settings .vetedge-edge-settings-intro p {
+	color: var(--vetedge-edge-muted);
+	font-size: .75rem;
+	line-height: 1.5;
+	margin: .2rem 0 0;
+}
+
+body.vetedge-edge-desk .vetedge-edge-modal .modal-content {
+	border: 1px solid var(--vetedge-edge-border);
+	border-radius: 1rem;
+	box-shadow: 0 1.25rem 3rem rgb(18 32 51 / 18%);
+	overflow: clip;
+}
+
+body.vetedge-edge-desk .vetedge-edge-modal-header {
+	background: var(--vetedge-edge-surface-soft);
+	border-color: var(--vetedge-edge-border);
+}
+
+body.vetedge-edge-desk .vetedge-edge-modal-header .modal-title {
+	color: var(--vetedge-edge-ink);
+	font-weight: 800;
+}
+
+body.vetedge-edge-desk .vetedge-edge-modal-footer {
+	background: var(--vetedge-edge-surface-soft);
+	border-color: var(--vetedge-edge-border);
+}
+
+body.vetedge-edge-desk .form-control:focus,
+body.vetedge-edge-desk .input-with-feedback:focus,
+body.vetedge-edge-desk .btn:focus-visible,
+body.vetedge-edge-desk a:focus-visible {
+	box-shadow: 0 0 0 3px rgb(23 105 170 / 18%);
+	outline: none;
+}
+
+@media (max-width: 61.99rem) {
+	body.vetedge-edge-desk .vetedge-edge-subtitle {
+		display: none;
+	}
+
+	body.vetedge-edge-form .vetedge-edge-form-section,
+	body.vetedge-edge-settings .vetedge-edge-form-section {
+		border-radius: .8rem;
+		padding-inline: .55rem;
+	}
+}
+
+@media (max-width: 47.99rem) {
+	body.vetedge-edge-desk .vetedge-edge-eyebrow {
+		font-size: .62rem;
+	}
+
+	body.vetedge-edge-settings .vetedge-edge-settings-intro {
+		margin-inline: 0;
+	}
+}
