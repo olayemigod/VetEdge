@@ -14,9 +14,15 @@
 		archive: "vetedge.services.notification_api.archive_my_notification",
 	});
 
-	const RESOURCE_ROUTES = Object.freeze({
+	const DOCUMENT_ROUTES = Object.freeze({
 		"/app/veterinary-patient": "patients",
 		"/app/veterinary-appointment": "appointments",
+		"/app/veterinary-settings": "settings",
+	});
+
+	// These records remain on the earlier read-focused Resource Center until their
+	// complete EdgeSuite forms and workflow providers are migrated in later phases.
+	const RESOURCE_ROUTES = Object.freeze({
 		"/app/veterinary-missed-appointment": "missed-appointments",
 		"/app/veterinary-consultation": "consultations",
 		"/app/veterinary-lab-order": "lab-orders",
@@ -30,6 +36,7 @@
 		"/app/vetedge-executive-dashboard",
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
+		"/app/vetedge-document-workspace",
 	]);
 
 	const state = {
@@ -99,11 +106,30 @@
 		return true;
 	}
 
+	function migratedDocumentTarget(path) {
+		for (const [basePath, resource] of Object.entries(DOCUMENT_ROUTES)) {
+			if (path === basePath) {
+				return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}`;
+			}
+			if (path.startsWith(`${basePath}/`)) {
+				const name = decodeURIComponent(path.slice(basePath.length + 1));
+				if (!name || resource === "settings") {
+					return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}`;
+				}
+				return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}&name=${encodeURIComponent(name)}`;
+			}
+		}
+		return "";
+	}
+
 	function navigationAdapter() {
 		return {
 			open(route) {
 				const path = normalizePath(route);
 				if (!path) return false;
+
+				const migratedTarget = migratedDocumentTarget(path);
+				if (migratedTarget) return openSameTab(migratedTarget);
 
 				const resource = RESOURCE_ROUTES[path];
 				if (resource) {
@@ -220,6 +246,7 @@
 			open(item) {
 				const target = item?.target || targetForItem(item || {});
 				if (!target) return false;
+				if (navigationAdapter().open(target) === true) return true;
 				return openNewTab(target);
 			},
 		};
@@ -259,6 +286,7 @@
 			runtimeVersion: state.runtimeVersion,
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
+			documentRouteCount: Object.keys(DOCUMENT_ROUTES).length,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
 		};
 	}
@@ -266,6 +294,7 @@
 	window.VetEdgeUIBridge = Object.assign(window.VetEdgeUIBridge || {}, {
 		install,
 		diagnose,
+		documentRoutes: DOCUMENT_ROUTES,
 		resourceRoutes: RESOURCE_ROUTES,
 	});
 
