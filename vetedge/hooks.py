@@ -29,11 +29,13 @@ app_include_css = [
 	"/assets/vetedge/css/dashboard_shell.css",
 	"/assets/vetedge/css/veterinary_unread_badge.css",
 	"/assets/vetedge/css/vetedge_professional_ui.css?v=20260719-1",
+	"/assets/vetedge/css/vetedge_desk_ui.css?v=20260722-1",
 ]
 app_include_js = [
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
 	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2",
+	"/assets/vetedge/js/vetedge_desk_ui.js?v=20260722-1",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
