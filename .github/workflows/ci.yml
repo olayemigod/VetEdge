@@ -39,15 +39,17 @@ jobs:
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
-            vetedge/tests/test_vetedge_ui_identity_resource_center.py
+            vetedge/tests/test_vetedge_ui_identity_resource_center.py \
+            vetedge/tests/test_vetedge_document_workspace.py
 
-      - name: Validate EdgeSuite UI dependency contract
+      - name: Validate EdgeSuite UI dependency and document contracts
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
-            vetedge/tests/test_vetedge_ui_identity_resource_center.py
+            vetedge/tests/test_vetedge_ui_identity_resource_center.py \
+            vetedge/tests/test_vetedge_document_workspace.py
 
   frontend:
     name: Frontend validation
@@ -60,7 +62,7 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Check migrated dashboard JavaScript
+      - name: Check migrated EdgeSuite JavaScript
         run: |
           node --check \
             vetedge/public/js/vetedge_professional_ui.js
@@ -85,6 +87,12 @@ jobs:
 
           node --check \
             vetedge/public/js/vetedge_resource_center.bundle.js
+
+          node --check \
+            vetedge/veterinary/page/vetedge_document_workspace/vetedge_document_workspace.js
+
+          node --check \
+            vetedge/public/js/vetedge_document_workspace.bundle.js
 
   frappe-v16:
     name: Frappe v16 standalone integration
@@ -149,11 +157,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out private EdgeSuite UI 0.3 branch
+      - name: Check out EdgeSuite UI document foundation
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-identity-notifications-density
+          ref: agent/edgeui-document-foundation
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -238,6 +246,13 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_vetedge_ui_identity_resource_center
+
+      - name: Run full document workspace tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_document_workspace
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
