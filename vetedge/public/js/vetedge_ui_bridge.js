@@ -20,6 +20,16 @@
 		"/app/veterinary-settings": "settings",
 	});
 
+	const MASTER_ROUTES = Object.freeze({
+		"/app/veterinary-species": "species",
+		"/app/veterinary-breed": "breeds",
+		"/app/veterinary-symptom": "symptoms",
+		"/app/veterinary-diagnosis-category": "diagnosis-categories",
+		"/app/veterinary-diagnosis": "diagnoses",
+		"/app/veterinary-service-type": "service-types",
+		"/app/consultation-type": "consultation-types",
+	});
+
 	// These records remain on the earlier read-focused Resource Center until their
 	// complete EdgeSuite forms and workflow providers are migrated in later phases.
 	const RESOURCE_ROUTES = Object.freeze({
@@ -37,6 +47,7 @@
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
 		"/app/vetedge-document-workspace",
+		"/app/vetedge-master-workspace",
 	]);
 
 	const state = {
@@ -106,20 +117,28 @@
 		return true;
 	}
 
-	function migratedDocumentTarget(path) {
-		for (const [basePath, resource] of Object.entries(DOCUMENT_ROUTES)) {
+	function migratedTarget(path, routes, workspacePath) {
+		for (const [basePath, resource] of Object.entries(routes)) {
 			if (path === basePath) {
-				return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}`;
+				return `${workspacePath}?resource=${encodeURIComponent(resource)}`;
 			}
 			if (path.startsWith(`${basePath}/`)) {
 				const name = decodeURIComponent(path.slice(basePath.length + 1));
 				if (!name || resource === "settings") {
-					return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}`;
+					return `${workspacePath}?resource=${encodeURIComponent(resource)}`;
 				}
-				return `/app/vetedge-document-workspace?resource=${encodeURIComponent(resource)}&name=${encodeURIComponent(name)}`;
+				return `${workspacePath}?resource=${encodeURIComponent(resource)}&name=${encodeURIComponent(name)}`;
 			}
 		}
 		return "";
+	}
+
+	function migratedDocumentTarget(path) {
+		return migratedTarget(path, DOCUMENT_ROUTES, "/app/vetedge-document-workspace");
+	}
+
+	function migratedMasterTarget(path) {
+		return migratedTarget(path, MASTER_ROUTES, "/app/vetedge-master-workspace");
 	}
 
 	function navigationAdapter() {
@@ -128,8 +147,11 @@
 				const path = normalizePath(route);
 				if (!path) return false;
 
-				const migratedTarget = migratedDocumentTarget(path);
-				if (migratedTarget) return openSameTab(migratedTarget);
+				const migratedDocument = migratedDocumentTarget(path);
+				if (migratedDocument) return openSameTab(migratedDocument);
+
+				const migratedMaster = migratedMasterTarget(path);
+				if (migratedMaster) return openSameTab(migratedMaster);
 
 				const resource = RESOURCE_ROUTES[path];
 				if (resource) {
@@ -287,6 +309,7 @@
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
 			documentRouteCount: Object.keys(DOCUMENT_ROUTES).length,
+			masterRouteCount: Object.keys(MASTER_ROUTES).length,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
 		};
 	}
@@ -295,6 +318,7 @@
 		install,
 		diagnose,
 		documentRoutes: DOCUMENT_ROUTES,
+		masterRoutes: MASTER_ROUTES,
 		resourceRoutes: RESOURCE_ROUTES,
 	});
 
