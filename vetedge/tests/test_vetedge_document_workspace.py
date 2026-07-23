@@ -148,7 +148,7 @@ def test_settings_use_grouped_edgesuite_layout_and_preserve_single_document_save
 		"settingsGroups",
 		"settingsVisibleSchema",
 		"Save Settings",
-		'definition.is_single',
+		"definition.is_single",
 	):
 		assert contract in component
 	assert 'doc = frappe.get_single(doctype)' in api
@@ -162,8 +162,10 @@ def test_navigation_routes_only_completed_resources_to_new_workspace():
 		'"/app/veterinary-patient": "patients"',
 		'"/app/veterinary-appointment": "appointments"',
 		'"/app/veterinary-settings": "settings"',
+		"migratedTarget",
 		"migratedDocumentTarget",
-		"/app/vetedge-document-workspace?resource=",
+		'"/app/vetedge-document-workspace"',
+		'?resource=${encodeURIComponent(resource)}',
 		"documentRouteCount",
 	):
 		assert contract in bridge
