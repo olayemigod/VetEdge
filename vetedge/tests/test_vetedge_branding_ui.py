@@ -71,7 +71,7 @@ def test_all_current_vetedge_edgesuite_pages_load_branding_before_product_bundle
 		content = read(loader)
 		assert "vetedge_branding_ui.js?v=20260723-1" in content, loader
 		assert "VetEdgeBrandingUI?.install?.()" in content, loader
-		branding_index = content.index("vetedge_branding_ui.js?v=20260723-1")
+		install_index = content.index("VetEdgeBrandingUI?.install?.()")
 		product_bundle_indexes = [
 			content.find(bundle)
 			for bundle in (
@@ -83,4 +83,4 @@ def test_all_current_vetedge_edgesuite_pages_load_branding_before_product_bundle
 			if content.find(bundle) >= 0
 		]
 		assert product_bundle_indexes
-		assert branding_index < product_bundle_indexes[0]
+		assert install_index < product_bundle_indexes[0]
