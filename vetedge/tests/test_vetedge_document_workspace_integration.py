@@ -8,6 +8,7 @@ from vetedge.services.document_workspace import (
 	get_document,
 	get_document_list,
 	get_resource_definition,
+	save_document,
 )
 
 
@@ -63,6 +64,26 @@ class TestVetEdgeDocumentWorkspaceIntegration(FrappeTestCase):
 		self.assertEqual(payload["doctype"], "Veterinary Settings")
 		self.assertGreaterEqual(len(payload["schema"]["tabs"]), 2)
 		self.assertIsInstance(payload["values"], dict)
+
+	def test_owner_portal_logo_round_trips_through_settings_save(self):
+		meta = frappe.get_meta("Veterinary Settings")
+		if not meta.has_field("portal_logo"):
+			self.skipTest("Veterinary Settings has no portal_logo field")
+
+		settings = frappe.get_single("Veterinary Settings")
+		original = settings.get("portal_logo") or ""
+		test_logo = "/files/vetedge-owner-portal-logo-test.png"
+		try:
+			payload = save_document("settings", {"portal_logo": test_logo})
+			self.assertEqual(payload["values"].get("portal_logo"), test_logo)
+			self.assertEqual(
+				frappe.db.get_single_value("Veterinary Settings", "portal_logo") or "",
+				test_logo,
+			)
+		finally:
+			settings = frappe.get_single("Veterinary Settings")
+			settings.set("portal_logo", original)
+			settings.save(ignore_permissions=True)
 
 	def test_permission_aware_lists_return_pagination_contract(self):
 		for resource in ("patients", "appointments"):
