@@ -1,17 +1,16 @@
-// VetEdge clinic-branding adapter for EdgeSuite shell and document settings.
-// The adapter stays product-owned: EdgeSuite UI provides the shell/form primitives,
-// while VetEdge supplies Frappe upload behaviour and clinic identity resolution.
+// VetEdge branding adapter for the EdgeSuite shell and Veterinary Settings.
+// Owner/tenant branding remains portal-scoped. Operational pages use only the
+// product-app identity supplied by VetEdge/CoreEdge.
 (function () {
 	"use strict";
 
 	if (typeof window === "undefined") return;
 
-	const BRANDING_EVENT = "vetedge:branding-updated";
 	const STYLE_ID = "vetedge-branding-ui-style";
 	const STYLE_TEXT = `
-		.edge-app-shell.vetedge-shell-has-logo .edge-topbar__mark {
+		.edge-app-shell.vetedge-shell-has-product-logo .edge-topbar__mark {
 			background-color: var(--edge-color-surface, #fff);
-			background-image: var(--vetedge-shell-logo-image);
+			background-image: var(--vetedge-shell-product-logo-image);
 			background-position: center;
 			background-repeat: no-repeat;
 			background-size: contain;
@@ -22,11 +21,12 @@
 			padding: .16rem;
 		}
 
-		.edge-app-shell.vetedge-shell-has-logo .edge-topbar__mark > * {
+		.edge-app-shell.vetedge-shell-has-product-logo .edge-topbar__mark > * {
 			visibility: hidden;
 		}
 
-		.vetedge-shell-logo-mark {
+		.vetedge-shell-product-logo-mark,
+		.vetedge-shell-generic-mark {
 			align-items: center;
 			background: var(--edge-color-surface, #fff);
 			border: 1px solid var(--edge-color-border, #dce5ef);
@@ -39,14 +39,14 @@
 			width: 2.35rem;
 		}
 
-		.vetedge-shell-logo-mark img {
+		.vetedge-shell-product-logo-mark img {
 			display: block;
 			max-height: 100%;
 			max-width: 100%;
 			object-fit: contain;
 		}
 
-		.vetedge-branding-card {
+		.vetedge-owner-branding-card {
 			background: var(--edge-color-surface, var(--card-bg, #fff));
 			border: 1px solid var(--edge-color-border, var(--border-color, #dce5ef));
 			border-radius: var(--edge-radius-lg, 1rem);
@@ -57,26 +57,26 @@
 			padding: 1rem;
 		}
 
-		.vetedge-branding-card__copy {
+		.vetedge-owner-branding-card__copy {
 			display: grid;
 			gap: .3rem;
 		}
 
-		.vetedge-branding-card__copy h3 {
+		.vetedge-owner-branding-card__copy h3 {
 			color: var(--edge-color-ink-900, #1c2b3b);
 			font-size: .88rem;
 			margin: 0;
 		}
 
-		.vetedge-branding-card__copy p,
-		.vetedge-branding-card__copy small {
+		.vetedge-owner-branding-card__copy p,
+		.vetedge-owner-branding-card__copy small {
 			color: var(--edge-color-ink-500, #6b7d90);
 			font-size: .72rem;
 			line-height: 1.45;
 			margin: 0;
 		}
 
-		.vetedge-branding-card__control {
+		.vetedge-owner-branding-card__control {
 			align-items: center;
 			display: flex;
 			flex-wrap: wrap;
@@ -84,7 +84,7 @@
 			justify-content: flex-end;
 		}
 
-		.vetedge-branding-card__preview {
+		.vetedge-owner-branding-card__preview {
 			align-items: center;
 			background: var(--edge-color-surface-soft, #f8fafc);
 			border: 1px solid var(--edge-color-border, #dce5ef);
@@ -97,24 +97,24 @@
 			width: 7rem;
 		}
 
-		.vetedge-branding-card__preview img {
+		.vetedge-owner-branding-card__preview img {
 			max-height: 100%;
 			max-width: 100%;
 			object-fit: contain;
 		}
 
-		.vetedge-branding-card__placeholder {
+		.vetedge-owner-branding-card__placeholder {
 			color: var(--edge-color-ink-500, #6b7d90);
 			font-size: .7rem;
 			text-align: center;
 		}
 
 		@media (max-width: 47.99rem) {
-			.vetedge-branding-card {
+			.vetedge-owner-branding-card {
 				grid-template-columns: minmax(0, 1fr);
 			}
 
-			.vetedge-branding-card__control {
+			.vetedge-owner-branding-card__control {
 				justify-content: flex-start;
 			}
 		}
@@ -154,25 +154,6 @@
 		return `url("${String(value || "").replace(/[\\"\n\r]/g, (match) => `\\${match}`)}")`;
 	}
 
-	function updateBootIdentityLogo(value) {
-		const logo = safeLogoUrl(value);
-		const boot = window.frappe?.boot;
-		if (boot) {
-			boot.edgesuite_ui_identity = boot.edgesuite_ui_identity || {};
-			for (const key of ["vetedge", "veterinary"]) {
-				boot.edgesuite_ui_identity[key] = {
-					...(boot.edgesuite_ui_identity[key] || {}),
-					tenant_logo: logo,
-				};
-			}
-			boot.vetedge_ui_identity = {
-				...(boot.vetedge_ui_identity || {}),
-				tenant_logo: logo,
-			};
-		}
-		window.dispatchEvent(new CustomEvent(BRANDING_EVENT, { detail: { tenant_logo: logo } }));
-	}
-
 	function callListener(listener, value) {
 		const listeners = Array.isArray(listener) ? listener : [listener];
 		listeners.forEach((entry) => {
@@ -180,7 +161,7 @@
 		});
 	}
 
-	function openLogoUploader(onUploaded) {
+	function openOwnerLogoUploader(onUploaded) {
 		const FileUploader = window.frappe?.ui?.FileUploader;
 		if (typeof FileUploader !== "function") {
 			window.frappe?.msgprint?.({
@@ -195,6 +176,7 @@
 			doctype: "Veterinary Settings",
 			docname: "Veterinary Settings",
 			allow_multiple: false,
+			is_private: 0,
 			restrictions: {
 				allowed_file_types: ["image/*"],
 			},
@@ -213,31 +195,43 @@
 		});
 	}
 
-	function isSettingsSetupSchema(schema) {
-		return (schema?.tabs || []).some((tab) => tab?.key === "general_tab");
+	function isPortalBrandingSchema(schema) {
+		return (schema?.tabs || []).some((tab) => tab?.key === "portal_branding_tab");
 	}
 
-	function renderBrandingCard(Vue, attrs) {
+	function withoutPortalLogoField(schema) {
+		return {
+			...(schema || {}),
+			tabs: (schema?.tabs || []).map((tab) => ({
+				...tab,
+				sections: (tab.sections || []).map((section) => ({
+					...section,
+					fields: (section.fields || []).filter((field) => field?.fieldname !== "portal_logo"),
+				})),
+			})),
+		};
+	}
+
+	function renderOwnerPortalLogoCard(Vue, attrs) {
 		const model = attrs.modelValue || {};
 		const updateModel = attrs["onUpdate:modelValue"];
-		const savedOrCurrent = safeLogoUrl(model.portal_logo || bootIdentity().tenant_logo || "");
+		const currentLogo = safeLogoUrl(model.portal_logo || "");
 		const setLogo = (url) => {
 			const next = { ...model, portal_logo: safeLogoUrl(url) };
 			callListener(updateModel, next);
-			updateBootIdentityLogo(next.portal_logo);
 		};
 
-		return Vue.h("section", { class: "vetedge-branding-card", "aria-label": "Clinic logo" }, [
-			Vue.h("div", { class: "vetedge-branding-card__copy" }, [
-				Vue.h("h3", "Clinic Logo"),
-				Vue.h("p", "Upload the clinic logo used in the VetEdge operational shell and as the owner portal logo fallback."),
-				Vue.h("small", "The shell preview updates immediately. Click Save Settings to keep the change."),
+		return Vue.h("section", { class: "vetedge-owner-branding-card", "aria-label": "Owner Portal Logo" }, [
+			Vue.h("div", { class: "vetedge-owner-branding-card__copy" }, [
+				Vue.h("h3", "Owner Portal Logo"),
+				Vue.h("p", "Upload the tenant-owned logo shown on owner-facing portal and guest-booking surfaces."),
+				Vue.h("small", "This logo does not change the VetEdge operational shell. Click Save Settings to keep the change."),
 			]),
-			Vue.h("div", { class: "vetedge-branding-card__control" }, [
-				Vue.h("span", { class: "vetedge-branding-card__preview" }, [
-					savedOrCurrent
-						? Vue.h("img", { src: savedOrCurrent, alt: "Current clinic logo", loading: "eager", decoding: "async" })
-						: Vue.h("span", { class: "vetedge-branding-card__placeholder" }, "No clinic logo uploaded"),
+			Vue.h("div", { class: "vetedge-owner-branding-card__control" }, [
+				Vue.h("span", { class: "vetedge-owner-branding-card__preview" }, [
+					currentLogo
+						? Vue.h("img", { src: currentLogo, alt: "Current owner portal logo", loading: "eager", decoding: "async" })
+						: Vue.h("span", { class: "vetedge-owner-branding-card__placeholder" }, "No owner portal logo uploaded"),
 				]),
 				Vue.h(
 					"button",
@@ -245,11 +239,11 @@
 						type: "button",
 						class: "edge-button edge-button--primary",
 						disabled: Boolean(attrs.readonly),
-						onClick: () => openLogoUploader(setLogo),
+						onClick: () => openOwnerLogoUploader(setLogo),
 					},
-					savedOrCurrent ? "Replace Logo" : "Upload Logo",
+					currentLogo ? "Replace Logo" : "Upload Logo",
 				),
-				savedOrCurrent
+				currentLogo
 					? Vue.h(
 							"button",
 							{
@@ -267,46 +261,45 @@
 
 	function installShellAdapter(edgeUI) {
 		const CurrentShell = edgeUI.components?.EdgeAppShell;
+		const EdgeIcon = edgeUI.components?.EdgeIcon;
 		const Vue = edgeUI.Vue;
 		if (!CurrentShell || !Vue?.defineComponent || !Vue?.h || !edgeUI.registerComponent) return false;
-		if (CurrentShell.__vetedgeBrandingShellWrapper) return true;
+		if (CurrentShell.__vetedgeProductBrandingShellWrapper) return true;
 
-		const BrandedVetEdgeShell = Vue.defineComponent({
-			name: "BrandedVetEdgeShell",
+		const ProductBrandedVetEdgeShell = Vue.defineComponent({
+			name: "ProductBrandedVetEdgeShell",
 			inheritAttrs: false,
 			setup(_props, context) {
-				const revision = Vue.ref(0);
-				const refresh = () => {
-					revision.value += 1;
-				};
-				Vue.onMounted?.(() => window.addEventListener(BRANDING_EVENT, refresh));
-				Vue.onBeforeUnmount?.(() => window.removeEventListener(BRANDING_EVENT, refresh));
-
 				return () => {
-					revision.value;
 					const attrs = context.attrs || {};
-					const logo = safeLogoUrl(bootIdentity().tenant_logo || bootIdentity().product_logo || "");
+					const identity = bootIdentity();
+					const productLogo = safeLogoUrl(identity.product_logo || "");
 					const slots = { ...(context.slots || {}) };
-					if (logo && !slots.brand) {
-						slots.brand = () =>
-							Vue.h("span", { class: "vetedge-shell-logo-mark" }, [
-								Vue.h("img", { src: logo, alt: "", loading: "eager", decoding: "async" }),
-							]);
+					if (!slots.brand) {
+						slots.brand = productLogo
+							? () =>
+								Vue.h("span", { class: "vetedge-shell-product-logo-mark" }, [
+									Vue.h("img", { src: productLogo, alt: "", loading: "eager", decoding: "async" }),
+								])
+							: () =>
+								Vue.h("span", { class: "vetedge-shell-generic-mark", "aria-hidden": "true" }, [
+									EdgeIcon ? Vue.h(EdgeIcon, { name: identity.product_icon || "stethoscope", size: "md" }) : null,
+								]);
 					}
 					return Vue.h(
 						CurrentShell,
 						{
 							...attrs,
-							class: [attrs.class, logo ? "vetedge-shell-has-logo" : ""],
-							style: [attrs.style, logo ? { "--vetedge-shell-logo-image": cssUrl(logo) } : null],
+							class: [attrs.class, productLogo ? "vetedge-shell-has-product-logo" : "vetedge-shell-generic-product"],
+							style: [attrs.style, productLogo ? { "--vetedge-shell-product-logo-image": cssUrl(productLogo) } : null],
 						},
 						slots,
 					);
 				};
 			},
 		});
-		BrandedVetEdgeShell.__vetedgeBrandingShellWrapper = true;
-		edgeUI.registerComponent("EdgeAppShell", BrandedVetEdgeShell, { replace: true });
+		ProductBrandedVetEdgeShell.__vetedgeProductBrandingShellWrapper = true;
+		edgeUI.registerComponent("EdgeAppShell", ProductBrandedVetEdgeShell, { replace: true });
 		return true;
 	}
 
@@ -314,23 +307,27 @@
 		const CurrentForm = edgeUI.components?.EdgeDocumentForm;
 		const Vue = edgeUI.Vue;
 		if (!CurrentForm || !Vue?.defineComponent || !Vue?.h || !edgeUI.registerComponent) return false;
-		if (CurrentForm.__vetedgeBrandingFormWrapper) return true;
+		if (CurrentForm.__vetedgeOwnerPortalBrandingFormWrapper) return true;
 
-		const BrandedVetEdgeDocumentForm = Vue.defineComponent({
-			name: "BrandedVetEdgeDocumentForm",
+		const OwnerPortalBrandedDocumentForm = Vue.defineComponent({
+			name: "OwnerPortalBrandedDocumentForm",
 			inheritAttrs: false,
 			setup(_props, context) {
 				return () => {
 					const attrs = context.attrs || {};
+					const isPortalBranding = isPortalBrandingSchema(attrs.schema);
+					const formAttrs = isPortalBranding
+						? { ...attrs, schema: withoutPortalLogoField(attrs.schema) }
+						: attrs;
 					const children = [];
-					if (isSettingsSetupSchema(attrs.schema)) children.push(renderBrandingCard(Vue, attrs));
-					children.push(Vue.h(CurrentForm, attrs, context.slots || {}));
+					if (isPortalBranding) children.push(renderOwnerPortalLogoCard(Vue, attrs));
+					children.push(Vue.h(CurrentForm, formAttrs, context.slots || {}));
 					return Vue.h("div", { class: "vetedge-branded-document-form" }, children);
 				};
 			},
 		});
-		BrandedVetEdgeDocumentForm.__vetedgeBrandingFormWrapper = true;
-		edgeUI.registerComponent("EdgeDocumentForm", BrandedVetEdgeDocumentForm, { replace: true });
+		OwnerPortalBrandedDocumentForm.__vetedgeOwnerPortalBrandingFormWrapper = true;
+		edgeUI.registerComponent("EdgeDocumentForm", OwnerPortalBrandedDocumentForm, { replace: true });
 		return true;
 	}
 
@@ -344,7 +341,7 @@
 		try {
 			state.shellInstalled = installShellAdapter(edgeUI);
 			state.formInstalled = installSettingsFormAdapter(edgeUI);
-			if (!state.shellInstalled) throw new Error("EdgeAppShell branding adapter could not be installed.");
+			if (!state.shellInstalled) throw new Error("EdgeAppShell product-branding adapter could not be installed.");
 			return {
 				installed: true,
 				shellInstalled: state.shellInstalled,
@@ -357,12 +354,18 @@
 	}
 
 	function diagnose() {
-		return { ...state, tenantLogo: safeLogoUrl(bootIdentity().tenant_logo || "") };
+		const identity = bootIdentity();
+		return {
+			...state,
+			deploymentMode: identity.deployment_mode || "",
+			productLogo: safeLogoUrl(identity.product_logo || ""),
+			productLogoSource: identity.product_logo_source || "generic",
+			ownerPortalLogo: safeLogoUrl(identity.owner_portal_logo || identity.tenant_logo || ""),
+		};
 	}
 
 	window.VetEdgeBrandingUI = Object.assign(window.VetEdgeBrandingUI || {}, {
 		install,
 		diagnose,
-		updateLogo: updateBootIdentityLogo,
 	});
 })();
