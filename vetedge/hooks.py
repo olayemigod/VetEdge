@@ -33,6 +33,7 @@ app_include_css = [
 app_include_js = [
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
 	"/assets/vetedge/js/vetedge_home_navigation.js?v=20260723-1",
+	"/assets/vetedge/js/vetedge_clinical_route.js?v=20260723-1",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260723-2",
 	# Branding is a global Desk enhancement. Loading it here guarantees that the
 	# settings uploader and shell product-logo adapter exist before VetEdge pages mount.
