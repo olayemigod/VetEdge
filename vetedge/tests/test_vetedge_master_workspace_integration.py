@@ -104,8 +104,9 @@ class TestVetEdgeMasterWorkspaceIntegration(FrappeTestCase):
 				frappe.delete_doc("Veterinary Species", created_name, force=True, ignore_permissions=True)
 
 	def test_disabled_species_is_hidden_and_rejected_for_breed(self):
-		active_name = self.unique("Active Species")
-		disabled_name = self.unique("Disabled Species")
+		marker = self.unique("EdgeSuite Link Species")
+		active_name = f"{marker}-Active"
+		disabled_name = f"{marker}-Disabled"
 		active = frappe.get_doc(
 			{
 				"doctype": "Veterinary Species",
@@ -121,7 +122,7 @@ class TestVetEdgeMasterWorkspaceIntegration(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True)
 		try:
-			options = get_master_link_options("breeds", "species", query="Species")
+			options = get_master_link_options("breeds", "species", query=marker)
 			values = {row["value"] for row in options}
 			self.assertIn(active.name, values)
 			self.assertNotIn(disabled.name, values)
