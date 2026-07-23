@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import frappe
+from edgesuite_ui.api.product_context import get_product_context, switch_product
 
 from vetedge.api.product_context import get_product_availability
 
@@ -48,6 +49,28 @@ class TestVetEdgeProductAppContext(unittest.TestCase):
 				patch("vetedge.api.product_context.has_vetedge_access", return_value=False),
 			):
 				self.assertIsNone(get_product_availability())
+		finally:
+			frappe.session.user = original_user
+
+	def test_shared_context_aggregates_only_currently_available_veterinary(self):
+		original_user = frappe.session.user
+		try:
+			frappe.session.user = "Administrator"
+			with patch("vetedge.api.product_context.has_vetedge_access", return_value=True):
+				context = get_product_context()
+			self.assertIn(
+				"vetedge",
+				{product["key"] for product in context["available_products"]},
+			)
+
+			with patch("vetedge.api.product_context.has_vetedge_access", return_value=False):
+				context = get_product_context()
+				self.assertNotIn(
+					"vetedge",
+					{product["key"] for product in context["available_products"]},
+				)
+				with self.assertRaises(frappe.PermissionError):
+					switch_product("vetedge")
 		finally:
 			frappe.session.user = original_user
 
