@@ -122,11 +122,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out EdgeSuite UI document foundation
+      - name: Check out EdgeSuite UI Product App Switcher
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-document-foundation
+          ref: agent/edgeui-product-app-switcher
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -135,8 +135,8 @@ jobs:
         run: |
           bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
           bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
-          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
-          bench get-app --skip-assets "$GITHUB_WORKSPACE"
+          bench get-app --skip-assets "file://$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "file://$GITHUB_WORKSPACE"
 
       - name: Create standalone VetEdge site
         working-directory: frappe-bench
