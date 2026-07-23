@@ -24,6 +24,26 @@ def _company_identity(company: str | None) -> dict:
 	}
 
 
+def _settings_identity() -> dict:
+	"""Resolve tenant-facing branding saved in Veterinary Settings.
+
+	The existing ``portal_logo`` field is also the local clinic-logo fallback for
+	operational EdgeSuite pages. This keeps one uploaded clinic identity across
+	Desk and the owner portal without adding a second competing logo setting.
+	"""
+	try:
+		if not frappe.db.exists("DocType", "Veterinary Settings"):
+			return {"name": "", "logo": ""}
+		meta = frappe.get_meta("Veterinary Settings")
+		settings = frappe.get_single("Veterinary Settings")
+		return {
+			"name": settings.get("portal_brand_name") if meta.has_field("portal_brand_name") else "",
+			"logo": settings.get("portal_logo") if meta.has_field("portal_logo") else "",
+		}
+	 except Exception:
+		return {"name": "", "logo": ""}
+
+
 def _fallback_company() -> str | None:
 	try:
 		return get_current_vetedge_company()
@@ -41,9 +61,10 @@ def build_vetedge_ui_identity() -> dict:
 	branding = get_branding()
 	mode = get_edge_platform_mode()
 	company = _company_identity(_fallback_company())
+	settings = _settings_identity()
 
-	tenant_name = company.get("label") or branding.get("company_name") or branding.get("brand_name") or "Veterinary Clinic"
-	tenant_logo = company.get("logo") or branding.get("logo") or ""
+	tenant_name = company.get("label") or settings.get("name") or branding.get("company_name") or branding.get("brand_name") or "Veterinary Clinic"
+	tenant_logo = settings.get("logo") or company.get("logo") or branding.get("logo") or ""
 
 	is_saas = mode == "shared_hosted"
 	product_name = "VetEdge" if is_saas else "Veterinary"
