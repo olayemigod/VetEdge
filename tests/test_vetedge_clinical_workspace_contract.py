@@ -83,23 +83,28 @@ def test_status_vitals_history_and_treatment_defaults_delegate_to_existing_servi
 		"get_patient_medical_history_view",
 		"get_treatment_item_defaults_for_consultation",
 		"get_treatment_item_link_options",
+		'is_enabled("vitals")',
 	):
 		assert contract in service
 
 
-def test_billed_and_locked_treatment_rows_are_not_silently_rewritten():
+def test_billed_and_source_generated_treatment_rows_are_not_silently_rewritten():
 	service = read(SERVICE)
 	component = read(COMPONENT)
+	bundle = read(BUNDLE)
 	for contract in (
 		"PLANNED_TREATMENT_IMMUTABLE_FIELDS",
-		"Billed treatment row",
+		"PROTECTED_TREATMENT_SOURCE_TYPES",
+		"Source-generated or billed treatment row",
 		"cannot be removed",
 		"cannot be edited",
+		'row["source_type"] = "Treatment"',
 		"CONSULTATION_SCOPE_LOCKED_STATUSES",
 		"detail.scope_locked",
 		"treatmentRowLocked(row)",
+		"treatmentRowLockedWithSourceProtection",
 	):
-		assert contract in service or contract in component
+		assert contract in service or contract in component or contract in bundle
 
 
 def test_frontend_is_full_edgesuite_clinical_workspace():
@@ -142,6 +147,7 @@ def test_frontend_is_full_edgesuite_clinical_workspace():
 	assert "const runtime = window.EdgeSuiteUI;" in bundle
 	assert "window.EdgeUI" not in bundle
 	assert "applyWorkspaceSafety(VetEdgeClinicalWorkspace, { guardNavigation: true })" in bundle
+	assert "saveVitalsWithReliableClose" in bundle
 
 
 def test_native_consultation_routes_resolve_to_the_clinical_workspace():
@@ -152,7 +158,9 @@ def test_native_consultation_routes_resolve_to_the_clinical_workspace():
 		"/app/vetedge-clinical-workspace",
 		'doctype !== "Veterinary Consultation"',
 		'routeType === "Form"',
-		'routeType === "List"',
+		'routeType !== "List"',
+		"isNewDocumentRoute",
+		'"?new=1"',
 	):
 		assert contract in route
 	assert "/app/vetedge-clinical-workspace" in list_script
