@@ -1,12 +1,11 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "vetedge" / "services" / "master_workspace.py"
 COMPONENT = ROOT / "vetedge" / "public" / "js" / "vetedge_master_workspace" / "VetEdgeMasterWorkspace.vue"
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_master_workspace.bundle.js"
 SAFETY = ROOT / "vetedge" / "public" / "js" / "vetedge_workspace_safety.js"
-BRIDGE = ROOT / "vetedge" / "public" / "js" / "vetedge_ui_bridge.js"
+BRIDGE = ROOT / "vetedge" / "public"" / "js" / "vetedge_ui_bridge.js"
 PROFESSIONAL = ROOT / "vetedge" / "public" / "js" / "vetedge_professional_ui.js"
 HOME = ROOT / "vetedge" / "public" / "js" / "vetedge_home_navigation.js"
 PROFESSIONAL_CSS = ROOT / "vetedge" / "public" / "css" / "vetedge_professional_ui.css"
