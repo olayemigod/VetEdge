@@ -43,6 +43,7 @@
 	});
 
 	const PRODUCT_ROUTES = new Set([
+		"/app/vetedge",
 		"/app/vetedge-executive-dashboard",
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
