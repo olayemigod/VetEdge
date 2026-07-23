@@ -40,7 +40,7 @@ def _settings_identity() -> dict:
 			"name": settings.get("portal_brand_name") if meta.has_field("portal_brand_name") else "",
 			"logo": settings.get("portal_logo") if meta.has_field("portal_logo") else "",
 		}
-	 except Exception:
+	except Exception:
 		return {"name": "", "logo": ""}
 
 
@@ -63,7 +63,13 @@ def build_vetedge_ui_identity() -> dict:
 	company = _company_identity(_fallback_company())
 	settings = _settings_identity()
 
-	tenant_name = company.get("label") or settings.get("name") or branding.get("company_name") or branding.get("brand_name") or "Veterinary Clinic"
+	tenant_name = (
+		company.get("label")
+		or settings.get("name")
+		or branding.get("company_name")
+		or branding.get("brand_name")
+		or "Veterinary Clinic"
+	)
 	tenant_logo = settings.get("logo") or company.get("logo") or branding.get("logo") or ""
 
 	is_saas = mode == "shared_hosted"
