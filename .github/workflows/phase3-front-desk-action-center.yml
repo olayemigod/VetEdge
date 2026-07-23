@@ -172,9 +172,28 @@ jobs:
           bench build --app vetedge
           bench --site ci.localhost migrate
 
-      - name: Run live front desk tests
+      - name: Capture live front desk test output
         working-directory: frappe-bench
         run: |
+          set +e
           bench --site ci.localhost run-tests \
             --app vetedge \
-            --module vetedge.tests.test_front_desk_action_center_integration
+            --module vetedge.tests.test_front_desk_action_center_integration \
+            > /tmp/frontdesk-tests.txt 2>&1
+          status=$?
+          cat /tmp/frontdesk-tests.txt
+          echo "$status" > /tmp/frontdesk-tests.status
+          exit 0
+
+      - name: Upload front desk test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontdesk-test-diagnostics
+          path: |
+            /tmp/frontdesk-tests.txt
+            /tmp/frontdesk-tests.status
+          if-no-files-found: error
+
+      - name: Enforce live front desk test result
+        run: test "$(cat /tmp/frontdesk-tests.status)" = "0"
