@@ -12,6 +12,7 @@ from vetedge.services.consultation_flow import (
 	ensure_consultations_enabled,
 	transition_consultation_status,
 )
+from vetedge.services.feature_flags import is_enabled
 from vetedge.services.medical_history import get_patient_medical_history_view
 from vetedge.services.permissions import (
 	can_access_branch_data,
@@ -33,6 +34,14 @@ from vetedge.services.vitals import (
 )
 
 PAGE_LENGTH_MAX = 100
+STATUS_ACTION_ORDER = (
+	"In Progress",
+	"Awaiting Payment",
+	"Pending Dispensary",
+	"Ready for Treatment",
+	"Completed",
+	"Cancelled",
+)
 EDITABLE_SCALAR_FIELDS = (
 	"patient",
 	"consultation_datetime",
@@ -67,6 +76,8 @@ PLANNED_TREATMENT_IMMUTABLE_FIELDS = (
 	"billing_status",
 	"payment_status",
 )
+PROTECTED_TREATMENT_SOURCE_TYPES = {"Consultation", "Lab Order", "Vaccination"}
+EDITABLE_TREATMENT_BILLING_STATUSES = {"Pending", "Skipped", "Cancelled"}
 
 
 def _require_clinical_context() -> str:
@@ -150,6 +161,7 @@ def _status_actions(doc) -> list[dict[str, Any]]:
 		"Completed": _("Complete Consultation"),
 		"Cancelled": _("Cancel Consultation"),
 	}
+	allowed = VALID_CONSULTATION_STATUS_TRANSITIONS.get(doc.status, set())
 	return [
 		{
 			"key": f"status:{target}",
@@ -157,29 +169,9 @@ def _status_actions(doc) -> list[dict[str, Any]]:
 			"primary": target in {"In Progress", "Completed"},
 			"danger": target == "Cancelled",
 		}
-		for target in VALID_CONSULTATION_STATUS_TRANSITIONS.get(doc.status, set())
+		for target in STATUS_ACTION_ORDER
+		if target in allowed
 	]
-
-
-def _consultation_row(doc) -> dict[str, Any]:
-	return {
-		"name": doc.name,
-		"modified": doc.modified,
-		"consultation_title": doc.consultation_title,
-		"patient": doc.patient,
-		"patient_label": _document_title("Veterinary Patient", doc.patient),
-		"primary_owner": doc.primary_owner,
-		"owner_label": _document_title("Customer", doc.primary_owner),
-		"status": doc.status,
-		"consultation_datetime": doc.consultation_datetime,
-		"consultation_type": doc.consultation_type,
-		"service_branch": doc.service_branch,
-		"consulting_practitioner": doc.consulting_practitioner,
-		"consulting_practitioner_name": doc.consulting_practitioner_name,
-		"presenting_complaint": doc.presenting_complaint,
-		"payment_status": doc.payment_status,
-		"dispensary_status": doc.dispensary_status,
-	}
 
 
 @frappe.whitelist()
@@ -265,9 +257,9 @@ def get_consultation_detail(name: str) -> dict:
 	doc.check_permission("read")
 	can_access_consultation(frappe.session.user, doc.name, raise_exception=True)
 	_validate_branch(doc.service_branch)
-	latest_vitals = None
-	if frappe.has_permission("Veterinary Vital Signs", "read"):
-		latest_vitals = get_latest_vitals_for_consultation(doc.name)
+	vitals_enabled = is_enabled("vitals")
+	can_read_vitals = vitals_enabled and frappe.has_permission("Veterinary Vital Signs", "read")
+	latest_vitals = get_latest_vitals_for_consultation(doc.name) if can_read_vitals else None
 	return {
 		"name": doc.name,
 		"modified": doc.modified,
@@ -280,6 +272,7 @@ def get_consultation_detail(name: str) -> dict:
 			"daily_consultation_number": doc.daily_consultation_number,
 			"primary_owner": doc.primary_owner,
 			"primary_owner_label": _document_title("Customer", doc.primary_owner),
+			"company": doc.company,
 			"consulting_practitioner_name": doc.consulting_practitioner_name,
 			"follow_up_appointment": doc.follow_up_appointment,
 			"dispensary_status": doc.dispensary_status,
@@ -300,7 +293,8 @@ def get_consultation_detail(name: str) -> dict:
 		"latest_vitals": latest_vitals,
 		"actions": _status_actions(doc),
 		"capabilities": {
-			"create_vitals": bool(frappe.has_permission("Veterinary Vital Signs", "create"))
+			"create_vitals": vitals_enabled
+				and bool(frappe.has_permission("Veterinary Vital Signs", "create"))
 				and doc.status not in {"Completed", "Cancelled"},
 			"view_history": bool(frappe.has_permission("Veterinary Consultation", "read")),
 			"open_billing": bool(doc.name),
@@ -329,15 +323,32 @@ def _same_editable_treatment(existing, incoming: dict) -> bool:
 	return True
 
 
+def _source_treatment_is_protected(row) -> bool:
+	return bool(
+		row.get("source_document")
+		or row.get("source_detail_name")
+		or row.get("source_type") in PROTECTED_TREATMENT_SOURCE_TYPES
+	)
+
+
+def _treatment_row_is_protected(row) -> bool:
+	return bool(
+		_source_treatment_is_protected(row)
+		or (row.get("billing_status") or "Pending") not in EDITABLE_TREATMENT_BILLING_STATUSES
+	)
+
+
 def _replace_planned_treatments(doc, rows: list[dict]) -> None:
 	existing_by_name = {row.name: row for row in doc.get("planned_treatments") or [] if row.name}
 	incoming_names = {row.get("name") for row in rows or [] if row.get("name")}
 	for existing in existing_by_name.values():
 		if existing.name in incoming_names:
 			continue
-		if (existing.billing_status or "Pending") not in {"Pending", "Skipped", "Cancelled"}:
+		if _treatment_row_is_protected(existing):
 			frappe.throw(
-				_("Billed treatment row {0} cannot be removed from the Clinical Workspace.").format(existing.item),
+				_("Source-generated or billed treatment row {0} cannot be removed from the Clinical Workspace.").format(
+					existing.item
+				),
 				frappe.ValidationError,
 			)
 
@@ -345,18 +356,23 @@ def _replace_planned_treatments(doc, rows: list[dict]) -> None:
 	for raw in rows or []:
 		name = raw.get("name")
 		existing = existing_by_name.get(name)
-		if existing and (existing.billing_status or "Pending") not in {"Pending", "Skipped", "Cancelled"}:
-			if not _same_editable_treatment(existing, raw):
-				frappe.throw(
-					_("Billed treatment row {0} cannot be edited. Create a new treatment row instead.").format(existing.item),
-					frappe.ValidationError,
-				)
-		row = {field: raw.get(field) for field in PLANNED_TREATMENT_EDITABLE_FIELDS if raw.get(field) not in (None, "")}
+		if existing and _treatment_row_is_protected(existing) and not _same_editable_treatment(existing, raw):
+			frappe.throw(
+				_("Source-generated or billed treatment row {0} cannot be edited. Create a new treatment row instead.").format(
+					existing.item
+				),
+				frappe.ValidationError,
+			)
+		row = {
+			field: raw.get(field)
+			for field in PLANNED_TREATMENT_EDITABLE_FIELDS
+			if raw.get(field) not in (None, "")
+		}
 		if existing:
 			for fieldname in PLANNED_TREATMENT_IMMUTABLE_FIELDS:
 				row[fieldname] = existing.get(fieldname)
 		else:
-			row["source_type"] = raw.get("source_type") or "Treatment"
+			row["source_type"] = "Treatment"
 			row["billing_status"] = "Pending"
 			row["payment_status"] = "Not Billed"
 		row["qty"] = flt(row.get("qty") or 1)
@@ -455,7 +471,12 @@ def get_treatment_defaults(
 ) -> dict:
 	_require_clinical_context()
 	_validate_branch(branch)
-	return get_treatment_item_defaults_for_consultation(item, company, customer, branch)
+	return get_treatment_item_defaults_for_consultation(
+		item,
+		company=company,
+		customer=customer,
+		branch=branch,
+	)
 
 
 @frappe.whitelist()
@@ -473,7 +494,7 @@ def get_clinical_link_options(kind: str, search: str = "", branch: str | None = 
 	config = {
 		"patient": ("Veterinary Patient", "patient_name", {"status": ["!=", "Deceased"]}),
 		"branch": ("Branch", "name", {}),
-		"consultation_type": ("Consultation Type", "name", {}),
+		"consultation_type": ("Consultation Type", "consultation_type", {}),
 		"symptom": ("Veterinary Symptom", "name", {}),
 		"diagnosis": ("Veterinary Diagnosis", "name", {}),
 	}
