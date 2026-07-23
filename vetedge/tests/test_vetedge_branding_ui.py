@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BRANDING_UI = ROOT / "vetedge" / "public" / "js" / "vetedge_branding_ui.js"
 IDENTITY = ROOT / "vetedge" / "ui_identity.py"
+HOOKS = ROOT / "vetedge" / "hooks.py"
 LOADERS = (
 	ROOT / "vetedge" / "veterinary" / "page" / "vetedge_document_workspace" / "vetedge_document_workspace.js",
 	ROOT / "vetedge" / "veterinary" / "page" / "vetedge_resource_center" / "vetedge_resource_center.js",
@@ -64,6 +65,15 @@ def test_boot_identity_prefers_saved_veterinary_settings_logo_then_safe_fallback
 		'tenant_logo = settings.get("logo") or company.get("logo") or branding.get("logo") or ""',
 	):
 		assert contract in content
+
+
+def test_branding_adapter_is_a_global_desk_asset_before_the_ui_bridge():
+	content = read(HOOKS)
+	branding = '"/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-3"'
+	professional = '"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1"'
+	bridge = '"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2"'
+	assert branding in content
+	assert content.index(professional) < content.index(branding) < content.index(bridge)
 
 
 def test_all_current_vetedge_edgesuite_pages_bound_branding_wait_and_mount_product_bundle():
