@@ -16,7 +16,7 @@ def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def test_owner_logo_upload_is_portal_scoped():
+def test_owner_logo_upload_is_portal_scoped_and_uses_explicit_v_model():
 	content = read(BRANDING_UI)
 	for value in (
 		"FileUploader",
@@ -27,9 +27,16 @@ def test_owner_logo_upload_is_portal_scoped():
 		"withoutPortalLogoField",
 		"does not change the VetEdge operational shell",
 		"Save Settings to keep the change",
+		'props: {',
+		'modelValue: { type: Object',
+		'emits: ["update:modelValue", "change", "search-options"]',
+		'context.emit("update:modelValue", next)',
+		'"onUpdate:modelValue": updateModel',
+		"extractFileUrl",
 	):
 		assert value in content
 	assert "updateBootIdentityLogo" not in content
+	assert 'const updateModel = attrs["onUpdate:modelValue"]' not in content
 
 
 def test_shell_uses_product_logo_and_generic_veterinary_fallback():
@@ -65,7 +72,7 @@ def test_identity_separates_owner_and_coreedge_product_logos():
 
 def test_branding_asset_is_global_and_cannot_block_pages():
 	hooks = read(HOOKS)
-	assert "vetedge_branding_ui.js?v=20260723-4" in hooks
+	assert "vetedge_branding_ui.js?v=20260723-5" in hooks
 	for loader in LOADERS:
 		content = read(loader)
 		assert "VetEdgeBrandingUI?.install?.()" in content
