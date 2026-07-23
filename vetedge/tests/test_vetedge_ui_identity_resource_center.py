@@ -31,15 +31,21 @@ def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def test_boot_identity_separates_clinic_and_deployment_product_branding():
+def test_boot_identity_separates_owner_and_deployment_product_branding():
 	content = read(IDENTITY)
 	for contract in (
 		"company_logo",
 		"tenant_name",
 		"tenant_logo",
+		"owner_portal_logo",
+		"tenant_logo_scope",
+		"product_logo",
+		"product_logo_source",
+		"product_logo_scope",
+		"COREDGE_PRODUCT_LOGO_KEYS",
 		'get_edge_platform_mode()',
 		'mode == "shared_hosted"',
-		'product_name = "VetEdge" if is_saas else "Veterinary"',
+		'product_name = "VetEdge" if is_shared_hosted else "Veterinary"',
 		'product_icon": "stethoscope"',
 		'bootinfo["edgesuite_ui_identity"]',
 		'shared["vetedge"] = identity',
@@ -90,12 +96,12 @@ def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
 	content = read(RESOURCE_API)
 	for contract in (
-		"frappe.has_permission(doctype, \"read\")",
-		"frappe.has_permission(doctype, \"create\")",
-		"frappe.has_permission(doctype, \"write\")",
-		"frappe.has_permission(doctype, \"delete\")",
-		"doc.check_permission(\"write\")",
-		"doc.check_permission(\"delete\")",
+		'frappe.has_permission(doctype, "read")',
+		'frappe.has_permission(doctype, "create")',
+		'frappe.has_permission(doctype, "write")',
+		'frappe.has_permission(doctype, "delete")',
+		'doc.check_permission("write")',
+		'doc.check_permission("delete")',
 		"doc.docstatus != 0",
 		"_permission_aware_count",
 		"frappe.get_list(",
@@ -138,8 +144,10 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "frappe.ui.Dialog" in component
 
 
-def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
+def test_hooks_load_branding_and_bridge_after_professional_adapter():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
+	assert "vetedge_branding_ui.js?v=20260723-4" in content
 	assert "vetedge_ui_bridge.js?v=20260720-2" in content
-	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
+	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_branding_ui.js")
+	assert content.index("vetedge_branding_ui.js") < content.index("vetedge_ui_bridge.js")
