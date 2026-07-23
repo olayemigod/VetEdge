@@ -40,16 +40,18 @@ jobs:
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py \
-            vetedge/tests/test_vetedge_document_workspace.py
+            vetedge/tests/test_vetedge_document_workspace.py \
+            tests/test_vetedge_master_workspace_contract.py
 
-      - name: Validate EdgeSuite UI dependency and document contracts
+      - name: Validate EdgeSuite UI dependency and migration contracts
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py \
-            vetedge/tests/test_vetedge_document_workspace.py
+            vetedge/tests/test_vetedge_document_workspace.py \
+            tests/test_vetedge_master_workspace_contract.py
 
   frontend:
     name: Frontend validation
@@ -65,10 +67,16 @@ jobs:
       - name: Check migrated EdgeSuite JavaScript
         run: |
           node --check \
+            vetedge/public/js/vetedge_home_navigation.js
+
+          node --check \
             vetedge/public/js/vetedge_professional_ui.js
 
           node --check \
             vetedge/public/js/vetedge_ui_bridge.js
+
+          node --check \
+            vetedge/public/js/vetedge_workspace_safety.js
 
           node --check \
             vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
@@ -96,6 +104,12 @@ jobs:
 
           node --check \
             vetedge/public/js/vetedge_document_workspace/workspace_runtime.js
+
+          node --check \
+            vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
+
+          node --check \
+            vetedge/public/js/vetedge_master_workspace.bundle.js
 
   frappe-v16:
     name: Frappe v16 standalone integration
@@ -263,6 +277,13 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_vetedge_document_workspace_integration
+
+      - name: Run live clinical master workspace tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_master_workspace_integration
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
