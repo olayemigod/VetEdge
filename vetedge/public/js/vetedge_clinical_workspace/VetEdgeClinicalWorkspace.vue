@@ -19,6 +19,48 @@
 				/>
 			</template>
 
+			<template #filters>
+				<EdgeFilterBar v-if="!detail.open" title="Filter consultations">
+					<div class="vetedge-clinical-filters">
+						<EdgeLinkField
+							:model-value="filters.branch"
+							label="Branch"
+							placeholder="All permitted branches"
+							:searcher="(query) => linkSearch('branch', query)"
+							@update:model-value="(value) => setFilter('branch', value)"
+						/>
+						<EdgeLinkField
+							:model-value="filters.practitioner"
+							label="Practitioner"
+							placeholder="All doctors"
+							:searcher="(query) => linkSearch('practitioner', query)"
+							@update:model-value="(value) => setFilter('practitioner', value)"
+						/>
+						<label class="vetedge-clinical-field">
+							<span>Status</span>
+							<select v-model="filters.status" class="form-control">
+								<option value="">All statuses</option>
+								<option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
+							</select>
+						</label>
+						<label class="vetedge-clinical-field vetedge-clinical-field--search">
+							<span>Search</span>
+							<input
+								v-model.trim="filters.search"
+								type="search"
+								class="form-control"
+								placeholder="Consultation, patient, owner or complaint"
+								@keyup.enter="applyFilters"
+							/>
+						</label>
+					</div>
+					<template #actions>
+						<button type="button" class="edge-button edge-button--primary" :disabled="loading" @click="applyFilters">Apply</button>
+						<button type="button" class="edge-button" :disabled="loading" @click="resetFilters">Reset</button>
+					</template>
+				</EdgeFilterBar>
+			</template>
+
 			<template v-if="!detail.open">
 				<section class="vetedge-clinical-summary" aria-label="Consultation summary">
 					<EdgeStatCard label="Draft" :value="summary.draft || 0" icon="file-pen-line" />
@@ -28,44 +70,14 @@
 					<EdgeStatCard label="Completed" :value="summary.completed || 0" icon="circle-check" />
 				</section>
 
-				<template #filters>
-					<EdgeFilterBar title="Filter consultations">
-						<div class="vetedge-clinical-filters">
-							<EdgeLinkField
-								:model-value="filters.branch"
-								label="Branch"
-								placeholder="All permitted branches"
-								:searcher="(query) => linkSearch('branch', query)"
-								@update:model-value="(value) => setFilter('branch', value)"
-							/>
-							<EdgeLinkField
-								:model-value="filters.practitioner"
-								label="Practitioner"
-								placeholder="All doctors"
-								:searcher="(query) => linkSearch('practitioner', query)"
-								@update:model-value="(value) => setFilter('practitioner', value)"
-							/>
-							<label class="vetedge-clinical-field">
-								<span>Status</span>
-								<select v-model="filters.status" class="form-control">
-									<option value="">All statuses</option>
-									<option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
-								</select>
-							</label>
-							<label class="vetedge-clinical-field vetedge-clinical-field--search">
-								<span>Search</span>
-								<input v-model.trim="filters.search" type="search" class="form-control" placeholder="Consultation, patient, owner or complaint" @keyup.enter="applyFilters" />
-							</label>
-						</div>
-						<template #actions>
-							<button type="button" class="edge-button edge-button--primary" :disabled="loading" @click="applyFilters">Apply</button>
-							<button type="button" class="edge-button" :disabled="loading" @click="resetFilters">Reset</button>
-						</template>
-					</EdgeFilterBar>
-				</template>
-
 				<EdgeLoadingState v-if="loading" message="Loading consultations..." :skeleton="true" />
-				<EdgeErrorState v-else-if="error" title="Consultations could not load" :message="error" action-label="Try again" @retry="refreshList" />
+				<EdgeErrorState
+					v-else-if="error"
+					title="Consultations could not load"
+					:message="error"
+					action-label="Try again"
+					@retry="refreshList"
+				/>
 				<EdgeDataTable
 					v-else
 					:columns="listColumns"
@@ -86,7 +98,13 @@
 
 			<template v-else>
 				<EdgeLoadingState v-if="detail.loading" message="Loading consultation..." :skeleton="true" />
-				<EdgeErrorState v-else-if="detail.error" title="Consultation could not load" :message="detail.error" action-label="Back to list" @retry="backToList" />
+				<EdgeErrorState
+					v-else-if="detail.error"
+					title="Consultation could not load"
+					:message="detail.error"
+					action-label="Back to list"
+					@retry="backToList"
+				/>
 				<div v-else class="vetedge-clinical-detail">
 					<section class="vetedge-clinical-statusbar">
 						<div>
@@ -95,15 +113,21 @@
 							<span>Dispensary: <strong>{{ form.dispensary_status || 'Not Required' }}</strong></span>
 						</div>
 						<div class="vetedge-clinical-actions">
-							<button type="button" class="edge-button" :disabled="busy || isNew" @click="openHistory">Medical History</button>
-							<button type="button" class="edge-button" :disabled="busy || isNew" @click="openVitals">New Vitals</button>
-							<button type="button" class="edge-button" :disabled="busy || isNew" @click="openBilling">Billing & Payment</button>
+							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.view_history" @click="openHistory">Medical History</button>
+							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.create_vitals" @click="openVitals">New Vitals</button>
+							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.open_billing" @click="openBilling">Billing & Payment</button>
 							<button type="button" class="edge-button edge-button--primary" :disabled="busy || !detail.can_write" @click="saveConsultation">{{ busy ? 'Saving…' : 'Save Consultation' }}</button>
 						</div>
 					</section>
 
 					<nav class="vetedge-clinical-tabs" aria-label="Consultation sections">
-						<button v-for="tab in tabs" :key="tab.value" type="button" :class="{ 'is-active': activeTab === tab.value }" @click="activeTab = tab.value">
+						<button
+							v-for="tab in tabs"
+							:key="tab.value"
+							type="button"
+							:class="{ 'is-active': activeTab === tab.value }"
+							@click="activeTab = tab.value"
+						>
 							<span>{{ tab.label }}</span>
 							<small>{{ tab.description }}</small>
 						</button>
@@ -141,14 +165,20 @@
 							<label class="vetedge-clinical-field"><span>Assessment Notes</span><textarea v-model="form.assessment_notes" class="form-control" rows="5" @input="markDirty"></textarea></label>
 						</div>
 
-						<header class="vetedge-clinical-subhead"><div><h4>Symptoms</h4><p>Capture only active and clinically relevant symptoms.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addSymptom">Add Symptom</button></header>
+						<header class="vetedge-clinical-subhead">
+							<div><h4>Symptoms</h4><p>Capture only active and clinically relevant symptoms.</p></div>
+							<button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addSymptom">Add Symptom</button>
+						</header>
 						<div v-for="(row, index) in form.symptoms" :key="row._key || row.name || index" class="vetedge-clinical-childrow">
 							<EdgeLinkField :model-value="row.symptom" label="Symptom" placeholder="Select symptom" :searcher="(query) => linkSearch('symptom', query)" @update:model-value="(value) => updateChild('symptoms', index, 'symptom', value)" />
 							<label class="vetedge-clinical-field"><span>Notes</span><input v-model="row.notes" class="form-control" @input="markDirty" /></label>
 							<button type="button" class="edge-button edge-button--danger edge-button--compact" @click="removeChild('symptoms', index)">Remove</button>
 						</div>
 
-						<header class="vetedge-clinical-subhead"><div><h4>Diagnoses</h4><p>Diagnosis and treatment capture remains restricted by existing Veterinary Doctor permissions.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addDiagnosis">Add Diagnosis</button></header>
+						<header class="vetedge-clinical-subhead">
+							<div><h4>Diagnoses</h4><p>Diagnosis and treatment capture remains restricted by existing Veterinary Doctor permissions.</p></div>
+							<button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addDiagnosis">Add Diagnosis</button>
+						</header>
 						<div v-for="(row, index) in form.diagnoses" :key="row._key || row.name || index" class="vetedge-clinical-childrow vetedge-clinical-childrow--diagnosis">
 							<EdgeLinkField :model-value="row.diagnosis" label="Diagnosis" placeholder="Select diagnosis" :searcher="(query) => linkSearch('diagnosis', query)" @update:model-value="(value) => updateChild('diagnoses', index, 'diagnosis', value)" />
 							<label class="vetedge-clinical-field"><span>Diagnosis Type</span><select v-model="row.diagnosis_type" class="form-control" @change="markDirty"><option value=""></option><option v-for="type in diagnosisTypes" :key="type" :value="type">{{ type }}</option></select></label>
@@ -158,7 +188,14 @@
 					</section>
 
 					<section v-if="activeTab === 'treatment'" class="vetedge-clinical-panel">
-						<header class="vetedge-clinical-subhead"><div><h3>Treatment Plan</h3><p v-if="detail.scope_locked" class="text-warning">Treatment scope is locked because this consultation is {{ detail.status }}. Existing billing-safe rows remain visible.</p><p v-else>Add treatment rows before the consultation reaches Ready for Treatment.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="detail.scope_locked || !detail.can_write" @click="addTreatment">Add Treatment</button></header>
+						<header class="vetedge-clinical-subhead">
+							<div>
+								<h3>Treatment Plan</h3>
+								<p v-if="detail.scope_locked" class="text-warning">Treatment scope is locked because this consultation is {{ detail.status }}. Existing billing-safe rows remain visible.</p>
+								<p v-else>Add treatment rows before the consultation reaches Ready for Treatment.</p>
+							</div>
+							<button type="button" class="edge-button edge-button--compact" :disabled="detail.scope_locked || !detail.can_write" @click="addTreatment">Add Treatment</button>
+						</header>
 						<label class="vetedge-clinical-field"><span>Treatment Plan Summary</span><textarea v-model="form.treatment_plan_summary" class="form-control" rows="4" @input="markDirty"></textarea></label>
 						<div v-for="(row, index) in form.planned_treatments" :key="row._key || row.name || index" class="vetedge-clinical-treatmentrow">
 							<EdgeLinkField :model-value="row.item" label="Treatment Item" placeholder="Select treatment item" :disabled="treatmentRowLocked(row)" :searcher="(query) => linkSearch('treatment_item', query)" @update:model-value="(value) => updateTreatmentItem(index, value)" />
@@ -199,20 +236,26 @@
 				<label v-for="field in vitalFields" :key="field.name" class="vetedge-clinical-field"><span>{{ field.label }}</span><input v-model="vitalsDialog.values[field.name]" :type="field.type || 'text'" :min="field.min" :step="field.step" class="form-control" /></label>
 				<label class="vetedge-clinical-field vetedge-clinical-field--wide"><span>Notes</span><textarea v-model="vitalsDialog.values.notes" class="form-control" rows="4"></textarea></label>
 			</div>
-			<template #footer><button type="button" class="edge-button" :disabled="busy" @click="closeVitals">Cancel</button><button type="button" class="edge-button edge-button--primary" :disabled="busy" @click="saveVitals">Save Vitals</button></template>
+			<template #footer>
+				<button type="button" class="edge-button" :disabled="busy" @click="closeVitals">Cancel</button>
+				<button type="button" class="edge-button edge-button--primary" :disabled="busy" @click="saveVitals">Save Vitals</button>
+			</template>
 		</EdgeModal>
 
 		<EdgeModal :open="historyDialog.open" title="Patient Medical History" :subtitle="historySubtitle" :busy="historyDialog.loading" @close="closeHistory">
 			<EdgeLoadingState v-if="historyDialog.loading" message="Loading medical history..." :skeleton="true" />
 			<div v-else class="vetedge-clinical-history">
-				<section v-for="section in historySections" :key="section.label"><h4>{{ section.label }}</h4><div v-if="!section.rows.length" class="vetedge-clinical-empty">No records.</div><article v-for="row in section.rows" :key="row.name || row.timestamp"><strong>{{ row.name || row.consultation_title || row.vaccine || row.tests_summary || 'Clinical record' }}</strong><span>{{ row.status || row.payment_status || '' }}</span><p>{{ row.presenting_complaint || row.assessment_notes || row.results_summary || row.notes || '' }}</p></article></section>
+				<section v-for="section in historySections" :key="section.label">
+					<h4>{{ section.label }}</h4>
+					<div v-if="!section.rows.length" class="vetedge-clinical-empty">No records.</div>
+					<article v-for="row in section.rows" :key="row.name || row.timestamp">
+						<strong>{{ row.title || row.name || row.vaccine || row.tests_summary || 'Clinical record' }}</strong>
+						<span>{{ row.status || row.payment_status || '' }}</span>
+						<p>{{ row.presenting_complaint || row.assessment_notes || row.results_summary || row.notes || '' }}</p>
+					</article>
+				</section>
 			</div>
 			<template #footer><button type="button" class="edge-button" @click="closeHistory">Close</button></template>
-		</EdgeModal>
-
-		<EdgeModal :open="confirmation.open" :title="confirmation.title" :subtitle="confirmation.message" :busy="confirmation.busy" @close="closeConfirmation">
-			<p>{{ confirmation.message }}</p>
-			<template #footer><button type="button" class="edge-button" :disabled="confirmation.busy" @click="closeConfirmation">Stay</button><button type="button" :class="['edge-button', confirmation.danger ? 'edge-button--danger' : 'edge-button--primary']" :disabled="confirmation.busy" @click="confirmPendingAction">{{ confirmation.confirmLabel }}</button></template>
 		</EdgeModal>
 	</EdgeAppShell>
 </template>
@@ -230,12 +273,14 @@ const API = Object.freeze({
 	defaults: "vetedge.services.clinical_workspace.get_treatment_defaults",
 });
 const STATUSES = ["Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"];
-const emptyConfirmation = () => ({ open: false, title: "", message: "", confirmLabel: "Continue", danger: false, busy: false, handler: null });
+const blankCapabilities = () => ({ create_vitals: false, view_history: false, open_billing: false });
+const blankDetail = (overrides = {}) => ({ open: false, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [], capabilities: blankCapabilities(), ...overrides });
 const blankForm = () => ({ patient: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
 function call(method, args = {}) { return frappe.call({ method, args }).then((response) => response.message); }
 function message(error, fallback) { return error?.message || error?._server_messages || error?.exc_type || fallback; }
 function localDatetime(value) { if (!value) return ""; return String(value).replace(" ", "T").slice(0, 16); }
 function serverDatetime(value) { return value ? String(value).replace("T", " ") : value; }
+function rowKey(row) { return row?.name || window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`; }
 
 export default {
 	name: "VetEdgeClinicalWorkspace",
@@ -258,11 +303,10 @@ export default {
 			error: "",
 			busy: false,
 			dirty: false,
-			detail: { open: false, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [] },
+			detail: blankDetail(),
 			form: blankForm(),
 			vitalsDialog: { open: false, values: {} },
 			historyDialog: { open: false, loading: false, data: {} },
-			confirmation: emptyConfirmation(),
 			listColumns: [
 				{ key: "consultation_datetime", label: "Date/Time", type: "datetime" },
 				{ key: "patient_label", label: "Patient" },
@@ -296,7 +340,15 @@ export default {
 		vitalEntries() {
 			const v = this.detail.latest_vitals || {};
 			return [
-				["Recorded On", frappe.datetime?.str_to_user?.(v.recorded_on) || v.recorded_on], ["Temperature", v.temperature], ["Weight", v.weight], ["Heart Rate", v.heart_rate], ["Respiratory Rate", v.respiratory_rate], ["Body Condition", v.body_condition_score], ["Hydration", v.hydration_status], ["Pain Score", v.pain_score], ["Appetite", v.appetite_status],
+				["Recorded On", frappe.datetime?.str_to_user?.(v.recorded_on) || v.recorded_on],
+				["Temperature", v.temperature],
+				["Weight", v.weight],
+				["Heart Rate", v.heart_rate],
+				["Respiratory Rate", v.respiratory_rate],
+				["Body Condition", v.body_condition_score],
+				["Hydration", v.hydration_status],
+				["Pain Score", v.pain_score],
+				["Appetite", v.appetite_status],
 			].map(([label, value]) => ({ label, value }));
 		},
 		historySubtitle() { return this.historyDialog.data?.summary?.patient_name || this.form.patient || "Patient"; },
@@ -306,26 +358,38 @@ export default {
 				{ label: "Consultations", rows: data.consultations || [] },
 				{ label: "Vaccinations", rows: data.vaccinations || [] },
 				{ label: "Laboratory", rows: data.labs || [] },
-				{ label: "Hospitalisation", rows: data.hospitalisations || [] },
+				{ label: "Vitals", rows: data.vitals || [] },
 			];
 		},
 	},
 	mounted() {
+		const params = new URLSearchParams(window.location.search || "");
+		if (params.get("consultation")) {
+			this.loadDetail(params.get("consultation"));
+			return;
+		}
+		if (params.has("new")) {
+			this.startNewConsultation();
+			return;
+		}
 		this.refreshList();
-		const requested = new URLSearchParams(window.location.search || "").get("consultation");
-		if (requested) this.loadDetail(requested);
 	},
 	methods: {
 		async refreshList() {
-			this.loading = true; this.error = "";
+			this.loading = true;
+			this.error = "";
 			try {
 				const [summary, consultations] = await Promise.all([
 					call(API.summary, { branch: this.filters.branch || undefined }),
 					call(API.list, { ...this.filters, start: this.consultations.start || 0, page_length: this.consultations.page_length || 25 }),
 				]);
-				this.summary = summary || {}; this.consultations = consultations || { rows: [], total: 0, start: 0, page_length: 25 };
-			} catch (error) { this.error = message(error, "Unable to load consultations."); }
-			finally { this.loading = false; }
+				this.summary = summary || {};
+				this.consultations = consultations || { rows: [], total: 0, start: 0, page_length: 25 };
+			} catch (error) {
+				this.error = message(error, "Unable to load consultations.");
+			} finally {
+				this.loading = false;
+			}
 		},
 		applyFilters() { this.consultations.start = 0; return this.refreshList(); },
 		resetFilters() { this.filters = { branch: "", practitioner: "", status: "", search: "" }; this.consultations.start = 0; return this.refreshList(); },
@@ -334,81 +398,156 @@ export default {
 		nextPage() { this.consultations.start += this.consultations.page_length; this.refreshList(); },
 		openConsultation(row) { return this.loadDetail(row.name); },
 		async loadDetail(name) {
-			this.detail = { open: true, loading: true, error: "", name, modified: "", status: "Draft", can_write: false, scope_locked: false, latest_vitals: null, actions: [] };
+			this.detail = blankDetail({ open: true, loading: true, name, can_write: false });
 			this.activeTab = "visit";
 			try {
 				const payload = await call(API.detail, { name });
 				this.applyDetail(payload);
 				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`);
-			} catch (error) { this.detail.loading = false; this.detail.error = message(error, "Unable to load consultation."); }
+			} catch (error) {
+				this.detail.loading = false;
+				this.detail.error = message(error, "Unable to load consultation.");
+			}
 		},
 		applyDetail(payload) {
 			const values = payload?.values || {};
-			this.detail = { open: true, loading: false, error: "", name: payload?.name || "", modified: payload?.modified || "", status: payload?.status || "Draft", can_write: payload?.can_write !== false, scope_locked: Boolean(payload?.scope_locked), latest_vitals: payload?.latest_vitals || null, actions: payload?.actions || [] };
-			this.form = { ...blankForm(), ...values, consultation_datetime: localDatetime(values.consultation_datetime), symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: row.name || crypto.randomUUID?.() || Math.random() })), diagnoses: (values.diagnoses || []).map((row) => ({ ...row, _key: row.name || crypto.randomUUID?.() || Math.random() })), planned_treatments: (values.planned_treatments || []).map((row) => ({ ...row, _key: row.name || crypto.randomUUID?.() || Math.random() })) };
+			this.detail = blankDetail({
+				open: true,
+				name: payload?.name || "",
+				modified: payload?.modified || "",
+				status: payload?.status || "Draft",
+				can_write: payload?.can_write !== false,
+				scope_locked: Boolean(payload?.scope_locked),
+				latest_vitals: payload?.latest_vitals || null,
+				actions: payload?.actions || [],
+				capabilities: { ...blankCapabilities(), ...(payload?.capabilities || {}) },
+			});
+			this.form = {
+				...blankForm(),
+				...values,
+				consultation_datetime: localDatetime(values.consultation_datetime),
+				symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: rowKey(row) })),
+				diagnoses: (values.diagnoses || []).map((row) => ({ ...row, _key: rowKey(row) })),
+				planned_treatments: (values.planned_treatments || []).map((row) => ({ ...row, _key: rowKey(row) })),
+			};
 			this.dirty = false;
 		},
 		startNewConsultation() {
-			this.detail = { open: true, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [] };
-			this.form = blankForm(); this.activeTab = "visit"; this.dirty = false;
+			this.detail = blankDetail({ open: true, can_write: true });
+			this.form = blankForm();
+			this.activeTab = "visit";
+			this.dirty = false;
 			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace?new=1");
 		},
-		backToList() { this.detail.open = false; this.detail.name = ""; this.form = blankForm(); this.dirty = false; window.history.replaceState({}, "", "/app/vetedge-clinical-workspace"); this.refreshList(); },
+		backToList() {
+			this.detail = blankDetail();
+			this.form = blankForm();
+			this.dirty = false;
+			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace");
+			this.refreshList();
+		},
 		markDirty() { this.dirty = true; },
 		updateField(field, value) { this.form[field] = value || ""; this.markDirty(); },
 		updateChild(table, index, field, value) { this.form[table][index][field] = value || ""; this.markDirty(); },
-		addSymptom() { this.form.symptoms.push({ _key: Math.random(), symptom: "", notes: "" }); this.markDirty(); },
-		addDiagnosis() { this.form.diagnoses.push({ _key: Math.random(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); },
-		addTreatment() { this.form.planned_treatments.push({ _key: Math.random(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); },
+		addSymptom() { this.form.symptoms.push({ _key: rowKey(), symptom: "", notes: "" }); this.markDirty(); },
+		addDiagnosis() { this.form.diagnoses.push({ _key: rowKey(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); },
+		addTreatment() { this.form.planned_treatments.push({ _key: rowKey(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); },
 		removeChild(table, index) { this.form[table].splice(index, 1); this.markDirty(); },
 		async updateTreatmentItem(index, item) {
-			const row = this.form.planned_treatments[index]; row.item = item || ""; this.markDirty();
+			const row = this.form.planned_treatments[index];
+			row.item = item || "";
+			this.markDirty();
 			if (!item) return;
 			try {
 				const defaults = await call(API.defaults, { item, company: this.form.company, customer: this.form.primary_owner, branch: this.form.service_branch });
 				Object.assign(row, { uom: defaults?.uom || row.uom, rate: defaults?.rate ?? row.rate, service_type: defaults?.service_type || row.service_type, treatment_type: defaults?.treatment_type || row.treatment_type });
-			} catch (error) { frappe.show_alert({ message: message(error, "Treatment defaults could not load."), indicator: "orange" }); }
+			} catch (error) {
+				frappe.show_alert({ message: message(error, "Treatment defaults could not load."), indicator: "orange" });
+			}
 		},
 		treatmentRowLocked(row) { return this.detail.scope_locked || !["Pending", "Skipped", "Cancelled", ""].includes(row.billing_status || "Pending"); },
 		async saveConsultation() {
 			if (this.busy) return;
 			this.busy = true;
 			try {
-				const payload = { ...this.form, name: this.detail.name || undefined, modified: this.detail.modified || undefined, consultation_datetime: serverDatetime(this.form.consultation_datetime), symptoms: this.form.symptoms.map(({ _key, ...row }) => row), diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row), planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row) };
+				const payload = {
+					...this.form,
+					name: this.detail.name || undefined,
+					modified: this.detail.modified || undefined,
+					consultation_datetime: serverDatetime(this.form.consultation_datetime),
+					symptoms: this.form.symptoms.map(({ _key, ...row }) => row),
+					diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row),
+					planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row),
+				};
 				const detail = await call(API.save, { payload });
-				this.applyDetail(detail); frappe.show_alert({ message: "Consultation saved.", indicator: "green" });
+				this.applyDetail(detail);
+				frappe.show_alert({ message: "Consultation saved.", indicator: "green" });
 				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`);
-			} catch (error) { frappe.msgprint({ title: "Consultation could not be saved", message: message(error, "Save failed."), indicator: "red" }); }
-			finally { this.busy = false; }
+				return detail;
+			} catch (error) {
+				frappe.msgprint({ title: "Consultation could not be saved", message: message(error, "Save failed."), indicator: "red" });
+				return null;
+			} finally {
+				this.busy = false;
+			}
 		},
 		async runAction(action) {
 			if (this.dirty) { frappe.msgprint("Save or discard consultation changes before running a workflow action."); return; }
 			this.busy = true;
-			try { const detail = await call(API.action, { name: this.detail.name, action: action.key, modified: this.detail.modified }); this.applyDetail(detail); frappe.show_alert({ message: `${action.label} completed.`, indicator: "green" }); }
-			catch (error) { frappe.msgprint({ title: "Workflow action failed", message: message(error, "Action failed."), indicator: "red" }); }
-			finally { this.busy = false; }
+			try {
+				const detail = await call(API.action, { name: this.detail.name, action: action.key, modified: this.detail.modified });
+				this.applyDetail(detail);
+				frappe.show_alert({ message: `${action.label} completed.`, indicator: "green" });
+			} catch (error) {
+				frappe.msgprint({ title: "Workflow action failed", message: message(error, "Action failed."), indicator: "red" });
+			} finally {
+				this.busy = false;
+			}
 		},
-		openVitals() { if (this.isNew) return; this.vitalsDialog = { open: true, values: {} }; },
+		openVitals() { if (!this.isNew && this.detail.capabilities.create_vitals) this.vitalsDialog = { open: true, values: {} }; },
 		closeVitals() { if (!this.busy) this.vitalsDialog = { open: false, values: {} }; },
 		async saveVitals() {
 			this.busy = true;
-			try { const result = await call(API.vitals, { name: this.detail.name, values: this.vitalsDialog.values, modified: this.detail.modified }); this.applyDetail(result.detail); this.closeVitals(); frappe.show_alert({ message: "Vitals recorded.", indicator: "green" }); }
-			catch (error) { frappe.msgprint({ title: "Vitals could not be saved", message: message(error, "Vitals failed."), indicator: "red" }); }
-			finally { this.busy = false; }
+			try {
+				const result = await call(API.vitals, { name: this.detail.name, values: this.vitalsDialog.values, modified: this.detail.modified });
+				this.applyDetail(result.detail);
+				this.closeVitals();
+				frappe.show_alert({ message: "Vitals recorded.", indicator: "green" });
+			} catch (error) {
+				frappe.msgprint({ title: "Vitals could not be saved", message: message(error, "Vitals failed."), indicator: "red" });
+			} finally {
+				this.busy = false;
+			}
 		},
-		async openHistory() { this.historyDialog = { open: true, loading: true, data: {} }; try { this.historyDialog.data = await call(API.history, { name: this.detail.name, limit: 20 }) || {}; } catch (error) { frappe.msgprint({ title: "Medical history unavailable", message: message(error, "History failed."), indicator: "red" }); this.historyDialog.open = false; } finally { this.historyDialog.loading = false; } },
+		async openHistory() {
+			if (!this.detail.capabilities.view_history) return;
+			this.historyDialog = { open: true, loading: true, data: {} };
+			try {
+				this.historyDialog.data = await call(API.history, { name: this.detail.name, limit: 20 }) || {};
+			} catch (error) {
+				frappe.msgprint({ title: "Medical history unavailable", message: message(error, "History failed."), indicator: "red" });
+				this.historyDialog.open = false;
+			} finally {
+				this.historyDialog.loading = false;
+			}
+		},
 		closeHistory() { this.historyDialog = { open: false, loading: false, data: {} }; },
 		openBilling() {
-			if (!window.vetedgeBillingModal?.open || this.isNew) return;
+			if (!window.vetedgeBillingModal?.open || this.isNew || !this.detail.capabilities.open_billing) return;
 			const workspace = this;
-			window.vetedgeBillingModal.open({ doc: { doctype: "Veterinary Consultation", name: this.detail.name }, is_new: () => false, is_dirty: () => workspace.dirty, save: () => workspace.saveConsultation(), reload_doc: () => workspace.loadDetail(workspace.detail.name) });
+			window.vetedgeBillingModal.open({
+				doc: { doctype: "Veterinary Consultation", name: this.detail.name },
+				is_new: () => false,
+				is_dirty: () => workspace.dirty,
+				save: () => workspace.saveConsultation(),
+				reload_doc: () => workspace.loadDetail(workspace.detail.name),
+			});
 		},
 		openRelated(doctype) { frappe.route_options = { consultation: this.detail.name, patient: this.form.patient }; frappe.set_route("List", doctype); },
 		openDocument(doctype, name) { if (name) frappe.set_route("Form", doctype, name); },
 		openRoute(route) { if (route) window.location.assign(route); },
 		async linkSearch(kind, search) { return (await call(API.links, { kind, search, branch: this.form.service_branch || this.filters.branch || undefined, limit: 20 })) || []; },
 		formatMoney(value) { return typeof format_currency === "function" ? format_currency(value || 0) : Number(value || 0).toFixed(2); },
-		openConfirmation(options) { this.confirmation = { ...emptyConfirmation(), open: true, ...options }; },
 	},
 };
 </script>
