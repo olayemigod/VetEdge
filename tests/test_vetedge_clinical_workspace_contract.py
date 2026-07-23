@@ -2,6 +2,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "vetedge" / "services" / "clinical_workspace.py"
+SAFETY = ROOT / "vetedge" / "services" / "clinical_workspace_safety.py"
+HISTORY_SAFE = ROOT / "vetedge" / "services" / "medical_history_safe.py"
+HOOKS = ROOT / "vetedge" / "hooks.py"
 COMPONENT = (
     ROOT
     / "vetedge"
@@ -10,8 +13,17 @@ COMPONENT = (
     / "vetedge_clinical_workspace"
     / "VetEdgeClinicalWorkspace.vue"
 )
+CONTROLLER = (
+    ROOT
+    / "vetedge"
+    / "public"
+    / "js"
+    / "vetedge_clinical_workspace"
+    / "clinical_workspace_controller.js"
+)
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
 PAGE_ROOT = ROOT / "vetedge" / "veterinary" / "page" / "vetedge_clinical_workspace"
+REDIRECT_ROOT = ROOT / "vetedge" / "public" / "js" / "clinical_workspace"
 
 
 def read(path: Path) -> str:
@@ -80,6 +92,7 @@ def test_clinical_payload_cannot_directly_mutate_workflow_billing_or_stock_truth
 
 def test_existing_controllers_remain_authoritative_for_actions():
     service = read(SERVICE)
+    consultation_flow = read(ROOT / "vetedge" / "services" / "consultation_flow.py")
     for contract in (
         "transition_consultation_status(name, status)",
         "create_vitals_from_consultation(name, payload)",
@@ -92,6 +105,9 @@ def test_existing_controllers_remain_authoritative_for_actions():
         "get_patient_medical_history_view",
     ):
         assert contract in service
+
+    assert 'if status == "Cancelled":' in consultation_flow
+    assert "execute_consultation_cancellation(consultation)" in consultation_flow
 
 
 def test_provider_is_permission_branch_and_conflict_safe():
@@ -117,6 +133,8 @@ def test_provider_is_permission_branch_and_conflict_safe():
 
 def test_child_rows_preserve_protected_source_and_billing_identity():
     service = read(SERVICE)
+    safety = read(SAFETY)
+    hooks = read(HOOKS)
     for contract in (
         "def _replace_child_rows_preserving_protected",
         "existing[row_name].items()",
@@ -126,11 +144,44 @@ def test_child_rows_preserve_protected_source_and_billing_identity():
     ):
         assert contract in service
 
+    for contract in (
+        "CLINICAL_WORKSPACE_SAVE_COMMAND",
+        "SOURCE_CONTROLLED_TYPES",
+        "LOCKED_BILLING_STATUSES",
+        "LOCKED_PAYMENT_STATUSES",
+        "def enforce_clinical_workspace_treatment_row_safety",
+        "cannot be removed here",
+        "cannot be changed here",
+    ):
+        assert contract in safety
+
+    assert "clinical_workspace_safety.enforce_clinical_workspace_treatment_row_safety" in hooks
+
+
+def test_medical_history_degrades_by_module_permission():
+    safe_history = read(HISTORY_SAFE)
+    hooks = read(HOOKS)
+    for contract in (
+        "can_read_consultations",
+        "can_read_vitals",
+        "can_read_labs",
+        "can_read_vaccinations",
+        "EMPTY_VITAL_TRENDS",
+        "build_permission_aware_medical_history",
+    ):
+        assert contract in safe_history
+
+    assert "medical_history_safe.get_patient_medical_history_view" in hooks
+    assert "medical_history_safe.get_clinical_medical_history" in hooks
+
 
 def test_frontend_contract_uses_full_edgesuite_runtime():
     for path in (
         SERVICE,
+        SAFETY,
+        HISTORY_SAFE,
         COMPONENT,
+        CONTROLLER,
         BUNDLE,
         PAGE_ROOT / "vetedge_clinical_workspace.js",
         PAGE_ROOT / "vetedge_clinical_workspace.json",
@@ -138,6 +189,7 @@ def test_frontend_contract_uses_full_edgesuite_runtime():
         assert path.exists(), path
 
     component = read(COMPONENT)
+    controller = read(CONTROLLER)
     loader = read(PAGE_ROOT / "vetedge_clinical_workspace.js")
     bundle = read(BUNDLE)
     for contract in (
@@ -165,20 +217,49 @@ def test_frontend_contract_uses_full_edgesuite_runtime():
     assert "const runtime = window.EdgeSuiteUI;" in bundle
     assert "window.EdgeUI" not in bundle
     assert "applyWorkspaceSafety(VetEdgeClinicalWorkspace)" in bundle
+    assert "restoreProtectedTreatmentRows" in bundle
+    assert "Discard unsaved clinical changes" in bundle
+    assert "handleBeforeUnload" in controller
+    assert "navigateWithDirtyGuard" in controller
 
 
-def test_native_clinical_routes_redirect_to_workspace():
-    consultation_root = ROOT / "vetedge" / "veterinary" / "doctype" / "veterinary_consultation"
-    vitals_root = ROOT / "vetedge" / "veterinary" / "doctype" / "veterinary_vital_signs"
-    for path, tab in (
-        (consultation_root / "veterinary_consultation.js", "consultations"),
-        (consultation_root / "veterinary_consultation_list.js", "consultations"),
-        (vitals_root / "veterinary_vital_signs.js", "vitals"),
-        (vitals_root / "veterinary_vital_signs_list.js", "vitals"),
-    ):
+def test_native_clinical_routes_redirect_to_workspace_without_replacing_controllers():
+    hooks = read(HOOKS)
+    redirects = (
+        (REDIRECT_ROOT / "consultation_redirect.js", "consultations"),
+        (REDIRECT_ROOT / "consultation_list_redirect.js", "consultations"),
+        (REDIRECT_ROOT / "vitals_redirect.js", "vitals"),
+        (REDIRECT_ROOT / "vitals_list_redirect.js", "vitals"),
+    )
+    for path, tab in redirects:
         content = read(path)
         assert "/app/vetedge-clinical-workspace" in content
-        assert f"tab={tab}" in content
+        assert tab in content
+
+    for contract in (
+        '"Veterinary Consultation": "public/js/clinical_workspace/consultation_redirect.js"',
+        '"Veterinary Vital Signs": "public/js/clinical_workspace/vitals_redirect.js"',
+        '"Veterinary Consultation": "public/js/clinical_workspace/consultation_list_redirect.js"',
+        '"Veterinary Vital Signs": "public/js/clinical_workspace/vitals_list_redirect.js"',
+    ):
+        assert contract in hooks
+
+    native_consultation = read(
+        ROOT
+        / "vetedge"
+        / "veterinary"
+        / "doctype"
+        / "veterinary_consultation"
+        / "veterinary_consultation.js"
+    )
+    assert "add_billing_actions" in native_consultation
+    assert "get_consultation_cancellation_preflight" in native_consultation
+
+
+def test_unrelated_grooming_permission_hooks_are_preserved():
+    hooks = read(HOOKS)
+    assert '"Pet Grooming Appointment": "vetedge.services.permissions.has_veterinary_grooming_appointment_permission"' in hooks
+    assert '"Pet Grooming Session": "vetedge.services.permissions.has_veterinary_grooming_session_permission"' in hooks
 
 
 def test_double_review_gate_is_documented_for_phase_4():
