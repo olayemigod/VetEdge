@@ -151,17 +151,47 @@ Provide a dedicated pricing-aware setup experience that preserves ERPNext Item r
 
 Implemented on `agent/vetedge-full-edgeui-pricing-masters-phase2b` under draft PR #19. Focused Phase 2B CI, full VetEdge regression CI, clean-site builds, migration and live pricing-side-effect tests are complete; grouped manual QA and acceptance remain pending.
 
-## Deferred Phases
+## Phase 3 — Front Desk Action Workflows
 
-### Phase 3 — Front Desk Action Workflows
-
-Expected candidates:
+### Scope
 
 - Veterinary Guest Booking Request
-- Veterinary Missed Appointment action centre
+- Veterinary Missed Appointment action workflow
 - Appointment Queue
 
-Missed Appointment must preserve its dedicated reschedule, cancel and resolve actions and fix the existing modified-after-open conflict.
+### Business Goal
+
+Give front-desk and clinical staff one action-oriented workspace for incoming guest registrations, live appointment workload and missed-appointment follow-up without exposing three disconnected native interfaces.
+
+### Implementation
+
+- Dedicated `/app/vetedge-front-desk-action-center` EdgeSuite page.
+- Three workflow tabs: Appointment Queue, Guest Requests and Missed Appointments.
+- Permission-aware summaries, lists, search, filters, pagination and time buckets.
+- Branch-safe data filtering and server-side branch access validation.
+- Practitioner filtering limited to enabled VetEdge Doctor users.
+- Guest actions delegate to existing registration and appointment-conversion services.
+- Queue actions delegate to existing appointment transition and consultation-creation services.
+- Missed actions delegate to existing contact, reschedule, cancel, resolve and reopen services.
+- Explicit optimistic timestamps for guest, queue and missed actions.
+- Clear refresh guidance when another user or the hourly missed-appointment sync changes a record after it was opened.
+- Native Guest Request, Missed Appointment and old Appointment Queue routes redirect into the Action Centre.
+- Collision-safe standalone EdgeSuite UI asset loading and responsive desktop/mobile states.
+
+### Business and Accounting Boundaries
+
+- The Action Centre is read-and-act; it is not a second editable appointment or consultation form.
+- Guest registration confirmation may create Customer, Patient, registration invoice and appointment records only through the existing Guest Booking service.
+- Appointment queue actions use normal appointment controllers and retain registration-payment and consultation-payment gates.
+- The Action Centre does not directly create, submit, cancel or mutate Sales Invoice, Payment Entry or Stock Entry records.
+- Submitted accounting and stock documents are not changed.
+- Guest request cancellation is blocked after registration confirmation and only cancels an unprogressed `Awaiting Registration` placeholder appointment.
+
+### Status
+
+Implemented on `agent/vetedge-full-edgeui-front-desk-actions-phase3`. Focused Phase 3 CI, full VetEdge regression CI, clean-site build, migration and live action tests must pass before the phase is reported complete. Grouped manual browser QA and acceptance remain pending.
+
+## Deferred Phases
 
 ### Phase 4 — Clinical Documents
 
