@@ -11,9 +11,41 @@ from vetedge.services.appointment_notifications import (
 from vetedge.services.notifications import notify_appointment_event
 
 
+def _is_guest_placeholder_cancellation(doc) -> bool:
+	get_before_save = getattr(doc, "get_doc_before_save", None)
+	previous = get_before_save() if callable(get_before_save) else None
+	return bool(
+		previous
+		and not doc.get("patient")
+		and not previous.get("patient")
+		and doc.get("status") == "Cancelled"
+		and previous.get("status") == "Awaiting Registration"
+		and doc.get("created_from") == "Guest"
+		and doc.get("guest_booking_request")
+		and previous.get("guest_booking_request") == doc.get("guest_booking_request")
+		and previous.get("branch") == doc.get("branch")
+	)
+
+
 def validate_appointment(*args, **kwargs):
 	from vetedge.services.appointment_flow import validate_appointment as _validate_appointment
-	return _validate_appointment(*args, **kwargs)
+
+	doc = args[0] if args else kwargs.get("doc")
+	if not doc or not _is_guest_placeholder_cancellation(doc):
+		return _validate_appointment(*args, **kwargs)
+
+	from vetedge.services.appointment_flow import validate_status
+
+	# Validate the real Awaiting Registration -> Cancelled transition first.
+	validate_status(doc)
+	cancelled_status = doc.status
+	try:
+		# The placeholder legitimately has no Patient until registration. Validate
+		# its unchanged guest context before restoring the requested terminal state.
+		doc.status = "Awaiting Registration"
+		return _validate_appointment(*args, **kwargs)
+	finally:
+		doc.status = cancelled_status
 
 
 def sync_missed_appointment_from_source(*args, **kwargs):
@@ -78,19 +110,19 @@ class VeterinaryAppointment(Document):
 									pass
 
 							from frappe.utils import get_datetime, get_date_str, get_time_str
-							
+
 							clinic_name = (
 								frappe.db.get_value("Website Settings", "Website Settings", "app_name")
 								or (frappe.db.get_value("Company", self.company, "company_name") if getattr(self, "company", None) else None)
 								or "our clinic"
 							)
-							
+
 							owner_name = (
 								frappe.db.get_value("Customer", self.primary_owner, "customer_name")
 								or self.primary_owner
 								or "Customer"
 							)
-							
+
 							patient_name = "your pet"
 							if getattr(self, "patient", None):
 								patient_name = (
@@ -98,12 +130,12 @@ class VeterinaryAppointment(Document):
 									or self.patient
 									or "your pet"
 								)
-								
+
 							dt_val = get_datetime(self.appointment_datetime) if self.appointment_datetime else None
 							app_date = get_date_str(dt_val) if dt_val else ""
 							app_time = dt_val.strftime("%H:%M") if dt_val else ""
 							app_datetime = str(self.appointment_datetime) if self.appointment_datetime else ""
-							
+
 							clinic_phone = ""
 							if getattr(self, "branch", None):
 								try:
