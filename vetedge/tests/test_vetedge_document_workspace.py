@@ -8,14 +8,9 @@ PAGE_DIR = ROOT / "vetedge" / "veterinary" / "page" / "vetedge_document_workspac
 PAGE_JSON = PAGE_DIR / "vetedge_document_workspace.json"
 PAGE_JS = PAGE_DIR / "vetedge_document_workspace.js"
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_document_workspace.bundle.js"
-COMPONENT = (
-	ROOT
-	/ "vetedge"
-	/ "public"
-	/ "js"
-	/ "vetedge_document_workspace"
-	/ "VetEdgeDocumentWorkspace.vue"
-)
+COMPONENT_DIR = ROOT / "vetedge" / "public" / "js" / "vetedge_document_workspace"
+COMPONENT = COMPONENT_DIR / "VetEdgeDocumentWorkspace.vue"
+WORKSPACE_RUNTIME = COMPONENT_DIR / "workspace_runtime.js"
 BRIDGE = ROOT / "vetedge" / "public" / "js" / "vetedge_ui_bridge.js"
 
 
@@ -24,7 +19,7 @@ def read(path: Path) -> str:
 
 
 def test_first_full_document_batch_is_source_controlled_and_explicit():
-	for path in (API, PAGE_JSON, PAGE_JS, BUNDLE, COMPONENT):
+	for path in (API, PAGE_JSON, PAGE_JS, BUNDLE, COMPONENT, WORKSPACE_RUNTIME):
 		assert path.exists(), path
 
 	content = read(API)
@@ -122,10 +117,24 @@ def test_page_requires_real_edgesuite_document_components_not_native_dialog_skin
 		assert contract in component
 
 	assert "runtime.components" in bundle
+	assert "installWorkspaceRuntime" in bundle
 	assert "frappe.ui.Dialog" not in component
 	assert "frappe.ui.Dialog" not in loader
 	assert "frappe.client.insert" not in component
 	assert "frappe.client.set_value" not in component
+
+
+def test_confirmation_and_settings_navigation_lifecycle_is_safe():
+	content = read(WORKSPACE_RUNTIME)
+	for contract in (
+		"installWorkspaceRuntime",
+		"methods.closeConfirmation",
+		"busy: false",
+		"handler: null",
+		"window.location.assign(\"/app/vetedge\")",
+		"component.__vetedgeWorkspaceRuntimeInstalled = true",
+	):
+		assert contract in content
 
 
 def test_settings_use_grouped_edgesuite_layout_and_preserve_single_document_save():
