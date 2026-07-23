@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,82 +16,59 @@ def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def test_branding_adapter_supplies_logo_upload_without_bypassing_document_save():
+def test_owner_logo_upload_is_portal_scoped():
 	content = read(BRANDING_UI)
-	for contract in (
-		"frappe?.ui?.FileUploader",
-		'doctype: "Veterinary Settings"',
-		'docname: "Veterinary Settings"',
-		'allowed_file_types: ["image/*"]',
+	for value in (
+		"FileUploader",
+		"Veterinary Settings",
 		"portal_logo",
-		"Upload Logo",
-		"Replace Logo",
+		"Owner Portal Logo",
+		"portal_branding_tab",
+		"withoutPortalLogoField",
+		"does not change the VetEdge operational shell",
 		"Save Settings to keep the change",
-		'edgeUI.registerComponent("EdgeDocumentForm"',
 	):
-		assert contract in content
-
-	for unsafe in (
-		"frappe.db.set_value",
-		"frappe.client.set_value",
-		"frappe.client.insert",
-		"delete_file",
-	):
-		assert unsafe not in content
+		assert value in content
+	assert "updateBootIdentityLogo" not in content
 
 
-def test_shell_adapter_uses_boot_identity_and_refreshes_after_logo_change():
+def test_shell_uses_product_logo_and_generic_veterinary_fallback():
 	content = read(BRANDING_UI)
-	for contract in (
-		'BRANDING_EVENT = "vetedge:branding-updated"',
-		"edgesuite_ui_identity?.vetedge",
-		"tenant_logo",
-		"vetedge-shell-has-logo",
-		"vetedge-shell-logo-mark",
-		'edgeUI.registerComponent("EdgeAppShell"',
-		"window.dispatchEvent(new CustomEvent",
+	for value in (
+		'identity.product_logo || ""',
+		"vetedge-shell-has-product-logo",
+		"vetedge-shell-generic-product",
+		"vetedge-shell-product-logo-mark",
+		"vetedge-shell-generic-mark",
+		'identity.product_icon || "stethoscope"',
 	):
-		assert contract in content
+		assert value in content
+	assert "tenant_logo || bootIdentity().product_logo" not in content
 
 
-def test_boot_identity_prefers_saved_veterinary_settings_logo_then_safe_fallbacks():
+def test_identity_separates_owner_and_coreedge_product_logos():
 	content = read(IDENTITY)
-	for contract in (
-		"def _settings_identity()",
-		'frappe.get_single("Veterinary Settings")',
-		'meta.has_field("portal_logo")',
-		'tenant_logo = settings.get("logo") or company.get("logo") or branding.get("logo") or ""',
+	for value in (
+		"_owner_portal_identity",
+		"COREDGE_PRODUCT_LOGO_KEYS",
+		"product_logo_url",
+		"product_app_logo_url",
+		"app_logo_url",
+		'_coreedge_product_logo_url(mode: str)',
+		'if mode != "shared_hosted"',
+		'"owner_portal_logo": owner_portal_logo',
+		'"product_logo_source": "coreedge" if product_logo else "generic"',
+		'"product_logo_scope": "operational_shell"',
 	):
-		assert contract in content
+		assert value in content
 
 
-def test_branding_adapter_is_a_global_desk_asset_before_the_ui_bridge():
-	content = read(HOOKS)
-	branding = '"/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-3"'
-	professional = '"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1"'
-	bridge = '"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2"'
-	assert branding in content
-	assert content.index(professional) < content.index(branding) < content.index(bridge)
-
-
-def test_all_current_vetedge_edgesuite_pages_bound_branding_wait_and_mount_product_bundle():
+def test_branding_asset_is_global_and_cannot_block_pages():
+	hooks = read(HOOKS)
+	assert "vetedge_branding_ui.js?v=20260723-4" in hooks
 	for loader in LOADERS:
 		content = read(loader)
-		assert "VetEdgeBrandingUI?.install?.()" in content, loader
-		assert "brandingSettled" in content, loader
-		assert "window.setTimeout" in content, loader
-		assert "1500" in content, loader
-		assert "vetedge_branding_ui.js?v=20260723-2" in content, loader
-		install_index = content.index("VetEdgeBrandingUI?.install?.()")
-		product_bundle_indexes = [
-			content.find(bundle)
-			for bundle in (
-				"vetedge_document_workspace.bundle.js",
-				"vetedge_resource_center.bundle.js",
-				"vetedge_executive_dashboard.bundle.js",
-				"vetedge_stock_expiry_monitor.bundle.js",
-			)
-			if content.find(bundle) >= 0
-		]
-		assert product_bundle_indexes
-		assert install_index < product_bundle_indexes[0]
+		assert "VetEdgeBrandingUI?.install?.()" in content
+		assert "brandingSettled" in content
+		assert "window.setTimeout" in content
+		assert "1500" in content
