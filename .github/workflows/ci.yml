@@ -38,7 +38,8 @@ jobs:
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
-            vetedge/tests/test_vetedge_document_workspace.py
+            vetedge/tests/test_vetedge_document_workspace.py \
+            vetedge/tests/test_vetedge_product_app_context.py
 
       - name: Ruff navigation contracts
         run: |
@@ -80,6 +81,9 @@ jobs:
 
       - name: Check migrated EdgeSuite JavaScript
         run: |
+          node --check \
+            vetedge/public/js/edgesuite_product_menu.js
+
           node --check \
             vetedge/public/js/vetedge_home_navigation.js
 
@@ -188,11 +192,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out EdgeSuite UI document foundation
+      - name: Check out EdgeSuite UI Product App Switcher
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-document-foundation
+          ref: agent/edgeui-product-app-switcher
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -211,11 +215,11 @@ jobs:
 
           bench get-app \
             --skip-assets \
-            "$GITHUB_WORKSPACE/edgesuite-ui-source"
+            "file://$GITHUB_WORKSPACE/edgesuite-ui-source"
 
           bench get-app \
             --skip-assets \
-            "$GITHUB_WORKSPACE"
+            "file://$GITHUB_WORKSPACE"
 
       - name: Create standalone VetEdge site
         working-directory: frappe-bench
@@ -233,6 +237,7 @@ jobs:
 
           bench --site ci.localhost set-config edge_platform_mode standalone
           bench --site ci.localhost set-config coreedge_required 0
+          bench --site ci.localhost set-config allow_tests true
 
       - name: Verify standalone application set
         working-directory: frappe-bench
@@ -263,6 +268,13 @@ jobs:
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_coreedge_adapter
+
+      - name: Run Product App availability tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_product_app_context
 
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
