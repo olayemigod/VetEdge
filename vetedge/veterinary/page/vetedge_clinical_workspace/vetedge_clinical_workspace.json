@@ -1,0 +1,31 @@
+{
+ "content": null,
+ "creation": "2026-07-23 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "heart-pulse",
+ "idx": 0,
+ "modified": "2026-07-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Veterinary",
+ "name": "vetedge-clinical-workspace",
+ "owner": "Administrator",
+ "page_name": "vetedge-clinical-workspace",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "VetEdge Doctor"},
+  {"role": "VetEdge Nurse"},
+  {"role": "Veterinary Nurse"},
+  {"role": "VetEdge Front Desk"},
+  {"role": "Dispensary User"},
+  {"role": "Lab Technician"},
+  {"role": "Branch Manager"},
+  {"role": "VetEdge Branch Manager"}
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Veterinary Clinical Workspace"
+}
