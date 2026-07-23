@@ -1,45 +1,88 @@
-// VetEdge professional EdgeSuite UI 0.2 consumer adapter.
+// VetEdge professional EdgeSuite UI consumer adapter.
 // Business rules remain in VetEdge; this file only supplies navigation and shell presentation.
 (function () {
 	"use strict";
 
 	if (typeof window === "undefined") return;
 
-	const ASSET_VERSION = "20260719-1";
+	const ASSET_VERSION = "20260723-2";
 	const STYLE_ID = "vetedge-professional-ui-style";
 	const STYLE_URL = `/assets/vetedge/css/vetedge_professional_ui.css?v=${ASSET_VERSION}`;
 	const SECTION_STATE_KEY = "edgeui:vetedge:sidebar-sections";
 	const LIFECYCLE_EVENTS = ["desktop_screen", "sidebar_setup", "toolbar_setup", "page-change"];
 	const BELL_MARKUP = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+	const TECHNICAL_DESCRIPTIONS = new Set(["doctype", "page", "report", "link", "workspace sidebar"]);
 
 	const SECTION_META = Object.freeze({
-		Dashboard: { icon: "chart", description: "Performance, operations, and management dashboards" },
-		"Front Desk": { icon: "calendar", description: "Appointments, patients, customers, invoices, and payments" },
-		Clinical: { icon: "activity", description: "Consultations, medical records, laboratory, and vaccination" },
-		"Hospital & Services": { icon: "building", description: "Hospitalisation, boarding, grooming, and care services" },
-		"Inventory & Pharmacy": { icon: "layers", description: "Dispensary, inventory, batches, and stock monitoring" },
-		Inventory: { icon: "layers", description: "Dispensary, inventory, batches, and stock monitoring" },
-		Reports: { icon: "report", description: "Operational, clinical, stock, and financial reports" },
-		Setup: { icon: "settings", description: "Veterinary configuration, masters, and administration" },
-		Administration: { icon: "settings", description: "Veterinary configuration, masters, and administration" },
+		Dashboard: { icon: "chart", description: "Performance and operational overview" },
+		"Front Desk": { icon: "calendar", description: "Appointments, patients and payments" },
+		Clinical: { icon: "activity", description: "Consultations and patient care" },
+		"Hospital & Services": { icon: "building", description: "Hospital, boarding and grooming" },
+		"Inventory & Pharmacy": { icon: "layers", description: "Dispensary and stock control" },
+		Inventory: { icon: "layers", description: "Dispensary and stock control" },
+		Reports: { icon: "report", description: "Operational and management reports" },
+		"Veterinary Masters": { icon: "list", description: "Clinical reference records" },
+		Setup: { icon: "settings", description: "Configuration and administration" },
+		Configuration: { icon: "settings", description: "Configuration and administration" },
+		Administration: { icon: "settings", description: "Configuration and administration" },
+		Platform: { icon: "grid", description: "Platform access and services" },
+		"Help & Training": { icon: "help", description: "Guides and staff training" },
 	});
 
 	const ITEM_META = Object.freeze({
-		"Executive Dashboard": { icon: "chart", description: "Branch-aware operational and financial overview" },
-		"Clinical Dashboard": { icon: "activity", description: "Clinical workload and patient-care overview" },
-		"Financial Dashboard": { icon: "wallet", description: "Revenue, receivables, and payment performance" },
-		"Inventory / Dispensary Dashboard": { icon: "layers", description: "Stock, dispensary, and inventory performance" },
-		"Stock Expiry Monitor": { icon: "layers", description: "Track expired and soon-to-expire batch stock" },
-		"Appointment Queue": { icon: "calendar", description: "Run the live front-desk appointment queue" },
-		Patients: { icon: "students", description: "Veterinary patient records and profiles" },
-		Appointments: { icon: "calendar", description: "Schedule and manage veterinary appointments" },
-		Consultations: { icon: "clipboard", description: "Clinical consultation records and treatment workflow" },
-		"Medical History": { icon: "report", description: "Review longitudinal patient medical history" },
-		"Lab Orders": { icon: "assessment", description: "Laboratory requests, billing, and results" },
-		"Vaccination Records": { icon: "shield", description: "Vaccination history and due-date tracking" },
-		Hospitalisations: { icon: "building", description: "Admissions, care activities, charges, and discharge" },
-		"Pet Boarding Booking": { icon: "calendar", description: "Boarding reservations and service planning" },
-		"Veterinary Settings": { icon: "settings", description: "Configure veterinary workflows and controls" },
+		"Veterinary Home": { icon: "home", description: "Return to the main workspace" },
+		"Executive Dashboard": { icon: "chart", description: "Clinic performance overview" },
+		"Clinical Dashboard": { icon: "activity", description: "Clinical workload overview" },
+		"Financial Dashboard": { icon: "wallet", description: "Revenue and payment performance" },
+		"Inventory / Dispensary Dashboard": { icon: "layers", description: "Stock and dispensary overview" },
+		"Lab Dashboard": { icon: "assessment", description: "Laboratory workload overview" },
+		"Vaccination Dashboard": { icon: "shield", description: "Vaccination activity overview" },
+		"Boarding Dashboard": { icon: "building", description: "Boarding activity overview" },
+		"Grooming Dashboard": { icon: "activity", description: "Grooming activity overview" },
+		"Practitioner Performance Dashboard": { icon: "user", description: "Practitioner workload and results" },
+		"Branch Performance Dashboard": { icon: "building", description: "Compare branch performance" },
+		"Stock Expiry Monitor": { icon: "layers", description: "Review expiring batch stock" },
+		"Appointment Queue": { icon: "calendar", description: "Run the live appointment queue" },
+		Patients: { icon: "students", description: "Manage veterinary patients" },
+		Appointments: { icon: "calendar", description: "Schedule and manage appointments" },
+		"Guest Booking Requests": { icon: "clipboard", description: "Review owner booking requests" },
+		"Missed Appointments": { icon: "calendar", description: "Resolve missed appointments" },
+		Customer: { icon: "user", description: "Manage pet owner accounts" },
+		"Sales Invoice": { icon: "report", description: "Review veterinary invoices" },
+		"Payment Entry": { icon: "wallet", description: "Record and review payments" },
+		Consultations: { icon: "clipboard", description: "Run clinical consultations" },
+		"Medical History": { icon: "report", description: "Review patient medical history" },
+		"Vital Signs": { icon: "activity", description: "Record patient vital signs" },
+		"Lab Orders": { icon: "assessment", description: "Manage tests and results" },
+		"Vaccination Records": { icon: "shield", description: "Manage vaccination records" },
+		Hospitalisations: { icon: "building", description: "Manage admissions and discharge" },
+		"Kennel Availability Board": { icon: "building", description: "View available care locations" },
+		"Pet Boarding Booking": { icon: "calendar", description: "Manage boarding reservations" },
+		"Pet Boarding Stay": { icon: "building", description: "Manage active boarding stays" },
+		"Pet Boarding Care Record": { icon: "clipboard", description: "Record boarding care" },
+		"Pet Grooming Appointment": { icon: "calendar", description: "Schedule grooming services" },
+		"Pet Grooming Session": { icon: "activity", description: "Run grooming sessions" },
+		Item: { icon: "layers", description: "Manage stock and service items" },
+		Species: { icon: "activity", description: "Maintain animal species" },
+		Breeds: { icon: "list", description: "Maintain species-specific breeds" },
+		Symptoms: { icon: "activity", description: "Maintain clinical symptoms" },
+		Diagnoses: { icon: "clipboard", description: "Maintain standard diagnoses" },
+		"Diagnosis Categories": { icon: "layers", description: "Organise diagnosis records" },
+		"Service Types": { icon: "tool", description: "Maintain veterinary service types" },
+		"Consultation Types": { icon: "clipboard", description: "Maintain consultation options" },
+		"Treatment Items": { icon: "layers", description: "Maintain treatment billing items" },
+		"Treatment Types": { icon: "settings", description: "Maintain treatment categories" },
+		"Lab Tests": { icon: "assessment", description: "Maintain laboratory test catalogue" },
+		Vaccines: { icon: "shield", description: "Maintain vaccine catalogue" },
+		"Pet Grooming Service": { icon: "activity", description: "Maintain grooming services" },
+		Settings: { icon: "settings", description: "Configure Veterinary operations" },
+		"Veterinary Settings": { icon: "settings", description: "Configure Veterinary operations" },
+		Branch: { icon: "building", description: "Manage clinic branches" },
+		"Care Locations": { icon: "building", description: "Manage hospital care locations" },
+		Kennel: { icon: "building", description: "Manage kennels and capacity" },
+		"Branch User Assignment": { icon: "students", description: "Assign users to branches" },
+		"Branch Practitioner Assignment": { icon: "user", description: "Assign practitioners to branches" },
+		"Training Centre": { icon: "help", description: "Open staff training guides" },
 	});
 
 	const ICON_ALIASES = Object.freeze({
@@ -117,8 +160,14 @@
 		return `/app/${target.replace(/^\/+/, "")}`;
 	}
 
+	function shortDescription(value) {
+		const text = String(value || "").replace(/\s+/g, " ").trim();
+		if (!text || TECHNICAL_DESCRIPTIONS.has(text.toLowerCase())) return "";
+		return text.length > 72 ? `${text.slice(0, 69).trim()}…` : text;
+	}
+
 	function itemDescription(item) {
-		return ITEM_META[item.label]?.description || String(item.description || item.link_type || "Veterinary workspace");
+		return shortDescription(ITEM_META[item.label]?.description || item.description || "");
 	}
 
 	function fallbackGroups() {
@@ -127,8 +176,9 @@
 				key: "overview",
 				label: "Overview",
 				icon: "home",
-				description: "Veterinary operations and inventory overview",
+				description: "Veterinary operations overview",
 				items: [
+					{ label: "Veterinary Home", route: "/app/vetedge", icon: "home", description: ITEM_META["Veterinary Home"].description, link_type: "Page", link_to: "vetedge" },
 					{ label: "Executive Dashboard", route: "/app/vetedge-executive-dashboard", icon: "chart", description: ITEM_META["Executive Dashboard"].description, link_type: "Page", link_to: "vetedge-executive-dashboard" },
 					{ label: "Stock Expiry Monitor", route: "/app/stock-expiry-monitor", icon: "layers", description: ITEM_META["Stock Expiry Monitor"].description, link_type: "Page", link_to: "stock-expiry-monitor" },
 				],
@@ -160,7 +210,7 @@
 					key: slug(source.label || `section-${groups.length + 1}`),
 					label: source.label || "Navigation",
 					icon: semanticIcon(source.icon, "", meta.icon || "layers"),
-					description: meta.description || `${source.label || "Veterinary"} workspace`,
+					description: shortDescription(meta.description || source.description || ""),
 					defaultCollapsed: Boolean(source.keep_closed),
 					items: [],
 				};
@@ -169,7 +219,7 @@
 			}
 			if (source.type !== "Link") continue;
 			if (!group) {
-				group = { key: "navigation", label: "Navigation", icon: "grid", description: "Veterinary workspace", items: [] };
+				group = { key: "navigation", label: "Navigation", icon: "grid", description: "", items: [] };
 				groups.push(group);
 			}
 			const item = {
@@ -181,11 +231,19 @@
 				roles: Array.isArray(source.roles) ? source.roles : [],
 				badge: source.badge || "",
 			};
-			item.route = shellRoute(item);
+			item.route = shellRoute({ ...item, route: source.route || "" });
 			if (item.label && item.route) group.items.push(item);
 		}
 		const populated = groups.filter((entry) => entry.items.length);
 		return populated.length ? populated : fallbackGroups();
+	}
+
+	function compactShellGroups(groups) {
+		return (groups || []).map((group) => ({
+			...group,
+			description: "",
+			items: (group.items || []).map((item) => ({ ...item, description: "" })),
+		}));
 	}
 
 	function profile() {
@@ -206,11 +264,11 @@
 	function productMenuSections(groups) {
 		return groups.map((group) => ({
 			label: group.label,
-			description: group.description || "",
+			description: shortDescription(group.description || ""),
 			icon: group.icon || "layers",
 			items: group.items.map((item) => ({
 				label: item.label,
-				description: item.description || "",
+				description: shortDescription(item.description || ""),
 				icon: item.icon || "list",
 				badge: item.badge || "",
 				roles: item.roles || [],
@@ -270,7 +328,8 @@
 			setup(_props, context) {
 				return () => {
 					const attrs = context.attrs || {};
-					const suppliedMenu = Array.isArray(attrs.menuItems) && attrs.menuItems.length ? attrs.menuItems : groups;
+					const sourceMenu = Array.isArray(attrs.menuItems) && attrs.menuItems.length ? attrs.menuItems : groups;
+					const suppliedMenu = compactShellGroups(sourceMenu);
 					const suppliedNavigate = attrs.onNavigate;
 					const onNavigate = (route) => {
 						let handled = false;
@@ -406,13 +465,14 @@
 	window.VetEdgeProfessionalUI = Object.assign(window.VetEdgeProfessionalUI || {}, {
 		install,
 		getMenuItems,
+		compactShellGroups,
 		diagnose,
 		openRoute,
 	});
 
 	bindLifecycle();
 	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", () => scheduleInstall("asset-ready"));
+		window.frappe.require("edgesuite_ui.bundle.js", () => scheduleInstall("asset-ready"));
 	} else if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", () => scheduleInstall("dom-ready"), { once: true });
 	} else {
