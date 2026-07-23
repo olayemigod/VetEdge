@@ -34,8 +34,8 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			self.assertTrue(path.exists(), path)
 
 		hooks = self.read(HOOKS)
-		self.assertIn("vetedge_professional_ui.css?v=20260719-1", hooks)
-		self.assertIn("vetedge_professional_ui.js?v=20260719-1", hooks)
+		self.assertIn("vetedge_professional_ui.css?v=20260723-2", hooks)
+		self.assertIn("vetedge_professional_ui.js?v=20260723-2", hooks)
 		self.assertLess(hooks.index("dashboard_shell.css"), hooks.index("vetedge_professional_ui.css"))
 		self.assertLess(hooks.index("edgesuite_product_menu.js"), hooks.index("vetedge_professional_ui.js"))
 
@@ -49,6 +49,8 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			"source.type !== \"Link\"",
 			"defaultCollapsed: Boolean(source.keep_closed)",
 			"getMenuItems",
+			"compactShellGroups",
+			"shortDescription",
 		):
 			self.assertIn(contract, content)
 
@@ -67,6 +69,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			"MutationObserver",
 			"VetEdgeProfessionalUI",
 			"diagnose",
+			'window.frappe.require("edgesuite_ui.bundle.js"',
 		):
 			self.assertIn(contract, content)
 
@@ -118,6 +121,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			"max-width: none !important",
 			"--edge-primary: #1769aa",
 			"--edge-accent: #1f9d72",
+			".vetedge-product-menu-link-copy > small",
 			".vetedge-notification-icon svg",
 		):
 			self.assertIn(contract, content)
