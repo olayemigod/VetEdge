@@ -1,0 +1,180 @@
+name: Phase 3 Front Desk Action Centre
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: phase3-frontdesk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Front desk action contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile front desk service
+        run: python -m py_compile vetedge/services/front_desk_action_center.py
+
+      - name: Ruff front desk service and tests
+        run: |
+          ruff check \
+            vetedge/services/front_desk_action_center.py \
+            tests/test_vetedge_front_desk_action_center_contract.py \
+            vetedge/tests/test_front_desk_action_center_integration.py
+
+      - name: Validate front desk contracts
+        run: python -m pytest -q tests/test_vetedge_front_desk_action_center_contract.py
+
+  frontend:
+    name: Front desk action frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Check front desk JavaScript
+        run: |
+          node --check vetedge/public/js/vetedge_front_desk_action_center.bundle.js
+          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
+          node --check vetedge/veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js
+          node --check vetedge/veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request.js
+          node --check vetedge/veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request_list.js
+          node --check vetedge/veterinary/doctype/veterinary_missed_appointment/veterinary_missed_appointment.js
+          node --check vetedge/veterinary/doctype/veterinary_missed_appointment/veterinary_missed_appointment_list.js
+
+  frappe-v16:
+    name: Front desk Frappe v16 integration
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install bench prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev pkg-config redis-tools
+          python -m pip install --upgrade frappe-bench
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create clean Frappe v16 bench
+        run: |
+          bench init \
+            --frappe-branch version-16 \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            frappe-bench
+
+          cd frappe-bench
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Check out EdgeSuite UI document foundation
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          ref: agent/edgeui-document-foundation
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
+
+      - name: Fetch ERPNext, Payments, and local applications
+        working-directory: frappe-bench
+        run: |
+          bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
+          bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
+          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "$GITHUB_WORKSPACE"
+
+      - name: Create standalone VetEdge site
+        working-directory: frappe-bench
+        run: |
+          bench new-site ci.localhost \
+            --db-host 127.0.0.1 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
+          bench --site ci.localhost install-app edgesuite_ui
+          bench --site ci.localhost install-app vetedge
+          bench --site ci.localhost set-config edge_platform_mode standalone
+          bench --site ci.localhost set-config coreedge_required 0
+          bench --site ci.localhost set-config allow_tests true
+
+      - name: Verify standalone application set
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost list-apps | tee /tmp/installed-apps.txt
+          grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
+          if grep -Eq '^coreedge[[:space:]]' /tmp/installed-apps.txt; then
+            echo "CoreEdge must not be installed in the standalone VetEdge CI site."
+            exit 1
+          fi
+
+      - name: Build and migrate Front Desk Action Centre
+        working-directory: frappe-bench
+        run: |
+          bench build --app edgesuite_ui
+          bench build --app vetedge
+          bench --site ci.localhost migrate
+
+      - name: Run live front desk tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_front_desk_action_center_integration
