@@ -107,9 +107,15 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 				return;
 			}
 
+			let brandingSettled = false;
 			const loadMonitorBundle = () => {
-				if (wrapper.current_visit_id !== visit_id) return;
-				window.VetEdgeBrandingUI?.install?.();
+				if (brandingSettled || wrapper.current_visit_id !== visit_id) return;
+				brandingSettled = true;
+				try {
+					window.VetEdgeBrandingUI?.install?.();
+				} catch (error) {
+					console.warn('VetEdge branding enhancement could not be installed:', error);
+				}
 				frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
 					if (wrapper.current_visit_id !== visit_id) return;
 
@@ -144,7 +150,8 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			if (window.VetEdgeBrandingUI?.install) {
 				loadMonitorBundle();
 			} else {
-				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-1', loadMonitorBundle);
+				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-2', loadMonitorBundle);
+				window.setTimeout(loadMonitorBundle, 1500);
 			}
 		};
 
