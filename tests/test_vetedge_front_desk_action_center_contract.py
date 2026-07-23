@@ -2,6 +2,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "vetedge" / "services" / "front_desk_action_center.py"
+APPOINTMENT_CONTROLLER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_appointment"
+	/ "veterinary_appointment.py"
+)
+PRACTITIONER_INTEGRITY = ROOT / "vetedge" / "services" / "practitioner_integrity.py"
 COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -84,6 +93,28 @@ def test_actions_preserve_existing_business_controllers_and_platform_access():
 	assert "appointment.save()" in service
 	assert "doc.save()" in service
 	assert "frappe.db.set_value" not in service
+
+
+def test_guest_placeholder_cancellation_remains_narrow_and_controller_driven():
+	appointment = read(APPOINTMENT_CONTROLLER)
+	practitioner = read(PRACTITIONER_INTEGRITY)
+	for content in (appointment, practitioner):
+		for contract in (
+			"def _is_guest_placeholder_cancellation",
+			'not doc.get("patient")',
+			'not previous.get("patient")',
+			'doc.get("status") == "Cancelled"',
+			'previous.get("status") == "Awaiting Registration"',
+			'doc.get("created_from") == "Guest"',
+			'previous.get("guest_booking_request") == doc.get("guest_booking_request")',
+			'previous.get("branch") == doc.get("branch")',
+		):
+			assert contract in content
+
+	assert "validate_status(doc)" in appointment
+	assert 'doc.status = "Awaiting Registration"' in appointment
+	assert "doc.status = cancelled_status" in appointment
+	assert "or _is_guest_placeholder_cancellation(doc)" in practitioner
 
 
 def test_modified_after_open_is_replaced_with_explicit_optimistic_locking():
