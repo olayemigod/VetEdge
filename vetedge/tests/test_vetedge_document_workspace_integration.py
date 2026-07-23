@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+import frappe.model.workflow as workflow_module
 from frappe.tests.utils import FrappeTestCase
 
 from vetedge.services.document_workspace import (
@@ -45,6 +46,15 @@ class TestVetEdgeDocumentWorkspaceIntegration(FrappeTestCase):
 
 			payload = get_document(resource)
 			self.assertEqual(payload["state_field"], "status")
+
+	def test_plain_status_documents_do_not_raise_workflow_not_found_popup(self):
+		class PlainVeterinaryPatient:
+			doctype = "Veterinary Patient"
+
+		frappe.clear_messages()
+		self.assertEqual(workflow_module.get_transitions(PlainVeterinaryPatient()), [])
+		messages = [str(message.get("message") or "") for message in frappe.get_message_log()]
+		self.assertFalse(any("Workflow not found" in message for message in messages))
 
 	def test_veterinary_settings_resolve_as_grouped_single_document(self):
 		payload = get_document("settings")
