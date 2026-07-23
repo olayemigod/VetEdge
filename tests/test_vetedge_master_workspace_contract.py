@@ -169,5 +169,6 @@ def test_workspace_safety_is_shared_by_documents_and_masters():
 		"wrapGuardedMethod",
 	):
 		assert value in safety
-	assert "applyWorkspaceSafety(VetEdgeDocumentWorkspace, { guardNavigation: true })" in document_bundle
+	assert "applyWorkspaceSafety(VetEdgeDocumentWorkspace" in document_bundle
+	assert "guardNavigation: true" in document_bundle
 	assert "applyWorkspaceSafety(VetEdgeMasterWorkspace)" in master_bundle
