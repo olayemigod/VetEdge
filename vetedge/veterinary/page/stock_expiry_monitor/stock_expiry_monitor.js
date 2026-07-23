@@ -107,35 +107,45 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 				return;
 			}
 
-			frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+			const loadMonitorBundle = () => {
 				if (wrapper.current_visit_id !== visit_id) return;
+				window.VetEdgeBrandingUI?.install?.();
+				frappe.require('vetedge_stock_expiry_monitor.bundle.js', () => {
+					if (wrapper.current_visit_id !== visit_id) return;
 
-				$loading.remove();
+					$loading.remove();
 
-				if (!window.VetedgeStockExpiryMonitor) {
-					showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
-					return;
-				}
+					if (!window.VetedgeStockExpiryMonitor) {
+						showLoadFailure(__('Failed to load the Stock Expiry Monitor product bundle.'));
+						return;
+					}
 
-				try {
-					const root = $(
-						'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
-					).appendTo(page.body);
+					try {
+						const root = $(
+							'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
+						).appendTo(page.body);
 
-					wrapper.vue_app = runtime.createEdgeApp(
-						window.VetedgeStockExpiryMonitor
-					);
+						wrapper.vue_app = runtime.createEdgeApp(
+							window.VetedgeStockExpiryMonitor
+						);
 
-					wrapper.vue_app.mount(root[0]);
-				} catch (error) {
-					console.error('Error mounting Stock Expiry Monitor:', error);
-					showLoadFailure(
-						__('Error mounting Stock Expiry Monitor: {0}', [
-							error.message || String(error)
-						])
-					);
-				}
-			});
+						wrapper.vue_app.mount(root[0]);
+					} catch (error) {
+						console.error('Error mounting Stock Expiry Monitor:', error);
+						showLoadFailure(
+							__('Error mounting Stock Expiry Monitor: {0}', [
+								error.message || String(error)
+							])
+						);
+					}
+				});
+			};
+
+			if (window.VetEdgeBrandingUI?.install) {
+				loadMonitorBundle();
+			} else {
+				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-1', loadMonitorBundle);
+			}
 		};
 
 		if (window.VetEdgeProfessionalUI?.install) {
