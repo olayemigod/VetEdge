@@ -14,6 +14,11 @@
 		}
 	}
 
+	function isNewDocumentRoute(name) {
+		const value = String(name || "").toLowerCase();
+		return !value || value === "new" || value.startsWith("new-veterinary-consultation");
+	}
+
 	function redirectConsultationRoute() {
 		if (redirecting || window.location.pathname === WORKSPACE_PATH) return false;
 		const route = currentRoute();
@@ -22,11 +27,11 @@
 		if (doctype !== "Veterinary Consultation") return false;
 
 		let target = WORKSPACE_PATH;
-		if (routeType === "Form" && route[2]) {
-			target += `?consultation=${encodeURIComponent(route[2])}`;
-		} else if (routeType === "Form" || routeType === "List") {
-			target += routeType === "Form" ? "?new=1" : "";
-		} else {
+		if (routeType === "Form") {
+			target += isNewDocumentRoute(route[2])
+				? "?new=1"
+				: `?consultation=${encodeURIComponent(route[2])}`;
+		} else if (routeType !== "List") {
 			return false;
 		}
 
