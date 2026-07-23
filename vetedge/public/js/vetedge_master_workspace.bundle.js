@@ -1,4 +1,7 @@
 import VetEdgeMasterWorkspace from './vetedge_master_workspace/VetEdgeMasterWorkspace.vue';
+import { applyWorkspaceSafety } from './vetedge_workspace_safety';
+
+applyWorkspaceSafety(VetEdgeMasterWorkspace);
 
 export function mountVetEdgeMasterWorkspace(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
