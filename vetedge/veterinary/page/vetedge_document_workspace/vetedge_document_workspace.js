@@ -29,9 +29,12 @@ frappe.pages['vetedge-document-workspace'].on_page_show = function(wrapper) {
 			.appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	// Use the standalone app's collision-safe bundle name. CoreEdge historically
+	// shipped a different `edgeui.bundle.js`, so the generic manifest key is not
+	// safe on sites where both apps are installed.
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
-		const runtime = window.EdgeSuiteUI || window.EdgeUI;
+		const runtime = window.EdgeSuiteUI;
 		const required = [
 			'EdgeAppShell',
 			'EdgePageLayout',
