@@ -13,12 +13,12 @@
   "is_active"
  ],
  "fields": [
-  {"fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "label": "Branch", "options": "Branch", "reqd": 1},
-  {"fieldname": "registration_item", "fieldtype": "Link", "in_list_view": 1, "label": "Registration Item", "options": "Item"},
-  {"fieldname": "registration_fee", "fieldtype": "Currency", "in_list_view": 1, "label": "Registration Fee"},
-  {"default": "0", "fieldname": "auto_create_invoice_on_registration", "fieldtype": "Check", "in_list_view": 1, "label": "Auto Create Invoice on Registration"},
-  {"default": "0", "fieldname": "require_payment_before_first_consultation", "fieldtype": "Check", "label": "Require Payment Before First Consultation"},
-  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"}
+  {"columns": 3, "fieldname": "branch", "fieldtype": "Link", "in_list_view": 1, "label": "Branch", "options": "Branch", "reqd": 1},
+  {"columns": 3, "fieldname": "registration_item", "fieldtype": "Link", "in_list_view": 1, "label": "Registration Item", "options": "Item"},
+  {"columns": 2, "fieldname": "registration_fee", "fieldtype": "Currency", "in_list_view": 1, "label": "Registration Fee"},
+  {"columns": 1, "default": "0", "description": "Automatically create the registration invoice when a patient is registered under this branch rule.", "fieldname": "auto_create_invoice_on_registration", "fieldtype": "Check", "in_list_view": 1, "label": "Auto Invoice"},
+  {"columns": 2, "default": "0", "description": "Require the registration invoice to be paid before the patient's first consultation.", "fieldname": "require_payment_before_first_consultation", "fieldtype": "Check", "label": "Payment Before Consultation"},
+  {"columns": 1, "default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"}
  ],
  "istable": 1,
  "module": "Veterinary",
