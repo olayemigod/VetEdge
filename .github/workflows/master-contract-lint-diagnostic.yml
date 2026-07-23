@@ -1,0 +1,19 @@
+name: Master Contract Lint Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Master workspace contract Ruff
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check tests/test_vetedge_master_workspace_contract.py
