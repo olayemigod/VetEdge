@@ -144,10 +144,12 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "frappe.ui.Dialog" in component
 
 
-def test_hooks_load_branding_and_bridge_after_professional_adapter():
+def test_hooks_load_home_branding_and_bridge_in_safe_order():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
-	assert "vetedge_branding_ui.js?v=20260723-4" in content
-	assert "vetedge_ui_bridge.js?v=20260720-2" in content
+	assert "vetedge_home_navigation.js?v=20260723-1" in content
+	assert "vetedge_branding_ui.js?v=20260723-5" in content
+	assert "vetedge_ui_bridge.js?v=20260723-1" in content
+	assert content.index("vetedge_home_navigation.js") < content.index("vetedge_professional_ui.js")
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_branding_ui.js")
 	assert content.index("vetedge_branding_ui.js") < content.index("vetedge_ui_bridge.js")
