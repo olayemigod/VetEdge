@@ -1,4 +1,7 @@
 import VetEdgeDocumentWorkspace from './vetedge_document_workspace/VetEdgeDocumentWorkspace.vue';
+import { installWorkspaceRuntime } from './vetedge_document_workspace/workspace_runtime';
+
+installWorkspaceRuntime(VetEdgeDocumentWorkspace);
 
 export function mountVetEdgeDocumentWorkspace(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
