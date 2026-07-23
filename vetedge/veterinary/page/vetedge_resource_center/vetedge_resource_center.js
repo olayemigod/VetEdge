@@ -64,24 +64,34 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 				return;
 			}
 
-			frappe.require('vetedge_resource_center.bundle.js', () => {
+			const loadResourceBundle = () => {
 				if (wrapper.current_visit_id !== visitId) return;
-				if (!window.VetEdgeResourceCenter) {
-					showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
-					return;
-				}
+				window.VetEdgeBrandingUI?.install?.();
+				frappe.require('vetedge_resource_center.bundle.js', () => {
+					if (wrapper.current_visit_id !== visitId) return;
+					if (!window.VetEdgeResourceCenter) {
+						showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
+						return;
+					}
 
-				try {
-					$loading.remove();
-					const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
-						.appendTo(page.body);
-					wrapper.vue_app = runtime.createEdgeApp(window.VetEdgeResourceCenter);
-					wrapper.vue_app.mount(root[0]);
-				} catch (error) {
-					console.error('Error mounting Veterinary Resource Center:', error);
-					showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
-				}
-			});
+					try {
+						$loading.remove();
+						const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
+							.appendTo(page.body);
+						wrapper.vue_app = runtime.createEdgeApp(window.VetEdgeResourceCenter);
+						wrapper.vue_app.mount(root[0]);
+					} catch (error) {
+						console.error('Error mounting Veterinary Resource Center:', error);
+						showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
+					}
+				});
+			};
+
+			if (window.VetEdgeBrandingUI?.install) {
+				loadResourceBundle();
+			} else {
+				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-1', loadResourceBundle);
+			}
 		};
 
 		if (window.VetEdgeProfessionalUI?.install) {
