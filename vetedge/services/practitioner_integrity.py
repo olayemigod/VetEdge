@@ -102,7 +102,24 @@ def _populate_responsible_user(doc, fieldname: str) -> None:
 def _can_skip_practitioner_requirement(doc) -> bool:
 	if doc.doctype != "Veterinary Appointment":
 		return False
-	return cstr(doc.get("status") or "").strip() in APPOINTMENT_PRACTITIONER_OPTIONAL_STATUSES
+	status = cstr(doc.get("status") or "").strip()
+	return status in APPOINTMENT_PRACTITIONER_OPTIONAL_STATUSES or _is_guest_placeholder_cancellation(doc)
+
+
+def _is_guest_placeholder_cancellation(doc) -> bool:
+	get_before_save = getattr(doc, "get_doc_before_save", None)
+	previous = get_before_save() if callable(get_before_save) else None
+	return bool(
+		previous
+		and not doc.get("patient")
+		and not previous.get("patient")
+		and doc.get("status") == "Cancelled"
+		and previous.get("status") == "Awaiting Registration"
+		and doc.get("created_from") == "Guest"
+		and doc.get("guest_booking_request")
+		and previous.get("guest_booking_request") == doc.get("guest_booking_request")
+		and previous.get("branch") == doc.get("branch")
+	)
 
 
 def _require_non_empty_user(doc, fieldname: str) -> None:
