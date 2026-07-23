@@ -66,11 +66,14 @@ def test_boot_identity_prefers_saved_veterinary_settings_logo_then_safe_fallback
 		assert contract in content
 
 
-def test_all_current_vetedge_edgesuite_pages_load_branding_before_product_bundle():
+def test_all_current_vetedge_edgesuite_pages_bound_branding_wait_and_mount_product_bundle():
 	for loader in LOADERS:
 		content = read(loader)
-		assert "vetedge_branding_ui.js?v=20260723-1" in content, loader
 		assert "VetEdgeBrandingUI?.install?.()" in content, loader
+		assert "brandingSettled" in content, loader
+		assert "window.setTimeout" in content, loader
+		assert "1500" in content, loader
+		assert "vetedge_branding_ui.js?v=20260723-2" in content, loader
 		install_index = content.index("VetEdgeBrandingUI?.install?.()")
 		product_bundle_indexes = [
 			content.find(bundle)
