@@ -36,7 +36,7 @@ app_include_js = [
 	# Branding is a global Desk enhancement. Loading it here guarantees that the
 	# settings uploader and shell product-logo adapter exist before VetEdge pages mount.
 	"/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-5",
-	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2",
+	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260723-1",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
