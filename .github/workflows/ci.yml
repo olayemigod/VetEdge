@@ -94,6 +94,9 @@ jobs:
           node --check \
             vetedge/public/js/vetedge_document_workspace.bundle.js
 
+          node --check \
+            vetedge/public/js/vetedge_document_workspace/workspace_runtime.js
+
   frappe-v16:
     name: Frappe v16 standalone integration
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
@@ -247,12 +250,19 @@ jobs:
             --app vetedge \
             --module vetedge.tests.test_vetedge_ui_identity_resource_center
 
-      - name: Run full document workspace tests
+      - name: Run full document workspace contract tests
         working-directory: frappe-bench
         run: |
           bench --site ci.localhost run-tests \
             --app vetedge \
             --module vetedge.tests.test_vetedge_document_workspace
+
+      - name: Run live document workspace metadata tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_document_workspace_integration
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
