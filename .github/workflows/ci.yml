@@ -49,15 +49,21 @@ jobs:
       - name: Ruff master workspace contract
         run: ruff check tests/test_vetedge_master_workspace_contract.py
 
-      - name: Validate EdgeSuite UI dependency and migration contracts
+      - name: Validate migration foundation contracts
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_document_workspace.py
+
+      - name: Validate navigation contracts
+        run: |
+          python -m pytest -q \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
-            vetedge/tests/test_vetedge_ui_identity_resource_center.py \
-            vetedge/tests/test_vetedge_document_workspace.py \
-            tests/test_vetedge_master_workspace_contract.py
+            vetedge/tests/test_vetedge_ui_identity_resource_center.py
+
+      - name: Validate master workspace contract
+        run: python -m pytest -q tests/test_vetedge_master_workspace_contract.py
 
   frontend:
     name: Frontend validation
