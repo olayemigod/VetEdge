@@ -57,6 +57,15 @@ doctype_list_js = {
 	"Veterinary Vital Signs": "public/js/clinical_workspace/vitals_list_redirect.js",
 }
 
+override_whitelisted_methods = {
+	"vetedge.services.medical_history.get_patient_medical_history_view": (
+		"vetedge.services.medical_history_safe.get_patient_medical_history_view"
+	),
+	"vetedge.services.clinical_workspace.get_clinical_medical_history": (
+		"vetedge.services.medical_history_safe.get_clinical_medical_history"
+	),
+}
+
 get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website_user_home_page"
 
 after_install = "vetedge.install.after_install"
@@ -89,7 +98,7 @@ has_permission = {
 	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
 	"Pet Grooming Appointment": "vetedge.services.permissions.has_pet_grooming_appointment_permission",
-	"Pet Grooming Session": "vetedge.services.permissions.has_pet_grooming_session_permission",
+	"Pet Grooming Session": "vetedge.services.permissions.has_grooming_document_permission",
 	"Veterinary Notification Log": "vetedge.services.permissions.has_notification_admin_permission",
 	"Veterinary Notification Preference": "vetedge.services.permissions.has_notification_admin_permission",
 	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
