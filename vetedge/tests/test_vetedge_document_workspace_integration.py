@@ -34,6 +34,18 @@ class TestVetEdgeDocumentWorkspaceIntegration(FrappeTestCase):
 			self.assertIsInstance(payload["values"], dict)
 			self.assertIn("permissions", payload)
 
+	def test_frappe_16_workflow_state_field_compatibility(self):
+		for resource, doctype in (
+			("patients", "Veterinary Patient"),
+			("appointments", "Veterinary Appointment"),
+		):
+			meta = frappe.get_meta(doctype)
+			self.assertTrue(hasattr(meta, "workflow_state_field"))
+			self.assertEqual(meta.workflow_state_field, "")
+
+			payload = get_document(resource)
+			self.assertEqual(payload["state_field"], "status")
+
 	def test_veterinary_settings_resolve_as_grouped_single_document(self):
 		payload = get_document("settings")
 		self.assertFalse(payload["is_new"])
