@@ -21,7 +21,9 @@ LIST = (
 	/ "veterinary_consultation_list.js"
 )
 PAGE_ROOT = ROOT / "vetedge" / "veterinary" / "page" / "vetedge_clinical_workspace"
+HOME_PAGE_ROOT = ROOT / "vetedge" / "veterinary" / "page" / "vetedge"
 HOOKS = ROOT / "vetedge" / "hooks.py"
+HOME_NAVIGATION = ROOT / "vetedge" / "public" / "js" / "vetedge_home_navigation.js"
 
 
 def read(path: Path) -> str:
@@ -143,11 +145,25 @@ def test_frontend_is_full_edgesuite_clinical_workspace():
 	assert "cur_frm" not in component
 	assert "frappe.require('edgesuite_ui.bundle.js'" in loader
 	assert "const runtime = window.EdgeSuiteUI;" in loader
+	assert "'EdgeIcon'" in loader
+	assert "resetPageScroll" in loader
 	assert "frappe.require('edgeui.bundle.js'" not in loader
 	assert "const runtime = window.EdgeSuiteUI;" in bundle
 	assert "window.EdgeUI" not in bundle
 	assert "applyWorkspaceSafety(VetEdgeClinicalWorkspace, { guardNavigation: true })" in bundle
 	assert "saveVitalsWithReliableClose" in bundle
+
+
+def test_manual_qa_regressions_render_real_rows_and_icons():
+	bundle = read(BUNDLE)
+	for contract in (
+		"fieldname: column.fieldname || column.key",
+		"status: column.status === true || column.type === 'status'",
+		"VetEdgeClinicalStatCard",
+		"runtime?.components?.EdgeIcon",
+		"CLINICAL_ICON_ALIASES",
+	):
+		assert contract in bundle
 
 
 def test_native_consultation_routes_resolve_to_the_clinical_workspace():
@@ -165,6 +181,23 @@ def test_native_consultation_routes_resolve_to_the_clinical_workspace():
 		assert contract in route
 	assert "/app/vetedge-clinical-workspace" in list_script
 	assert "vetedge_clinical_route.js" in hooks
+
+
+def test_veterinary_home_route_has_a_real_desk_page():
+	for path in (
+		HOME_PAGE_ROOT / "__init__.py",
+		HOME_PAGE_ROOT / "vetedge.js",
+		HOME_PAGE_ROOT / "vetedge.json",
+	):
+		assert path.exists(), path
+
+	hooks = read(HOOKS)
+	navigation = read(HOME_NAVIGATION)
+	home_script = read(HOME_PAGE_ROOT / "vetedge.js")
+	assert 'app_home = "/app/vetedge"' in hooks
+	assert 'const HOME_ROUTE = "/app/vetedge"' in navigation
+	assert "frappe.pages.vetedge" in home_script
+	assert "frappe.set_route('vetedge-executive-dashboard')" in home_script
 
 
 def test_existing_billing_modal_is_reused_instead_of_reimplemented():
