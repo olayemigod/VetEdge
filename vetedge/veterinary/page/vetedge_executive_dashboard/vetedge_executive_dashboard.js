@@ -72,9 +72,15 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 				return;
 			}
 
+			let brandingSettled = false;
 			const loadDashboardBundle = () => {
-				if (wrapper.current_visit_id !== visitId) return;
-				window.VetEdgeBrandingUI?.install?.();
+				if (brandingSettled || wrapper.current_visit_id !== visitId) return;
+				brandingSettled = true;
+				try {
+					window.VetEdgeBrandingUI?.install?.();
+				} catch (error) {
+					console.warn('VetEdge branding enhancement could not be installed:', error);
+				}
 				frappe.require('vetedge_executive_dashboard.bundle.js', () => {
 					if (wrapper.current_visit_id !== visitId) return;
 					if (!window.VetedgeExecutiveDashboard) {
@@ -98,7 +104,8 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 			if (window.VetEdgeBrandingUI?.install) {
 				loadDashboardBundle();
 			} else {
-				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-1', loadDashboardBundle);
+				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-2', loadDashboardBundle);
+				window.setTimeout(loadDashboardBundle, 1500);
 			}
 		};
 
