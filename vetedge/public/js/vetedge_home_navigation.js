@@ -7,6 +7,9 @@
 	const HOME_ROUTE = "/app/vetedge";
 	const HOME_LABEL = "Veterinary Home";
 	const LIFECYCLE_EVENTS = ["desktop_screen", "sidebar_setup", "toolbar_setup", "page-change"];
+	const state = {
+		navigationWrapped: false,
+	};
 
 	function homeItem() {
 		return {
@@ -49,9 +52,19 @@
 		return created;
 	}
 
+	function normalizePath(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		try {
+			return new URL(raw, window.location.origin).pathname.replace(/\/$/, "") || "/";
+		} catch (_error) {
+			return raw.split("?")[0].replace(/\/$/, "");
+		}
+	}
+
 	function itemRoute(item) {
 		const direct = String(item?.route || "").trim();
-		if (direct) return direct.replace(/\/$/, "");
+		if (direct) return normalizePath(direct);
 		const target = String(item?.link_to || "").trim().toLowerCase();
 		return item?.link_type === "Page" && target === "vetedge" ? HOME_ROUTE : "";
 	}
@@ -76,21 +89,60 @@
 		return true;
 	}
 
+	function installNavigationAdapter() {
+		const edgeUI = window.EdgeSuiteUI || window.EdgeUI;
+		if (!edgeUI?.getAdapter || !edgeUI?.registerAdapter) return false;
+		const current = edgeUI.getAdapter("navigation:vetedge") || edgeUI.getAdapter("navigation:veterinary");
+		if (!current || current.__vetedgeHomeNavigationWrapped) {
+			state.navigationWrapped = Boolean(current?.__vetedgeHomeNavigationWrapped);
+			return state.navigationWrapped;
+		}
+
+		const wrapped = {
+			...current,
+			__vetedgeHomeNavigationWrapped: true,
+			open(route) {
+				if (normalizePath(route) === HOME_ROUTE) {
+					window.location.assign(HOME_ROUTE);
+					return true;
+				}
+				return current.open?.(route) === true;
+			},
+		};
+		edgeUI.registerAdapter("navigation:vetedge", wrapped, { replace: true });
+		edgeUI.registerAdapter("navigation:veterinary", wrapped, { replace: true });
+		state.navigationWrapped = true;
+		return true;
+	}
+
 	function install() {
 		const installed = ensureHomeLink();
 		if (installed) {
 			window.VetEdgeProfessionalUI?.install?.();
 		}
+		installNavigationAdapter();
 		return installed;
+	}
+
+	function diagnose() {
+		return {
+			homeRoute: HOME_ROUTE,
+			homePresent: Boolean(canonicalSidebar()?.items?.some((item) => itemRoute(item) === HOME_ROUTE)),
+			navigationWrapped: state.navigationWrapped,
+		};
 	}
 
 	window.VetEdgeHomeNavigation = Object.assign(window.VetEdgeHomeNavigation || {}, {
 		install,
 		ensureHomeLink,
+		installNavigationAdapter,
+		diagnose,
 		homeRoute: HOME_ROUTE,
 	});
 
 	install();
 	LIFECYCLE_EVENTS.forEach((eventName) => document.addEventListener(eventName, install));
 	window.frappe?.router?.on?.("change", install);
+	window.setTimeout(install, 250);
+	window.setTimeout(install, 1000);
 })();
