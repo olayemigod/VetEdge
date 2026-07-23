@@ -73,9 +73,15 @@ frappe.pages['vetedge-document-workspace'].on_page_show = function(wrapper) {
 				return;
 			}
 
+			let brandingSettled = false;
 			const loadWorkspaceBundle = () => {
-				if (wrapper.current_visit_id !== visitId) return;
-				window.VetEdgeBrandingUI?.install?.();
+				if (brandingSettled || wrapper.current_visit_id !== visitId) return;
+				brandingSettled = true;
+				try {
+					window.VetEdgeBrandingUI?.install?.();
+				} catch (error) {
+					console.warn('VetEdge branding enhancement could not be installed:', error);
+				}
 				frappe.require('vetedge_document_workspace.bundle.js', () => {
 					if (wrapper.current_visit_id !== visitId) return;
 					if (!window.VetEdgeDocumentWorkspace) {
@@ -98,7 +104,8 @@ frappe.pages['vetedge-document-workspace'].on_page_show = function(wrapper) {
 			if (window.VetEdgeBrandingUI?.install) {
 				loadWorkspaceBundle();
 			} else {
-				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-1', loadWorkspaceBundle);
+				frappe.require('/assets/vetedge/js/vetedge_branding_ui.js?v=20260723-2', loadWorkspaceBundle);
+				window.setTimeout(loadWorkspaceBundle, 1500);
 			}
 		};
 
