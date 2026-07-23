@@ -14,6 +14,34 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/ruff-action@v3
+
+      - name: Install Ruff
+        uses: astral-sh/ruff-action@v3
         with:
-          args: check tests/test_vetedge_master_workspace_contract.py
+          args: --version
+
+      - name: Capture Ruff result
+        run: |
+          ruff check tests/test_vetedge_master_workspace_contract.py \
+            --output-format json > /tmp/master-contract-ruff.json || true
+
+      - name: Upload Ruff result
+        uses: actions/upload-artifact@v4
+        with:
+          name: master-contract-ruff
+          path: /tmp/master-contract-ruff.json
+          if-no-files-found: error
+
+      - name: Enforce Ruff result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/master-contract-ruff.json').read_text())
+          if result:
+              for item in result:
+                  location = item.get('location') or {}
+                  print(f"{item.get('filename')}:{location.get('row')}:{location.get('column')} {item.get('code')} {item.get('message')}")
+              raise SystemExit(1)
+          PY
