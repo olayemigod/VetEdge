@@ -12,6 +12,19 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
+	const resetPageScroll = () => {
+		const elements = [
+			page.body,
+			wrapper,
+			...$(wrapper).parents('.layout-main-section-wrapper, .page-body, .desk-page').get()
+		].filter(Boolean);
+		[...new Set(elements)].forEach((element) => {
+			if (typeof element.scrollTo === 'function') element.scrollTo({ top: 0, left: 0 });
+			else element.scrollTop = 0;
+		});
+		if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+	};
+
 	if (wrapper.vue_app) {
 		try {
 			wrapper.vue_app.unmount();
@@ -22,6 +35,7 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	}
 
 	$(page.body).empty();
+	resetPageScroll();
 	const $loading = $('<div class="p-6 text-center text-muted"></div>')
 		.text(__('Loading Veterinary Clinical Workspace...'))
 		.appendTo(page.body);
@@ -42,6 +56,7 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 			'EdgePageHeader',
 			'EdgeFilterBar',
 			'EdgeStatCard',
+			'EdgeIcon',
 			'EdgeDataTable',
 			'EdgeStatusBadge',
 			'EdgeLinkField',
@@ -90,6 +105,8 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 						.appendTo(page.body);
 					wrapper.vue_app = runtime.createEdgeApp(window.VetEdgeClinicalWorkspace);
 					wrapper.vue_app.mount(root[0]);
+					resetPageScroll();
+					window.requestAnimationFrame?.(resetPageScroll);
 				} catch (error) {
 					console.error('Error mounting Veterinary Clinical Workspace:', error);
 					showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)]));
