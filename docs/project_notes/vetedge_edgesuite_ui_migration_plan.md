@@ -65,7 +65,7 @@ VetEdge uses a dense operational menu because the product has many workflows.
 
 ### Status
 
-Implemented on the Phase 1 branch and awaiting grouped manual QA. The Phase 1 pull request must remain draft until CI and manual acceptance are complete.
+Implemented on the Phase 1 branch. Automated CI and clean-site integration are complete; grouped manual QA and acceptance remain pending.
 
 ## Phase 2A — Clinical Reference Masters
 
@@ -83,7 +83,7 @@ Implemented on the Phase 1 branch and awaiting grouped manual QA. The Phase 1 pu
 
 Provide a clean, consistent setup experience for clinical reference records used by registration, consultation and service workflows.
 
-### Implementation Requirements
+### Implementation
 
 - Dedicated EdgeSuite master workspace.
 - Permission-aware list, search, filters, create, edit and delete.
@@ -106,13 +106,11 @@ Provide a clean, consistent setup experience for clinical reference records used
 
 ### Status
 
-Implemented on `agent/vetedge-full-edgeui-masters-phase2a`. Automated CI and manual browser QA remain pending.
+Implemented on `agent/vetedge-full-edgeui-masters-phase2a`. Automated CI and clean-site integration are complete; grouped manual QA and acceptance remain pending.
 
-## Deferred Phases
+## Phase 2B — Pricing and Service Masters
 
-### Phase 2B — Pricing and Service Masters
-
-Expected candidates:
+### Scope
 
 - Veterinary Treatment Item
 - Veterinary Treatment Type
@@ -120,7 +118,40 @@ Expected candidates:
 - Veterinary Vaccine
 - Pet Grooming Service
 
-These require pricing, item, stock and billing-aware review before migration.
+### Business Goal
+
+Provide a dedicated pricing-aware setup experience that preserves ERPNext Item rules, existing Item Price and shelf-life controller behaviour, and safe stock versus non-stock selection.
+
+### Implementation
+
+- Dedicated `/app/vetedge-pricing-master-workspace` EdgeSuite page.
+- Permission-aware list, search, filters, pagination, create, edit and delete.
+- Full Frappe section and conditional-field metadata in the EdgeSuite forms.
+- Normal `doc.insert()` and `doc.save()` execution so existing controllers remain authoritative.
+- VetEdge platform-access checks for mutations and optimistic timestamp protection.
+- Immutable autoname identity fields after creation.
+- Enabled sales Item filtering for Treatment Items and Treatment Types.
+- Enabled non-stock sales Item filtering for Lab Tests and Grooming Services.
+- Enabled stock or non-stock sales Item support for Vaccines.
+- Active Species, Service Type and Treatment Type filtering and backend validation.
+- Enabled selling Price List filtering and backend validation.
+- Clear save-behaviour notices for Item Price and Item shelf-life side effects.
+- One clear Active/Inactive filter even where the underlying DocType stores `disabled`.
+- Native list and form routes redirected into the EdgeSuite workspace.
+
+### Pricing and Stock Boundaries
+
+- Treatment Item saves may update ERPNext Item Price and Item shelf life through existing controller hooks.
+- Lab Test and Vaccine saves may update ERPNext Item Price through existing controller hooks.
+- Grooming Service Default Rate remains a VetEdge service default and does not silently update Item Price.
+- The workspace does not create, submit, cancel or mutate Sales Invoice, Payment Entry or Stock Entry records.
+- Submitted accounting and stock documents are not changed.
+
+### Status
+
+Implemented on `agent/vetedge-full-edgeui-pricing-masters-phase2b` under draft PR #19. Focused Phase 2B CI, full VetEdge regression CI, clean-site builds, migration and live pricing-side-effect tests are complete; grouped manual QA and acceptance remain pending.
+
+## Deferred Phases
 
 ### Phase 3 — Front Desk Action Workflows
 
