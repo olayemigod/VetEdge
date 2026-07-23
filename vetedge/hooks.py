@@ -47,6 +47,16 @@ app_include_js = [
 	"/assets/vetedge/js/veterinary_unread_badge.js",
 ]
 
+doctype_js = {
+	"Veterinary Consultation": "public/js/clinical_workspace/consultation_redirect.js",
+	"Veterinary Vital Signs": "public/js/clinical_workspace/vitals_redirect.js",
+}
+
+doctype_list_js = {
+	"Veterinary Consultation": "public/js/clinical_workspace/consultation_list_redirect.js",
+	"Veterinary Vital Signs": "public/js/clinical_workspace/vitals_list_redirect.js",
+}
+
 get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website_user_home_page"
 
 after_install = "vetedge.install.after_install"
@@ -142,6 +152,7 @@ doc_events = {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.clinical_workspace_safety.enforce_clinical_workspace_treatment_row_safety",
 		],
 	},
 	"Veterinary Lab Order": {
