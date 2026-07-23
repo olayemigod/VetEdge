@@ -1,0 +1,46 @@
+name: Document Contract Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Document workspace contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install pytest
+        run: python -m pip install --upgrade pytest
+
+      - name: Capture contract result
+        run: |
+          set +e
+          python -m pytest -q vetedge/tests/test_vetedge_document_workspace.py \
+            > /tmp/document-contract.txt 2>&1
+          status=$?
+          echo "$status" > /tmp/document-contract.status
+          exit 0
+
+      - name: Upload contract result
+        uses: actions/upload-artifact@v4
+        with:
+          name: document-contract-result
+          path: |
+            /tmp/document-contract.txt
+            /tmp/document-contract.status
+          if-no-files-found: error
+
+      - name: Enforce contract result
+        run: |
+          cat /tmp/document-contract.txt
+          test "$(cat /tmp/document-contract.status)" = "0"
