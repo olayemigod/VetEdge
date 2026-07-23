@@ -154,11 +154,14 @@
 		return `url("${String(value || "").replace(/[\\"\n\r]/g, (match) => `\\${match}`)}")`;
 	}
 
-	function callListener(listener, value) {
-		const listeners = Array.isArray(listener) ? listener : [listener];
-		listeners.forEach((entry) => {
-			if (typeof entry === "function") entry(value);
-		});
+	function extractFileUrl(file) {
+		const candidates = [
+			file?.file_url,
+			file?.message?.file_url,
+			file?.files?.[0]?.file_url,
+			Array.isArray(file) ? file[0]?.file_url : "",
+		];
+		return safeLogoUrl(candidates.find(Boolean) || "");
 	}
 
 	function openOwnerLogoUploader(onUploaded) {
@@ -181,7 +184,7 @@
 				allowed_file_types: ["image/*"],
 			},
 			on_success(file) {
-				const url = safeLogoUrl(file?.file_url || file?.file_name || "");
+				const url = extractFileUrl(file);
 				if (!url) {
 					window.frappe?.msgprint?.({
 						title: __("Logo upload incomplete"),
@@ -191,6 +194,10 @@
 					return;
 				}
 				onUploaded(url);
+				window.frappe?.show_alert?.({
+					message: __("Owner portal logo selected. Click Save Settings to keep the change."),
+					indicator: "green",
+				});
 			},
 		});
 	}
@@ -212,13 +219,13 @@
 		};
 	}
 
-	function renderOwnerPortalLogoCard(Vue, attrs) {
-		const model = attrs.modelValue || {};
-		const updateModel = attrs["onUpdate:modelValue"];
-		const currentLogo = safeLogoUrl(model.portal_logo || "");
+	function renderOwnerPortalLogoCard(Vue, options) {
+		const currentLogo = safeLogoUrl(options.modelValue?.portal_logo || "");
 		const setLogo = (url) => {
-			const next = { ...model, portal_logo: safeLogoUrl(url) };
-			callListener(updateModel, next);
+			options.updateModel({
+				...(options.modelValue || {}),
+				portal_logo: safeLogoUrl(url),
+			});
 		};
 
 		return Vue.h("section", { class: "vetedge-owner-branding-card", "aria-label": "Owner Portal Logo" }, [
@@ -238,7 +245,7 @@
 					{
 						type: "button",
 						class: "edge-button edge-button--primary",
-						disabled: Boolean(attrs.readonly),
+						disabled: Boolean(options.readonly),
 						onClick: () => openOwnerLogoUploader(setLogo),
 					},
 					currentLogo ? "Replace Logo" : "Upload Logo",
@@ -249,7 +256,7 @@
 							{
 								type: "button",
 								class: "edge-button",
-								disabled: Boolean(attrs.readonly),
+								disabled: Boolean(options.readonly),
 								onClick: () => setLogo(""),
 							},
 							"Clear",
@@ -312,16 +319,42 @@
 		const OwnerPortalBrandedDocumentForm = Vue.defineComponent({
 			name: "OwnerPortalBrandedDocumentForm",
 			inheritAttrs: false,
-			setup(_props, context) {
+			props: {
+				schema: { type: Object, default: () => ({ tabs: [] }) },
+				modelValue: { type: Object, default: () => ({}) },
+				errors: { type: Object, default: () => ({}) },
+				readonly: { type: Boolean, default: false },
+				linkSearcher: { type: Function, default: null },
+				childLinkSearcher: { type: Function, default: null },
+			},
+			emits: ["update:modelValue", "change", "search-options"],
+			setup(props, context) {
+				const updateModel = (next) => context.emit("update:modelValue", next);
 				return () => {
-					const attrs = context.attrs || {};
-					const isPortalBranding = isPortalBrandingSchema(attrs.schema);
-					const formAttrs = isPortalBranding
-						? { ...attrs, schema: withoutPortalLogoField(attrs.schema) }
-						: attrs;
+					const isPortalBranding = isPortalBrandingSchema(props.schema);
+					const formProps = {
+						...(context.attrs || {}),
+						schema: isPortalBranding ? withoutPortalLogoField(props.schema) : props.schema,
+						modelValue: props.modelValue,
+						errors: props.errors,
+						readonly: props.readonly,
+						linkSearcher: props.linkSearcher,
+						childLinkSearcher: props.childLinkSearcher,
+						"onUpdate:modelValue": updateModel,
+						onChange: (payload) => context.emit("change", payload),
+						onSearchOptions: (payload) => context.emit("search-options", payload),
+					};
 					const children = [];
-					if (isPortalBranding) children.push(renderOwnerPortalLogoCard(Vue, attrs));
-					children.push(Vue.h(CurrentForm, formAttrs, context.slots || {}));
+					if (isPortalBranding) {
+						children.push(
+							renderOwnerPortalLogoCard(Vue, {
+								modelValue: props.modelValue,
+								readonly: props.readonly,
+								updateModel,
+							}),
+						);
+					}
+					children.push(Vue.h(CurrentForm, formProps, context.slots || {}));
 					return Vue.h("div", { class: "vetedge-branded-document-form" }, children);
 				};
 			},
