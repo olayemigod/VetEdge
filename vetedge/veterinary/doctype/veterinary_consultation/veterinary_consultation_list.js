@@ -11,6 +11,9 @@
 		};
 
 		frappe.listview_settings["Veterinary Consultation"] = {
+			onload() {
+				window.location.replace("/app/vetedge-clinical-workspace");
+			},
 			get_indicator(doc) {
 				const status = doc.status || "Unknown";
 				const color = consultationStatusPalette[status] || "gray";
@@ -18,6 +21,6 @@
 			},
 		};
 	} catch (error) {
-		console.error("VetEdge consultation list indicator setup failed", error);
+		console.error("VetEdge consultation list routing failed", error);
 	}
 })();
