@@ -33,15 +33,21 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q vetedge
 
-      - name: Ruff
+      - name: Ruff migration foundation contracts
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_document_workspace.py
+
+      - name: Ruff navigation contracts
+        run: |
+          ruff check \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
-            vetedge/tests/test_vetedge_ui_identity_resource_center.py \
-            vetedge/tests/test_vetedge_document_workspace.py \
-            tests/test_vetedge_master_workspace_contract.py
+            vetedge/tests/test_vetedge_ui_identity_resource_center.py
+
+      - name: Ruff master workspace contract
+        run: ruff check tests/test_vetedge_master_workspace_contract.py
 
       - name: Validate EdgeSuite UI dependency and migration contracts
         run: |
