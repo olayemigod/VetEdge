@@ -116,6 +116,9 @@ def test_page_requires_real_edgesuite_document_components_not_native_dialog_skin
 	):
 		assert contract in component
 
+	assert "frappe.require('edgesuite_ui.bundle.js'" in loader
+	assert "const runtime = window.EdgeSuiteUI;" in loader
+	assert "frappe.require('edgeui.bundle.js'" not in loader
 	assert "runtime.components" in bundle
 	assert "installWorkspaceRuntime" in bundle
 	assert "frappe.ui.Dialog" not in component
@@ -131,7 +134,7 @@ def test_confirmation_and_settings_navigation_lifecycle_is_safe():
 		"methods.closeConfirmation",
 		"busy: false",
 		"handler: null",
-		"window.location.assign(\"/app/vetedge\")",
+		'window.location.assign("/app/vetedge")',
 		"component.__vetedgeWorkspaceRuntimeInstalled = true",
 	):
 		assert contract in content
