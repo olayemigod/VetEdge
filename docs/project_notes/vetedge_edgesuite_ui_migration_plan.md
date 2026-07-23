@@ -187,9 +187,19 @@ Give front-desk and clinical staff one action-oriented workspace for incoming gu
 - Submitted accounting and stock documents are not changed.
 - Guest request cancellation is blocked after registration confirmation and only cancels an unprogressed `Awaiting Registration` placeholder appointment.
 
+### Review Findings and Corrections
+
+- Replaced the native Appointment Queue's permission-bypassing `frappe.get_all` reads with permission-aware `frappe.get_list` queries.
+- Replaced the missed-appointment modified-after-open failure with explicit server timestamps and refresh-on-conflict behaviour.
+- Hardened action-dialog closure and restored direct access to a converted guest request's linked Patient.
+- Found that cancelling a no-patient guest placeholder failed normal appointment validation after the status became `Cancelled`.
+- Added a narrow saved-snapshot exception that still validates the real `Awaiting Registration` to `Cancelled` transition, requires the same guest request and branch, and applies only where neither snapshot has a Patient.
+- Aligned the practitioner-integrity hook with the same narrow guest-placeholder cancellation rule while preserving branch integrity.
+- Retained focused CI diagnostic artifacts so future live action failures expose their exact traceback without weakening the test gate.
+
 ### Status
 
-Implemented on `agent/vetedge-full-edgeui-front-desk-actions-phase3`. Focused Phase 3 CI, full VetEdge regression CI, clean-site build, migration and live action tests must pass before the phase is reported complete. Grouped manual browser QA and acceptance remain pending.
+Implemented on `agent/vetedge-full-edgeui-front-desk-actions-phase3` under draft PR #20. Focused Phase 3 CI, full VetEdge regression CI, stacked Phase 2B CI, clean-site builds, migration and all seven live front-desk action tests are complete; grouped manual browser QA and acceptance remain pending.
 
 ## Deferred Phases
 
