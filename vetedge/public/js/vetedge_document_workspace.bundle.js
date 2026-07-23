@@ -1,6 +1,8 @@
 import VetEdgeDocumentWorkspace from './vetedge_document_workspace/VetEdgeDocumentWorkspace.vue';
 import { installWorkspaceRuntime } from './vetedge_document_workspace/workspace_runtime';
+import { applyWorkspaceSafety } from './vetedge_workspace_safety';
 
+applyWorkspaceSafety(VetEdgeDocumentWorkspace, { guardNavigation: true });
 installWorkspaceRuntime(VetEdgeDocumentWorkspace);
 
 export function mountVetEdgeDocumentWorkspace(target) {
