@@ -1,4 +1,4 @@
-/* VetEdge consumer refinements for the standalone EdgeSuite UI 0.2 professional shell. */
+/* VetEdge consumer refinements for the standalone EdgeSuite UI professional shell. */
 body.edge-suite-product-vetedge,
 .vetedge-executive-dashboard-root,
 .vetedge-expiry-monitor-root {
@@ -11,8 +11,7 @@ body.edge-suite-product-vetedge,
 	--edge-focus-ring: rgba(23, 105, 170, 0.24);
 }
 
-/* PR #6 intentionally used a content-only shell. EdgeSuite UI 0.2 now owns the
-   professional product navigation on the two migrated VetEdge pages. */
+/* EdgeSuite UI owns the professional product navigation on migrated VetEdge pages. */
 body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell__sidebar.edge-sidebar,
 body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell__sidebar.edge-sidebar {
 	display: flex !important;
@@ -64,6 +63,12 @@ body.edge-suite-product-vetedge .edge-sidebar-item:focus-visible,
 body.edge-suite-product-vetedge .edge-product-menu__trigger:focus-visible {
 	outline: 3px solid var(--edge-focus-ring);
 	outline-offset: 2px;
+}
+
+/* The emergency DOM fallback is intentionally label-only. It must never expose
+   internal link types such as DocType, Page or Report beneath navigation labels. */
+.vetedge-product-menu-link-copy > small {
+	display: none !important;
 }
 
 .vetedge-notification-icon {
