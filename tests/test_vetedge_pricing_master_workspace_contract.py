@@ -153,6 +153,19 @@ def test_pricing_page_is_full_edgesuite_and_uses_collision_safe_runtime():
 	assert "applyWorkspaceSafety(VetEdgePricingMasterWorkspace)" in bundle
 
 
+def test_disabled_storage_is_presented_as_one_clear_active_status_filter():
+	bundle = read(BUNDLE)
+	for contract in (
+		"installStatusFilterSemantics",
+		"source_fieldname: 'disabled'",
+		"fieldname: 'is_active'",
+		"label: __('Status')",
+		"translatedFilters.disabled",
+		"String(activeValue) === '1' ? '0' : '1'",
+	):
+		assert contract in bundle
+
+
 def test_native_phase_2b_routes_redirect_to_the_pricing_workspace():
 	for folder, file_stem, doctype, resource in (
 		("veterinary_treatment_item", "veterinary_treatment_item", "Veterinary Treatment Item", "treatment-items"),
