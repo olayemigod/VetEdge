@@ -67,19 +67,22 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 	for contract in (
 		"CLINICAL_CONTEXT_API",
 		"loadPatientOwnerContext",
-		"Owner:",
-		"Tel:",
-		"showOwnerDetails",
+		"createClinicalLinkField",
+		"patientLabelById",
+		"selectedLabel: props.selectedLabel || patientLabel",
+		"vetedge-owner-summary",
+		"Pet Owner",
 		"View Owner Details",
+		"showOwnerDetails",
 		"clinicalContextAwareLinkSearch",
 	):
 		assert contract in bundle
 
-	subtitle = bundle.split("clinicalDetailSubtitleWithOwner", 1)[1].split(
-		"VetEdgeClinicalWorkspace.methods.showOwnerDetails", 1
+	owner_summary = bundle.split("VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton", 1)[1].split(
+		"const originalTreatmentRowLocked", 1
 	)[0]
-	assert "owner.email_id" not in subtitle
-	assert "patient.emergency_contact" not in subtitle
+	assert "owner.email_id" not in owner_summary
+	assert "patient.emergency_contact" not in owner_summary
 
 
 def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
