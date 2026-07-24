@@ -57,7 +57,7 @@ def assert_consultation_write_ownership(
 	)
 
 
-def enforce_consultation_practitioner_ownership(doc) -> None:
+def enforce_consultation_practitioner_ownership(doc, method: str | None = None) -> None:
 	user = get_current_user()
 	if not is_restricted_doctor(user):
 		return
@@ -77,6 +77,12 @@ def enforce_consultation_practitioner_ownership(doc) -> None:
 		)
 
 	doc.consulting_practitioner = user
+
+
+def enforce_vitals_consultation_ownership(doc, method: str | None = None) -> None:
+	consultation = doc.get("consultation")
+	if consultation:
+		assert_consultation_write_ownership(consultation, action="vitals")
 
 
 def _document_title(doctype: str, name: str | None) -> str | None:
