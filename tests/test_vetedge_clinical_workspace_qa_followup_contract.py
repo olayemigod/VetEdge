@@ -69,10 +69,17 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 		"loadPatientOwnerContext",
 		"Owner:",
 		"Tel:",
-		"Email:",
+		"showOwnerDetails",
+		"View Owner Details",
 		"clinicalContextAwareLinkSearch",
 	):
 		assert contract in bundle
+
+	subtitle = bundle.split("clinicalDetailSubtitleWithOwner", 1)[1].split(
+		"VetEdgeClinicalWorkspace.methods.showOwnerDetails", 1
+	)[0]
+	assert "owner.email_id" not in subtitle
+	assert "patient.emergency_contact" not in subtitle
 
 
 def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
