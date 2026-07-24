@@ -222,10 +222,14 @@ export function mountVetEdgeClinicalWorkspace(target) {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
 
-	VetEdgeClinicalWorkspace.components = {
-		...runtime.components,
-		EdgeLinkField: createClinicalLinkField(runtime.components.EdgeLinkField),
-	};
+	if (!runtime.components?.EdgeLinkField) {
+		VetEdgeClinicalWorkspace.components = runtime.components;
+	} else {
+		VetEdgeClinicalWorkspace.components = {
+			...runtime.components,
+			EdgeLinkField: createClinicalLinkField(runtime.components.EdgeLinkField),
+		};
+	}
 	const app = runtime.createEdgeApp(VetEdgeClinicalWorkspace);
 	app.mount(target);
 	return app;
