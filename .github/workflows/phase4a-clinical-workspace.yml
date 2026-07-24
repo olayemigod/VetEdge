@@ -27,15 +27,20 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install --upgrade pytest ruff
 
-      - name: Compile clinical provider
-        run: python -m py_compile vetedge/services/clinical_workspace.py
+      - name: Compile clinical providers
+        run: |
+          python -m py_compile \
+            vetedge/services/clinical_workspace.py \
+            vetedge/services/clinical_workspace_context.py
 
-      - name: Ruff clinical provider and tests
+      - name: Ruff clinical providers and tests
         run: |
           ruff check \
             vetedge/services/clinical_workspace.py \
+            vetedge/services/clinical_workspace_context.py \
             tests/test_vetedge_clinical_workspace_contract.py \
-            vetedge/tests/test_vetedge_clinical_workspace_integration.py
+            vetedge/tests/test_vetedge_clinical_workspace_integration.py \
+            vetedge/tests/test_vetedge_clinical_workspace_qa_followup.py
 
       - name: Validate clinical workspace contracts
         run: python -m pytest -q tests/test_vetedge_clinical_workspace_contract.py
@@ -54,6 +59,7 @@ jobs:
         run: |
           node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
           node --check vetedge/public/js/vetedge_clinical_route.js
+          node --check vetedge/veterinary/page/vetedge/vetedge.js
           node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
           node --check vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation_list.js
 
@@ -173,10 +179,14 @@ jobs:
         working-directory: frappe-bench
         run: |
           set +e
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_vetedge_clinical_workspace_integration \
-            > /tmp/clinical-tests.txt 2>&1
+          {
+            bench --site ci.localhost run-tests \
+              --app vetedge \
+              --module vetedge.tests.test_vetedge_clinical_workspace_integration
+            bench --site ci.localhost run-tests \
+              --app vetedge \
+              --module vetedge.tests.test_vetedge_clinical_workspace_qa_followup
+          } > /tmp/clinical-tests.txt 2>&1
           status=$?
           cat /tmp/clinical-tests.txt
           echo "$status" > /tmp/clinical-tests.status
