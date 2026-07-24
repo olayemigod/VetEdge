@@ -68,7 +68,7 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 		"CLINICAL_CONTEXT_API",
 		"VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext",
 		"createClinicalLinkField",
-		"patientLabelById",
+		"const patientLabelById = reactive(new Map())",
 		"selectedLabel: props.selectedLabel || patientLabel",
 		"vetedge-owner-summary",
 		"Pet Owner",
@@ -77,6 +77,7 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 		"clinicalContextAwareLinkSearch",
 	):
 		assert contract in bundle
+	assert "const patientLabelById = new Map()" not in bundle
 
 	owner_summary = bundle.split("VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton", 1)[1].split(
 		"const originalTreatmentRowLocked", 1
