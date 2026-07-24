@@ -116,6 +116,13 @@ class TestVetEdgeClinicalWorkspaceIntegration(FrappeTestCase):
 			"consultation_type": self.ensure_consultation_type(),
 		}
 
+	def test_veterinary_home_page_exists_after_migration(self):
+		self.assertTrue(frappe.db.exists("Page", "vetedge"))
+		page = frappe.get_doc("Page", "vetedge")
+		self.assertEqual(page.page_name, "vetedge")
+		self.assertEqual(page.module, "Veterinary")
+		self.assertEqual(page.title, "Veterinary Home")
+
 	def test_create_list_detail_update_and_stale_write_contract(self):
 		context = self.create_context()
 		created = save_consultation(
