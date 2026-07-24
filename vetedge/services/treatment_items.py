@@ -164,7 +164,7 @@ def get_treatment_item_link_options(doctype, txt, searchfield, start, page_len, 
 				OR item.item_name LIKE %(search)s
 				OR treatment.name LIKE %(search)s
 			)
-		ORDER BY item.item_name ASC, item.name ASC
+		ORDER BY treatment.modified DESC, item.item_name ASC, item.name ASC
 		LIMIT %(page_len)s OFFSET %(start)s
 		""",
 		{
