@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +28,18 @@ class TestVetEdgeProductAppContext(unittest.TestCase):
 		self.assertEqual(product["label"], "Veterinary")
 		self.assertEqual(product["home_route"], "/app/vetedge")
 		self.assertIn("/app/veterinary-*", product["route_patterns"])
+
+	def test_stable_veterinary_home_page_is_source_controlled(self):
+		page_root = self.app_path("veterinary", "page", "vetedge")
+		page = json.loads((page_root / "vetedge.json").read_text(encoding="utf-8"))
+		script = (page_root / "vetedge.js").read_text(encoding="utf-8")
+
+		self.assertEqual(page["name"], "vetedge")
+		self.assertEqual(page["module"], "Veterinary")
+		self.assertEqual(page["title"], "Veterinary Home")
+		self.assertIn('frappe.pages["vetedge"]', script)
+		self.assertIn('const target = "vetedge-document-workspace"', script)
+		self.assertIn("frappe.set_route(target)", script)
 
 	def test_guest_and_website_users_are_not_available_products(self):
 		original_user = frappe.session.user
