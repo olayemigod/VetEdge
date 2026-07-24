@@ -14,6 +14,12 @@ const restrictedDoctor = () => {
 	return roles.has('VetEdge Doctor') && ![...ELEVATED_ROLES].some((role) => roles.has(role));
 };
 const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message);
+const escapeHtml = (value) => {
+	if (window.frappe?.utils?.escape_html) return frappe.utils.escape_html(String(value || ''));
+	const element = document.createElement('div');
+	element.textContent = String(value || '');
+	return element.innerHTML;
+};
 
 const originalData = VetEdgeClinicalWorkspace.data;
 VetEdgeClinicalWorkspace.data = function clinicalWorkspaceDataWithPatientContext() {
@@ -27,12 +33,51 @@ const originalDetailSubtitle = VetEdgeClinicalWorkspace.computed.detailSubtitle;
 VetEdgeClinicalWorkspace.computed.detailSubtitle = function clinicalDetailSubtitleWithOwner() {
 	const base = originalDetailSubtitle?.call(this) || 'Clinical consultation capture';
 	const owner = this.patientContext?.owner || {};
-	const ownerDetails = [
+	const ownerSummary = [
 		owner.label ? `Owner: ${owner.label}` : '',
 		owner.mobile_no ? `Tel: ${owner.mobile_no}` : '',
-		owner.email_id ? `Email: ${owner.email_id}` : '',
 	].filter(Boolean);
-	return [base, ...ownerDetails].filter(Boolean).join(' · ');
+	return [base, ...ownerSummary].filter(Boolean).join(' · ');
+};
+
+VetEdgeClinicalWorkspace.methods.showOwnerDetails = function showOwnerDetails() {
+	const patient = this.patientContext?.patient || {};
+	const owner = this.patientContext?.owner || {};
+	if (!owner.name && !owner.label) return;
+
+	const rows = [
+		['Owner', owner.label || owner.name],
+		['Phone', owner.mobile_no],
+		['Email', owner.email_id],
+		['Emergency Contact', patient.emergency_contact],
+		['Patient Species', patient.species],
+		['Patient Breed', patient.breed],
+	].filter(([, value]) => value);
+	const message = rows.length
+		? `<div class="vetedge-owner-details">${rows.map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('')}</div>`
+		: '<p>No additional owner details are available.</p>';
+	frappe.msgprint({ title: 'Pet Owner Details', message, indicator: 'blue' });
+};
+
+VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton = function syncOwnerDetailsButton() {
+	this.$nextTick?.(() => {
+		const actions = document.querySelector('.vetedge-clinical-detail .vetedge-clinical-statusbar .vetedge-clinical-actions');
+		if (!actions) return;
+		let button = actions.querySelector('.vetedge-owner-details-button');
+		const owner = this.patientContext?.owner || {};
+		if (!owner.name && !owner.label) {
+			button?.remove();
+			return;
+		}
+		if (!button) {
+			button = document.createElement('button');
+			button.type = 'button';
+			button.className = 'edge-button vetedge-owner-details-button';
+			button.textContent = 'View Owner Details';
+			actions.prepend(button);
+		}
+		button.onclick = () => this.showOwnerDetails();
+	});
 };
 
 VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext(patient, applyDefaultBranch = true) {
@@ -42,6 +87,7 @@ VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPa
 		this.patientContext = blankPatientContext();
 		this.form.primary_owner = '';
 		this.form.primary_owner_label = '';
+		this.syncOwnerDetailsButton();
 		return;
 	}
 	try {
@@ -54,9 +100,11 @@ VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPa
 			this.form.service_branch = context.patient.default_branch;
 			this.markDirty();
 		}
+		this.syncOwnerDetailsButton();
 	} catch (error) {
 		if (this._patientContextRequest !== request) return;
 		this.patientContext = blankPatientContext();
+		this.syncOwnerDetailsButton();
 		frappe.show_alert({ message: error?.message || 'Pet owner information could not load.', indicator: 'orange' });
 	}
 };
@@ -80,6 +128,7 @@ VetEdgeClinicalWorkspace.methods.applyDetail = function applyDetailWithOwnership
 		owner: { name: values.primary_owner || '', label: values.primary_owner_label || values.primary_owner || '' },
 	};
 	if (this.form.patient) this.loadPatientOwnerContext(this.form.patient, false);
+	else this.syncOwnerDetailsButton();
 	const assignedDoctor = this.form.consulting_practitioner || '';
 	if (restrictedDoctor() && assignedDoctor && assignedDoctor !== currentUser()) {
 		this.detail.can_write = false;
@@ -92,12 +141,14 @@ const originalStartNewConsultation = VetEdgeClinicalWorkspace.methods?.startNewC
 VetEdgeClinicalWorkspace.methods.startNewConsultation = function startNewConsultationWithDoctorOwnership() {
 	originalStartNewConsultation.call(this);
 	this.patientContext = blankPatientContext();
+	this.syncOwnerDetailsButton();
 	if (restrictedDoctor()) this.form.consulting_practitioner = currentUser();
 };
 
 const originalBackToList = VetEdgeClinicalWorkspace.methods?.backToList;
 VetEdgeClinicalWorkspace.methods.backToList = function backToListWithContextReset() {
 	this.patientContext = blankPatientContext();
+	document.querySelector('.vetedge-owner-details-button')?.remove();
 	return originalBackToList.call(this);
 };
 
