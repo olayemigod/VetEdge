@@ -1,3 +1,5 @@
+import { defineComponent, h } from 'vue';
+
 import VetEdgeClinicalWorkspace from './vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue';
 import { applyWorkspaceSafety } from './vetedge_workspace_safety';
 
@@ -6,6 +8,7 @@ const CLINICAL_CONTEXT_API = Object.freeze({
 	patientOwner: 'vetedge.services.clinical_workspace_context.get_patient_owner_context',
 });
 const ELEVATED_ROLES = new Set(['System Manager', 'VetEdge Administrator']);
+const patientLabelById = new Map();
 const blankPatientContext = () => ({ patient: {}, owner: {} });
 const currentUser = () => window.frappe?.session?.user || '';
 const currentRoles = () => new Set(window.frappe?.user_roles || []);
@@ -21,6 +24,30 @@ const escapeHtml = (value) => {
 	return element.innerHTML;
 };
 
+function createClinicalLinkField(baseComponent) {
+	return defineComponent({
+		name: 'VetEdgeClinicalLinkField',
+		inheritAttrs: false,
+		props: baseComponent?.props || {},
+		setup(props, { attrs, slots }) {
+			return () => {
+				const patientLabel = props.label === 'Patient'
+					? patientLabelById.get(String(props.modelValue || '')) || ''
+					: '';
+				return h(
+					baseComponent,
+					{
+						...attrs,
+						...props,
+						selectedLabel: props.selectedLabel || patientLabel,
+					},
+					slots,
+				);
+			};
+		},
+	});
+}
+
 const originalData = VetEdgeClinicalWorkspace.data;
 VetEdgeClinicalWorkspace.data = function clinicalWorkspaceDataWithPatientContext() {
 	const state = originalData.call(this) || {};
@@ -31,13 +58,7 @@ VetEdgeClinicalWorkspace.computed = VetEdgeClinicalWorkspace.computed || {};
 VetEdgeClinicalWorkspace.computed.isRestrictedDoctor = restrictedDoctor;
 const originalDetailSubtitle = VetEdgeClinicalWorkspace.computed.detailSubtitle;
 VetEdgeClinicalWorkspace.computed.detailSubtitle = function clinicalDetailSubtitleWithOwner() {
-	const base = originalDetailSubtitle?.call(this) || 'Clinical consultation capture';
-	const owner = this.patientContext?.owner || {};
-	const ownerSummary = [
-		owner.label ? `Owner: ${owner.label}` : '',
-		owner.mobile_no ? `Tel: ${owner.mobile_no}` : '',
-	].filter(Boolean);
-	return [base, ...ownerSummary].filter(Boolean).join(' · ');
+	return originalDetailSubtitle?.call(this) || 'Clinical consultation capture';
 };
 
 VetEdgeClinicalWorkspace.methods.showOwnerDetails = function showOwnerDetails() {
@@ -59,52 +80,46 @@ VetEdgeClinicalWorkspace.methods.showOwnerDetails = function showOwnerDetails() 
 
 VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton = function syncOwnerDetailsButton() {
 	this.$nextTick?.(() => {
-		const actions = document.querySelector('.vetedge-clinical-detail .vetedge-clinical-statusbar .vetedge-clinical-actions');
-		if (!actions) return;
-		let button = actions.querySelector('.vetedge-owner-details-button');
+		document.querySelector('.vetedge-clinical-statusbar .vetedge-owner-details-button')?.remove();
+		const visitPanel = [...document.querySelectorAll('.vetedge-clinical-panel')].find(
+			(panel) => panel.querySelector('h3')?.textContent?.trim() === 'Patient and Visit',
+		);
+		if (!visitPanel) return;
+
+		let summary = visitPanel.querySelector('.vetedge-owner-summary');
 		const owner = this.patientContext?.owner || {};
 		if (!owner.name && !owner.label) {
-			button?.remove();
+			summary?.remove();
 			return;
 		}
-		if (!button) {
-			button = document.createElement('button');
-			button.type = 'button';
-			button.className = 'edge-button vetedge-owner-details-button';
-			button.textContent = 'View Owner Details';
-			actions.prepend(button);
-		}
-		button.onclick = () => this.showOwnerDetails();
-	});
-};
 
-VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext(patient, applyDefaultBranch = true) {
-	const request = Symbol('patient-context');
-	this._patientContextRequest = request;
-	if (!patient) {
-		this.patientContext = blankPatientContext();
-		this.form.primary_owner = '';
-		this.form.primary_owner_label = '';
-		this.syncOwnerDetailsButton();
-		return;
-	}
-	try {
-		const context = await call(CLINICAL_CONTEXT_API.patientOwner, { patient });
-		if (this._patientContextRequest !== request || this.form.patient !== patient) return;
-		this.patientContext = { ...blankPatientContext(), ...(context || {}) };
-		this.form.primary_owner = context?.owner?.name || '';
-		this.form.primary_owner_label = context?.owner?.label || '';
-		if (applyDefaultBranch && !this.form.service_branch && context?.patient?.default_branch) {
-			this.form.service_branch = context.patient.default_branch;
-			this.markDirty();
+		if (!summary) {
+			summary = document.createElement('div');
+			summary.className = 'vetedge-owner-summary';
+			Object.assign(summary.style, {
+				display: 'flex',
+				alignItems: 'center',
+				justifyContent: 'space-between',
+				gap: '1rem',
+				padding: '0.75rem 1rem',
+				margin: '0.5rem 0 1rem',
+				border: '1px solid var(--border-color, #dfe3e8)',
+				borderRadius: '0.75rem',
+				background: 'var(--card-bg, #fff)',
+			});
+			visitPanel.querySelector('h3')?.insertAdjacentElement('afterend', summary);
 		}
-		this.syncOwnerDetailsButton();
-	} catch (error) {
-		if (this._patientContextRequest !== request) return;
-		this.patientContext = blankPatientContext();
-		this.syncOwnerDetailsButton();
-		frappe.show_alert({ message: error?.message || 'Pet owner information could not load.', indicator: 'orange' });
-	}
+
+		summary.innerHTML = `
+			<div class="vetedge-owner-summary__content">
+				<small style="display:block; opacity:.7; margin-bottom:.2rem;">Pet Owner</small>
+				<strong class="vetedge-owner-summary__name">${escapeHtml(owner.label || owner.name)}</strong>
+				${owner.mobile_no ? `<span class="vetedge-owner-summary__phone" style="display:block; margin-top:.2rem;">${escapeHtml(owner.mobile_no)}</span>` : ''}
+			</div>
+			<button type="button" class="edge-button edge-button--compact vetedge-owner-details-button">View Owner Details</button>
+		`;
+		summary.querySelector('.vetedge-owner-details-button').onclick = () => this.showOwnerDetails();
+	});
 };
 
 const originalTreatmentRowLocked = VetEdgeClinicalWorkspace.methods?.treatmentRowLocked;
@@ -121,8 +136,10 @@ const originalApplyDetail = VetEdgeClinicalWorkspace.methods?.applyDetail;
 VetEdgeClinicalWorkspace.methods.applyDetail = function applyDetailWithOwnershipAndOwnerContext(payload) {
 	originalApplyDetail.call(this, payload);
 	const values = payload?.values || {};
+	const patientLabel = payload?.patient_label || values.patient || '';
+	if (values.patient && patientLabel) patientLabelById.set(String(values.patient), patientLabel);
 	this.patientContext = {
-		patient: { name: values.patient || '', label: payload?.patient_label || values.patient || '' },
+		patient: { name: values.patient || '', label: patientLabel },
 		owner: { name: values.primary_owner || '', label: values.primary_owner_label || values.primary_owner || '' },
 	};
 	if (this.form.patient) this.loadPatientOwnerContext(this.form.patient, false);
@@ -146,7 +163,7 @@ VetEdgeClinicalWorkspace.methods.startNewConsultation = function startNewConsult
 const originalBackToList = VetEdgeClinicalWorkspace.methods?.backToList;
 VetEdgeClinicalWorkspace.methods.backToList = function backToListWithContextReset() {
 	this.patientContext = blankPatientContext();
-	document.querySelector('.vetedge-owner-details-button')?.remove();
+	document.querySelector('.vetedge-owner-summary')?.remove();
 	return originalBackToList.call(this);
 };
 
@@ -165,7 +182,15 @@ VetEdgeClinicalWorkspace.methods.linkSearch = async function clinicalContextAwar
 		const effectiveSearch = String(search || '') === String(selected || '') ? '' : search;
 		return (await call(CLINICAL_CONTEXT_API.options, { kind, search: effectiveSearch || '', limit: 50 })) || [];
 	}
-	return originalLinkSearch.call(this, kind, search);
+	const options = await originalLinkSearch.call(this, kind, search);
+	if (kind === 'patient') {
+		for (const option of options || []) {
+			const value = option?.value || option?.name || option?.[0];
+			const label = option?.label || option?.title || option?.[1] || value;
+			if (value && label) patientLabelById.set(String(value), String(label));
+		}
+	}
+	return options;
 };
 
 const originalSaveVitals = VetEdgeClinicalWorkspace.methods?.saveVitals;
@@ -180,6 +205,15 @@ if (typeof originalSaveVitals === 'function') {
 	};
 }
 
+const originalActiveTabWatch = VetEdgeClinicalWorkspace.watch?.activeTab;
+VetEdgeClinicalWorkspace.watch = {
+	...(VetEdgeClinicalWorkspace.watch || {}),
+	activeTab(value, previous) {
+		if (typeof originalActiveTabWatch === 'function') originalActiveTabWatch.call(this, value, previous);
+		if (value === 'visit') this.syncOwnerDetailsButton();
+	},
+};
+
 applyWorkspaceSafety(VetEdgeClinicalWorkspace, { guardNavigation: true });
 
 export function mountVetEdgeClinicalWorkspace(target) {
@@ -188,7 +222,10 @@ export function mountVetEdgeClinicalWorkspace(target) {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
 
-	VetEdgeClinicalWorkspace.components = runtime.components;
+	VetEdgeClinicalWorkspace.components = {
+		...runtime.components,
+		EdgeLinkField: createClinicalLinkField(runtime.components.EdgeLinkField),
+	};
 	const app = runtime.createEdgeApp(VetEdgeClinicalWorkspace);
 	app.mount(target);
 	return app;
