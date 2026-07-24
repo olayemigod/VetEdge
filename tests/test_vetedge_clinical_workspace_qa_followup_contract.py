@@ -5,6 +5,17 @@ CONTEXT = ROOT / "vetedge" / "services" / "clinical_workspace_context.py"
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
 HOOKS = ROOT / "vetedge" / "hooks.py"
 HOME = ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.js"
+HOME_JSON = ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.json"
+CLINICAL_JSON = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_clinical_workspace"
+	/ "vetedge_clinical_workspace.json"
+)
+PAGE_ROLE_PATCH = ROOT / "vetedge" / "patches" / "ensure_vetedge_operational_page_roles.py"
+PATCHES = ROOT / "vetedge" / "patches.txt"
 
 
 def read(path: Path) -> str:
@@ -76,3 +87,19 @@ def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
 		"vetedge-executive-dashboard",
 	):
 		assert contract in home
+
+
+def test_operational_page_role_aliases_are_source_controlled_and_migrated():
+	home_json = read(HOME_JSON)
+	clinical_json = read(CLINICAL_JSON)
+	patch = read(PAGE_ROLE_PATCH)
+	patches = read(PATCHES)
+
+	for role in ("VetEdge Doctor", "Veterinary Nurse", "VetEdge Nurse"):
+		assert role in home_json
+		assert role in clinical_json
+		assert role in patch
+	assert '"vetedge"' in patch
+	assert '"vetedge-clinical-workspace"' in patch
+	assert "page.append(\"roles\", {\"role\": role})" in patch
+	assert "vetedge.patches.ensure_vetedge_operational_page_roles" in patches
