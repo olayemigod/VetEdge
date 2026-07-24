@@ -143,7 +143,11 @@ doc_events = {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.clinical_workspace_context.enforce_consultation_practitioner_ownership",
 		],
+	},
+	"Veterinary Vital Signs": {
+		"before_save": "vetedge.services.clinical_workspace_context.enforce_vitals_consultation_ownership",
 	},
 	"Veterinary Lab Order": {
 		"before_save": [
