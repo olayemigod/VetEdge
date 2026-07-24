@@ -66,7 +66,7 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 
 	for contract in (
 		"CLINICAL_CONTEXT_API",
-		"loadPatientOwnerContext",
+		"VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext",
 		"createClinicalLinkField",
 		"patientLabelById",
 		"selectedLabel: props.selectedLabel || patientLabel",
@@ -83,6 +83,14 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 	)[0]
 	assert "owner.email_id" not in owner_summary
 	assert "patient.emergency_contact" not in owner_summary
+
+	loader_definition = bundle.index(
+		"VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext"
+	)
+	apply_detail_call = bundle.index("this.loadPatientOwnerContext(this.form.patient, false)")
+	patient_change_call = bundle.index("this.loadPatientOwnerContext(value || '')")
+	assert loader_definition < apply_detail_call
+	assert loader_definition < patient_change_call
 
 
 def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
