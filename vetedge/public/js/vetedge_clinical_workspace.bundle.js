@@ -1,4 +1,4 @@
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, reactive } from 'vue';
 
 import VetEdgeClinicalWorkspace from './vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue';
 import { applyWorkspaceSafety } from './vetedge_workspace_safety';
@@ -8,7 +8,7 @@ const CLINICAL_CONTEXT_API = Object.freeze({
 	patientOwner: 'vetedge.services.clinical_workspace_context.get_patient_owner_context',
 });
 const ELEVATED_ROLES = new Set(['System Manager', 'VetEdge Administrator']);
-const patientLabelById = new Map();
+const patientLabelById = reactive(new Map());
 const blankPatientContext = () => ({ patient: {}, owner: {} });
 const currentUser = () => window.frappe?.session?.user || '';
 const currentRoles = () => new Set(window.frappe?.user_roles || []);
