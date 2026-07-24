@@ -132,6 +132,38 @@ VetEdgeClinicalWorkspace.methods.treatmentRowLocked = function treatmentRowLocke
 	return sourceGenerated || originalTreatmentRowLocked?.call(this, row) === true;
 };
 
+VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext(patient, applyDefaultBranch = true) {
+	const request = Symbol('patient-context');
+	this._patientContextRequest = request;
+	if (!patient) {
+		this.patientContext = blankPatientContext();
+		this.form.primary_owner = '';
+		this.form.primary_owner_label = '';
+		this.syncOwnerDetailsButton();
+		return;
+	}
+
+	try {
+		const context = await call(CLINICAL_CONTEXT_API.patientOwner, { patient });
+		if (this._patientContextRequest !== request || this.form.patient !== patient) return;
+		this.patientContext = { ...blankPatientContext(), ...(context || {}) };
+		this.form.primary_owner = context?.owner?.name || '';
+		this.form.primary_owner_label = context?.owner?.label || '';
+		const patientLabel = context?.patient?.label || context?.patient?.name || patient;
+		if (patientLabel) patientLabelById.set(String(patient), String(patientLabel));
+		if (applyDefaultBranch && !this.form.service_branch && context?.patient?.default_branch) {
+			this.form.service_branch = context.patient.default_branch;
+			this.markDirty();
+		}
+		this.syncOwnerDetailsButton();
+	} catch (error) {
+		if (this._patientContextRequest !== request) return;
+		this.patientContext = blankPatientContext();
+		this.syncOwnerDetailsButton();
+		frappe.show_alert({ message: error?.message || 'Pet owner information could not load.', indicator: 'orange' });
+	}
+};
+
 const originalApplyDetail = VetEdgeClinicalWorkspace.methods?.applyDetail;
 VetEdgeClinicalWorkspace.methods.applyDetail = function applyDetailWithOwnershipAndOwnerContext(payload) {
 	originalApplyDetail.call(this, payload);
