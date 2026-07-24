@@ -3,6 +3,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTEXT = ROOT / "vetedge" / "services" / "clinical_workspace_context.py"
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
+PAGE_LOADER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_clinical_workspace"
+	/ "vetedge_clinical_workspace.js"
+)
+TREATMENT_ITEMS = ROOT / "vetedge" / "services" / "treatment_items.py"
 HOOKS = ROOT / "vetedge" / "hooks.py"
 HOME = ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.js"
 HOME_JSON = ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.json"
@@ -68,7 +77,8 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 		"CLINICAL_CONTEXT_API",
 		"VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext",
 		"createClinicalLinkField",
-		"const patientLabelById = reactive(new Map())",
+		"reactive(new Map())",
+		"patientLabelById",
 		"selectedLabel: props.selectedLabel || patientLabel",
 		"vetedge-owner-summary",
 		"Pet Owner",
@@ -92,6 +102,27 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 	patient_change_call = bundle.index("this.loadPatientOwnerContext(value || '')")
 	assert loader_definition < apply_detail_call
 	assert loader_definition < patient_change_call
+
+
+def test_clinical_workspace_has_persistent_and_keyboard_save_actions():
+	loader = read(PAGE_LOADER)
+	for contract in (
+		"vetedge-clinical-save-dock",
+		"event.ctrlKey || event.metaKey",
+		"String(event.key || '').toLowerCase() !== 's'",
+		"event.preventDefault()",
+		"workspace.saveConsultation()",
+		"workspace?.vitalsDialog?.open",
+		"workspace?.historyDialog?.open",
+		"document.addEventListener('keydown', saveShortcutHandler)",
+		"document.removeEventListener('keydown', saveShortcutHandler)",
+	):
+		assert contract in loader
+
+
+def test_treatment_item_lookup_orders_recent_profiles_first():
+	treatment_items = read(TREATMENT_ITEMS)
+	assert "ORDER BY treatment.modified DESC, item.item_name ASC, item.name ASC" in treatment_items
 
 
 def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
