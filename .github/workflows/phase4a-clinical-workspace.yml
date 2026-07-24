@@ -39,11 +39,15 @@ jobs:
             vetedge/services/clinical_workspace.py \
             vetedge/services/clinical_workspace_context.py \
             tests/test_vetedge_clinical_workspace_contract.py \
+            tests/test_vetedge_clinical_workspace_qa_followup_contract.py \
             vetedge/tests/test_vetedge_clinical_workspace_integration.py \
             vetedge/tests/test_vetedge_clinical_workspace_qa_followup.py
 
       - name: Validate clinical workspace contracts
-        run: python -m pytest -q tests/test_vetedge_clinical_workspace_contract.py
+        run: |
+          python -m pytest -q \
+            tests/test_vetedge_clinical_workspace_contract.py \
+            tests/test_vetedge_clinical_workspace_qa_followup_contract.py
 
   frontend:
     name: Clinical workspace frontend
@@ -179,15 +183,20 @@ jobs:
         working-directory: frappe-bench
         run: |
           set +e
-          {
-            bench --site ci.localhost run-tests \
-              --app vetedge \
-              --module vetedge.tests.test_vetedge_clinical_workspace_integration
-            bench --site ci.localhost run-tests \
-              --app vetedge \
-              --module vetedge.tests.test_vetedge_clinical_workspace_qa_followup
-          } > /tmp/clinical-tests.txt 2>&1
-          status=$?
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_clinical_workspace_integration \
+            > /tmp/clinical-tests.txt 2>&1
+          base_status=$?
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_clinical_workspace_qa_followup \
+            >> /tmp/clinical-tests.txt 2>&1
+          followup_status=$?
+          status=0
+          if [ "$base_status" -ne 0 ] || [ "$followup_status" -ne 0 ]; then
+            status=1
+          fi
           cat /tmp/clinical-tests.txt
           echo "$status" > /tmp/clinical-tests.status
           exit 0
