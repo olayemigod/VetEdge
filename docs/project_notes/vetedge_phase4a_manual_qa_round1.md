@@ -53,14 +53,20 @@ Mathew Alao / ProcessEdge Solutions Limited
 - Added a live Frappe test requiring the Page record to exist after migration.
 - Tightened static contracts so the failed local wrapper cannot return unnoticed.
 
-## Retest Required
+## Round 2 Browser Retest
 
-- `/app/vetedge` redirects to the Executive Dashboard.
-- Summary cards render SVG icons.
-- Consultation rows show their real values.
-- Clicking a populated row opens the correct consultation.
-- New Consultation remains operational.
+### Passed
+
+- Summary cards render graphical icons instead of icon-name text.
+- Consultation rows display actual values.
+- Status and Payment render as badges where applicable.
+- Clicking a populated row opens the selected consultation.
+- New Consultation still opens the Patient and Visit screen.
+
+### Pending Explicit Confirmation
+
+- `/app/vetedge` opens Veterinary Home and redirects to the Executive Dashboard without `Page vetedge not found`.
 
 ## Status
 
-Round 1 failed and was corrected. Round 2 browser retest remains pending.
+Clinical Workspace Stage 0 checks passed after correction. Veterinary Home route confirmation remains pending before Stage 1 workflow QA begins.
