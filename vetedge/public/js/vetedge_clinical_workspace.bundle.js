@@ -50,8 +50,6 @@ VetEdgeClinicalWorkspace.methods.showOwnerDetails = function showOwnerDetails() 
 		['Phone', owner.mobile_no],
 		['Email', owner.email_id],
 		['Emergency Contact', patient.emergency_contact],
-		['Patient Species', patient.species],
-		['Patient Breed', patient.breed],
 	].filter(([, value]) => value);
 	const message = rows.length
 		? `<div class="vetedge-owner-details">${rows.map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('')}</div>`
