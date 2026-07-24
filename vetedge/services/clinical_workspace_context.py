@@ -17,9 +17,6 @@ from vetedge.services.permissions import (
 from vetedge.services.portal_access import require_internal_user
 
 
-CLINICAL_WRITE_ACTIONS = {"save", "transition", "vitals"}
-
-
 def is_restricted_doctor(user: str | None = None) -> bool:
 	user = user or get_current_user()
 	roles = get_user_roles(user)
@@ -62,7 +59,7 @@ def enforce_consultation_practitioner_ownership(doc, method: str | None = None) 
 	if not is_restricted_doctor(user):
 		return
 
-	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	previous = doc.get_doc_before_save()
 	if previous and previous.get("consulting_practitioner") != user:
 		frappe.throw(
 			_("This consultation belongs to another doctor and cannot be reassigned or saved by you."),
