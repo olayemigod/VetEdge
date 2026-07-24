@@ -209,7 +209,9 @@ def test_veterinary_home_route_has_a_real_desk_page_and_repair_patch():
 	assert 'app_home = "/app/vetedge"' in hooks
 	assert 'const HOME_ROUTE = "/app/vetedge"' in navigation
 	assert "frappe.pages.vetedge" in home_script
-	assert "frappe.set_route('vetedge-executive-dashboard')" in home_script
+	assert "resolveVetEdgeHomeRoute" in home_script
+	assert "vetedge-clinical-workspace" in home_script
+	assert "vetedge-executive-dashboard" in home_script
 	assert "vetedge.patches.ensure_vetedge_home_page" in read(PATCHES)
 	assert 'frappe.db.exists("Page", PAGE_NAME)' in patch
 	assert 'frappe.clear_cache(doctype="Page")' in patch
