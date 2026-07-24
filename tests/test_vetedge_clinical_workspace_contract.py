@@ -24,6 +24,8 @@ PAGE_ROOT = ROOT / "vetedge" / "veterinary" / "page" / "vetedge_clinical_workspa
 HOME_PAGE_ROOT = ROOT / "vetedge" / "veterinary" / "page" / "vetedge"
 HOOKS = ROOT / "vetedge" / "hooks.py"
 HOME_NAVIGATION = ROOT / "vetedge" / "public" / "js" / "vetedge_home_navigation.js"
+PATCHES = ROOT / "vetedge" / "patches.txt"
+HOME_PATCH = ROOT / "vetedge" / "patches" / "ensure_vetedge_home_page.py"
 
 
 def read(path: Path) -> str:
@@ -150,20 +152,28 @@ def test_frontend_is_full_edgesuite_clinical_workspace():
 	assert "frappe.require('edgeui.bundle.js'" not in loader
 	assert "const runtime = window.EdgeSuiteUI;" in bundle
 	assert "window.EdgeUI" not in bundle
+	assert "VetEdgeClinicalWorkspace.components = runtime.components" in bundle
 	assert "applyWorkspaceSafety(VetEdgeClinicalWorkspace, { guardNavigation: true })" in bundle
 	assert "saveVitalsWithReliableClose" in bundle
 
 
-def test_manual_qa_regressions_render_real_rows_and_icons():
+def test_manual_qa_regressions_delegate_to_shared_component_contracts():
+	component = read(COMPONENT)
 	bundle = read(BUNDLE)
 	for contract in (
-		"fieldname: column.fieldname || column.key",
-		"status: column.status === true || column.type === 'status'",
+		'{ key: "consultation_datetime", label: "Date/Time", type: "datetime" }',
+		'{ key: "patient_label", label: "Patient" }',
+		'icon="file-pen-line"',
+		'icon="credit-card"',
+	):
+		assert contract in component
+
+	for obsolete_local_wrapper in (
+		"clinicalWorkspaceDataWithTableCompatibility",
 		"VetEdgeClinicalStatCard",
-		"runtime?.components?.EdgeIcon",
 		"CLINICAL_ICON_ALIASES",
 	):
-		assert contract in bundle
+		assert obsolete_local_wrapper not in bundle
 
 
 def test_native_consultation_routes_resolve_to_the_clinical_workspace():
@@ -183,21 +193,26 @@ def test_native_consultation_routes_resolve_to_the_clinical_workspace():
 	assert "vetedge_clinical_route.js" in hooks
 
 
-def test_veterinary_home_route_has_a_real_desk_page():
+def test_veterinary_home_route_has_a_real_desk_page_and_repair_patch():
 	for path in (
 		HOME_PAGE_ROOT / "__init__.py",
 		HOME_PAGE_ROOT / "vetedge.js",
 		HOME_PAGE_ROOT / "vetedge.json",
+		HOME_PATCH,
 	):
 		assert path.exists(), path
 
 	hooks = read(HOOKS)
 	navigation = read(HOME_NAVIGATION)
 	home_script = read(HOME_PAGE_ROOT / "vetedge.js")
+	patch = read(HOME_PATCH)
 	assert 'app_home = "/app/vetedge"' in hooks
 	assert 'const HOME_ROUTE = "/app/vetedge"' in navigation
 	assert "frappe.pages.vetedge" in home_script
 	assert "frappe.set_route('vetedge-executive-dashboard')" in home_script
+	assert "vetedge.patches.ensure_vetedge_home_page" in read(PATCHES)
+	assert 'frappe.db.exists("Page", PAGE_NAME)' in patch
+	assert 'frappe.clear_cache(doctype="Page")' in patch
 
 
 def test_existing_billing_modal_is_reused_instead_of_reimplemented():
