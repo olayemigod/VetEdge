@@ -7,9 +7,18 @@ const CLINICAL_CONTEXT_API = Object.freeze({
 	options: 'vetedge.services.clinical_workspace_context.get_clinical_context_options',
 	patientOwner: 'vetedge.services.clinical_workspace_context.get_patient_owner_context',
 });
+const CLINICAL_STAGE3_API = Object.freeze({
+	policy: 'vetedge.services.clinical_workspace_stage3.get_default_consultation_fee_policy',
+	save: 'vetedge.services.clinical_workspace_stage3.save_consultation',
+});
 const ELEVATED_ROLES = new Set(['System Manager', 'VetEdge Administrator']);
 const patientLabelById = reactive(new Map());
 const blankPatientContext = () => ({ patient: {}, owner: {} });
+const blankClinicalBillingPolicy = () => ({
+	allow_editing_default_consultation_fee: false,
+	default_consultation_source_detail: 'Default Consultation Fee',
+	loaded: false,
+});
 const currentUser = () => window.frappe?.session?.user || '';
 const currentRoles = () => new Set(window.frappe?.user_roles || []);
 const restrictedDoctor = () => {
@@ -17,6 +26,17 @@ const restrictedDoctor = () => {
 	return roles.has('VetEdge Doctor') && ![...ELEVATED_ROLES].some((role) => roles.has(role));
 };
 const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message);
+const serverDatetime = (value) => (value ? String(value).replace('T', ' ') : value);
+const apiErrorMessage = (error, fallback) => error?.message || error?._server_messages || error?.exc_type || fallback;
+const isSourceGeneratedTreatmentRow = (row) => Boolean(
+	row?.source_document
+	|| row?.source_detail_name
+	|| ['Consultation', 'Lab Order', 'Vaccination'].includes(row?.source_type)
+);
+const isDefaultConsultationFeeRow = (row, policy) => Boolean(
+	row?.source_type === 'Consultation'
+	&& row?.source_detail_name === (policy?.default_consultation_source_detail || 'Default Consultation Fee')
+);
 const escapeHtml = (value) => {
 	if (window.frappe?.utils?.escape_html) return frappe.utils.escape_html(String(value || ''));
 	const element = document.createElement('div');
@@ -51,7 +71,11 @@ function createClinicalLinkField(baseComponent) {
 const originalData = VetEdgeClinicalWorkspace.data;
 VetEdgeClinicalWorkspace.data = function clinicalWorkspaceDataWithPatientContext() {
 	const state = originalData.call(this) || {};
-	return { ...state, patientContext: blankPatientContext() };
+	return {
+		...state,
+		patientContext: blankPatientContext(),
+		clinicalBillingPolicy: blankClinicalBillingPolicy(),
+	};
 };
 
 VetEdgeClinicalWorkspace.computed = VetEdgeClinicalWorkspace.computed || {};
@@ -122,14 +146,41 @@ VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton = function syncOwnerDeta
 	});
 };
 
+VetEdgeClinicalWorkspace.methods.loadClinicalBillingPolicy = async function loadClinicalBillingPolicy() {
+	try {
+		const policy = await call(CLINICAL_STAGE3_API.policy);
+		this.clinicalBillingPolicy = {
+			...blankClinicalBillingPolicy(),
+			...(policy || {}),
+			loaded: true,
+		};
+	} catch (error) {
+		this.clinicalBillingPolicy = { ...blankClinicalBillingPolicy(), loaded: true };
+	}
+};
+
 const originalTreatmentRowLocked = VetEdgeClinicalWorkspace.methods?.treatmentRowLocked;
 VetEdgeClinicalWorkspace.methods.treatmentRowLocked = function treatmentRowLockedWithSourceProtection(row) {
-	const sourceGenerated = Boolean(
-		row?.source_document
-		|| row?.source_detail_name
-		|| ['Consultation', 'Lab Order', 'Vaccination'].includes(row?.source_type)
+	const baseLocked = originalTreatmentRowLocked?.call(this, row) === true;
+	const defaultFeeEditable = Boolean(
+		this.clinicalBillingPolicy?.allow_editing_default_consultation_fee
+		&& isDefaultConsultationFeeRow(row, this.clinicalBillingPolicy)
 	);
-	return sourceGenerated || originalTreatmentRowLocked?.call(this, row) === true;
+	if (defaultFeeEditable) return baseLocked;
+	return isSourceGeneratedTreatmentRow(row) || baseLocked;
+};
+
+const originalRemoveChild = VetEdgeClinicalWorkspace.methods?.removeChild;
+VetEdgeClinicalWorkspace.methods.removeChild = function removeChildWithSourceProtection(table, index) {
+	const row = this.form?.[table]?.[index];
+	if (table === 'planned_treatments' && isSourceGeneratedTreatmentRow(row)) {
+		frappe.show_alert({
+			message: 'Source-generated treatment rows cannot be removed. Update billing settings or the source document instead.',
+			indicator: 'orange',
+		});
+		return;
+	}
+	return originalRemoveChild?.call(this, table, index);
 };
 
 VetEdgeClinicalWorkspace.methods.loadPatientOwnerContext = async function loadPatientOwnerContext(patient, applyDefaultBranch = true) {
@@ -170,10 +221,21 @@ VetEdgeClinicalWorkspace.methods.applyDetail = function applyDetailWithOwnership
 	const values = payload?.values || {};
 	const patientLabel = payload?.patient_label || values.patient || '';
 	if (values.patient && patientLabel) patientLabelById.set(String(values.patient), patientLabel);
+	this.form.consultation_invoices = (this.form.consultation_invoices || []).map((row) => {
+		const salesInvoice = row?.sales_invoice || '';
+		return {
+			...row,
+			name: salesInvoice,
+			invoice: salesInvoice,
+			status: row?.invoice_status || row?.status || '',
+			payment_status: row?.payment_status || row?.invoice_status || '',
+		};
+	});
 	this.patientContext = {
 		patient: { name: values.patient || '', label: patientLabel },
 		owner: { name: values.primary_owner || '', label: values.primary_owner_label || values.primary_owner || '' },
 	};
+	this.loadClinicalBillingPolicy();
 	if (this.form.patient) this.loadPatientOwnerContext(this.form.patient, false);
 	else this.syncOwnerDetailsButton();
 	const assignedDoctor = this.form.consulting_practitioner || '';
@@ -189,6 +251,7 @@ VetEdgeClinicalWorkspace.methods.startNewConsultation = function startNewConsult
 	originalStartNewConsultation.call(this);
 	this.patientContext = blankPatientContext();
 	this.syncOwnerDetailsButton();
+	this.loadClinicalBillingPolicy();
 	if (restrictedDoctor()) this.form.consulting_practitioner = currentUser();
 };
 
@@ -223,6 +286,36 @@ VetEdgeClinicalWorkspace.methods.linkSearch = async function clinicalContextAwar
 		}
 	}
 	return options;
+};
+
+VetEdgeClinicalWorkspace.methods.saveConsultation = async function saveConsultationWithStage3BillingPolicy() {
+	if (this.busy) return null;
+	this.busy = true;
+	try {
+		const payload = {
+			...this.form,
+			name: this.detail.name || undefined,
+			modified: this.detail.modified || undefined,
+			consultation_datetime: serverDatetime(this.form.consultation_datetime),
+			symptoms: this.form.symptoms.map(({ _key, ...row }) => row),
+			diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row),
+			planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row),
+		};
+		const detail = await call(CLINICAL_STAGE3_API.save, { payload });
+		this.applyDetail(detail);
+		frappe.show_alert({ message: 'Consultation saved.', indicator: 'green' });
+		window.history.replaceState({}, '', `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`);
+		return detail;
+	} catch (error) {
+		frappe.msgprint({
+			title: 'Consultation could not be saved',
+			message: apiErrorMessage(error, 'Save failed.'),
+			indicator: 'red',
+		});
+		return null;
+	} finally {
+		this.busy = false;
+	}
 };
 
 const originalSaveVitals = VetEdgeClinicalWorkspace.methods?.saveVitals;
