@@ -158,6 +158,7 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 								|| workspace?.busy
 								|| workspace?.vitalsDialog?.open
 								|| workspace?.historyDialog?.open
+								|| workspace?.phase5HistoryOpen
 								|| typeof workspace?.saveConsultation !== 'function'
 							) return;
 							Promise.resolve(workspace.saveConsultation()).finally(syncSaveDock);
@@ -166,7 +167,12 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 						$saveButton.on('click', saveConsultation);
 						const saveShortcutHandler = (event) => {
 							if (!(event.ctrlKey || event.metaKey) || String(event.key || '').toLowerCase() !== 's') return;
-							if (!workspace?.detail?.open || workspace?.vitalsDialog?.open || workspace?.historyDialog?.open) return;
+							if (
+								!workspace?.detail?.open
+								|| workspace?.vitalsDialog?.open
+								|| workspace?.historyDialog?.open
+								|| workspace?.phase5HistoryOpen
+							) return;
 							event.preventDefault();
 							saveConsultation();
 						};
