@@ -1,0 +1,41 @@
+name: Sidebar Test Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install test dependencies
+        run: python -m pip install --quiet --upgrade pytest
+
+      - name: Capture sidebar test output
+        run: |
+          set +e
+          python -m pytest -vv -s vetedge/services/test_dashboard_install.py > /tmp/sidebar-tests.txt 2>&1
+          status=$?
+          cat /tmp/sidebar-tests.txt
+          echo "$status" > /tmp/sidebar-tests.status
+          exit 0
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidebar-test-diagnostics
+          path: |
+            /tmp/sidebar-tests.txt
+            /tmp/sidebar-tests.status
+          if-no-files-found: error
