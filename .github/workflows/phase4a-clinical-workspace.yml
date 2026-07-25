@@ -32,7 +32,8 @@ jobs:
           python -m py_compile \
             vetedge/services/clinical_workspace.py \
             vetedge/services/clinical_workspace_context.py \
-            vetedge/services/clinical_workspace_stage3.py
+            vetedge/services/clinical_workspace_stage3.py \
+            vetedge/services/clinical_workspace_phase5.py
 
       - name: Ruff clinical providers and tests
         run: |
@@ -40,16 +41,20 @@ jobs:
             vetedge/services/clinical_workspace.py \
             vetedge/services/clinical_workspace_context.py \
             vetedge/services/clinical_workspace_stage3.py \
+            vetedge/services/clinical_workspace_phase5.py \
             tests/test_vetedge_clinical_workspace_contract.py \
             tests/test_vetedge_clinical_workspace_qa_followup_contract.py \
+            tests/test_vetedge_clinical_workspace_phase5_contract.py \
             vetedge/tests/test_vetedge_clinical_workspace_integration.py \
-            vetedge/tests/test_vetedge_clinical_workspace_qa_followup.py
+            vetedge/tests/test_vetedge_clinical_workspace_qa_followup.py \
+            vetedge/tests/test_vetedge_clinical_workspace_phase5.py
 
       - name: Validate clinical workspace contracts
         run: |
           python -m pytest -q \
             tests/test_vetedge_clinical_workspace_contract.py \
-            tests/test_vetedge_clinical_workspace_qa_followup_contract.py
+            tests/test_vetedge_clinical_workspace_qa_followup_contract.py \
+            tests/test_vetedge_clinical_workspace_phase5_contract.py
 
   frontend:
     name: Clinical workspace frontend
@@ -64,9 +69,12 @@ jobs:
       - name: Check clinical workspace JavaScript
         run: |
           node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/public/js/vetedge_clinical_workspace_phase5.js
+          node --check vetedge/public/js/vetedge_medical_history_ui.js
           node --check vetedge/public/js/vetedge_clinical_route.js
           node --check vetedge/veterinary/page/vetedge/vetedge.js
           node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
+          node --check vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js
           node --check vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation_list.js
 
   frappe-v16:
@@ -195,8 +203,13 @@ jobs:
             --module vetedge.tests.test_vetedge_clinical_workspace_qa_followup \
             >> /tmp/clinical-tests.txt 2>&1
           followup_status=$?
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_clinical_workspace_phase5 \
+            >> /tmp/clinical-tests.txt 2>&1
+          phase5_status=$?
           status=0
-          if [ "$base_status" -ne 0 ] || [ "$followup_status" -ne 0 ]; then
+          if [ "$base_status" -ne 0 ] || [ "$followup_status" -ne 0 ] || [ "$phase5_status" -ne 0 ]; then
             status=1
           fi
           cat /tmp/clinical-tests.txt
