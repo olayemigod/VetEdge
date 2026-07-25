@@ -17,6 +17,14 @@
 		if (!component?.methods || component.__vetedgePhase5Installed) return component;
 		component.__vetedgePhase5Installed = true;
 
+		const originalData = component.data;
+		component.data = function phase5ClinicalWorkspaceData() {
+			return {
+				...(originalData.call(this) || {}),
+				phase5HistoryOpen: false,
+			};
+		};
+
 		const originalApplyDetail = component.methods.applyDetail;
 		component.methods.applyDetail = function applyDetailWithPhase5(payload) {
 			originalApplyDetail.call(this, payload);
@@ -123,7 +131,7 @@
 							{ fieldname: 'planned_qty', fieldtype: 'Float', label: __('Planned Qty'), read_only: 1, in_list_view: 1, columns: 2 },
 							{ fieldname: 'dispensed_qty', fieldtype: 'Float', label: __('Dispensed Qty'), reqd: 1, read_only: canConfirm ? 0 : 1, in_list_view: 1, columns: 2 },
 							{ fieldname: 'uom', fieldtype: 'Link', options: 'UOM', label: __('UOM'), read_only: 1, in_list_view: 1, columns: 2 },
-							{ fieldname: 'selected_batch', fieldtype: 'Link', options: 'Batch', label: __('Selected Batch'), read_only: 1 },
+							{ fieldname: 'selected_batch', fieldtype: 'Link', options: 'Batch', label: __('Selected Batch'), read_only: canConfirm ? 0 : 1 },
 							{ fieldname: 'notes', fieldtype: 'Small Text', label: __('Notes'), read_only: canConfirm ? 0 : 1 },
 						],
 					},
@@ -210,12 +218,12 @@
 
 		component.methods.openHistory = function openDateGroupedMedicalHistory() {
 			if (!this.form?.patient || !window.VetEdgeMedicalHistoryUI?.openDialog) return;
-			this.historyDialog = { ...(this.historyDialog || {}), open: true, loading: false, data: {} };
+			this.phase5HistoryOpen = true;
 			window.VetEdgeMedicalHistoryUI.openDialog({
 				patient: this.form.patient,
 				patientLabel: this.patientContext?.patient?.label || this.form.patient,
 				onClose: () => {
-					this.historyDialog = { ...(this.historyDialog || {}), open: false, loading: false, data: {} };
+					this.phase5HistoryOpen = false;
 				},
 			});
 		};
@@ -224,7 +232,7 @@
 	}
 
 	window.VetEdgeClinicalWorkspacePhase5 = Object.freeze({
-		version: '1.0.0',
+		version: '1.0.1',
 		install,
 	});
 })();
