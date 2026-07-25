@@ -64,8 +64,19 @@ def test_treatment_additions_are_newest_first_and_default_fee_is_last():
 def test_phase5_installs_before_workspace_mounts():
 	loader = read("vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js")
 
-	install = loader.index("VetEdgeClinicalWorkspacePhase5?.install")
+	install = loader.index("VetEdgeClinicalWorkspacePhase5.install")
 	mount = loader.index("runtime.createEdgeApp(window.VetEdgeClinicalWorkspace)")
 	assert install < mount
 	assert "vetedge_medical_history_ui.js" in loader
 	assert "vetedge_clinical_workspace_phase5.js" in loader
+
+
+def test_phase5_assets_use_fail_safe_promise_loader():
+	loader = read("vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js")
+
+	assert "vetedge_medical_history_ui.js?v=" not in loader
+	assert "vetedge_clinical_workspace_phase5.js?v=" not in loader
+	assert ".then(() =>" in loader
+	assert ".catch((error) =>" in loader
+	assert "Required Phase 5 clinical modules were not registered" in loader
+	assert "Veterinary Clinical Workspace assets could not load" in loader
