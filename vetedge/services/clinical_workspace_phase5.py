@@ -22,7 +22,6 @@ from vetedge.services.permissions import can_access_consultation, can_dispense
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.stock import get_branch_dispensary_warehouse
 
-
 LOCKED_DISPENSARY_COMPLETION_MESSAGE = _(
 	"Dispensary confirmation is required before this consultation can be completed. "
 	"Review and confirm the dispensary issue first."
