@@ -41,12 +41,16 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 	def test_loader_requires_standalone_edgesuite_ui_before_product_bundle(self):
 		content = self.read("veterinary", "page", "stock_expiry_monitor", "stock_expiry_monitor.js")
 
-		self.assertIn("frappe.require('edgeui.bundle.js'", content)
+		self.assertIn("frappe.require('edgesuite_ui.bundle.js'", content)
+		self.assertNotIn("frappe.require('edgeui.bundle.js'", content)
 		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", content)
 		self.assertIn("runtime?.createEdgeApp", content)
 		self.assertIn("runtime?.components", content)
 		self.assertIn("frappe.require('vetedge_stock_expiry_monitor.bundle.js'", content)
-		self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_stock_expiry_monitor.bundle.js"))
+		self.assertLess(
+			content.index("edgesuite_ui.bundle.js"),
+			content.index("vetedge_stock_expiry_monitor.bundle.js"),
+		)
 		self.assertIn("unmount()", content)
 		self.assertIn("current_visit_id", content)
 		self.assertIn("Stock Expiry Monitor failed to load", content)
