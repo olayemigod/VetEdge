@@ -85,7 +85,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		return null;
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visit_id) return;
 
 		const runtime = getEdgeSuiteRuntime();
