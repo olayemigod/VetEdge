@@ -3,11 +3,17 @@ from __future__ import annotations
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from vetedge.services.clinical_workspace import create_consultation_vitals, save_consultation
+from vetedge.services.clinical_workspace import create_consultation_vitals
 from vetedge.services.clinical_workspace_context import (
 	get_clinical_context_options,
 	get_patient_owner_context,
 )
+from vetedge.services.clinical_workspace_stage3 import (
+	_treatment_row_edit_is_protected,
+	_treatment_row_removal_is_protected,
+	save_consultation,
+)
+from vetedge.services.consultation_billing_plan import DEFAULT_CONSULTATION_SOURCE_DETAIL
 
 
 class TestVetEdgeClinicalWorkspaceQAFollowup(FrappeTestCase):
@@ -182,3 +188,53 @@ class TestVetEdgeClinicalWorkspaceQAFollowup(FrappeTestCase):
 		self.assertEqual(patient_context["patient"]["emergency_contact"], "+2348098765432")
 		self.assertEqual(patient_context["owner"]["name"], context["customer"])
 		self.assertTrue(patient_context["owner"]["label"])
+
+	def test_default_consultation_fee_can_be_edited_but_not_removed_while_pending(self):
+		settings = frappe._dict(
+			enabled=True,
+			auto_add_default_consultation_billing_item=True,
+			allow_editing_consultation_billing_item=True,
+		)
+		row = frappe._dict(
+			source_type="Consultation",
+			source_doctype="Veterinary Consultation",
+			source_document="VET-CONS-QA",
+			source_detail_name=DEFAULT_CONSULTATION_SOURCE_DETAIL,
+			billing_status="Pending",
+			payment_status="Not Billed",
+		)
+
+		self.assertFalse(_treatment_row_edit_is_protected(row, settings))
+		self.assertTrue(_treatment_row_removal_is_protected(row))
+
+		settings.allow_editing_consultation_billing_item = False
+		self.assertTrue(_treatment_row_edit_is_protected(row, settings))
+
+		settings.allow_editing_consultation_billing_item = True
+		row.billing_status = "Draft Invoiced"
+		self.assertTrue(_treatment_row_edit_is_protected(row, settings))
+
+	def test_lab_vaccination_and_paid_rows_remain_protected(self):
+		settings = frappe._dict(
+			enabled=True,
+			auto_add_default_consultation_billing_item=True,
+			allow_editing_consultation_billing_item=True,
+		)
+		for source_type in ("Lab Order", "Vaccination"):
+			row = frappe._dict(
+				source_type=source_type,
+				source_document=f"{source_type}-QA",
+				source_detail_name="QA Source Row",
+				billing_status="Pending",
+				payment_status="Not Billed",
+			)
+			self.assertTrue(_treatment_row_edit_is_protected(row, settings))
+			self.assertTrue(_treatment_row_removal_is_protected(row))
+
+		paid = frappe._dict(
+			source_type="Treatment",
+			billing_status="Submitted Invoiced",
+			payment_status="Paid",
+		)
+		self.assertTrue(_treatment_row_edit_is_protected(paid, settings))
+		self.assertTrue(_treatment_row_removal_is_protected(paid))
