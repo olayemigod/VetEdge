@@ -22,6 +22,16 @@ STOCK_EXPIRY_BUNDLE = (
 	/ "js"
 	/ "vetedge_stock_expiry_monitor.bundle.js"
 )
+EDGEUI_PAGE_LOADERS = (
+	STOCK_EXPIRY_LOADER,
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_executive_dashboard" / "vetedge_executive_dashboard.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_resource_center" / "vetedge_resource_center.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_document_workspace" / "vetedge_document_workspace.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_master_workspace" / "vetedge_master_workspace.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_pricing_master_workspace" / "vetedge_pricing_master_workspace.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_clinical_workspace" / "vetedge_clinical_workspace.js",
+	REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_front_desk_action_center" / "vetedge_front_desk_action_center.js",
+)
 
 
 def _get_required_apps() -> list[str]:
@@ -60,13 +70,21 @@ def test_typescript_config_aliases_vue_to_edgesuite_ui_not_coreedge():
 	assert "coreedge" not in json.dumps(config).lower()
 
 
-def test_stock_expiry_loader_uses_standalone_edgesuite_ui_runtime():
+def test_all_vetedge_page_loaders_use_collision_safe_edgesuite_ui_runtime():
+	for loader in EDGEUI_PAGE_LOADERS:
+		assert loader.exists(), loader
+		content = loader.read_text(encoding="utf-8")
+		assert "edgesuite_ui.bundle.js" in content, loader
+		assert "window.EdgeSuiteUI" in content, loader
+		assert "createEdgeApp" in content, loader
+		assert "frappe.require('edgeui.bundle.js'" not in content, loader
+		assert 'frappe.require("edgeui.bundle.js"' not in content, loader
+
+
+def test_stock_expiry_loader_orders_shared_runtime_before_product_bundle():
 	content = STOCK_EXPIRY_LOADER.read_text(encoding="utf-8")
 
-	assert "edgeui.bundle.js" in content
-	assert "window.EdgeSuiteUI || window.EdgeUI" in content
-	assert "vetedge_stock_expiry_monitor.bundle.js" in content
-	assert content.index("edgeui.bundle.js") < content.index(
+	assert content.index("edgesuite_ui.bundle.js") < content.index(
 		"vetedge_stock_expiry_monitor.bundle.js"
 	)
 	assert "coreedge" not in content.lower()
