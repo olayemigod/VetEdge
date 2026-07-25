@@ -46,7 +46,7 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 	];
 
 	// The legacy `edgeui.bundle.js` manifest key is intentionally not loaded.
-	// It collides with the historical CoreEdge bundle on mixed-app sites.
+	// It can collide with another app's historical bundle on mixed-app sites.
 	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 
