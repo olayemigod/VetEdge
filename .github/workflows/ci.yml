@@ -36,6 +36,7 @@ jobs:
       - name: Ruff migration foundation contracts
         run: |
           ruff check \
+            vetedge/services/test_dashboard_install.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_document_workspace.py
@@ -48,6 +49,9 @@ jobs:
 
       - name: Ruff master workspace contract
         run: ruff check tests/test_vetedge_master_workspace_contract.py
+
+      - name: Validate sidebar migration idempotency
+        run: python -m pytest -q vetedge/services/test_dashboard_install.py
 
       - name: Validate EdgeSuite UI dependency contract
         run: python -m pytest -q vetedge/tests/test_edgesuite_ui_dependency_contract.py
