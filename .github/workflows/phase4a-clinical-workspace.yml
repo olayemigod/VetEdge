@@ -31,13 +31,15 @@ jobs:
         run: |
           python -m py_compile \
             vetedge/services/clinical_workspace.py \
-            vetedge/services/clinical_workspace_context.py
+            vetedge/services/clinical_workspace_context.py \
+            vetedge/services/clinical_workspace_stage3.py
 
       - name: Ruff clinical providers and tests
         run: |
           ruff check \
             vetedge/services/clinical_workspace.py \
             vetedge/services/clinical_workspace_context.py \
+            vetedge/services/clinical_workspace_stage3.py \
             tests/test_vetedge_clinical_workspace_contract.py \
             tests/test_vetedge_clinical_workspace_qa_followup_contract.py \
             vetedge/tests/test_vetedge_clinical_workspace_integration.py \
