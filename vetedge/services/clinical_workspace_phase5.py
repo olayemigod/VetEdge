@@ -53,7 +53,7 @@ def _sort_treatment_order_rows(rows: list[Any]) -> list[Any]:
 			-(frappe.utils.get_datetime(row.get("creation") or row.get("modified")).timestamp())
 			if row.get("creation") or row.get("modified")
 			else 0,
-			-int(row.get("idx") or 0),
+			int(row.get("idx") or 0),
 		),
 	)
 
