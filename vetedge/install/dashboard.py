@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 
 import frappe
 from frappe.modules.import_file import import_file_by_path
 
-
-SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
+SIDEBAR_SYNC_IGNORED_FIELDS = {
+	"name",
+	"doctype",
+	"creation",
+	"modified",
+	"modified_by",
+	"owner",
+	"docstatus",
+	"idx",
+	"parent",
+	"parentfield",
+	"parenttype",
+}
 VETEDGE_DESK_ROUTE = "/app/vetedge"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
@@ -60,6 +72,57 @@ def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
 
 
+def _normalize_sidebar_value(value):
+	if hasattr(value, "as_dict"):
+		value = value.as_dict(no_nulls=False)
+	if isinstance(value, dict):
+		return {
+			key: _normalize_sidebar_value(item)
+			for key, item in value.items()
+			if key not in SIDEBAR_SYNC_IGNORED_FIELDS and not str(key).startswith("_")
+		}
+	if isinstance(value, (list, tuple)):
+		return [_normalize_sidebar_value(item) for item in value]
+	return value
+
+
+def _sidebar_current_state(sidebar, desired_keys: set[str]) -> dict:
+	if hasattr(sidebar, "as_dict"):
+		values = sidebar.as_dict(no_nulls=False)
+	else:
+		values = {}
+		for key in desired_keys:
+			if hasattr(sidebar, "get"):
+				values[key] = sidebar.get(key)
+			else:
+				values[key] = getattr(sidebar, key, None)
+	return _normalize_sidebar_value({key: values.get(key) for key in desired_keys})
+
+
+def _sidebar_desired_state(standard_doc: dict, kept_items: list) -> dict:
+	desired = _prepare_standard_sidebar_update_payload(standard_doc)
+	desired["title"] = "Veterinary"
+	desired["items"] = kept_items
+	return _normalize_sidebar_value(desired)
+
+
+def _sidebar_needs_update(sidebar, standard_doc: dict, kept_items: list) -> bool:
+	desired = _sidebar_desired_state(standard_doc, kept_items)
+	current = _sidebar_current_state(sidebar, set(desired))
+	return current != desired
+
+
+@contextmanager
+def _suppress_workspace_sidebar_export():
+	"""Prevent runtime sidebar synchronisation from rewriting app JSON in developer mode."""
+	previous = getattr(frappe.flags, "in_import", False)
+	frappe.flags.in_import = True
+	try:
+		yield
+	finally:
+		frappe.flags.in_import = previous
+
+
 FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "report", "branch_performance_summary", "branch_performance_summary.json"),
 	("veterinary", "number_card", "today_revenue", "today_revenue.json"),
@@ -75,7 +138,6 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
 	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 	("veterinary", "page", "kennel_availability_board", "kennel_availability_board.json"),
-	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),
 )
 
@@ -116,27 +178,27 @@ def ensure_vetedge_workspace_sidebar() -> None:
 
 	_import_standard_files(SIDEBAR_PAGE_FILES)
 
-	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
 	if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		frappe.rename_doc("Workspace Sidebar", "Veterinary", "VetEdge", force=True)
 
-	# Clean up duplicate if both exist
 	if frappe.db.exists("Workspace Sidebar", "Veterinary") and frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		frappe.delete_doc("Workspace Sidebar", "Veterinary", force=True)
 
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 	standard_doc["title"] = "Veterinary"
-
 	standard_items = standard_doc.get("items") or []
 	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
-		sidebar.set("items", [])
-		sidebar.update(_prepare_standard_sidebar_update_payload(standard_doc))
-		sidebar.set("items", kept_items)
-		sidebar.save(ignore_permissions=True)
-		sidebar.db_set("title", "Veterinary")
+		if _sidebar_needs_update(sidebar, standard_doc, kept_items):
+			payload = _prepare_standard_sidebar_update_payload(standard_doc)
+			payload.pop("items", None)
+			sidebar.set("items", [])
+			sidebar.update(payload)
+			sidebar.set("items", kept_items)
+			with _suppress_workspace_sidebar_export():
+				sidebar.save(ignore_permissions=True)
 	else:
 		standard_doc["items"] = kept_items
 		sidebar = frappe.get_doc(standard_doc)
@@ -144,8 +206,8 @@ def ensure_vetedge_workspace_sidebar() -> None:
 			sidebar.set("items", kept_items)
 		else:
 			sidebar.items = kept_items
-		sidebar.insert(ignore_permissions=True)
-		sidebar.db_set("title", "Veterinary")
+		with _suppress_workspace_sidebar_export():
+			sidebar.insert(ignore_permissions=True)
 
 	if hasattr(frappe, "cache"):
 		frappe.cache.delete_key("bootinfo")
@@ -155,15 +217,14 @@ def ensure_vetedge_desktop_icon() -> None:
 	if not frappe.db.exists("DocType", "Desktop Icon"):
 		return
 
-	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
 	if frappe.db.exists("Desktop Icon", "Veterinary") and not frappe.db.exists("Desktop Icon", "VetEdge"):
 		frappe.rename_doc("Desktop Icon", "Veterinary", "VetEdge", force=True)
 
-	# Clean up duplicate if both exist
 	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
 		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	from vetedge.services.branding import get_branding
+
 	branding = get_branding()
 	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
 
