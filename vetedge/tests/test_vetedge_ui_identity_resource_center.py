@@ -131,10 +131,11 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 
 	loader = read(RESOURCE_LOADER)
 	component = read(RESOURCE_COMPONENT)
-	assert "edgeui.bundle.js" in loader
+	assert "edgesuite_ui.bundle.js" in loader
 	assert "vetedge_professional_ui.js" in loader
 	assert "vetedge_resource_center.bundle.js" in loader
-	assert loader.index("edgeui.bundle.js") < loader.index("vetedge_resource_center.bundle.js")
+	assert loader.index("edgesuite_ui.bundle.js") < loader.index("vetedge_resource_center.bundle.js")
+	assert "frappe.require('edgeui.bundle.js'" not in loader
 	assert "EdgeAppShell" in component
 	assert "get_resource_page" in component
 	assert "get_resource_editor" in component
