@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTEXT = ROOT / "vetedge" / "services" / "clinical_workspace_context.py"
+STAGE3 = ROOT / "vetedge" / "services" / "clinical_workspace_stage3.py"
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
 PAGE_LOADER = (
 	ROOT
@@ -90,7 +91,7 @@ def test_patient_owner_and_consultation_type_context_are_visible_and_provider_dr
 	assert "const patientLabelById = new Map()" not in bundle
 
 	owner_summary = bundle.split("VetEdgeClinicalWorkspace.methods.syncOwnerDetailsButton", 1)[1].split(
-		"const originalTreatmentRowLocked", 1
+		"VetEdgeClinicalWorkspace.methods.loadClinicalBillingPolicy", 1
 	)[0]
 	assert "owner.email_id" not in owner_summary
 	assert "patient.emergency_contact" not in owner_summary
@@ -125,6 +126,47 @@ def test_treatment_item_lookup_orders_recent_profiles_first():
 	assert "ORDER BY treatment.modified DESC, item.item_name ASC, item.name ASC" in treatment_items
 
 
+def test_stage3_invoice_links_and_default_consultation_fee_policy_are_safe():
+	stage3 = read(STAGE3)
+	bundle = read(BUNDLE)
+
+	for contract in (
+		"DEFAULT_CONSULTATION_SOURCE_DETAIL",
+		"def _default_consultation_fee_edit_is_allowed",
+		"def _treatment_row_edit_is_protected",
+		"def _treatment_row_removal_is_protected",
+		"can_edit_default_consultation_billing_item",
+		'row["source_type"] = "Treatment"',
+		'row["billing_status"] = "Pending"',
+		'row["payment_status"] = "Not Billed"',
+		"PLANNED_TREATMENT_IMMUTABLE_FIELDS",
+		"_assert_timestamp",
+		"can_access_consultation",
+		"require_vetedge_platform_access",
+	):
+		assert contract in stage3
+
+	for contract in (
+		"CLINICAL_STAGE3_API",
+		"clinical_workspace_stage3.save_consultation",
+		"clinical_workspace_stage3.get_default_consultation_fee_policy",
+		"isDefaultConsultationFeeRow",
+		"isSourceGeneratedTreatmentRow",
+		"removeChildWithSourceProtection",
+		"row?.sales_invoice || ''",
+		"name: salesInvoice",
+		"invoice: salesInvoice",
+		"saveConsultationWithStage3BillingPolicy",
+	):
+		assert contract in bundle
+
+	invoice_normalization = bundle.split("this.form.consultation_invoices =", 1)[1].split(
+		"this.patientContext =", 1
+	)[0]
+	assert "row?.name" not in invoice_normalization
+	assert "sales_invoice" in invoice_normalization
+
+
 def test_veterinary_home_is_role_aware_for_doctors_and_operational_roles():
 	home = read(HOME)
 	for contract in (
@@ -151,5 +193,5 @@ def test_operational_page_role_aliases_are_source_controlled_and_migrated():
 		assert role in patch
 	assert '"vetedge"' in patch
 	assert '"vetedge-clinical-workspace"' in patch
-	assert "page.append(\"roles\", {\"role\": role})" in patch
+	assert 'page.append("roles", {"role": role})' in patch
 	assert "vetedge.patches.ensure_vetedge_operational_page_roles" in patches
