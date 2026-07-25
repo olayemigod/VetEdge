@@ -144,6 +144,7 @@ doc_events = {
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
 			"vetedge.services.clinical_workspace_context.enforce_consultation_practitioner_ownership",
+			"vetedge.services.clinical_workspace_phase5.enforce_pending_dispensary_completion_invariant",
 		],
 	},
 	"Veterinary Vital Signs": {
