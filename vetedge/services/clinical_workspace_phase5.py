@@ -31,7 +31,7 @@ LOCKED_DISPENSARY_COMPLETION_MESSAGE = _(
 
 def enforce_pending_dispensary_completion_invariant(doc, method: str | None = None) -> None:
 	"""Prevent every save path from persisting an impossible final workflow state."""
-	if getattr(doc, "doctype", None) != "Veterinary Consultation":
+	if doc.get("doctype") != "Veterinary Consultation":
 		return
 	if (doc.get("status") or "") == "Completed" and (doc.get("dispensary_status") or "") == DISPENSARY_PENDING:
 		frappe.throw(LOCKED_DISPENSARY_COMPLETION_MESSAGE, frappe.ValidationError)
