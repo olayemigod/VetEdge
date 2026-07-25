@@ -20,3 +20,4 @@ vetedge.patches.backfill_hospitalisation_patient_name
 vetedge.patches.normalize_website_settings_branding
 vetedge.patches.ensure_vetedge_home_page
 vetedge.patches.ensure_vetedge_operational_page_roles
+vetedge.patches.repair_completed_pending_dispensary_consultations
