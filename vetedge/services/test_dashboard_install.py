@@ -229,6 +229,9 @@ class TestDashboardInstall(TestCase):
 			def save(self, **kwargs):
 				pass
 
+			def insert(self, **kwargs):
+				pass
+
 		sidebar = MockSidebar()
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(exists=exists),
