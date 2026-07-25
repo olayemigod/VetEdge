@@ -86,6 +86,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 	};
 
 	// The legacy `edgeui.bundle.js` manifest key is intentionally not loaded.
+	// Legacy call deliberately excluded: frappe.require('edgeui.bundle.js'
 	// Mixed-app sites must resolve the collision-safe standalone runtime instead.
 	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visit_id) return;
