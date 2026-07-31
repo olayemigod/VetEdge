@@ -31,6 +31,7 @@ app_include_css = [
 	"/assets/vetedge/css/vetedge_professional_ui.css?v=20260719-1",
 ]
 app_include_js = [
+	"/assets/vetedge/js/edgesuite_keyboard_shortcuts.js",
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
 	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2",
