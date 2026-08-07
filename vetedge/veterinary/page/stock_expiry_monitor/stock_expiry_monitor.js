@@ -96,6 +96,12 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			return;
 		}
 
+		// Keep both runtime globals aligned before the product bundle evaluates.
+		// Older VetEdge consumers still resolve components from window.EdgeUI,
+		// while the standalone shared runtime is canonical on window.EdgeSuiteUI.
+		if (!window.EdgeSuiteUI) window.EdgeSuiteUI = runtime;
+		if (!window.EdgeUI) window.EdgeUI = runtime;
+
 		const loadMonitor = () => {
 			if (wrapper.current_visit_id !== visit_id) return;
 			const professionalUI = window.VetEdgeProfessionalUI?.install?.();
