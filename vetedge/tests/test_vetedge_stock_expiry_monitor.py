@@ -93,7 +93,9 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			self.assertIn(label, content)
 		for icon in ("close", "activity", "layers", "building", "shield"):
 			self.assertIn(f"'{icon}'", content)
-		self.assertIn("showSidebar: false", content)
+		self.assertIn("showSidebar: true", content)
+		self.assertIn("menuItems: this.sharedMenuItems", content)
+		self.assertIn("resolveVetEdgeMenuItems", content)
 		self.assertIn("rowActions", content)
 		self.assertIn("Open Item", content)
 		self.assertIn("Open Batch", content)
