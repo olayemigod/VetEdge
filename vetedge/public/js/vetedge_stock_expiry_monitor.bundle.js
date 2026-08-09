@@ -2,6 +2,43 @@ import { h } from 'vue';
 
 import LegacyStockExpiryMonitor from './vetedge_stock_expiry_monitor/VetedgeStockExpiryMonitor.vue';
 
+function getEdgeSuiteRuntime() {
+	return window.EdgeSuiteUI || window.EdgeUI || null;
+}
+
+function normalizeMenuSource(source) {
+	if (Array.isArray(source)) return source;
+	if (!source || typeof source !== 'object') return [];
+	for (const key of ['sections', 'menu_items', 'menuItems', 'items']) {
+		if (Array.isArray(source[key])) return source[key];
+	}
+	return [];
+}
+
+function resolveVetEdgeMenuItems() {
+	const boot = window.frappe?.boot || {};
+	const candidates = [
+		boot.edgesuite_product_menu,
+		boot.vetedge_product_menu,
+		boot.product_menu,
+		window.VetedgeProductMenu?.config,
+		window.VetedgeProductMenu,
+		window.EdgeSuiteUI?.productMenu,
+	];
+	for (const candidate of candidates) {
+		const items = normalizeMenuSource(candidate);
+		if (items.length) return items;
+	}
+	return [];
+}
+
+function navigateEdgeRoute(route) {
+	if (!route || !window.frappe?.set_route) return;
+	const parts = String(route).replace(/^\/+/, '').split('/').filter(Boolean);
+	if (parts[0] === 'app' || parts[0] === 'desk') parts.shift();
+	if (parts.length) window.frappe.set_route(...parts);
+}
+
 function createCanonicalStockExpiryMonitor(runtime) {
 	const components = runtime?.components || runtime || {};
 	const {
@@ -65,6 +102,12 @@ function createCanonicalStockExpiryMonitor(runtime) {
 		...LegacyStockExpiryMonitor,
 		name: 'VetedgeStockExpiryMonitor',
 		components: {},
+		computed: {
+			...(LegacyStockExpiryMonitor.computed || {}),
+			sharedMenuItems() {
+				return resolveVetEdgeMenuItems();
+			},
+		},
 		render() {
 			const reportRows = (this.rows || []).map((row) => ({
 				...row,
@@ -81,37 +124,25 @@ function createCanonicalStockExpiryMonitor(runtime) {
 						class: 'edge-select filter-select',
 						value: this.filters.warehouse,
 						disabled: this.metadataLoading,
-						onChange: (event) => {
-							this.filters.warehouse = event.target.value;
-							this.fetchData();
-						},
+						onChange: (event) => { this.filters.warehouse = event.target.value; this.fetchData(); },
 					}, [option('', 'All Warehouses'), ...(this.warehouses || []).map((value) => option(value, value))])),
 					filterField('Item Group', h('select', {
 						class: 'edge-select filter-select',
 						value: this.filters.item_group,
 						disabled: this.metadataLoading,
-						onChange: (event) => {
-							this.filters.item_group = event.target.value;
-							this.fetchData();
-						},
+						onChange: (event) => { this.filters.item_group = event.target.value; this.fetchData(); },
 					}, [option('', 'All Item Groups'), ...(this.itemGroups || []).map((value) => option(value, value))])),
 					filterField('Expiry Window', h('select', {
 						class: 'edge-select filter-select',
 						value: this.filters.expiry_window,
 						disabled: this.metadataLoading,
-						onChange: (event) => {
-							this.filters.expiry_window = event.target.value;
-							this.fetchData();
-						},
+						onChange: (event) => { this.filters.expiry_window = event.target.value; this.fetchData(); },
 					}, [option('all', 'All Inventory'), option('expired', 'Expired Batches'), option('expiring soon', 'Expiring Soon')])),
 					filterField('Days Threshold', h('select', {
 						class: 'edge-select filter-select',
 						value: this.filters.days_threshold,
 						disabled: this.metadataLoading,
-						onChange: (event) => {
-							this.filters.days_threshold = Number(event.target.value);
-							this.fetchData();
-						},
+						onChange: (event) => { this.filters.days_threshold = Number(event.target.value); this.fetchData(); },
 					}, [30, 60, 90, 180].map((days) => option(days, `${days} Days`)))),
 					filterField('Item Code', h('input', {
 						type: 'text',
@@ -136,16 +167,9 @@ function createCanonicalStockExpiryMonitor(runtime) {
 
 			let reportBody;
 			if (this.error) {
-				reportBody = h(EdgeErrorState, {
-					title: 'Inventory Fetch Failed',
-					message: this.error,
-					onRetry: () => this.fetchData(),
-				});
+				reportBody = h(EdgeErrorState, { title: 'Inventory Fetch Failed', message: this.error, onRetry: () => this.fetchData() });
 			} else if (this.loading) {
-				reportBody = h(EdgeLoadingState, {
-					message: 'Fetching batch inventory data...',
-					skeleton: true,
-				});
+				reportBody = h(EdgeLoadingState, { message: 'Fetching batch inventory data...', skeleton: true });
 			} else {
 				const statCards = [
 					['Expired Batches', this.summary.expired_items || 0, 'close', 'danger', 'Total number of batches whose expiry date has passed'],
@@ -171,26 +195,12 @@ function createCanonicalStockExpiryMonitor(runtime) {
 						footer: () => h('div', { class: 'pagination-footer' }, [
 							h('span', { class: 'page-info' }, `Showing page ${this.currentPage} (${reportRows.length} of ${this.totalCount} records)`),
 							h('div', { class: 'pagination-buttons' }, [
-								h('button', {
-									type: 'button',
-									class: 'edge-button edge-button--compact pagination-btn',
-									disabled: this.currentPage === 1,
-									onClick: () => this.changePage(-1),
-								}, 'Previous'),
-								h('button', {
-									type: 'button',
-									class: 'edge-button edge-button--compact pagination-btn',
-									disabled: this.currentPage * this.filters.limit >= this.totalCount,
-									onClick: () => this.changePage(1),
-								}, 'Next'),
+								h('button', { type: 'button', class: 'edge-button edge-button--compact pagination-btn', disabled: this.currentPage === 1, onClick: () => this.changePage(-1) }, 'Previous'),
+								h('button', { type: 'button', class: 'edge-button edge-button--compact pagination-btn', disabled: this.currentPage * this.filters.limit >= this.totalCount, onClick: () => this.changePage(1) }, 'Next'),
 							]),
 						]),
 					})
-					: h(EdgeEmptyState, {
-						title: 'No Expiry Records',
-						description: 'No inventory batch expiries match the current filters.',
-						icon: 'check',
-					});
+					: h(EdgeEmptyState, { title: 'No Expiry Records', description: 'No inventory batch expiries match the current filters.', icon: 'check' });
 
 				reportBody = h('div', { class: 'edge-report-body' }, [
 					h('div', { class: 'edge-stat-grid summary-stats-grid' }, statCards),
@@ -205,7 +215,9 @@ function createCanonicalStockExpiryMonitor(runtime) {
 				tenantName: this.tenantName,
 				branchName: this.branchName,
 				userName: this.userName,
-				showSidebar: false,
+				showSidebar: true,
+				menuItems: this.sharedMenuItems,
+				onNavigate: navigateEdgeRoute,
 			}, {
 				default: () => h(EdgePageLayout, null, {
 					header: () => h(EdgePageHeader, {
@@ -219,16 +231,11 @@ function createCanonicalStockExpiryMonitor(runtime) {
 	};
 }
 
-function getEdgeSuiteRuntime() {
-	return window.EdgeSuiteUI || window.EdgeUI || null;
-}
-
 export function mountVetedgeStockExpiryMonitor(target) {
 	const runtime = getEdgeSuiteRuntime();
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
-
 	const component = createCanonicalStockExpiryMonitor(runtime);
 	const app = runtime.createEdgeApp(component);
 	app.mount(target);
@@ -237,9 +244,7 @@ export function mountVetedgeStockExpiryMonitor(target) {
 
 if (typeof window !== 'undefined') {
 	const runtime = getEdgeSuiteRuntime();
-	window.VetedgeStockExpiryMonitor = runtime
-		? createCanonicalStockExpiryMonitor(runtime)
-		: LegacyStockExpiryMonitor;
+	window.VetedgeStockExpiryMonitor = runtime ? createCanonicalStockExpiryMonitor(runtime) : LegacyStockExpiryMonitor;
 	window.mountVetedgeStockExpiryMonitor = mountVetedgeStockExpiryMonitor;
 }
 
