@@ -73,8 +73,11 @@ def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
 		'label="Service Branch"',
 		"Populated from selected patient",
 		"this.searchLink(\"patient\", query)",
-		"const raw = option?.raw || {}",
-		"this.form.owner = raw.primary_owner",
+		"const serverOption = option?.raw || {}",
+		"const patientRow = serverOption?.raw || serverOption",
+		"serverOption.primary_owner || patientRow.primary_owner",
+		"this.form.owner = owner",
+		"this.labels.owner = ownerLabel",
 		"this.clearPractitioner()",
 		"create_edgeui_appointment",
 	):
