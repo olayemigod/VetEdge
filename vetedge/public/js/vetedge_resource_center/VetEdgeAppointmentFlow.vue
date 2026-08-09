@@ -173,11 +173,14 @@ export default {
 			return this.searchLink("practitioner", query, { branch: this.form.branch });
 		},
 		onPatientSelected(option) {
-			const raw = option?.raw || {};
+			const serverOption = option?.raw || {};
+			const patientRow = serverOption?.raw || serverOption;
+			const owner = serverOption.primary_owner || patientRow.primary_owner || option.owner || "";
+			const ownerLabel = serverOption.owner_label || patientRow.owner_label || owner;
 			this.form.patient = option.value;
 			this.labels.patient = option.label;
-			this.form.owner = raw.primary_owner || option.owner || "";
-			this.labels.owner = option.owner_label || raw.primary_owner || option.owner || "";
+			this.form.owner = owner;
+			this.labels.owner = ownerLabel;
 		},
 		clearPatient() {
 			this.form.patient = "";
