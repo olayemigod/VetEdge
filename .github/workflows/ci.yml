@@ -149,11 +149,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out private EdgeSuite UI 0.3 branch
+      - name: Check out EdgeSuite UI 0.6.2 consolidation branch
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-identity-notifications-density
+          ref: agent/edgeui-0.6.2-consolidation
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
