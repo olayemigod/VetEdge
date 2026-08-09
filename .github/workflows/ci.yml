@@ -151,11 +151,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out EdgeSuite UI 0.6.2 consolidation branch
+      - name: Check out authoritative EdgeSuite UI main (0.6.2)
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-0.6.2-consolidation
+          ref: main
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
