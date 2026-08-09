@@ -155,8 +155,6 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 
 	for contract in (
 		"search_appointment_link",
-		"create_appointment_owner",
-		"create_appointment_patient",
 		"create_edgeui_appointment",
 		"frappe.get_list(",
 		"get_assigned_branches",
@@ -172,17 +170,21 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
-		"Create New Pet Owner",
-		"Create New Veterinary Patient",
-		"createOwnerFromQuery",
-		"createPatientFromQuery",
-		"beginInlineCreate",
-		"this.clearPatient()",
+		'label="Veterinary Patient"',
+		"<span>Pet Owner</span>",
+		'label="Service Branch"',
+		"await this.searchPatient(option.value)",
+		"this.form.owner = owner",
 		"this.clearPractitioner()",
 		"create_edgeui_appointment",
 	):
 		assert contract in component
 
+	assert "Create New Pet Owner" not in component
+	assert "Create New Veterinary Patient" not in component
+	assert "createOwnerFromQuery" not in component
+	assert "createPatientFromQuery" not in component
+	assert "beginInlineCreate" not in component
 	assert "frappe.ui.Dialog" not in component
 	assert "window.open" not in component
 	assert "VetEdgeAppointmentFlow" in bundle
@@ -190,7 +192,6 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	assert "New Appointment" in bundle
 	assert "interceptAppointmentAction" in bundle
 	assert "EdgeLinkField" in loader
-	assert "EdgeSuite UI 0.4.0 or newer" in loader
 
 
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
