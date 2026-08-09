@@ -32,8 +32,6 @@ def test_appointment_links_are_permission_and_context_aware():
 		"search_appointment_link",
 		"frappe.has_permission(doctype, \"read\")",
 		"frappe.get_list(",
-		'filters["primary_owner"] = context["owner"]',
-		'filters["default_branch"]',
 		"get_assigned_branches",
 		"get_veterinary_doctor_users",
 		"Branch Practitioner Assignment",
@@ -43,29 +41,6 @@ def test_appointment_links_are_permission_and_context_aware():
 
 	assert "ignore_permissions=True" not in content
 	assert "frappe.db.sql(" not in content
-
-
-def test_create_new_owner_and_patient_keep_erpnext_and_vetedge_truth():
-	content = read(API)
-
-	for contract in (
-		"create_appointment_owner",
-		'frappe.has_permission("Customer", "create")',
-		"get_default_customer_group",
-		"get_default_territory",
-		'"customer_type": "Individual"',
-		"_find_owner_duplicate",
-		"create_appointment_patient",
-		'frappe.has_permission("Veterinary Patient", "create")',
-		"_find_patient_duplicate",
-		"Breed must belong to the selected Species",
-		'"status": "Active"',
-		"doc.insert()",
-	):
-		assert contract in content
-
-	assert 'frappe.get_doc({"doctype": "DocType"' not in content
-	assert "ignore_permissions" not in content
 
 
 def test_appointment_creation_reuses_existing_validation_and_permissions():
@@ -88,33 +63,50 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 	assert "Payment Entry" not in content
 
 
-def test_appointment_flow_uses_edgesuite_forms_for_owner_and_patient_creation():
+def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
 	content = read(COMPONENT)
 
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
-		"Create New Pet Owner",
-		"Create New Veterinary Patient",
-		"beginInlineCreate",
-		"resolvePendingCreate",
-		'v-show="screen === \'appointment\'"',
-		'v-show="screen === \'owner\'"',
-		'v-show="screen === \'patient\'"',
-		"create_appointment_owner",
-		"create_appointment_patient",
-		"create_edgeui_appointment",
-		"searchSpecies",
-		"searchBreed",
-		"this.clearPatient()",
+		'label="Veterinary Patient"',
+		'label="Service Branch"',
+		"Populated from selected patient",
+		"this.searchLink(\"patient\", query)",
+		"const raw = option?.raw || {}",
+		"this.form.owner = raw.primary_owner",
 		"this.clearPractitioner()",
-		"Back to Appointment",
+		"create_edgeui_appointment",
 	):
 		assert contract in content
 
+	patient_position = content.index('label="Veterinary Patient"')
+	owner_position = content.index("<span>Pet Owner</span>")
+	branch_position = content.index('label="Service Branch"')
+	assert patient_position < owner_position < branch_position
+
+	assert ':disabled="!form.owner || !form.branch"' not in content
+	assert 'placeholder="Search the selected owner\'s patients"' not in content
+	assert "if (changed) this.clearPatient()" not in content
+	assert "this.clearPatient();\n\t\t},\n\t\tclearBranch" not in content
 	assert "frappe.ui.Dialog" not in content
 	assert "frappe.new_doc" not in content
 	assert "window.open" not in content
+
+
+def test_appointment_submit_uses_patient_service_branch_and_practitioner():
+	content = read(COMPONENT)
+
+	for contract in (
+		"patient: this.form.patient",
+		"branch: this.form.branch",
+		"practitioner: this.form.practitioner",
+		"Patient, Service Branch, Practitioner and Appointment Date/Time are required.",
+	):
+		assert contract in content
+
+	assert "owner: this.form.owner" not in content
+	assert "Owner, Patient, Branch, Practitioner" not in content
 
 
 def test_resource_center_exposes_new_appointment_action_and_blocks_generic_editor():
@@ -138,5 +130,4 @@ def test_resource_center_exposes_new_appointment_action_and_blocks_generic_edito
 
 	assert "EdgeLinkField" in loader
 	assert "EdgeModal" in loader
-	assert "EdgeSuite UI 0.4.0 or newer" in loader
 	assert "window.mountVetEdgeResourceCenter" in loader
