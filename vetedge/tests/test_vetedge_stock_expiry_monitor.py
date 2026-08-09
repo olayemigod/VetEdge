@@ -52,14 +52,53 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 		self.assertIn("Stock Expiry Monitor failed to load", content)
 		self.assertNotIn("coreedge", content.lower())
 
-	def test_product_bundle_mounts_with_edgesuite_runtime(self):
+	def test_product_bundle_mounts_canonical_report_with_edgesuite_runtime(self):
 		content = self.read("public", "js", "vetedge_stock_expiry_monitor.bundle.js")
 
 		self.assertIn("window.EdgeSuiteUI || window.EdgeUI", content)
-		self.assertIn("runtime.createEdgeApp(VetedgeStockExpiryMonitor)", content)
-		self.assertIn("VetedgeStockExpiryMonitor.components = runtime.components", content)
+		self.assertIn("createCanonicalStockExpiryMonitor(runtime)", content)
+		self.assertIn("runtime.createEdgeApp(component)", content)
+		self.assertNotIn("VetedgeStockExpiryMonitor.components = runtime.components", content)
 		self.assertNotIn("import { createApp } from 'vue'", content)
 		self.assertNotIn("coreedge", content.lower())
+
+	def test_canonical_report_uses_shared_report_components(self):
+		content = self.read("public", "js", "vetedge_stock_expiry_monitor.bundle.js")
+		for component in (
+			"EdgeAppShell",
+			"EdgePageLayout",
+			"EdgePageHeader",
+			"EdgeFilterBar",
+			"EdgeStatCard",
+			"EdgeDataTable",
+			"EdgeLoadingState",
+			"EdgeEmptyState",
+			"EdgeErrorState",
+		):
+			self.assertIn(component, content)
+		for label in (
+			"Warehouse",
+			"Item Group",
+			"Expiry Window",
+			"Days Threshold",
+			"Item Code",
+			"Apply / Refresh",
+			"Expired Batches",
+			"Expiring Soon",
+			"Affected Total Qty",
+			"Affected Warehouses",
+			"Highest Risk Items",
+			"Last Recalculated",
+		):
+			self.assertIn(label, content)
+		for icon in ("close", "activity", "layers", "building", "shield"):
+			self.assertIn(f"'{icon}'", content)
+		self.assertIn("showSidebar: true", content)
+		self.assertIn("menuItems: this.sharedMenuItems", content)
+		self.assertIn("resolveVetEdgeMenuItems", content)
+		self.assertIn("rowActions", content)
+		self.assertIn("Open Item", content)
+		self.assertIn("Open Batch", content)
 
 	def test_frontend_uses_shared_component_contract_without_private_imports(self):
 		content = self.read(
@@ -134,9 +173,7 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 				self.assertNotIn(forbidden, content)
 
 	def test_filter_and_summary_labels_exist(self):
-		content = self.read(
-			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
-		)
+		content = self.read("public", "js", "vetedge_stock_expiry_monitor.bundle.js")
 		for label in (
 			"Warehouse",
 			"Item Group",
