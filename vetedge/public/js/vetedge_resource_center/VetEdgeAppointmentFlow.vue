@@ -172,15 +172,31 @@ export default {
 		searchPractitioner(query) {
 			return this.searchLink("practitioner", query, { branch: this.form.branch });
 		},
-		onPatientSelected(option) {
-			const serverOption = option?.raw || {};
-			const patientRow = serverOption?.raw || serverOption;
-			const owner = serverOption.primary_owner || patientRow.primary_owner || option.owner || "";
-			const ownerLabel = serverOption.owner_label || patientRow.owner_label || owner;
-			this.form.patient = option.value;
-			this.labels.patient = option.label;
-			this.form.owner = owner;
-			this.labels.owner = ownerLabel;
+		async onPatientSelected(option) {
+			const patient = String(option?.value || "").trim();
+			this.form.patient = patient;
+			this.labels.patient = option?.label || patient;
+			this.form.owner = "";
+			this.labels.owner = "";
+			if (!patient) return;
+
+			try {
+				const matches = await this.searchLink("patient", patient);
+				if (this.form.patient !== patient) return;
+				const exact = matches.find((row) => String(row?.value || "") === patient) || null;
+				const patientRow = exact?.raw || {};
+				const owner = String(patientRow.primary_owner || exact?.primary_owner || "").trim();
+				if (!owner) {
+					this.error = __("The selected patient does not have a Pet Owner configured.");
+					return;
+				}
+				this.form.owner = owner;
+				this.labels.owner = owner;
+				this.error = "";
+			} catch (error) {
+				if (this.form.patient !== patient) return;
+				this.error = error?.message || __("The Pet Owner could not be loaded from the selected patient.");
+			}
 		},
 		clearPatient() {
 			this.form.patient = "";
