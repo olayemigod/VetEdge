@@ -32,6 +32,17 @@ frappe.pages['vetedge-front-desk-action-center'].on_page_show = function(wrapper
 					$loading.remove();
 					const root = $('<div class="vetedge-front-desk-action-center-root" data-edge-product="vetedge"></div>').appendTo(page.body);
 					wrapper.vue_app = window.mountVetEdgeFrontDeskActionCenter(root[0]);
+					const params = new URLSearchParams(window.location.search || '');
+					const name = params.get('name');
+					const tab = params.get('tab') || 'queue';
+					if (name) {
+						const opener = tab === 'guest'
+							? wrapper.vue_app?.view?.openGuestDetail
+							: tab === 'missed'
+								? wrapper.vue_app?.view?.openMissedDetail
+								: wrapper.vue_app?.view?.openQueueDetail;
+						window.setTimeout(() => opener?.call(wrapper.vue_app.view, { name }), 0);
+					}
 				} catch (error) {
 					console.error('Error mounting Front Desk Action Centre:', error);
 					showFailure(__('Error mounting Front Desk Action Centre: {0}', [error.message || String(error)]));
