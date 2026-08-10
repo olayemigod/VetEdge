@@ -186,6 +186,33 @@ def test_resource_center_quick_edit_is_edgesuite_modal_not_frappe_dialog():
 	assert "originalOpenEditor" not in bundle
 
 
+def test_appointment_quick_edit_hides_series_and_keeps_pet_owner_verification_read_only():
+	api = read(RESOURCE_API)
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
+
+	for contract in (
+		'"naming_series",',
+		"_with_appointment_verification_fields",
+		'"fieldname": "primary_owner"',
+		'"label": _("Pet Owner")',
+		'"read_only": 1',
+		'"verification": 1',
+		"Derived from the selected Veterinary Patient",
+	):
+		assert contract in api
+
+	for contract in (
+		'v-if="field.read_only"',
+		"vetedge-quick-editor-readonly",
+		"refreshAppointmentOwner",
+		'field.fieldname === "patient"',
+		"appointment_edgeui.search_appointment_link",
+		"if (field.read_only) continue",
+		"field.reqd && !field.read_only",
+	):
+		assert contract in quick_editor
+
+
 def test_appointment_flow_uses_shared_links_and_server_safety():
 	api = read(APPOINTMENT_API)
 	component = read(APPOINTMENT_COMPONENT)
