@@ -48,6 +48,13 @@ MIGRATED_PAGES = {
 		"component": APP / "public/js/veterinary_medical_history/VeterinaryMedicalHistory.vue",
 		"provider": APP / "services/medical_history.py",
 	},
+	"service_operations": {
+		"loader": APP / "veterinary/page/vetedge_service_operations/vetedge_service_operations.js",
+		"page": APP / "veterinary/page/vetedge_service_operations/vetedge_service_operations.json",
+		"bundle": APP / "public/js/vetedge_service_operations.bundle.js",
+		"component": APP / "public/js/vetedge_service_operations/VetEdgeServiceOperations.vue",
+		"provider": APP / "services/service_operations.py",
+	},
 }
 
 
@@ -78,6 +85,7 @@ def test_recovered_editing_surfaces_use_shared_edgesuite_form_controls():
 	front_desk = read(MIGRATED_PAGES["front_desk"]["component"])
 	clinical = read(MIGRATED_PAGES["clinical"]["component"])
 	medical_history = read(MIGRATED_PAGES["medical_history"]["component"])
+	service_operations = read(MIGRATED_PAGES["service_operations"]["component"])
 
 	for control in ("EdgeInput", "EdgeTextarea", "EdgeCheckbox", "EdgeDropdown", "EdgeLinkField"):
 		assert control in settings
@@ -98,10 +106,18 @@ def test_recovered_editing_surfaces_use_shared_edgesuite_form_controls():
 		assert contract in medical_history
 	assert "form-control" not in medical_history
 	assert "frappe.ui.Dialog" not in medical_history
+	for contract in (
+		"EdgeFilterBar", "EdgeLinkField", "EdgeInput", "EdgeDropdown", "EdgeTextarea",
+		"EdgeDataTable", "EdgeModal",
+	):
+		assert contract in service_operations
+	assert "frappe.ui.Dialog" not in service_operations
+	assert "form-control" not in service_operations
 
 
 def test_medical_history_preserves_page_and_rich_clinical_modal_contracts():
 	component = read(MIGRATED_PAGES["medical_history"]["component"])
+	provider = read(MIGRATED_PAGES["medical_history"]["provider"])
 	clinical_bundle = read(MIGRATED_PAGES["clinical"]["bundle"])
 	modal = read(APP / "public/js/vetedge_clinical_workspace/VetEdgeMedicalHistoryModal.vue")
 	for contract in (
@@ -121,6 +137,11 @@ def test_medical_history_preserves_page_and_rich_clinical_modal_contracts():
 	):
 		assert contract in component
 		assert contract in modal
+	assert '"treatment_plan_summary"' in provider
+	assert "Treatment Plan Summary" in component
+	assert "Treatment Plan Summary" in modal
+	assert "stripHtml(row.treatment_plan_summary)" in component
+	assert "stripHtml(row.treatment_plan_summary)" in modal
 	assert "EdgeModal" in modal
 	assert "VetEdgeMedicalHistoryModal" in clinical_bundle
 	assert "historyView?.open?.({" in clinical_bundle
@@ -157,15 +178,29 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 		"/app/vetedge-front-desk-action-center",
 		"/app/vetedge-clinical-workspace",
 		"/app/veterinary-medical-history",
+		"/app/vetedge-service-operations",
 	):
 		assert route in bridge
 	assert '"/app/veterinary-consultation"' in bridge
+	assert 'path === "/app/veterinary-vital-signs"' in bridge
+	assert "return openSameTab(route)" in bridge
+	for contract in (
+		'"/app/kennel-availability-board": "availability"',
+		'"/app/pet-boarding-stay": "boarding-stays"',
+		'"/app/pet-boarding-care-record": "boarding-care-records"',
+		'"/app/pet-grooming-session": "grooming-sessions"',
+	):
+		assert contract in bridge
 	assert 'CLINICAL_WORKSPACE_PATH = "/app/vetedge-clinical-workspace"' in route_alignment
 	assert 'MEDICAL_HISTORY_PATH = "/app/veterinary-medical-history"' in route_alignment
+	assert 'SERVICE_WORKSPACE_PATH = "/app/vetedge-service-operations"' in route_alignment
 	assert '"Veterinary Patient": "patients"' in route_alignment
 	assert '"Veterinary Appointment": "appointments"' in route_alignment
 	assert '"Veterinary Species": "species"' in route_alignment
 	assert '"Consultation Type": "consultation-types"' in route_alignment
+	assert '"Pet Boarding Stay": "boarding-stays"' in route_alignment
+	assert '"Pet Boarding Care Record": "boarding-care-records"' in route_alignment
+	assert '"Pet Grooming Session": "grooming-sessions"' in route_alignment
 	assert 'doctype === "Veterinary Vital Signs"' in route_alignment
 	assert 'path === "/app/veterinary-vital-signs"' not in route_alignment
 	assert "__vetedgeAcceptedRouteAlignment" in route_alignment
@@ -178,6 +213,29 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	queue = read(APP / "veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js")
 	for content in (guest_form, guest_list, missed_form, missed_list, queue):
 		assert "/app/vetedge-front-desk-action-center" in content
+
+
+def test_hospital_services_workspace_preserves_operational_actions_and_existing_service_authority():
+	component = read(MIGRATED_PAGES["service_operations"]["component"])
+	provider = read(MIGRATED_PAGES["service_operations"]["provider"])
+	for contract in (
+		"Kennel Availability",
+		"Boarding Stays",
+		"Care Records",
+		"Grooming Sessions",
+		"get_kennel_availability_board_view",
+		"Add Care Record",
+		"View Care Records",
+		"Start Grooming",
+		"Complete Grooming",
+		"Cancel Session",
+		"Billing / Payment",
+	):
+		assert contract in component or contract in provider
+	assert "require_vetedge_platform_access" in provider
+	assert "doc.insert()" in provider
+	assert "transition_grooming_session_status" in provider
+	assert "ignore_permissions=True" not in provider
 
 
 def test_resource_center_deep_links_open_canonical_edgesuite_editor_or_appointment_flow():
