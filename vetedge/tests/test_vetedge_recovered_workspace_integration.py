@@ -11,6 +11,7 @@ from vetedge.services.pricing_master_workspace import (
 	get_pricing_master_definition,
 	get_pricing_master_list,
 )
+from vetedge.services.service_operations import get_service_operations_page
 from vetedge.services.settings_page import get_veterinary_settings_page
 
 
@@ -38,6 +39,7 @@ class TestRecoveredEdgeSuiteWorkspaces(FrappeTestCase):
 			"vetedge-front-desk-action-center",
 			"vetedge-clinical-workspace",
 			"veterinary-medical-history",
+			"vetedge-service-operations",
 		):
 			with self.subTest(page=page):
 				self.assertTrue(frappe.db.exists("Page", page), page)
@@ -92,6 +94,15 @@ class TestRecoveredEdgeSuiteWorkspaces(FrappeTestCase):
 				listing = get_pricing_master_list(resource, page_length=3)
 				self.assertEqual(definition["resource"], resource)
 				self.assertTrue(definition["permissions"]["read"])
+				self.assertIn("rows", listing)
+				self.assertEqual(listing["page_length"], 3)
+
+	def test_hospital_services_resources_execute_permission_aware_list_contracts(self):
+		for resource in ("boarding-stays", "boarding-care-records", "grooming-sessions"):
+			with self.subTest(resource=resource):
+				listing = get_service_operations_page(resource, page_length=3)
+				self.assertEqual(listing["resource"], resource)
+				self.assertIn("columns", listing)
 				self.assertIn("rows", listing)
 				self.assertEqual(listing["page_length"], 3)
 
