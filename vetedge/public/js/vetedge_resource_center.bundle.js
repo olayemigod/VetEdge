@@ -1,21 +1,27 @@
 import VetEdgeAppointmentFlow from './vetedge_resource_center/VetEdgeAppointmentFlow.vue';
 import VetEdgeResourceCenter from './vetedge_resource_center/VetEdgeResourceCenter.vue';
+import VetEdgeResourceQuickEditor from './vetedge_resource_center/VetEdgeResourceQuickEditor.vue';
 
 export function mountVetEdgeResourceCenter(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
-	if (!runtime.components?.EdgeLinkField || !runtime.components?.EdgeModal) {
-		throw new Error('VetEdge Resource Center requires EdgeSuite UI 0.4.0 or newer.');
+	if (!runtime.components?.EdgeLinkField || !runtime.components?.EdgeModal || !runtime.components?.EdgeDropdown) {
+		throw new Error('VetEdge Resource Center requires the EdgeSuite UI 0.6.2 form runtime.');
 	}
 
 	const flowHost = document.createElement('div');
 	flowHost.className = 'vetedge-appointment-flow-host';
 	document.body.appendChild(flowHost);
 
+	const quickEditorHost = document.createElement('div');
+	quickEditorHost.className = 'vetedge-resource-quick-editor-host';
+	document.body.appendChild(quickEditorHost);
+
 	let resourceView = null;
 	let syncActionLabels = () => {};
+
 	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
@@ -23,7 +29,15 @@ export function mountVetEdgeResourceCenter(target) {
 		},
 	});
 	const flowView = flowApp.mount(flowHost);
-	const originalOpenEditor = VetEdgeResourceCenter.methods?.openEditor;
+
+	const quickEditorApp = runtime.createEdgeApp(VetEdgeResourceQuickEditor, {
+		onSaved: async () => {
+			await resourceView?.loadPage?.();
+			syncActionLabels();
+		},
+	});
+	const quickEditorView = quickEditorApp.mount(quickEditorHost);
+
 	const ResourceCenterRoot = {
 		...VetEdgeResourceCenter,
 		components: { ...runtime.components, ...(VetEdgeResourceCenter.components || {}) },
@@ -34,7 +48,7 @@ export function mountVetEdgeResourceCenter(target) {
 					flowView?.open?.();
 					return;
 				}
-				return originalOpenEditor?.call(this, name);
+				quickEditorView?.open?.({ resource: this.resource, name });
 			},
 		},
 	};
@@ -81,7 +95,9 @@ export function mountVetEdgeResourceCenter(target) {
 			target.removeEventListener('click', interceptAppointmentAction, true);
 			app.unmount();
 			flowApp.unmount();
+			quickEditorApp.unmount();
 			flowHost.remove();
+			quickEditorHost.remove();
 		},
 	};
 }
@@ -89,6 +105,7 @@ export function mountVetEdgeResourceCenter(target) {
 if (typeof window !== 'undefined') {
 	window.VetEdgeResourceCenter = VetEdgeResourceCenter;
 	window.VetEdgeAppointmentFlow = VetEdgeAppointmentFlow;
+	window.VetEdgeResourceQuickEditor = VetEdgeResourceQuickEditor;
 	window.mountVetEdgeResourceCenter = mountVetEdgeResourceCenter;
 }
 
