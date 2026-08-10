@@ -170,8 +170,9 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
+		"EdgeDropdown",
 		'label="Veterinary Patient"',
-		"<span>Pet Owner</span>",
+		"vetedge-appointment-flow-readonly",
 		'label="Service Branch"',
 		'await this.searchLink("patient", patient)',
 		"this.form.owner = owner",
@@ -192,6 +193,7 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	assert "New Appointment" in bundle
 	assert "interceptAppointmentAction" in bundle
 	assert "EdgeLinkField" in loader
+	assert "EdgeDropdown" in loader
 
 
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
