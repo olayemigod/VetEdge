@@ -52,6 +52,7 @@
 		"/app/vetedge-pricing-master-workspace",
 		"/app/vetedge-front-desk-action-center",
 		"/app/vetedge-clinical-workspace",
+		"/app/veterinary-medical-history",
 	]);
 
 	const state = {
