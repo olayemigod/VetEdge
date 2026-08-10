@@ -35,7 +35,6 @@
 		Appointments: { icon: "calendar", description: "Schedule and manage veterinary appointments" },
 		Consultations: { icon: "clipboard", description: "Clinical consultation records and treatment workflow" },
 		"Medical History": { icon: "report", description: "Review longitudinal patient medical history" },
-		"Vital Signs": { icon: "activity", description: "Review and manage veterinary vital-sign records" },
 		"Lab Orders": { icon: "assessment", description: "Laboratory requests, billing, and results" },
 		"Vaccination Records": { icon: "shield", description: "Vaccination history and due-date tracking" },
 		Hospitalisations: { icon: "building", description: "Admissions, care activities, charges, and discharge" },
@@ -251,8 +250,7 @@
 		const observer = new MutationObserver((records) => {
 			for (const record of records) {
 				for (const node of record.addedNodes || []) {
-					if (!(node instanceof HTMLElement)) continue;
-					enhanceNotificationIcons(node);
+					if (node.nodeType === 1) enhanceNotificationIcons(node);
 				}
 			}
 		});
@@ -260,74 +258,164 @@
 		state.observerActive = true;
 	}
 
-	function registerProductMenu(edgeUI, groups) {
-		if (typeof edgeUI.registerProductMenu !== "function") return;
-		edgeUI.registerProductMenu({
-			product: "vetedge",
-			label: "Veterinary",
-			title: "Veterinary",
-			icon: "stethoscope",
-			sections: productMenuSections(groups),
-			profile: profile(),
-			navigate(item) {
-				const route = shellRoute(item || {});
-				if (!route) return;
-				const navigation = edgeUI.getAdapter?.("navigation:vetedge");
-				if (navigation?.open?.(route) === true) return;
-				openRoute(route);
+	function installShellAdapter(edgeUI, groups) {
+		if (edgeUI.__vetedgeProfessionalShellInstalled) return true;
+		const OriginalShell = edgeUI.components?.EdgeAppShell;
+		const Vue = edgeUI.Vue;
+		if (!OriginalShell || !Vue?.defineComponent || !Vue?.h || !edgeUI.registerComponent) return false;
+
+		const ProfessionalVetEdgeShell = Vue.defineComponent({
+			name: "ProfessionalVetEdgeShell",
+			inheritAttrs: false,
+			setup(_props, context) {
+				return () => {
+					const attrs = context.attrs || {};
+					const suppliedMenu = Array.isArray(attrs.menuItems) && attrs.menuItems.length ? attrs.menuItems : groups;
+					const suppliedNavigate = attrs.onNavigate;
+					const onNavigate = (route) => {
+						let handled = false;
+						const listeners = Array.isArray(suppliedNavigate) ? suppliedNavigate : [suppliedNavigate];
+						listeners.forEach((listener) => {
+							if (typeof listener === "function") {
+								listener(route);
+								handled = true;
+							}
+						});
+						if (!handled) openRoute(route);
+					};
+					return Vue.h(
+						OriginalShell,
+						{
+							...attrs,
+							menuItems: suppliedMenu,
+							subtitle: attrs.subtitle || "Veterinary Practice Management",
+							hideNativeSidebar: attrs.hideNativeSidebar ?? true,
+							sectionStateKey: attrs.sectionStateKey || SECTION_STATE_KEY,
+							onNavigate,
+						},
+						context.slots
+					);
+				};
 			},
 		});
+
+		edgeUI.registerComponent("EdgeAppShell", ProfessionalVetEdgeShell, { replace: true });
+		edgeUI.__vetedgeProfessionalShellInstalled = true;
+		return true;
+	}
+
+	function registerProfessionalMenu(edgeUI, groups) {
+		if (typeof edgeUI.registerProductMenu !== "function") return false;
+		edgeUI.registerProductMenu({
+			product: "VetEdge",
+			subtitle: "Veterinary practice operations",
+			menu_source: "vetedge-professional",
+			profile: profile(),
+			sections: productMenuSections(groups),
+		});
+		edgeUI.refreshProductMenu?.();
+		return true;
+	}
+
+	function patchLegacyMenu() {
+		const legacy = window.VetedgeProductMenu;
+		if (!legacy || legacy.__professionalMenuPatched) return;
+		for (const methodName of ["mount", "remount"]) {
+			const original = legacy[methodName];
+			if (typeof original !== "function") continue;
+			legacy[methodName] = function (...args) {
+				const result = original.apply(this, args);
+				window.setTimeout(() => {
+					const edgeUI = runtime();
+					if (edgeUI && state.menuGroups.length) registerProfessionalMenu(edgeUI, state.menuGroups);
+				}, 0);
+				return result;
+			};
+		}
+		legacy.__professionalMenuPatched = true;
+		state.legacyMenuPatched = true;
 	}
 
 	function install() {
 		state.lastError = null;
-		const edgeUI = runtime();
-		state.runtimeVersion = edgeUI?.version || "";
-		if (!edgeUI?.components || !versionSupportsProfessionalUI(edgeUI.version)) {
-			state.installed = false;
-			state.lastError = `VetEdge requires EdgeSuite UI 0.2 or newer; found ${edgeUI?.version || "unknown"}.`;
-			return { installed: false, message: state.lastError };
-		}
 		injectStyles();
-		state.menuGroups = getMenuItems();
-		registerProductMenu(edgeUI, state.menuGroups);
-		startObserver();
-		state.installed = true;
-		return { installed: true, menuGroups: state.menuGroups };
+		const edgeUI = runtime();
+		if (!edgeUI) {
+			return { installed: false, reason: "runtime-unavailable", message: "The standalone EdgeSuite UI runtime is unavailable." };
+		}
+		if (!versionSupportsProfessionalUI(edgeUI.version) || !edgeUI.components?.EdgeIcon) {
+			return {
+				installed: false,
+				reason: "edgeui-0.2-required",
+				message: `EdgeSuite UI 0.2 or newer is required. Loaded version: ${edgeUI.version || "unknown"}.`,
+			};
+		}
+
+		try {
+			const groups = getMenuItems();
+			if (!installShellAdapter(edgeUI, groups)) {
+				throw new Error("EdgeSuite UI does not expose the professional shell adapter contract.");
+			}
+			state.menuGroups = groups;
+			patchLegacyMenu();
+			registerProfessionalMenu(edgeUI, groups);
+			enhanceNotificationIcons();
+			startObserver();
+			state.installed = true;
+			state.runtimeVersion = edgeUI.version || "";
+			return { installed: true, version: state.runtimeVersion, groups: groups.length };
+		} catch (error) {
+			state.lastError = error?.message || String(error);
+			return { installed: false, reason: "installation-failed", message: state.lastError };
+		}
 	}
 
-	function scheduleInstall() {
-		if (state.scheduled) window.clearTimeout(state.scheduled);
+	function scheduleInstall(reason = "lifecycle") {
+		window.clearTimeout(state.scheduled);
 		state.scheduled = window.setTimeout(() => {
-			state.scheduled = null;
-			install();
-		}, 50);
+			const result = install();
+			if (!result.installed && window.frappe?.boot?.developer_mode) {
+				console.warn("[VetEdgeProfessionalUI]", reason, result);
+			}
+		}, 0);
 	}
 
 	function bindLifecycle() {
 		if (state.lifecycleBound) return;
-		for (const eventName of LIFECYCLE_EVENTS) document.addEventListener(eventName, scheduleInstall);
-		window.frappe?.router?.on?.("change", scheduleInstall);
 		state.lifecycleBound = true;
+		LIFECYCLE_EVENTS.forEach((eventName) => {
+			document.addEventListener(eventName, () => scheduleInstall(eventName));
+		});
+		window.frappe?.router?.on?.("change", () => scheduleInstall("router-change"));
+	}
+
+	function diagnose() {
+		return {
+			installed: state.installed,
+			runtimeVersion: state.runtimeVersion,
+			menuGroupCount: state.menuGroups.length,
+			menuItemCount: state.menuGroups.reduce((total, group) => total + group.items.length, 0),
+			observerActive: state.observerActive,
+			lifecycleBound: state.lifecycleBound,
+			legacyMenuPatched: state.legacyMenuPatched,
+			lastError: state.lastError,
+			productMenuSource: runtime()?.getProductMenuConfig?.()?.menu_source || "",
+		};
 	}
 
 	window.VetEdgeProfessionalUI = Object.assign(window.VetEdgeProfessionalUI || {}, {
 		install,
 		getMenuItems,
-		profile,
-		diagnose() {
-			return {
-				installed: state.installed,
-				runtimeVersion: state.runtimeVersion,
-				lastError: state.lastError,
-				menuGroups: state.menuGroups,
-			};
-		},
+		diagnose,
+		openRoute,
 	});
 
 	bindLifecycle();
-	if (!install()) {
-		document.addEventListener("DOMContentLoaded", install, { once: true });
-		window.setTimeout(install, 250);
+	if (window.frappe?.require) {
+		window.frappe.require("edgeui.bundle.js", () => scheduleInstall("asset-ready"));
+	} else if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", () => scheduleInstall("dom-ready"), { once: true });
+	} else {
+		scheduleInstall("initial");
 	}
 })();
