@@ -41,6 +41,13 @@ MIGRATED_PAGES = {
 		"component": APP / "public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue",
 		"provider": APP / "services/clinical_workspace.py",
 	},
+	"medical_history": {
+		"loader": APP / "veterinary/page/veterinary_medical_history/veterinary_medical_history.js",
+		"page": APP / "veterinary/page/veterinary_medical_history/veterinary_medical_history.json",
+		"bundle": APP / "public/js/veterinary_medical_history.bundle.js",
+		"component": APP / "public/js/veterinary_medical_history/VeterinaryMedicalHistory.vue",
+		"provider": APP / "services/medical_history.py",
+	},
 }
 
 
@@ -70,6 +77,7 @@ def test_recovered_editing_surfaces_use_shared_edgesuite_form_controls():
 	pricing = read(MIGRATED_PAGES["pricing"]["component"])
 	front_desk = read(MIGRATED_PAGES["front_desk"]["component"])
 	clinical = read(MIGRATED_PAGES["clinical"]["component"])
+	medical_history = read(MIGRATED_PAGES["medical_history"]["component"])
 
 	for control in ("EdgeInput", "EdgeTextarea", "EdgeCheckbox", "EdgeDropdown", "EdgeLinkField"):
 		assert control in settings
@@ -86,6 +94,33 @@ def test_recovered_editing_surfaces_use_shared_edgesuite_form_controls():
 		assert "EdgeTextarea" in content
 		assert "frappe.ui.Dialog" not in content
 		assert "form-control" not in content
+	for contract in ("EdgeFilterBar", "EdgeLinkField", "EdgeInput", "EdgeDataTable"):
+		assert contract in medical_history
+	assert "form-control" not in medical_history
+	assert "frappe.ui.Dialog" not in medical_history
+
+
+def test_medical_history_preserves_tabbed_vital_charts_and_longitudinal_sections():
+	component = read(MIGRATED_PAGES["medical_history"]["component"])
+	clinical_bundle = read(MIGRATED_PAGES["clinical"]["bundle"])
+	for contract in (
+		"temperature",
+		"weight",
+		"heart_rate",
+		"respiratory_rate",
+		"Clinical Trend Charts",
+		"Consultations",
+		"Vitals",
+		"Diagnoses",
+		"Symptoms",
+		"Treatments",
+		"Vaccinations",
+		"Laboratory",
+		"new frappe.Chart",
+		"get_patient_medical_history_view",
+	):
+		assert contract in component
+	assert "/app/veterinary-medical-history?patient=" in clinical_bundle
 
 
 def test_settings_brand_identity_is_restored_for_standalone_edgesuite_shell():
@@ -108,7 +143,7 @@ def test_settings_brand_identity_is_restored_for_standalone_edgesuite_shell():
 
 def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	bridge = read(APP / "public/js/vetedge_ui_bridge.js")
-	clinical_route = read(APP / "public/js/vetedge_clinical_route.js")
+	route_alignment = read(APP / "public/js/vetedge_clinical_route.js")
 	home = read(APP / "veterinary/page/vetedge/vetedge.js")
 
 	for route in (
@@ -120,7 +155,14 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	):
 		assert route in bridge
 	assert '"/app/veterinary-consultation"' in bridge
-	assert "WORKSPACE_PATH = \"/app/vetedge-clinical-workspace\"" in clinical_route
+	assert 'CLINICAL_WORKSPACE_PATH = "/app/vetedge-clinical-workspace"' in route_alignment
+	assert 'MEDICAL_HISTORY_PATH = "/app/veterinary-medical-history"' in route_alignment
+	assert '"Veterinary Patient": "patients"' in route_alignment
+	assert '"Veterinary Appointment": "appointments"' in route_alignment
+	assert '"Veterinary Species": "species"' in route_alignment
+	assert '"Consultation Type": "consultation-types"' in route_alignment
+	assert 'doctype === "Veterinary Vital Signs"' in route_alignment
+	assert "__vetedgeAcceptedRouteAlignment" in route_alignment
 	assert "/app/vetedge-resource-center" in home
 
 	guest_form = read(APP / "veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request.js")
@@ -130,6 +172,18 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	queue = read(APP / "veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js")
 	for content in (guest_form, guest_list, missed_form, missed_list, queue):
 		assert "/app/vetedge-front-desk-action-center" in content
+
+
+def test_resource_center_deep_links_open_canonical_edgesuite_editor_or_appointment_flow():
+	bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
+	for contract in (
+		"requestedName",
+		"requestedNew",
+		"quickEditorView?.open?.({",
+		"resource: resourceView.resource",
+		"flowView?.open?.()",
+	):
+		assert contract in bundle
 
 
 def test_pricing_master_native_routes_are_redirected_to_edgesuite_workspace():
@@ -148,6 +202,18 @@ def test_pricing_master_native_routes_are_redirected_to_edgesuite_workspace():
 			content = read(path)
 			assert "/app/vetedge-pricing-master-workspace" in content
 			assert f"resource={resource}" in content
+
+
+def test_removed_hospitalisation_dashboard_cannot_be_reimported_or_relisted():
+	dashboard_install = read(APP / "install/dashboard.py")
+	obsolete_page = APP / "veterinary/page/veterinary_hospitalisation_dashboard"
+	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.js").exists()
+	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.json").exists()
+	assert "REMOVED_STANDARD_PAGES" in dashboard_install
+	assert '"veterinary-hospitalisation-dashboard"' in dashboard_install
+	assert '("Page", "veterinary-hospitalisation-dashboard")' in dashboard_install
+	assert '("DocType", "Veterinary Vital Signs")' in dashboard_install
+	assert '"veterinary", "page", "veterinary_hospitalisation_dashboard"' not in dashboard_install
 
 
 def test_clinical_workspace_safety_followups_are_restored_and_wired_into_ui():
