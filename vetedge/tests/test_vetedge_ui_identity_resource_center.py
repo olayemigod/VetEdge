@@ -285,6 +285,7 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
-	assert "vetedge_clinical_route.js?v=20260810-1" in content
-	assert "vetedge_ui_bridge.js?v=20260810-1" in content
+	assert "edgesuite_product_menu.js?v=20260810-2" in content
+	assert "vetedge_clinical_route.js?v=20260810-2" in content
+	assert "vetedge_ui_bridge.js?v=20260810-2" in content
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
