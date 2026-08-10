@@ -109,14 +109,11 @@
 
 		if (doctype === "Veterinary Settings" && ["List", "Form"].includes(routeType)) return SETTINGS_PATH;
 
-		if (doctype === "Veterinary Vital Signs") {
-			// Phase 4 uses Clinical Workspace for capture and Medical History for longitudinal review.
-			// Existing named Vital Signs records remain directly accessible for audit/reference.
-			if (routeType === "List" || (routeType === "Form" && isNewDocumentRoute(name, doctype))) {
-				return MEDICAL_HISTORY_PATH;
-			}
-			return "";
-		}
+		// Veterinary Vital Signs remains an explicit Clinical menu destination.
+		// Consultation-linked capture is available inside Clinical Workspace, while the
+		// standalone DocType remains available for list/audit workflows until its own
+		// dedicated EdgeSuite migration is accepted.
+		if (doctype === "Veterinary Vital Signs") return "";
 
 		if (RESOURCE_DOCTYPES[doctype]) {
 			return documentWorkspaceTarget(RESOURCE_CENTER_PATH, RESOURCE_DOCTYPES[doctype], routeType, name, doctype);
@@ -166,7 +163,6 @@
 		if (SAME_TAB_PAGES.has(path)) return `${path}${search}`;
 		if (path === "/app/veterinary-settings") return SETTINGS_PATH;
 		if (path === "/app/veterinary-appointment-queue") return `${FRONT_DESK_PATH}?tab=queue`;
-		if (path === "/app/veterinary-vital-signs") return MEDICAL_HISTORY_PATH;
 
 		const clinicalBase = "/app/veterinary-consultation";
 		if (path === clinicalBase) return CLINICAL_WORKSPACE_PATH;
