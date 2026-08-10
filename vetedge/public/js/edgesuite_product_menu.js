@@ -267,6 +267,9 @@
 			sections,
 			profile: profile(),
 			menu_source: "workspace_sidebar",
+			navigate(item) {
+				routeTo(item);
+			},
 		});
 		edgeUI.refreshProductMenu?.();
 		state.mode = "shared-edgeui";

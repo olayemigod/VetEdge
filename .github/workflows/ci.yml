@@ -37,15 +37,22 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_appointment_edgeui.py \
+            vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
+            vetedge/tests/test_vetedge_recovered_workspace_integration.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
 
-      - name: Validate EdgeSuite UI dependency contract
+      - name: Validate EdgeSuite UI dependency and migration contracts
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_vetedge_appointment_edgeui.py \
+            vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
 
@@ -60,31 +67,36 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Check migrated dashboard JavaScript
+      - name: Check migrated EdgeSuite JavaScript
         run: |
-          node --check \
-            vetedge/public/js/vetedge_professional_ui.js
+          node --check vetedge/public/js/edgesuite_product_menu.js
+          node --check vetedge/public/js/vetedge_professional_ui.js
+          node --check vetedge/public/js/vetedge_ui_bridge.js
+          node --check vetedge/public/js/vetedge_clinical_route.js
+          node --check vetedge/public/js/vetedge_workspace_safety.js
 
-          node --check \
-            vetedge/public/js/vetedge_ui_bridge.js
+          node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
+          node --check vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
+          node --check vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js
+          node --check vetedge/public/js/vetedge_executive_dashboard.bundle.js
+          node --check vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js
+          node --check vetedge/public/js/vetedge_resource_center.bundle.js
 
-          node --check \
-            vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
-
-          node --check \
-            vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
-
-          node --check \
-            vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js
-
-          node --check \
-            vetedge/public/js/vetedge_executive_dashboard.bundle.js
-
-          node --check \
-            vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js
-
-          node --check \
-            vetedge/public/js/vetedge_resource_center.bundle.js
+          node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
+          node --check vetedge/public/js/veterinary_settings_center.bundle.js
+          node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
+          node --check vetedge/public/js/vetedge_master_workspace.bundle.js
+          node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
+          node --check vetedge/public/js/vetedge_pricing_master_workspace.bundle.js
+          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
+          node --check vetedge/public/js/vetedge_front_desk_action_center.bundle.js
+          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
+          node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js
+          node --check vetedge/public/js/veterinary_medical_history.bundle.js
+          node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
+          node --check vetedge/public/js/vetedge_service_operations.bundle.js
+          node --check vetedge/veterinary/page/vetedge/vetedge.js
 
   frappe-v16:
     name: Frappe v16 standalone integration
@@ -143,40 +155,26 @@ jobs:
             frappe-bench
 
           cd frappe-bench
-
           bench set-config -g db_host 127.0.0.1
           bench set-config -g redis_cache redis://127.0.0.1:6379
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out EdgeSuite UI 0.6.2 consolidation branch
+      - name: Check out authoritative EdgeSuite UI main (0.6.3+)
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: agent/edgeui-0.6.2-consolidation
+          ref: main
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
       - name: Fetch ERPNext, Payments, and local applications
         working-directory: frappe-bench
         run: |
-          bench get-app \
-            --branch version-16 \
-            --skip-assets \
-            https://github.com/frappe/erpnext.git
-
-          bench get-app \
-            --branch develop \
-            --skip-assets \
-            https://github.com/frappe/payments.git
-
-          bench get-app \
-            --skip-assets \
-            "$GITHUB_WORKSPACE/edgesuite-ui-source"
-
-          bench get-app \
-            --skip-assets \
-            "$GITHUB_WORKSPACE"
+          bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
+          bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
+          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "$GITHUB_WORKSPACE"
 
       - name: Create standalone VetEdge site
         working-directory: frappe-bench
@@ -186,12 +184,10 @@ jobs:
             --mariadb-root-password root \
             --admin-password admin \
             --no-mariadb-socket
-
           bench --site ci.localhost install-app erpnext
           bench --site ci.localhost install-app payments
           bench --site ci.localhost install-app edgesuite_ui
           bench --site ci.localhost install-app vetedge
-
           bench --site ci.localhost set-config edge_platform_mode standalone
           bench --site ci.localhost set-config coreedge_required 0
 
@@ -199,13 +195,11 @@ jobs:
         working-directory: frappe-bench
         run: |
           bench --site ci.localhost list-apps | tee /tmp/installed-apps.txt
-
           grep -Eq '^frappe[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^erpnext[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^payments[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
           grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
-
           if grep -Eq '^coreedge[[:space:]]' /tmp/installed-apps.txt; then
             echo "CoreEdge must not be installed in the standalone VetEdge CI site."
             exit 1
@@ -220,35 +214,32 @@ jobs:
 
       - name: Run standalone adapter tests
         working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_coreedge_adapter
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_coreedge_adapter
 
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_vetedge_professional_ui_contract
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_professional_ui_contract
+
+      - name: Run recovered EdgeSuite migration contracts
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_edgesuite_migration_recovery
+
+      - name: Execute recovered workspace providers
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_recovered_workspace_integration
 
       - name: Run identity and resource center tests
         working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_vetedge_ui_identity_resource_center
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_ui_identity_resource_center
+
+      - name: Run appointment EdgeSuite UI tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_appointment_edgeui
 
       - name: Run Stock Expiry Monitor tests
         working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_vetedge_stock_expiry_monitor
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_stock_expiry_monitor
 
       - name: Run Executive Dashboard migration tests
         working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost run-tests \
-            --app vetedge \
-            --module vetedge.tests.test_vetedge_executive_dashboard_edgeui
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_executive_dashboard_edgeui

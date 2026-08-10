@@ -17,8 +17,6 @@
 	const RESOURCE_ROUTES = Object.freeze({
 		"/app/veterinary-patient": "patients",
 		"/app/veterinary-appointment": "appointments",
-		"/app/veterinary-missed-appointment": "missed-appointments",
-		"/app/veterinary-consultation": "consultations",
 		"/app/veterinary-lab-order": "lab-orders",
 		"/app/veterinary-vaccination-record": "vaccinations",
 		"/app/pet-grooming-appointment": "grooming",
@@ -26,10 +24,47 @@
 		"/app/kennel": "kennels",
 	});
 
+	const MASTER_ROUTES = Object.freeze({
+		"/app/veterinary-species": "species",
+		"/app/veterinary-breed": "breeds",
+		"/app/veterinary-symptom": "symptoms",
+		"/app/veterinary-diagnosis-category": "diagnosis-categories",
+		"/app/veterinary-diagnosis": "diagnoses",
+		"/app/veterinary-service-type": "service-types",
+		"/app/consultation-type": "consultation-types",
+	});
+
+	const PRICING_ROUTES = Object.freeze({
+		"/app/veterinary-treatment-item": "treatment-items",
+		"/app/veterinary-treatment-type": "treatment-types",
+		"/app/veterinary-lab-test": "lab-tests",
+		"/app/veterinary-vaccine": "vaccines",
+		"/app/pet-grooming-service": "grooming-services",
+	});
+
+	const SERVICE_ROUTES = Object.freeze({
+		"/app/pet-boarding-stay": "boarding-stays",
+		"/app/pet-boarding-care-record": "boarding-care-records",
+		"/app/pet-grooming-session": "grooming-sessions",
+	});
+
+	const SERVICE_PAGES = Object.freeze({
+		"/app/kennel-availability": "availability",
+		"/app/kennel-availability-board": "availability",
+	});
+
 	const PRODUCT_ROUTES = new Set([
+		"/app/vetedge",
 		"/app/vetedge-executive-dashboard",
 		"/app/stock-expiry-monitor",
 		"/app/vetedge-resource-center",
+		"/app/veterinary-settings-center",
+		"/app/vetedge-master-workspace",
+		"/app/vetedge-pricing-master-workspace",
+		"/app/vetedge-front-desk-action-center",
+		"/app/vetedge-clinical-workspace",
+		"/app/veterinary-medical-history",
+		"/app/vetedge-service-operations",
 	]);
 
 	const state = {
@@ -99,11 +134,83 @@
 		return true;
 	}
 
+	function migratedTarget(path, routes, workspacePath) {
+		for (const [basePath, resource] of Object.entries(routes)) {
+			if (path === basePath) {
+				return `${workspacePath}?resource=${encodeURIComponent(resource)}`;
+			}
+			if (path.startsWith(`${basePath}/`)) {
+				const name = decodeURIComponent(path.slice(basePath.length + 1));
+				if (!name) return `${workspacePath}?resource=${encodeURIComponent(resource)}`;
+				return `${workspacePath}?resource=${encodeURIComponent(resource)}&name=${encodeURIComponent(name)}`;
+			}
+		}
+		return "";
+	}
+
+	function serviceTarget(path) {
+		const pageResource = SERVICE_PAGES[path];
+		if (pageResource) return `/app/vetedge-service-operations?resource=${encodeURIComponent(pageResource)}`;
+		return migratedTarget(path, SERVICE_ROUTES, "/app/vetedge-service-operations");
+	}
+
+	function clinicalTarget(path) {
+		const base = "/app/veterinary-consultation";
+		if (path === base) return "/app/vetedge-clinical-workspace";
+		if (!path.startsWith(`${base}/`)) return "";
+		const name = decodeURIComponent(path.slice(base.length + 1));
+		if (!name || name === "new" || name.toLowerCase().startsWith("new-veterinary-consultation")) {
+			return "/app/vetedge-clinical-workspace?new=1";
+		}
+		return `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`;
+	}
+
+	function frontDeskTarget(path) {
+		const routes = [
+			["/app/veterinary-guest-booking-request", "guest"],
+			["/app/veterinary-missed-appointment", "missed"],
+		];
+		for (const [base, tab] of routes) {
+			if (path === base) return `/app/vetedge-front-desk-action-center?tab=${tab}`;
+			if (path.startsWith(`${base}/`)) {
+				const name = decodeURIComponent(path.slice(base.length + 1));
+				return `/app/vetedge-front-desk-action-center?tab=${tab}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
+			}
+		}
+		if (path === "/app/veterinary-appointment-queue") {
+			return "/app/vetedge-front-desk-action-center?tab=queue";
+		}
+		return "";
+	}
+
 	function navigationAdapter() {
 		return {
 			open(route) {
 				const path = normalizePath(route);
 				if (!path) return false;
+
+				if (path === "/app/veterinary-settings") {
+					return openSameTab("/app/veterinary-settings-center");
+				}
+
+				if (path === "/app/veterinary-vital-signs" || path.startsWith("/app/veterinary-vital-signs/")) {
+					return openSameTab(route);
+				}
+
+				const service = serviceTarget(path);
+				if (service) return openSameTab(service);
+
+				const clinical = clinicalTarget(path);
+				if (clinical) return openSameTab(clinical);
+
+				const frontDesk = frontDeskTarget(path);
+				if (frontDesk) return openSameTab(frontDesk);
+
+				const migratedMaster = migratedTarget(path, MASTER_ROUTES, "/app/vetedge-master-workspace");
+				if (migratedMaster) return openSameTab(migratedMaster);
+
+				const migratedPricing = migratedTarget(path, PRICING_ROUTES, "/app/vetedge-pricing-master-workspace");
+				if (migratedPricing) return openSameTab(migratedPricing);
 
 				const resource = RESOURCE_ROUTES[path];
 				if (resource) {
@@ -220,6 +327,8 @@
 			open(item) {
 				const target = item?.target || targetForItem(item || {});
 				if (!target) return false;
+				const navigation = navigationAdapter();
+				if (navigation.open(target) === true) return true;
 				return openNewTab(target);
 			},
 		};
@@ -260,6 +369,9 @@
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
+			masterRouteCount: Object.keys(MASTER_ROUTES).length,
+			pricingRouteCount: Object.keys(PRICING_ROUTES).length,
+			serviceRouteCount: Object.keys(SERVICE_ROUTES).length + Object.keys(SERVICE_PAGES).length,
 		};
 	}
 
@@ -267,6 +379,9 @@
 		install,
 		diagnose,
 		resourceRoutes: RESOURCE_ROUTES,
+		masterRoutes: MASTER_ROUTES,
+		pricingRoutes: PRICING_ROUTES,
+		serviceRoutes: SERVICE_ROUTES,
 	});
 
 	if (!install()) {

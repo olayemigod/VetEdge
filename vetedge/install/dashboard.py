@@ -19,6 +19,17 @@ OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Context Switch Log",
 }
 
+REMOVED_STANDARD_PAGES = {
+	"veterinary-hospitalisation-dashboard",
+}
+
+# The obsolete Hospitalisation Dashboard must not reappear during recurring
+# standard sidebar synchronization. Operational Hospital & Services links and
+# Veterinary Vital Signs remain valid Veterinary navigation destinations.
+REMOVED_SIDEBAR_LINKS = {
+	("Page", "veterinary-hospitalisation-dashboard"),
+}
+
 
 def _installed_apps() -> set[str]:
 	try:
@@ -46,8 +57,12 @@ def _coreedge_available() -> bool:
 
 def _should_keep_sidebar_item(item) -> bool:
 	link_to = item.get("link_to") if isinstance(item, dict) else getattr(item, "link_to", None)
+	link_type = item.get("link_type") if isinstance(item, dict) else getattr(item, "link_type", None)
 	if not link_to:
 		return True
+
+	if (str(link_type or ""), str(link_to)) in REMOVED_SIDEBAR_LINKS:
+		return False
 
 	if link_to in OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS or str(link_to).startswith("CoreEdge "):
 		if not (_coreedge_available() and _doctype_exists(link_to)):
@@ -73,7 +88,6 @@ FINANCIAL_DASHBOARD_FILES = (
 	("veterinary", "dashboard_chart", "paid_vs_outstanding", "paid_vs_outstanding.json"),
 	("veterinary", "dashboard_chart", "payment_method_breakdown", "payment_method_breakdown.json"),
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
-	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 	("veterinary", "page", "kennel_availability_board", "kennel_availability_board.json"),
 	("workspace_sidebar", "vetedge.json"),
 	("desktop_icon", "vetedge.json"),
@@ -81,7 +95,6 @@ FINANCIAL_DASHBOARD_FILES = (
 
 SIDEBAR_PAGE_FILES = (
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
-	("veterinary", "page", "veterinary_hospitalisation_dashboard", "veterinary_hospitalisation_dashboard.json"),
 )
 
 
@@ -91,10 +104,16 @@ def ensure_financial_dashboard() -> None:
 		if os.path.exists(file_path):
 			import_file_by_path(file_path, force=True, ignore_version=True)
 
+	cleanup_removed_pages()
 	ensure_vetedge_workspace_sidebar()
 	cleanup_legacy_workspace_sidebars()
 	cleanup_legacy_financial_workspace()
 	ensure_vetedge_desktop_icon()
+
+
+def cleanup_removed_pages() -> None:
+	for page in REMOVED_STANDARD_PAGES:
+		frappe.delete_doc_if_exists("Page", page, force=1)
 
 
 def cleanup_legacy_financial_workspace() -> None:

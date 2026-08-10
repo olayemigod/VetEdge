@@ -36,6 +36,7 @@ SYSTEM_FIELDS = {
 	"docstatus",
 	"idx",
 	"amended_from",
+	"naming_series",
 }
 
 RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
@@ -172,6 +173,40 @@ def _editor_fields(meta) -> list[dict]:
 		}
 		for field in selected
 	]
+
+
+def _appointment_owner_verification_field(meta) -> dict[str, Any] | None:
+	if not meta.has_field("primary_owner"):
+		return None
+	field = meta.get_field("primary_owner")
+	return {
+		"fieldname": "primary_owner",
+		"fieldtype": "Link",
+		"label": _("Pet Owner"),
+		"options": field.options or "Customer",
+		"reqd": 0,
+		"read_only": 1,
+		"verification": 1,
+		"description": _("Derived from the selected Veterinary Patient and verified again when the appointment is saved."),
+		"default": None,
+		"depends_on": "",
+		"mandatory_depends_on": "",
+	}
+
+
+def _with_appointment_verification_fields(config: dict[str, Any], meta, fields: list[dict], name: str | None) -> list[dict]:
+	if config["key"] != "appointments" or not name:
+		return fields
+	owner_field = _appointment_owner_verification_field(meta)
+	if not owner_field:
+		return fields
+	result = list(fields)
+	patient_index = next(
+		(index for index, field in enumerate(result) if field.get("fieldname") == "patient"),
+		-1,
+	)
+	result.insert(patient_index + 1 if patient_index >= 0 else 0, owner_field)
+	return result
 
 
 def _unsupported_required_fields(meta) -> list[str]:
@@ -334,7 +369,7 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 			)
 		)
 
-	fields = _editor_fields(meta)
+	fields = _with_appointment_verification_fields(config, meta, _editor_fields(meta), name)
 	if name:
 		doc = frappe.get_doc(doctype, name)
 		doc.check_permission("read")

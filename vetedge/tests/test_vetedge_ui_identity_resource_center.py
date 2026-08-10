@@ -25,6 +25,23 @@ RESOURCE_COMPONENT = (
 	/ "vetedge_resource_center"
 	/ "VetEdgeResourceCenter.vue"
 )
+RESOURCE_QUICK_EDITOR = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_resource_center"
+	/ "VetEdgeResourceQuickEditor.vue"
+)
+APPOINTMENT_API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
+APPOINTMENT_COMPONENT = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_resource_center"
+	/ "VetEdgeAppointmentFlow.vue"
+)
 
 
 def read(path: Path) -> str:
@@ -120,7 +137,7 @@ def test_resource_center_count_uses_frappe_v16_aggregate_field_syntax():
 
 
 def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
-	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT):
+	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT, RESOURCE_QUICK_EDITOR):
 		assert path.exists(), path
 
 	loader = read(RESOURCE_LOADER)
@@ -135,11 +152,140 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "save_resource_record" in component
 	assert "delete_resource_record" in component
 	assert '"_blank", "noopener,noreferrer"' in component
-	assert "frappe.ui.Dialog" in component
+
+
+def test_resource_center_quick_edit_uses_shared_edgesuite_fields_not_local_native_controls():
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
+	bundle = read(RESOURCE_BUNDLE)
+	loader = read(RESOURCE_LOADER)
+
+	for contract in (
+		"EdgeModal",
+		"EdgeLinkField",
+		"EdgeDropdown",
+		"EdgeInput",
+		"EdgeTextarea",
+		"EdgeCheckbox",
+		"get_resource_editor",
+		"save_resource_record",
+		"frappe.desk.search.search_link",
+		"Save Changes",
+	):
+		assert contract in quick_editor
+
+	for runtime_component in (
+		"EdgeInput",
+		"EdgeTextarea",
+		"EdgeCheckbox",
+	):
+		assert f"'{runtime_component}'" in loader
+	assert "EdgeSuite UI 0.6.3 or newer" in loader
+
+	for forbidden in (
+		"frappe.ui.Dialog",
+		"frappe.msgprint",
+		"form-control",
+		"vetedge-quick-editor-control",
+		"vetedge-quick-editor-check",
+		"vetedge-quick-editor-readonly",
+		"<input",
+		"<textarea",
+	):
+		assert forbidden not in quick_editor
+
+	for contract in (
+		"VetEdgeResourceQuickEditor",
+		"quickEditorApp",
+		"quickEditorView",
+		"quickEditorView?.open?.({ resource: this.resource, name })",
+		"quickEditorApp.unmount()",
+		"quickEditorHost.remove()",
+	):
+		assert contract in bundle
+	assert "originalOpenEditor" not in bundle
+
+
+def test_appointment_quick_edit_hides_series_and_keeps_pet_owner_verification_read_only():
+	api = read(RESOURCE_API)
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
+
+	for contract in (
+		'"naming_series",',
+		"_with_appointment_verification_fields",
+		'"fieldname": "primary_owner"',
+		'"label": _("Pet Owner")',
+		'"read_only": 1',
+		'"verification": 1',
+		"Derived from the selected Veterinary Patient",
+	):
+		assert contract in api
+
+	for contract in (
+		'v-if="field.read_only"',
+		":model-value=\"readOnlyValue(field)\"",
+		"EdgeInput",
+		"refreshAppointmentOwner",
+		'field.fieldname === "patient"',
+		"appointment_edgeui.search_appointment_link",
+		"if (field.read_only) continue",
+		"field.reqd && !field.read_only",
+	):
+		assert contract in quick_editor
+
+
+def test_appointment_flow_uses_shared_links_and_server_safety():
+	api = read(APPOINTMENT_API)
+	component = read(APPOINTMENT_COMPONENT)
+	bundle = read(RESOURCE_BUNDLE)
+	loader = read(RESOURCE_LOADER)
+
+	for contract in (
+		"search_appointment_link",
+		"create_edgeui_appointment",
+		"frappe.get_list(",
+		"get_assigned_branches",
+		"get_veterinary_doctor_users",
+		"can_access_branch_data",
+		"validate_doctor_user",
+	):
+		assert contract in api
+	assert "ignore_permissions" not in api
+	assert "frappe.db.sql(" not in api
+	assert "doc.submit(" not in api
+
+	for contract in (
+		"EdgeModal",
+		"EdgeLinkField",
+		"EdgeDropdown",
+		'label="Veterinary Patient"',
+		"vetedge-appointment-flow-readonly",
+		'label="Service Branch"',
+		'await this.searchLink("patient", patient)',
+		"this.form.owner = owner",
+		"this.clearPractitioner()",
+		"create_edgeui_appointment",
+	):
+		assert contract in component
+
+	assert "Create New Pet Owner" not in component
+	assert "Create New Veterinary Patient" not in component
+	assert "createOwnerFromQuery" not in component
+	assert "createPatientFromQuery" not in component
+	assert "beginInlineCreate" not in component
+	assert "frappe.ui.Dialog" not in component
+	assert "window.open" not in component
+	assert "VetEdgeAppointmentFlow" in bundle
+	assert "flowApp.unmount()" in bundle
+	assert "New Appointment" in bundle
+	assert "interceptAppointmentAction" in bundle
+	assert "EdgeLinkField" in loader
+	assert "EdgeDropdown" in loader
 
 
 def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
-	assert "vetedge_ui_bridge.js?v=20260720-2" in content
+	assert "edgesuite_product_menu.js?v=20260810-2" in content
+	assert "vetedge_clinical_route.js?v=20260810-2" in content
+	assert "vetedge_ui_bridge.js?v=20260810-2" in content
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
