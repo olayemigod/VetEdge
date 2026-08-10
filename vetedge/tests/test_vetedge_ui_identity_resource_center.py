@@ -154,25 +154,44 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert '"_blank", "noopener,noreferrer"' in component
 
 
-def test_resource_center_quick_edit_is_edgesuite_modal_not_frappe_dialog():
+def test_resource_center_quick_edit_uses_shared_edgesuite_fields_not_local_native_controls():
 	quick_editor = read(RESOURCE_QUICK_EDITOR)
 	bundle = read(RESOURCE_BUNDLE)
+	loader = read(RESOURCE_LOADER)
 
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
 		"EdgeDropdown",
+		"EdgeInput",
+		"EdgeTextarea",
+		"EdgeCheckbox",
 		"get_resource_editor",
 		"save_resource_record",
 		"frappe.desk.search.search_link",
-		"vetedge-quick-editor-control",
 		"Save Changes",
 	):
 		assert contract in quick_editor
 
-	assert "frappe.ui.Dialog" not in quick_editor
-	assert "frappe.msgprint" not in quick_editor
-	assert "form-control" not in quick_editor
+	for runtime_component in (
+		"EdgeInput",
+		"EdgeTextarea",
+		"EdgeCheckbox",
+	):
+		assert f"'{runtime_component}'" in loader
+	assert "EdgeSuite UI 0.6.3 or newer" in loader
+
+	for forbidden in (
+		"frappe.ui.Dialog",
+		"frappe.msgprint",
+		"form-control",
+		"vetedge-quick-editor-control",
+		"vetedge-quick-editor-check",
+		"vetedge-quick-editor-readonly",
+		"<input",
+		"<textarea",
+	):
+		assert forbidden not in quick_editor
 
 	for contract in (
 		"VetEdgeResourceQuickEditor",
@@ -203,7 +222,8 @@ def test_appointment_quick_edit_hides_series_and_keeps_pet_owner_verification_re
 
 	for contract in (
 		'v-if="field.read_only"',
-		"vetedge-quick-editor-readonly",
+		":model-value=\"readOnlyValue(field)\"",
+		"EdgeInput",
 		"refreshAppointmentOwner",
 		'field.fieldname === "patient"',
 		"appointment_edgeui.search_appointment_link",
