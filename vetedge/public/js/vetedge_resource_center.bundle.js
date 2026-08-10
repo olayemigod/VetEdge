@@ -11,6 +11,10 @@ export function mountVetEdgeResourceCenter(target) {
 		throw new Error('VetEdge Resource Center requires the EdgeSuite UI 0.6.2 form runtime.');
 	}
 
+	const requestedRoute = new URLSearchParams(window.location.search || '');
+	const requestedName = String(requestedRoute.get('name') || '').trim();
+	const requestedNew = requestedRoute.get('new') === '1';
+
 	const flowHost = document.createElement('div');
 	flowHost.className = 'vetedge-appointment-flow-host';
 	document.body.appendChild(flowHost);
@@ -88,6 +92,23 @@ export function mountVetEdgeResourceCenter(target) {
 	const observer = new MutationObserver(syncActionLabels);
 	observer.observe(target, { childList: true, subtree: true });
 	syncActionLabels();
+
+	// Route alignment captures `name` / `new` before the Resource Center normalizes
+	// its list URL so bookmarks, sidebar links and notification deep links can open
+	// the canonical EdgeSuite editor rather than falling back to a native Frappe form.
+	if (requestedName || requestedNew) {
+		window.setTimeout(() => {
+			if (!resourceView) return;
+			if (requestedNew && isAppointments()) {
+				flowView?.open?.();
+				return;
+			}
+			quickEditorView?.open?.({
+				resource: resourceView.resource,
+				name: requestedName || null,
+			});
+		}, 0);
+	}
 
 	return {
 		unmount() {
