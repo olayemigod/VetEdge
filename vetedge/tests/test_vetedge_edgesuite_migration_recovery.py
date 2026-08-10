@@ -150,11 +150,12 @@ def test_pricing_master_native_routes_are_redirected_to_edgesuite_workspace():
 			assert f"resource={resource}" in content
 
 
-def test_clinical_workspace_safety_followups_are_restored():
+def test_clinical_workspace_safety_followups_are_restored_and_wired_into_ui():
 	hooks = read(APP / "hooks.py")
 	context = read(APP / "services/clinical_workspace_context.py")
 	phase5 = read(APP / "services/clinical_workspace_phase5.py")
 	stage3 = read(APP / "services/clinical_workspace_stage3.py")
+	component = read(MIGRATED_PAGES["clinical"]["component"])
 
 	assert "vetedge_clinical_route.js" in hooks
 	assert "enforce_consultation_practitioner_ownership" in hooks
@@ -165,3 +166,20 @@ def test_clinical_workspace_safety_followups_are_restored():
 	assert "confirm_workspace_dispensary" in phase5
 	assert "DEFAULT_CONSULTATION_SOURCE_DETAIL" in stage3
 	assert "can_edit_default_consultation_billing_item" in stage3
+
+	for contract in (
+		"clinical_workspace_stage3.save_consultation",
+		"clinical_workspace_context.get_clinical_context_options",
+		"clinical_workspace_context.get_patient_owner_context",
+		"clinical_workspace_stage3.get_default_consultation_fee_policy",
+		"clinical_workspace_phase5.get_treatment_display_order",
+		"clinical_workspace_phase5.get_dispensary_workspace_context",
+		"clinical_workspace_phase5.confirm_workspace_dispensary",
+		"Review Dispensary",
+		"Confirm Dispensary Issue",
+		"Pet Owner",
+		"confirmDiscard()",
+	):
+		assert contract in component
+	assert "window.confirm" not in component
+	assert "frappe.ui.Dialog" not in component
