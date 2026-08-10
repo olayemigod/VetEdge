@@ -25,6 +25,14 @@ RESOURCE_COMPONENT = (
 	/ "vetedge_resource_center"
 	/ "VetEdgeResourceCenter.vue"
 )
+RESOURCE_QUICK_EDITOR = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_resource_center"
+	/ "VetEdgeResourceQuickEditor.vue"
+)
 APPOINTMENT_API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
 APPOINTMENT_COMPONENT = (
 	ROOT
@@ -129,7 +137,7 @@ def test_resource_center_count_uses_frappe_v16_aggregate_field_syntax():
 
 
 def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
-	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT):
+	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT, RESOURCE_QUICK_EDITOR):
 		assert path.exists(), path
 
 	loader = read(RESOURCE_LOADER)
@@ -144,7 +152,38 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "save_resource_record" in component
 	assert "delete_resource_record" in component
 	assert '"_blank", "noopener,noreferrer"' in component
-	assert "frappe.ui.Dialog" in component
+
+
+def test_resource_center_quick_edit_is_edgesuite_modal_not_frappe_dialog():
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
+	bundle = read(RESOURCE_BUNDLE)
+
+	for contract in (
+		"EdgeModal",
+		"EdgeLinkField",
+		"EdgeDropdown",
+		"get_resource_editor",
+		"save_resource_record",
+		"frappe.desk.search.search_link",
+		"vetedge-quick-editor-control",
+		"Save Changes",
+	):
+		assert contract in quick_editor
+
+	assert "frappe.ui.Dialog" not in quick_editor
+	assert "frappe.msgprint" not in quick_editor
+	assert "form-control" not in quick_editor
+
+	for contract in (
+		"VetEdgeResourceQuickEditor",
+		"quickEditorApp",
+		"quickEditorView",
+		"quickEditorView?.open?.({ resource: this.resource, name })",
+		"quickEditorApp.unmount()",
+		"quickEditorHost.remove()",
+	):
+		assert contract in bundle
+	assert "originalOpenEditor" not in bundle
 
 
 def test_appointment_flow_uses_shared_links_and_server_safety():
