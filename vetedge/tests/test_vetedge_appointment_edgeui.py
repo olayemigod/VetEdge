@@ -69,8 +69,10 @@ def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
 	for contract in (
 		"EdgeModal",
 		"EdgeLinkField",
+		"EdgeDropdown",
 		'label="Veterinary Patient"',
 		'label="Service Branch"',
+		"vetedge-appointment-flow-readonly",
 		"Populated from selected patient",
 		"this.searchLink(\"patient\", query)",
 		'const matches = await this.searchLink("patient", patient)',
@@ -85,7 +87,7 @@ def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
 		assert contract in content
 
 	patient_position = content.index('label="Veterinary Patient"')
-	owner_position = content.index("<span>Pet Owner</span>")
+	owner_position = content.index('class="vetedge-appointment-flow-label">Pet Owner</span>')
 	branch_position = content.index('label="Service Branch"')
 	assert patient_position < owner_position < branch_position
 
@@ -134,4 +136,5 @@ def test_resource_center_exposes_new_appointment_action_and_blocks_generic_edito
 
 	assert "EdgeLinkField" in loader
 	assert "EdgeModal" in loader
+	assert "EdgeDropdown" in loader
 	assert "window.mountVetEdgeResourceCenter" in loader
