@@ -42,6 +42,17 @@
 		"/app/pet-grooming-service": "grooming-services",
 	});
 
+	const SERVICE_ROUTES = Object.freeze({
+		"/app/pet-boarding-stay": "boarding-stays",
+		"/app/pet-boarding-care-record": "boarding-care-records",
+		"/app/pet-grooming-session": "grooming-sessions",
+	});
+
+	const SERVICE_PAGES = Object.freeze({
+		"/app/kennel-availability": "availability",
+		"/app/kennel-availability-board": "availability",
+	});
+
 	const PRODUCT_ROUTES = new Set([
 		"/app/vetedge",
 		"/app/vetedge-executive-dashboard",
@@ -53,6 +64,7 @@
 		"/app/vetedge-front-desk-action-center",
 		"/app/vetedge-clinical-workspace",
 		"/app/veterinary-medical-history",
+		"/app/vetedge-service-operations",
 	]);
 
 	const state = {
@@ -136,6 +148,12 @@
 		return "";
 	}
 
+	function serviceTarget(path) {
+		const pageResource = SERVICE_PAGES[path];
+		if (pageResource) return `/app/vetedge-service-operations?resource=${encodeURIComponent(pageResource)}`;
+		return migratedTarget(path, SERVICE_ROUTES, "/app/vetedge-service-operations");
+	}
+
 	function clinicalTarget(path) {
 		const base = "/app/veterinary-consultation";
 		if (path === base) return "/app/vetedge-clinical-workspace";
@@ -174,6 +192,13 @@
 				if (path === "/app/veterinary-settings") {
 					return openSameTab("/app/veterinary-settings-center");
 				}
+
+				if (path === "/app/veterinary-vital-signs" || path.startsWith("/app/veterinary-vital-signs/")) {
+					return openSameTab(route);
+				}
+
+				const service = serviceTarget(path);
+				if (service) return openSameTab(service);
 
 				const clinical = clinicalTarget(path);
 				if (clinical) return openSameTab(clinical);
@@ -346,6 +371,7 @@
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
 			masterRouteCount: Object.keys(MASTER_ROUTES).length,
 			pricingRouteCount: Object.keys(PRICING_ROUTES).length,
+			serviceRouteCount: Object.keys(SERVICE_ROUTES).length + Object.keys(SERVICE_PAGES).length,
 		};
 	}
 
@@ -355,6 +381,7 @@
 		resourceRoutes: RESOURCE_ROUTES,
 		masterRoutes: MASTER_ROUTES,
 		pricingRoutes: PRICING_ROUTES,
+		serviceRoutes: SERVICE_ROUTES,
 	});
 
 	if (!install()) {
