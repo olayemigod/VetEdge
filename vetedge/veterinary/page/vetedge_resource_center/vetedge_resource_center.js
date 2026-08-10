@@ -43,13 +43,16 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 			'EdgeErrorState',
 			'EdgeModal',
 			'EdgeLinkField',
-			'EdgeDropdown'
+			'EdgeDropdown',
+			'EdgeInput',
+			'EdgeTextarea',
+			'EdgeCheckbox'
 		];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
 		if (!runtime?.createEdgeApp || missing.length) {
 			showFailure(
 				missing.length
-					? __('Missing EdgeSuite UI components: {0}. Rebuild EdgeSuite UI 0.6.2 or newer.', [missing.join(', ')])
+					? __('Missing EdgeSuite UI components: {0}. Rebuild EdgeSuite UI 0.6.3 or newer.', [missing.join(', ')])
 					: __('The standalone EdgeSuite UI runtime is unavailable.')
 			);
 			return;
