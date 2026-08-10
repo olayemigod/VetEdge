@@ -5,8 +5,24 @@ export function mountVetEdgeClinicalWorkspace(target) {
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
 		throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
 	}
-	VetEdgeClinicalWorkspace.components = runtime.components;
-	const app = runtime.createEdgeApp(VetEdgeClinicalWorkspace);
+	const ClinicalWorkspaceRoot = {
+		...VetEdgeClinicalWorkspace,
+		components: { ...runtime.components, ...(VetEdgeClinicalWorkspace.components || {}) },
+		methods: {
+			...(VetEdgeClinicalWorkspace.methods || {}),
+			openHistory() {
+				const patient = String(this.form?.patient || '').trim();
+				if (!patient) {
+					this.error = typeof __ === 'function'
+						? __('Select or save a Veterinary Patient before opening Medical History.')
+						: 'Select or save a Veterinary Patient before opening Medical History.';
+					return;
+				}
+				window.location.assign(`/app/veterinary-medical-history?patient=${encodeURIComponent(patient)}`);
+			},
+		},
+	};
+	const app = runtime.createEdgeApp(ClinicalWorkspaceRoot);
 	const view = app.mount(target);
 	return { view, unmount: () => app.unmount() };
 }
