@@ -14,8 +14,16 @@
 
 			<form class="vetedge-quick-editor-form" @submit.prevent="save">
 				<template v-for="field in schema.fields || []" :key="field.fieldname">
+					<div v-if="field.read_only" class="vetedge-quick-editor-field">
+						<span class="vetedge-quick-editor-label">{{ field.label }}</span>
+						<div class="vetedge-quick-editor-readonly" aria-readonly="true">
+							{{ readOnlyValue(field) }}
+						</div>
+						<small v-if="field.description" class="vetedge-quick-editor-helper">{{ field.description }}</small>
+					</div>
+
 					<EdgeLinkField
-						v-if="field.fieldtype === 'Link'"
+						v-else-if="field.fieldtype === 'Link'"
 						v-model="values[field.fieldname]"
 						:selected-label="linkLabels[field.fieldname] || values[field.fieldname] || ''"
 						:label="field.label"
@@ -144,7 +152,7 @@ export default {
 				this.values = this.normalizeValues(schema.fields || [], schema.values || {});
 				this.linkLabels = Object.fromEntries(
 					(schema.fields || [])
-						.filter((field) => field.fieldtype === "Link")
+						.filter((field) => field.fieldtype === "Link" && !field.read_only)
 						.map((field) => [field.fieldname, String(this.values[field.fieldname] || "")]),
 				);
 				if (!this.schema.can_save) {
@@ -172,6 +180,10 @@ export default {
 				}
 			}
 			return normalized;
+		},
+		readOnlyValue(field) {
+			const value = this.values[field.fieldname];
+			return value === undefined || value === null || value === "" ? "—" : String(value);
 		},
 		selectOptions(field) {
 			return String(field.options || "")
@@ -208,13 +220,42 @@ export default {
 			});
 			return response.message || [];
 		},
-		onLinkSelected(field, option) {
+		async onLinkSelected(field, option) {
 			this.values[field.fieldname] = option?.value || "";
 			this.linkLabels[field.fieldname] = option?.label || option?.value || "";
+			if (this.schema.resource === "appointments" && field.fieldname === "patient") {
+				await this.refreshAppointmentOwner(option?.value || "");
+			}
 		},
 		clearLink(field) {
 			this.values[field.fieldname] = "";
 			this.linkLabels[field.fieldname] = "";
+			if (this.schema.resource === "appointments" && field.fieldname === "patient") {
+				this.values.primary_owner = "";
+			}
+		},
+		async refreshAppointmentOwner(patient) {
+			if (!patient) {
+				this.values.primary_owner = "";
+				return;
+			}
+			try {
+				const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", {
+					field: "patient",
+					txt: patient,
+					page_length: 20,
+				});
+				const options = response.message || [];
+				const exact = options.find((row) => String(row?.value || "") === String(patient)) || null;
+				const patientRow = exact?.raw?.raw || exact?.raw || {};
+				this.values.primary_owner = patientRow.primary_owner || "";
+				if (!this.values.primary_owner) {
+					this.error = __("The selected patient does not have a Pet Owner configured.");
+				}
+			} catch (error) {
+				this.values.primary_owner = "";
+				this.error = error?.message || __("The Pet Owner could not be verified from the selected patient.");
+			}
 		},
 		handleFieldError(error) {
 			this.error = error?.message || __("A linked record could not be loaded.");
@@ -222,6 +263,7 @@ export default {
 		serializedValues() {
 			const payload = {};
 			for (const field of this.schema.fields || []) {
+				if (field.read_only) continue;
 				let value = this.values[field.fieldname];
 				if (field.fieldtype === "Datetime" && value) {
 					value = String(value).replace("T", " ");
@@ -234,7 +276,7 @@ export default {
 		},
 		validateRequired() {
 			const missing = (this.schema.fields || [])
-				.filter((field) => field.reqd)
+				.filter((field) => field.reqd && !field.read_only)
 				.filter((field) => {
 					const value = this.values[field.fieldname];
 					return value === undefined || value === null || String(value).trim() === "";
@@ -302,18 +344,29 @@ export default {
 	color: var(--edge-color-danger, #c53a3a);
 }
 
-.vetedge-quick-editor-control {
-	background: var(--edge-color-surface, #fff);
+.vetedge-quick-editor-control,
+.vetedge-quick-editor-readonly {
 	border: 1px solid var(--edge-color-border, #dce5ef);
 	border-radius: var(--edge-radius-md, .75rem);
 	box-sizing: border-box;
 	color: var(--edge-color-ink-950, #122033);
 	font: inherit;
 	min-height: 2.55rem;
-	outline: none;
 	padding: .65rem .75rem;
-	transition: border-color .15s ease, box-shadow .15s ease;
 	width: 100%;
+}
+
+.vetedge-quick-editor-control {
+	background: var(--edge-color-surface, #fff);
+	outline: none;
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.vetedge-quick-editor-readonly {
+	align-items: center;
+	background: var(--edge-color-surface-soft, #f9fbfd);
+	display: flex;
+	font-weight: 650;
 }
 
 .vetedge-quick-editor-control:focus {
