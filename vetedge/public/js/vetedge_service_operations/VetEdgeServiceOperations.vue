@@ -348,7 +348,7 @@ export default {
 				const values = { ...this.careDialog.values, care_datetime: serverDatetime(this.careDialog.values.care_datetime) };
 				await frappe.call(API.care, { stay: this.careDialog.stay, values });
 				frappe.show_alert({ message: __("Boarding care record saved."), indicator: "green" });
-				this.closeCareDialog();
+				this.careDialog = { open: false, stay: "", values: {} };
 				if (this.resource === "boarding-care-records") await this.loadRecords();
 			} catch (error) { this.error = error?.message || __("Boarding care record could not be saved."); }
 			finally { this.busy = false; }
