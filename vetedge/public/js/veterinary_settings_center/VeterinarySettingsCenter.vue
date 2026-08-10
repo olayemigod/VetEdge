@@ -206,6 +206,7 @@ export default {
 			activeTab: "", canWrite: false,
 			identity: {
 				tenant_name: window.frappe?.boot?.vetedge_ui_identity?.tenant_name || "Veterinary Clinic",
+				tenant_logo: window.frappe?.boot?.vetedge_ui_identity?.tenant_logo || "",
 				branch_name: window.frappe?.boot?.edgesuite_product_menu?.branch || "",
 				user_name: window.frappe?.boot?.user?.full_name || window.frappe?.session?.user || "",
 			},
@@ -253,12 +254,21 @@ export default {
 			try {
 				const response = await frappe.call("vetedge.services.settings_page.get_veterinary_settings_page");
 				const payload = response.message || {};
-				const identity = window.frappe?.boot?.vetedge_ui_identity;
-				if (identity) {
-					identity.tenant_name = payload.values?.portal_brand_name || identity.tenant_name;
-					identity.tenant_logo = payload.values?.portal_logo || "";
+				const tenantName = payload.values?.portal_brand_name || "Veterinary Clinic";
+				const tenantLogo = payload.values?.portal_logo || "";
+				const nextIdentity = {
+					...(window.frappe?.boot?.vetedge_ui_identity || {}),
+					tenant_name: tenantName,
+					tenant_logo: tenantLogo,
+				};
+				if (window.frappe?.boot) {
+					window.frappe.boot.vetedge_ui_identity = nextIdentity;
+					window.frappe.boot.edgesuite_ui_identity = window.frappe.boot.edgesuite_ui_identity || {};
+					window.frappe.boot.edgesuite_ui_identity.vetedge = nextIdentity;
+					window.frappe.boot.edgesuite_ui_identity.veterinary = nextIdentity;
 				}
-				document.dispatchEvent(new CustomEvent("edgesuite:identity-change", { detail: identity || {} }));
+				this.identity = { ...this.identity, tenant_name: tenantName, tenant_logo: tenantLogo };
+				document.dispatchEvent(new CustomEvent("edgesuite:identity-change", { detail: nextIdentity }));
 			} catch (_error) {}
 		},
 		setValue(fieldname, value) { this.values = { ...this.values, [fieldname]: value }; },
