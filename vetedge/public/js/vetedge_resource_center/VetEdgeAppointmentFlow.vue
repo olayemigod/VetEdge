@@ -9,7 +9,7 @@
 	>
 		<div v-if="loading" class="vetedge-appointment-flow-state">Loading appointment form...</div>
 
-		<div v-else>
+		<div v-else class="vetedge-appointment-flow-surface">
 			<div v-if="error" class="vetedge-appointment-flow-error" role="alert">{{ error }}</div>
 
 			<form class="vetedge-appointment-flow-form" @submit.prevent="submitAppointment">
@@ -26,15 +26,16 @@
 						@search-error="handleFieldError"
 					/>
 
-					<label class="vetedge-appointment-flow-field">
-						<span>Pet Owner</span>
-						<input
-							:value="labels.owner || form.owner"
-							class="form-control"
-							placeholder="Populated from selected patient"
-							readonly
-						/>
-					</label>
+					<div class="vetedge-appointment-flow-field">
+						<span class="vetedge-appointment-flow-label">Pet Owner</span>
+						<div
+							class="vetedge-appointment-flow-readonly"
+							:class="{ 'is-placeholder': !(labels.owner || form.owner) }"
+							aria-readonly="true"
+						>
+							{{ labels.owner || form.owner || 'Populated from selected patient' }}
+						</div>
+					</div>
 
 					<EdgeLinkField
 						v-model="form.branch"
@@ -63,21 +64,31 @@
 					/>
 
 					<label class="vetedge-appointment-flow-field">
-						<span>Appointment Date/Time <b>*</b></span>
-						<input v-model="form.appointment_datetime" type="datetime-local" class="form-control" required />
+						<span class="vetedge-appointment-flow-label">Appointment Date/Time <b>*</b></span>
+						<input
+							v-model="form.appointment_datetime"
+							type="datetime-local"
+							class="vetedge-appointment-flow-control"
+							required
+						/>
 					</label>
 
-					<label class="vetedge-appointment-flow-field">
-						<span>Appointment Type</span>
-						<select v-model="form.appointment_type" class="form-control">
-							<option v-for="type in bootstrap.appointment_types" :key="type" :value="type">{{ type }}</option>
-						</select>
-					</label>
+					<EdgeDropdown
+						v-model="form.appointment_type"
+						label="Appointment Type"
+						:options="appointmentTypeOptions"
+						placeholder="Select appointment type"
+					/>
 				</div>
 
 				<label class="vetedge-appointment-flow-field vetedge-appointment-flow-field--wide">
-					<span>Notes</span>
-					<textarea v-model.trim="form.notes" class="form-control" rows="3" placeholder="Reason for visit or front-desk notes"></textarea>
+					<span class="vetedge-appointment-flow-label">Notes</span>
+					<textarea
+						v-model.trim="form.notes"
+						class="vetedge-appointment-flow-control vetedge-appointment-flow-textarea"
+						rows="3"
+						placeholder="Reason for visit or front-desk notes"
+					></textarea>
 				</label>
 			</form>
 		</div>
@@ -125,6 +136,11 @@ export default {
 			form: emptyForm(),
 			labels: emptyLabels(),
 		};
+	},
+	computed: {
+		appointmentTypeOptions() {
+			return (this.bootstrap.appointment_types || []).map((type) => ({ value: type, label: type }));
+		},
 	},
 	methods: {
 		async open() {
@@ -266,41 +282,81 @@ export default {
 </script>
 
 <style scoped>
+.vetedge-appointment-flow-surface {
+	background: var(--edge-color-surface, #fff);
+}
+
 .vetedge-appointment-flow-form {
 	display: grid;
-	gap: 1rem;
+	gap: 1.15rem;
 }
 
 .vetedge-appointment-flow-grid {
 	display: grid;
-	gap: .9rem;
+	gap: 1rem;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .vetedge-appointment-flow-field {
 	display: grid;
-	gap: .35rem;
+	gap: .4rem;
 	min-width: 0;
 }
 
-.vetedge-appointment-flow-field > span {
+.vetedge-appointment-flow-label {
 	color: var(--edge-color-ink-700, #415469);
 	font-size: .75rem;
 	font-weight: 700;
+	letter-spacing: .01em;
 }
 
 .vetedge-appointment-flow-field--wide {
 	grid-column: 1 / -1;
 }
 
-.vetedge-appointment-flow-error {
-	background: color-mix(in srgb, var(--edge-color-danger, #c53a3a) 10%, white);
-	border: 1px solid color-mix(in srgb, var(--edge-color-danger, #c53a3a) 25%, white);
+.vetedge-appointment-flow-control,
+.vetedge-appointment-flow-readonly {
+	background: var(--edge-color-surface, #fff);
+	border: 1px solid var(--edge-color-border, #dce5ef);
 	border-radius: .7rem;
+	box-sizing: border-box;
+	color: var(--edge-color-ink-900, #172b3a);
+	font: inherit;
+	min-height: 2.55rem;
+	outline: none;
+	padding: .62rem .75rem;
+	transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+	width: 100%;
+}
+
+.vetedge-appointment-flow-control:focus {
+	border-color: var(--edge-color-primary, #2563eb);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--edge-color-primary, #2563eb) 14%, transparent);
+}
+
+.vetedge-appointment-flow-readonly {
+	align-items: center;
+	background: var(--edge-color-surface-soft, #f7fafc);
+	display: flex;
+}
+
+.vetedge-appointment-flow-readonly.is-placeholder {
+	color: var(--edge-color-ink-400, #8494a5);
+}
+
+.vetedge-appointment-flow-textarea {
+	min-height: 5.25rem;
+	resize: vertical;
+}
+
+.vetedge-appointment-flow-error {
+	background: color-mix(in srgb, var(--edge-color-danger, #c53a3a) 8%, white);
+	border: 1px solid color-mix(in srgb, var(--edge-color-danger, #c53a3a) 22%, white);
+	border-radius: .75rem;
 	color: var(--edge-color-danger, #a92f2f);
 	font-size: .8rem;
 	margin-bottom: 1rem;
-	padding: .75rem .85rem;
+	padding: .8rem .9rem;
 }
 
 .vetedge-appointment-flow-state {
