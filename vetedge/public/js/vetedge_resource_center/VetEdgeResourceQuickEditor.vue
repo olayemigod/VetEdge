@@ -14,13 +14,13 @@
 
 			<form class="vetedge-quick-editor-form" @submit.prevent="save">
 				<template v-for="field in schema.fields || []" :key="field.fieldname">
-					<div v-if="field.read_only" class="vetedge-quick-editor-field">
-						<span class="vetedge-quick-editor-label">{{ field.label }}</span>
-						<div class="vetedge-quick-editor-readonly" aria-readonly="true">
-							{{ readOnlyValue(field) }}
-						</div>
-						<small v-if="field.description" class="vetedge-quick-editor-helper">{{ field.description }}</small>
-					</div>
+					<EdgeInput
+						v-if="field.read_only"
+						:model-value="readOnlyValue(field)"
+						:label="field.label"
+						:description="field.description || ''"
+						readonly
+					/>
 
 					<EdgeLinkField
 						v-else-if="field.fieldtype === 'Link'"
@@ -46,45 +46,32 @@
 						:placeholder="`Select ${field.label}`"
 					/>
 
-					<label v-else-if="field.fieldtype === 'Check'" class="vetedge-quick-editor-check">
-						<input
-							type="checkbox"
-							:checked="Boolean(Number(values[field.fieldname]) || values[field.fieldname] === true)"
-							@change="values[field.fieldname] = $event.target.checked ? 1 : 0"
-						/>
-						<span>
-							<strong>{{ field.label }}</strong>
-							<small v-if="field.description">{{ field.description }}</small>
-						</span>
-					</label>
+					<EdgeCheckbox
+						v-else-if="field.fieldtype === 'Check'"
+						v-model="values[field.fieldname]"
+						:label="field.label"
+						:description="field.description || ''"
+					/>
 
-					<label v-else-if="isTextArea(field)" class="vetedge-quick-editor-field vetedge-quick-editor-field--wide">
-						<span class="vetedge-quick-editor-label">
-							{{ field.label }}<b v-if="field.reqd"> *</b>
-						</span>
-						<textarea
+					<div v-else-if="isTextArea(field)" class="vetedge-quick-editor-field--wide">
+						<EdgeTextarea
 							v-model="values[field.fieldname]"
-							class="vetedge-quick-editor-control vetedge-quick-editor-textarea"
+							:label="field.label"
+							:description="field.description || ''"
 							:rows="field.fieldtype === 'Long Text' ? 5 : 3"
 							:required="Boolean(field.reqd)"
-						></textarea>
-						<small v-if="field.description" class="vetedge-quick-editor-helper">{{ field.description }}</small>
-					</label>
-
-					<label v-else class="vetedge-quick-editor-field">
-						<span class="vetedge-quick-editor-label">
-							{{ field.label }}<b v-if="field.reqd"> *</b>
-						</span>
-						<input
-							:value="values[field.fieldname] ?? ''"
-							:type="inputType(field)"
-							class="vetedge-quick-editor-control"
-							:step="inputStep(field)"
-							:required="Boolean(field.reqd)"
-							@input="values[field.fieldname] = $event.target.value"
 						/>
-						<small v-if="field.description" class="vetedge-quick-editor-helper">{{ field.description }}</small>
-					</label>
+					</div>
+
+					<EdgeInput
+						v-else
+						v-model="values[field.fieldname]"
+						:label="field.label"
+						:description="field.description || ''"
+						:type="inputType(field)"
+						:step="inputStep(field)"
+						:required="Boolean(field.reqd)"
+					/>
 				</template>
 			</form>
 		</div>
@@ -324,95 +311,9 @@ export default {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.vetedge-quick-editor-field {
-	display: grid;
-	gap: .4rem;
-	min-width: 0;
-}
-
 .vetedge-quick-editor-field--wide {
 	grid-column: 1 / -1;
-}
-
-.vetedge-quick-editor-label {
-	color: var(--edge-color-ink-700, #415469);
-	font-size: .75rem;
-	font-weight: 700;
-}
-
-.vetedge-quick-editor-label b {
-	color: var(--edge-color-danger, #c53a3a);
-}
-
-.vetedge-quick-editor-control,
-.vetedge-quick-editor-readonly {
-	border: 1px solid var(--edge-color-border, #dce5ef);
-	border-radius: var(--edge-radius-md, .75rem);
-	box-sizing: border-box;
-	color: var(--edge-color-ink-950, #122033);
-	font: inherit;
-	min-height: 2.55rem;
-	padding: .65rem .75rem;
-	width: 100%;
-}
-
-.vetedge-quick-editor-control {
-	background: var(--edge-color-surface, #fff);
-	outline: none;
-	transition: border-color .15s ease, box-shadow .15s ease;
-}
-
-.vetedge-quick-editor-readonly {
-	align-items: center;
-	background: var(--edge-color-surface-soft, #f9fbfd);
-	display: flex;
-	font-weight: 650;
-}
-
-.vetedge-quick-editor-control:focus {
-	border-color: var(--edge-color-brand-500, #2d79c7);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--edge-color-brand-500, #2d79c7) 14%, transparent);
-}
-
-.vetedge-quick-editor-textarea {
-	min-height: 5.5rem;
-	resize: vertical;
-}
-
-.vetedge-quick-editor-helper {
-	color: var(--edge-color-ink-500, #6b7d90);
-	font-size: .7rem;
-}
-
-.vetedge-quick-editor-check {
-	align-items: flex-start;
-	background: var(--edge-color-surface-soft, #f9fbfd);
-	border: 1px solid var(--edge-color-border, #dce5ef);
-	border-radius: var(--edge-radius-md, .75rem);
-	display: flex;
-	gap: .65rem;
-	min-height: 2.55rem;
-	padding: .7rem .75rem;
-}
-
-.vetedge-quick-editor-check input {
-	accent-color: var(--edge-color-brand-500, #2d79c7);
-	margin-top: .15rem;
-}
-
-.vetedge-quick-editor-check span {
-	display: grid;
-	gap: .2rem;
-}
-
-.vetedge-quick-editor-check strong {
-	color: var(--edge-color-ink-800, #2a3c50);
-	font-size: .75rem;
-}
-
-.vetedge-quick-editor-check small {
-	color: var(--edge-color-ink-500, #6b7d90);
-	font-size: .7rem;
+	min-width: 0;
 }
 
 .vetedge-quick-editor-error {
