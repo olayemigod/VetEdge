@@ -173,7 +173,7 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 		'label="Veterinary Patient"',
 		"<span>Pet Owner</span>",
 		'label="Service Branch"',
-		"await this.searchPatient(option.value)",
+		'await this.searchLink("patient", patient)',
 		"this.form.owner = owner",
 		"this.clearPractitioner()",
 		"create_edgeui_appointment",
