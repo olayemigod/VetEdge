@@ -23,7 +23,7 @@
 				<EdgeFilterBar v-if="!detail.open" title="Filter consultations">
 					<div class="clinical-filter-grid">
 						<EdgeLinkField :model-value="filters.branch" label="Branch" placeholder="All permitted branches" :searcher="(query) => linkSearch('branch', query)" @update:model-value="(value) => setFilter('branch', value)" />
-						<EdgeLinkField :model-value="filters.practitioner" label="Practitioner" placeholder="All doctors" :searcher="(query) => linkSearch('practitioner', query)" @update:model-value="(value) => setFilter('practitioner', value)" />
+						<EdgeLinkField :model-value="filters.practitioner" label="Practitioner" placeholder="All permitted doctors" :searcher="(query) => contextSearch('practitioner', query)" @update:model-value="(value) => setFilter('practitioner', value)" />
 						<EdgeDropdown :model-value="filters.status" label="Status" placeholder="All statuses" :options="statusOptions" @update:model-value="(value) => setFilter('status', value)" />
 						<EdgeInput v-model="filters.search" type="search" label="Search" placeholder="Consultation, patient, owner or complaint" @keyup.enter="applyFilters" />
 					</div>
@@ -66,6 +66,7 @@
 							<span>Dispensary: <strong>{{ form.dispensary_status || 'Not Required' }}</strong></span>
 						</div>
 						<div class="clinical-row-actions">
+							<button v-if="dispensaryPending" type="button" class="edge-button" :disabled="busy || isNew" @click="openDispensary">Review Dispensary</button>
 							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.view_history" @click="openHistory">Medical History</button>
 							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.create_vitals" @click="openVitals">New Vitals</button>
 							<button type="button" class="edge-button" :disabled="busy || isNew || !detail.capabilities.open_billing" @click="openBilling">Billing & Payment</button>
@@ -82,10 +83,11 @@
 					<section v-if="activeTab === 'visit'" class="clinical-panel">
 						<h3>Patient and Visit</h3>
 						<div class="clinical-grid">
-							<EdgeLinkField :model-value="form.patient" label="Patient" placeholder="Select patient" :disabled="identityLocked" :searcher="(query) => linkSearch('patient', query)" @update:model-value="(value) => updateField('patient', value)" />
+							<EdgeLinkField :model-value="form.patient" label="Patient" placeholder="Select patient" :disabled="identityLocked" :searcher="(query) => linkSearch('patient', query)" @update:model-value="selectPatient" />
+							<EdgeInput :model-value="form.primary_owner_label || form.primary_owner || ''" label="Pet Owner" readonly description="Derived from the selected Veterinary Patient." />
 							<EdgeLinkField :model-value="form.service_branch" label="Service Branch" placeholder="Select branch" :disabled="identityLocked" :searcher="(query) => linkSearch('branch', query)" @update:model-value="(value) => updateField('service_branch', value)" />
-							<EdgeLinkField :model-value="form.consulting_practitioner" label="Consulting Practitioner" placeholder="Select doctor" :searcher="(query) => linkSearch('practitioner', query)" @update:model-value="(value) => updateField('consulting_practitioner', value)" />
-							<EdgeLinkField :model-value="form.consultation_type" label="Consultation Type" placeholder="Select consultation type" :searcher="(query) => linkSearch('consultation_type', query)" @update:model-value="(value) => updateField('consultation_type', value)" />
+							<EdgeLinkField :model-value="form.consulting_practitioner" label="Consulting Practitioner" placeholder="Select doctor" :searcher="(query) => contextSearch('practitioner', query)" @update:model-value="(value) => updateField('consulting_practitioner', value)" />
+							<EdgeLinkField :model-value="form.consultation_type" label="Consultation Type" placeholder="Select consultation type" :searcher="(query) => contextSearch('consultation_type', query)" @update:model-value="(value) => updateField('consultation_type', value)" />
 							<EdgeInput :model-value="form.consultation_datetime" type="datetime-local" label="Consultation Date/Time" @update:model-value="(value) => updateField('consultation_datetime', value)" />
 							<EdgeTextarea class="clinical-wide" :model-value="form.presenting_complaint" label="Presenting Complaint" :rows="4" @update:model-value="(value) => updateField('presenting_complaint', value)" />
 						</div>
@@ -154,16 +156,55 @@
 			<div v-else class="clinical-history"><section v-for="section in historySections" :key="section.label"><h4>{{ section.label }}</h4><div v-if="!section.rows.length" class="clinical-empty">No records.</div><article v-for="row in section.rows" :key="row.name || row.timestamp"><strong>{{ row.title || row.name || row.vaccine || row.tests_summary || 'Clinical record' }}</strong><span>{{ row.status || row.payment_status || '' }}</span><p>{{ row.presenting_complaint || row.assessment_notes || row.results_summary || row.notes || '' }}</p></article></section></div>
 			<template #footer><button type="button" class="edge-button" @click="closeHistory">Close</button></template>
 		</EdgeModal>
+
+		<EdgeModal :open="dispensaryDialog.open" title="Review Dispensary Issue" :subtitle="dispensarySubtitle" :busy="dispensaryDialog.loading || busy" @close="closeDispensary">
+			<EdgeLoadingState v-if="dispensaryDialog.loading" message="Loading dispensary context..." :skeleton="true" />
+			<div v-else class="clinical-dispensary">
+				<section class="clinical-dispensary-meta"><span>Warehouse</span><strong>{{ dispensaryDialog.context.warehouse || 'Not configured' }}</strong><span>Status</span><strong>{{ dispensaryDialog.context.status || 'Not Required' }}</strong></section>
+				<p>{{ dispensaryDialog.context.guidance || '' }}</p>
+				<div v-if="!(dispensaryDialog.items || []).length" class="clinical-empty">No dispensary items are pending.</div>
+				<div v-for="(row, index) in dispensaryDialog.items || []" :key="row.planned_treatment_row || `${row.item}-${index}`" class="clinical-dispensary-row">
+					<div><strong>{{ row.item_name || row.item }}</strong><small>{{ row.uom || '' }}</small></div>
+					<EdgeInput :model-value="row.planned_qty" type="number" label="Planned Qty" readonly />
+					<EdgeInput :model-value="row.dispensed_qty" type="number" label="Dispensed Qty" min="0" step="0.001" :disabled="!dispensaryDialog.context.can_confirm" @update:model-value="(value) => updateDispensaryQty(index, value)" />
+					<EdgeInput :model-value="row.selected_batch || ''" label="Batch" readonly />
+				</div>
+			</div>
+			<template #footer><button type="button" class="edge-button" :disabled="busy" @click="closeDispensary">Close</button><button v-if="dispensaryDialog.context.can_confirm && dispensaryPending" type="button" class="edge-button edge-button--primary" :disabled="busy || dispensaryDialog.loading" @click="confirmDispensary">Confirm Dispensary Issue</button></template>
+		</EdgeModal>
+
+		<EdgeModal :open="confirmation.open" :title="confirmation.title" :subtitle="confirmation.subtitle" :busy="false" @close="cancelConfirmation">
+			<p>{{ confirmation.message }}</p>
+			<template #footer><button type="button" class="edge-button" @click="cancelConfirmation">Keep Editing</button><button type="button" :class="['edge-button', confirmation.danger ? 'edge-button--danger' : 'edge-button--primary']" @click="confirmConfirmation">{{ confirmation.confirmLabel }}</button></template>
+		</EdgeModal>
 	</EdgeAppShell>
 </template>
 
 <script>
-const API = Object.freeze({ summary: "vetedge.services.clinical_workspace.get_clinical_summary", list: "vetedge.services.clinical_workspace.get_consultations", detail: "vetedge.services.clinical_workspace.get_consultation_detail", save: "vetedge.services.clinical_workspace.save_consultation", action: "vetedge.services.clinical_workspace.perform_consultation_action", vitals: "vetedge.services.clinical_workspace.create_consultation_vitals", history: "vetedge.services.clinical_workspace.get_consultation_history", links: "vetedge.services.clinical_workspace.get_clinical_link_options", defaults: "vetedge.services.clinical_workspace.get_treatment_defaults" });
+const API = Object.freeze({
+	summary: "vetedge.services.clinical_workspace.get_clinical_summary",
+	list: "vetedge.services.clinical_workspace.get_consultations",
+	detail: "vetedge.services.clinical_workspace.get_consultation_detail",
+	save: "vetedge.services.clinical_workspace_stage3.save_consultation",
+	action: "vetedge.services.clinical_workspace.perform_consultation_action",
+	vitals: "vetedge.services.clinical_workspace.create_consultation_vitals",
+	history: "vetedge.services.clinical_workspace.get_consultation_history",
+	links: "vetedge.services.clinical_workspace.get_clinical_link_options",
+	contextLinks: "vetedge.services.clinical_workspace_context.get_clinical_context_options",
+	patientContext: "vetedge.services.clinical_workspace_context.get_patient_owner_context",
+	defaults: "vetedge.services.clinical_workspace.get_treatment_defaults",
+	feePolicy: "vetedge.services.clinical_workspace_stage3.get_default_consultation_fee_policy",
+	treatmentOrder: "vetedge.services.clinical_workspace_phase5.get_treatment_display_order",
+	dispensaryContext: "vetedge.services.clinical_workspace_phase5.get_dispensary_workspace_context",
+	confirmDispensary: "vetedge.services.clinical_workspace_phase5.confirm_workspace_dispensary",
+});
 const STATUSES = ["Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"];
 const DIAGNOSIS_TYPES = ["Primary", "Differential", "Rule Out", "Resolved"];
 const blankCapabilities = () => ({ create_vitals: false, view_history: false, open_billing: false });
 const blankDetail = (overrides = {}) => ({ open: false, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [], capabilities: blankCapabilities(), ...overrides });
-const blankForm = () => ({ patient: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
+const blankForm = () => ({ patient: "", primary_owner: "", primary_owner_label: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
+const blankConfirmation = () => ({ open: false, title: "", subtitle: "", message: "", confirmLabel: "Continue", danger: false, resolve: null });
+const blankDispensary = () => ({ open: false, loading: false, context: {}, items: [] });
 function call(method, args = {}) { return frappe.call({ method, args }).then((response) => response.message); }
 function message(error, fallback) { return error?.message || error?._server_messages || error?.exc_type || fallback; }
 function localDatetime(value) { return value ? String(value).replace(" ", "T").slice(0, 16) : ""; }
@@ -172,31 +213,315 @@ function rowKey(row) { return row?.name || window.crypto?.randomUUID?.() || `${D
 
 export default {
 	name: "VetEdgeClinicalWorkspace",
-	data() { return { identity: window.frappe?.boot?.vetedge_ui_identity || {}, statuses: STATUSES, tabs: [{ value: "visit", label: "Visit", description: "Patient and consultation context" }, { value: "clinical", label: "Clinical Findings", description: "Complaint, examination and diagnosis" }, { value: "treatment", label: "Treatment Plan", description: "Billing-aware planned treatment" }, { value: "vitals", label: "Vitals & Billing", description: "Latest observations and invoice links" }], activeTab: "visit", summary: {}, consultations: { rows: [], total: 0, start: 0, page_length: 25 }, filters: { branch: "", practitioner: "", status: "", search: "" }, loading: false, error: "", busy: false, dirty: false, detail: blankDetail(), form: blankForm(), vitalsDialog: { open: false, values: {} }, historyDialog: { open: false, loading: false, data: {} }, listColumns: [{ key: "consultation_datetime", label: "Date/Time", type: "datetime" }, { key: "patient_label", label: "Patient" }, { key: "consultation_type", label: "Consultation Type" }, { key: "consulting_practitioner_name", label: "Practitioner" }, { key: "service_branch", label: "Branch" }, { key: "status", label: "Status", type: "status" }, { key: "payment_status", label: "Payment", type: "status" }], vitalFields: [{ name: "temperature", label: "Temperature", type: "number", min: 0, step: "0.1" }, { name: "weight", label: "Weight", type: "number", min: 0, step: "0.01" }, { name: "heart_rate", label: "Heart Rate", type: "number", min: 0, step: "1" }, { name: "respiratory_rate", label: "Respiratory Rate", type: "number", min: 0, step: "1" }, { name: "body_condition_score", label: "Body Condition Score", type: "number", min: 0, step: "0.5" }, { name: "pain_score", label: "Pain Score", type: "number", min: 0, step: "1" }] }; },
-	computed: {
-		statusOptions() { return this.statuses.map((value) => ({ value, label: value })); }, diagnosisTypeOptions() { return DIAGNOSIS_TYPES.map((value) => ({ value, label: value })); }, userName() { return window.frappe?.session?.user_fullname || window.frappe?.session?.user || ""; }, branchName() { return this.form.service_branch || this.filters.branch || ""; }, isNew() { return !this.detail.name; }, identityLocked() { return !this.isNew && this.detail.status !== "Draft"; }, detailTitle() { return this.form.consultation_title || this.detail.name || "New Veterinary Consultation"; }, detailSubtitle() { return [this.form.patient, this.form.consulting_practitioner_name, this.form.service_branch].filter(Boolean).join(" · ") || "Clinical consultation capture"; }, firstVisible() { return this.consultations.total ? this.consultations.start + 1 : 0; }, lastVisible() { return Math.min(this.consultations.start + (this.consultations.rows || []).length, this.consultations.total || 0); }, hasPrevious() { return this.consultations.start > 0; }, hasNext() { return this.consultations.start + this.consultations.page_length < this.consultations.total; }, vitalEntries() { const v = this.detail.latest_vitals || {}; return [["Recorded On", frappe.datetime?.str_to_user?.(v.recorded_on) || v.recorded_on], ["Temperature", v.temperature], ["Weight", v.weight], ["Heart Rate", v.heart_rate], ["Respiratory Rate", v.respiratory_rate], ["Body Condition", v.body_condition_score], ["Hydration", v.hydration_status], ["Pain Score", v.pain_score], ["Appetite", v.appetite_status]].map(([label, value]) => ({ label, value })); }, historySubtitle() { return this.historyDialog.data?.summary?.patient_name || this.form.patient || "Patient"; }, historySections() { const data = this.historyDialog.data || {}; return [{ label: "Consultations", rows: data.consultations || [] }, { label: "Vaccinations", rows: data.vaccinations || [] }, { label: "Laboratory", rows: data.labs || [] }, { label: "Vitals", rows: data.vitals || [] }]; }
+	data() {
+		return {
+			identity: window.frappe?.boot?.vetedge_ui_identity || {},
+			statuses: STATUSES,
+			tabs: [
+				{ value: "visit", label: "Visit", description: "Patient and consultation context" },
+				{ value: "clinical", label: "Clinical Findings", description: "Complaint, examination and diagnosis" },
+				{ value: "treatment", label: "Treatment Plan", description: "Billing-aware planned treatment" },
+				{ value: "vitals", label: "Vitals & Billing", description: "Latest observations and invoice links" },
+			],
+			activeTab: "visit",
+			summary: {},
+			consultations: { rows: [], total: 0, start: 0, page_length: 25 },
+			filters: { branch: "", practitioner: "", status: "", search: "" },
+			loading: false,
+			error: "",
+			busy: false,
+			dirty: false,
+			detail: blankDetail(),
+			form: blankForm(),
+			feePolicy: { allow_editing_default_consultation_fee: false, default_consultation_source_detail: "Default Consultation Fee" },
+			vitalsDialog: { open: false, values: {} },
+			historyDialog: { open: false, loading: false, data: {} },
+			dispensaryDialog: blankDispensary(),
+			confirmation: blankConfirmation(),
+			listColumns: [
+				{ key: "consultation_datetime", label: "Date/Time", type: "datetime" },
+				{ key: "patient_label", label: "Patient" },
+				{ key: "consultation_type", label: "Consultation Type" },
+				{ key: "consulting_practitioner_name", label: "Practitioner" },
+				{ key: "service_branch", label: "Branch" },
+				{ key: "status", label: "Status", type: "status" },
+				{ key: "payment_status", label: "Payment", type: "status" },
+			],
+			vitalFields: [
+				{ name: "temperature", label: "Temperature", type: "number", min: 0, step: "0.1" },
+				{ name: "weight", label: "Weight", type: "number", min: 0, step: "0.01" },
+				{ name: "heart_rate", label: "Heart Rate", type: "number", min: 0, step: "1" },
+				{ name: "respiratory_rate", label: "Respiratory Rate", type: "number", min: 0, step: "1" },
+				{ name: "body_condition_score", label: "Body Condition Score", type: "number", min: 0, step: "0.5" },
+				{ name: "pain_score", label: "Pain Score", type: "number", min: 0, step: "1" },
+			],
+		};
 	},
-	mounted() { window.addEventListener("beforeunload", this.handleBeforeUnload); const params = new URLSearchParams(window.location.search || ""); if (params.get("consultation")) return this.loadDetail(params.get("consultation")); if (params.has("new")) return this.startNewConsultation(); this.refreshList(); },
-	beforeUnmount() { window.removeEventListener("beforeunload", this.handleBeforeUnload); },
+	computed: {
+		statusOptions() { return this.statuses.map((value) => ({ value, label: value })); },
+		diagnosisTypeOptions() { return DIAGNOSIS_TYPES.map((value) => ({ value, label: value })); },
+		userName() { return window.frappe?.session?.user_fullname || window.frappe?.session?.user || ""; },
+		branchName() { return this.form.service_branch || this.filters.branch || ""; },
+		isNew() { return !this.detail.name; },
+		identityLocked() { return !this.isNew && this.detail.status !== "Draft"; },
+		detailTitle() { return this.form.consultation_title || this.detail.name || "New Veterinary Consultation"; },
+		detailSubtitle() { return [this.form.patient, this.form.consulting_practitioner_name, this.form.service_branch].filter(Boolean).join(" · ") || "Clinical consultation capture"; },
+		firstVisible() { return this.consultations.total ? this.consultations.start + 1 : 0; },
+		lastVisible() { return Math.min(this.consultations.start + (this.consultations.rows || []).length, this.consultations.total || 0); },
+		hasPrevious() { return this.consultations.start > 0; },
+		hasNext() { return this.consultations.start + this.consultations.page_length < this.consultations.total; },
+		dispensaryPending() { return (this.form.dispensary_status || "") === "Pending Dispensary"; },
+		dispensarySubtitle() { return [this.form.patient, this.dispensaryDialog.context.warehouse].filter(Boolean).join(" · ") || this.detail.name; },
+		vitalEntries() {
+			const v = this.detail.latest_vitals || {};
+			return [
+				["Recorded On", frappe.datetime?.str_to_user?.(v.recorded_on) || v.recorded_on],
+				["Temperature", v.temperature], ["Weight", v.weight], ["Heart Rate", v.heart_rate],
+				["Respiratory Rate", v.respiratory_rate], ["Body Condition", v.body_condition_score],
+				["Hydration", v.hydration_status], ["Pain Score", v.pain_score], ["Appetite", v.appetite_status],
+			].map(([label, value]) => ({ label, value }));
+		},
+		historySubtitle() { return this.historyDialog.data?.summary?.patient_name || this.form.patient || "Patient"; },
+		historySections() {
+			const data = this.historyDialog.data || {};
+			return [
+				{ label: "Consultations", rows: data.consultations || [] },
+				{ label: "Vaccinations", rows: data.vaccinations || [] },
+				{ label: "Laboratory", rows: data.labs || [] },
+				{ label: "Vitals", rows: data.vitals || [] },
+			];
+		},
+	},
+	async mounted() {
+		window.addEventListener("beforeunload", this.handleBeforeUnload);
+		await this.loadFeePolicy();
+		const params = new URLSearchParams(window.location.search || "");
+		if (params.get("consultation")) return this.loadDetail(params.get("consultation"));
+		if (params.has("new")) return this.startNewConsultation();
+		this.refreshList();
+	},
+	beforeUnmount() {
+		window.removeEventListener("beforeunload", this.handleBeforeUnload);
+		if (this.confirmation.resolve) this.confirmation.resolve(false);
+	},
 	methods: {
 		handleBeforeUnload(event) { if (!this.dirty) return; event.preventDefault(); event.returnValue = ""; },
-		async confirmDiscard() { if (!this.dirty) return true; return window.confirm(__("You have unsaved consultation changes. Discard them?")); },
-		async refreshList() { this.loading = true; this.error = ""; try { const [summary, consultations] = await Promise.all([call(API.summary, { branch: this.filters.branch || undefined }), call(API.list, { ...this.filters, start: this.consultations.start || 0, page_length: this.consultations.page_length || 25 })]); this.summary = summary || {}; this.consultations = consultations || { rows: [], total: 0, start: 0, page_length: 25 }; } catch (error) { this.error = message(error, "Unable to load consultations."); } finally { this.loading = false; } },
-		applyFilters() { this.consultations.start = 0; return this.refreshList(); }, resetFilters() { this.filters = { branch: "", practitioner: "", status: "", search: "" }; this.consultations.start = 0; return this.refreshList(); }, setFilter(field, value) { this.filters[field] = value || ""; }, previousPage() { this.consultations.start = Math.max(0, this.consultations.start - this.consultations.page_length); this.refreshList(); }, nextPage() { this.consultations.start += this.consultations.page_length; this.refreshList(); }, openConsultation(row) { return this.loadDetail(row.name); },
-		async loadDetail(name) { if (!(await this.confirmDiscard())) return; this.detail = blankDetail({ open: true, loading: true, name, can_write: false }); this.activeTab = "visit"; try { this.applyDetail(await call(API.detail, { name })); window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`); } catch (error) { this.detail.loading = false; this.detail.error = message(error, "Unable to load consultation."); } },
-		applyDetail(payload) { const values = payload?.values || {}; this.detail = blankDetail({ open: true, name: payload?.name || "", modified: payload?.modified || "", status: payload?.status || "Draft", can_write: payload?.can_write !== false, scope_locked: Boolean(payload?.scope_locked), latest_vitals: payload?.latest_vitals || null, actions: payload?.actions || [], capabilities: { ...blankCapabilities(), ...(payload?.capabilities || {}) } }); this.form = { ...blankForm(), ...values, consultation_datetime: localDatetime(values.consultation_datetime), symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: rowKey(row) })), diagnoses: (values.diagnoses || []).map((row) => ({ ...row, _key: rowKey(row) })), planned_treatments: (values.planned_treatments || []).map((row) => ({ ...row, _key: rowKey(row) })) }; this.dirty = false; },
-		async startNewConsultation() { if (!(await this.confirmDiscard())) return; this.detail = blankDetail({ open: true, can_write: true }); this.form = blankForm(); this.activeTab = "visit"; this.dirty = false; window.history.replaceState({}, "", "/app/vetedge-clinical-workspace?new=1"); },
-		async backToList() { if (!(await this.confirmDiscard())) return; this.detail = blankDetail(); this.form = blankForm(); this.dirty = false; window.history.replaceState({}, "", "/app/vetedge-clinical-workspace"); this.refreshList(); }, markDirty() { this.dirty = true; }, updateField(field, value) { this.form[field] = value ?? ""; this.markDirty(); }, updateChild(table, index, field, value) { this.form[table][index][field] = value ?? ""; this.markDirty(); }, addSymptom() { this.form.symptoms.push({ _key: rowKey(), symptom: "", notes: "" }); this.markDirty(); }, addDiagnosis() { this.form.diagnoses.push({ _key: rowKey(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); }, addTreatment() { this.form.planned_treatments.push({ _key: rowKey(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); }, removeChild(table, index) { this.form[table].splice(index, 1); this.markDirty(); },
-		async updateTreatmentItem(index, item) { const row = this.form.planned_treatments[index]; row.item = item || ""; this.markDirty(); if (!item) return; try { const defaults = await call(API.defaults, { item, company: this.form.company, customer: this.form.primary_owner, branch: this.form.service_branch }); Object.assign(row, { uom: defaults?.uom || row.uom, rate: defaults?.rate ?? row.rate, service_type: defaults?.service_type || row.service_type, treatment_type: defaults?.treatment_type || row.treatment_type }); } catch (error) { frappe.show_alert({ message: message(error, "Treatment defaults could not load."), indicator: "orange" }); } }, treatmentRowLocked(row) { return Boolean(row?.source_document || row?.source_detail_name || ["Consultation", "Lab Order", "Vaccination"].includes(row?.source_type)) || this.detail.scope_locked || !["Pending", "Skipped", "Cancelled", ""].includes(row.billing_status || "Pending"); },
-		async saveConsultation() { if (this.busy) return; this.busy = true; try { const payload = { ...this.form, name: this.detail.name || undefined, modified: this.detail.modified || undefined, consultation_datetime: serverDatetime(this.form.consultation_datetime), symptoms: this.form.symptoms.map(({ _key, ...row }) => row), diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row), planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row) }; const detail = await call(API.save, { payload }); this.applyDetail(detail); frappe.show_alert({ message: "Consultation saved.", indicator: "green" }); window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`); return detail; } catch (error) { this.error = message(error, "Consultation could not be saved."); return null; } finally { this.busy = false; } },
-		async runAction(action) { if (this.dirty) { this.error = __("Save or discard consultation changes before running a workflow action."); return; } this.busy = true; try { this.applyDetail(await call(API.action, { name: this.detail.name, action: action.key, modified: this.detail.modified })); frappe.show_alert({ message: `${action.label} completed.`, indicator: "green" }); } catch (error) { this.error = message(error, "Workflow action failed."); } finally { this.busy = false; } },
-		openVitals() { if (!this.isNew && this.detail.capabilities.create_vitals) this.vitalsDialog = { open: true, values: {} }; }, closeVitals() { if (!this.busy) this.vitalsDialog = { open: false, values: {} }; }, setVital(field, value) { this.vitalsDialog.values = { ...this.vitalsDialog.values, [field]: value }; }, async saveVitals() { this.busy = true; try { const result = await call(API.vitals, { name: this.detail.name, values: this.vitalsDialog.values, modified: this.detail.modified }); this.applyDetail(result.detail); this.vitalsDialog = { open: false, values: {} }; frappe.show_alert({ message: "Vitals recorded.", indicator: "green" }); } catch (error) { this.error = message(error, "Vitals could not be saved."); } finally { this.busy = false; } },
-		async openHistory() { if (!this.detail.capabilities.view_history) return; this.historyDialog = { open: true, loading: true, data: {} }; try { this.historyDialog.data = await call(API.history, { name: this.detail.name, limit: 20 }) || {}; } catch (error) { this.error = message(error, "Medical history unavailable."); this.historyDialog.open = false; } finally { this.historyDialog.loading = false; } }, closeHistory() { this.historyDialog = { open: false, loading: false, data: {} }; },
-		openBilling() { if (!window.vetedgeBillingModal?.open || this.isNew || !this.detail.capabilities.open_billing) return; const workspace = this; window.vetedgeBillingModal.open({ doc: { doctype: "Veterinary Consultation", name: this.detail.name }, is_new: () => false, is_dirty: () => workspace.dirty, save: () => workspace.saveConsultation(), reload_doc: () => workspace.loadDetail(workspace.detail.name) }); }, openRelated(doctype) { frappe.route_options = { consultation: this.detail.name, patient: this.form.patient }; frappe.set_route("List", doctype); }, openDocument(doctype, name) { if (name) frappe.set_route("Form", doctype, name); }, openRoute(route) { if (route) window.location.assign(route); }, async linkSearch(kind, search) { return (await call(API.links, { kind, search, branch: this.form.service_branch || this.filters.branch || undefined, limit: 20 })) || []; }, formatMoney(value) { return typeof format_currency === "function" ? format_currency(value || 0) : Number(value || 0).toFixed(2); }
-	}
+		confirmDiscard() {
+			if (!this.dirty) return Promise.resolve(true);
+			return new Promise((resolve) => {
+				this.confirmation = {
+					open: true,
+					title: __("Discard unsaved changes?"),
+					subtitle: __("Clinical Workspace"),
+					message: __("You have unsaved consultation changes. Continue without saving them?"),
+					confirmLabel: __("Discard Changes"),
+					danger: true,
+					resolve,
+				};
+			});
+		},
+		cancelConfirmation() {
+			const resolve = this.confirmation.resolve;
+			this.confirmation = blankConfirmation();
+			resolve?.(false);
+		},
+		confirmConfirmation() {
+			const resolve = this.confirmation.resolve;
+			this.confirmation = blankConfirmation();
+			this.dirty = false;
+			resolve?.(true);
+		},
+		async loadFeePolicy() {
+			try { this.feePolicy = { ...this.feePolicy, ...(await call(API.feePolicy) || {}) }; }
+			catch (_error) {}
+		},
+		async refreshList() {
+			this.loading = true; this.error = "";
+			try {
+				const [summary, consultations] = await Promise.all([
+					call(API.summary, { branch: this.filters.branch || undefined }),
+					call(API.list, { ...this.filters, start: this.consultations.start || 0, page_length: this.consultations.page_length || 25 }),
+				]);
+				this.summary = summary || {};
+				this.consultations = consultations || { rows: [], total: 0, start: 0, page_length: 25 };
+			} catch (error) { this.error = message(error, "Unable to load consultations."); }
+			finally { this.loading = false; }
+		},
+		applyFilters() { this.consultations.start = 0; return this.refreshList(); },
+		resetFilters() { this.filters = { branch: "", practitioner: "", status: "", search: "" }; this.consultations.start = 0; return this.refreshList(); },
+		setFilter(field, value) { this.filters[field] = value || ""; },
+		previousPage() { this.consultations.start = Math.max(0, this.consultations.start - this.consultations.page_length); this.refreshList(); },
+		nextPage() { this.consultations.start += this.consultations.page_length; this.refreshList(); },
+		openConsultation(row) { return this.loadDetail(row.name); },
+		async loadDetail(name) {
+			if (!(await this.confirmDiscard())) return;
+			this.detail = blankDetail({ open: true, loading: true, name, can_write: false });
+			this.activeTab = "visit";
+			try {
+				this.applyDetail(await call(API.detail, { name }));
+				await this.applyTreatmentOrder();
+				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`);
+			} catch (error) { this.detail.loading = false; this.detail.error = message(error, "Unable to load consultation."); }
+		},
+		applyDetail(payload) {
+			const values = payload?.values || {};
+			this.detail = blankDetail({ open: true, name: payload?.name || "", modified: payload?.modified || "", status: payload?.status || "Draft", can_write: payload?.can_write !== false, scope_locked: Boolean(payload?.scope_locked), latest_vitals: payload?.latest_vitals || null, actions: payload?.actions || [], capabilities: { ...blankCapabilities(), ...(payload?.capabilities || {}) } });
+			this.form = {
+				...blankForm(), ...values,
+				primary_owner_label: values.primary_owner_label || payload?.values?.primary_owner_label || payload?.owner_label || values.primary_owner || "",
+				consultation_datetime: localDatetime(values.consultation_datetime),
+				symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: rowKey(row) })),
+				diagnoses: (values.diagnoses || []).map((row) => ({ ...row, _key: rowKey(row) })),
+				planned_treatments: (values.planned_treatments || []).map((row) => ({ ...row, _key: rowKey(row) })),
+			};
+			this.dirty = false;
+		},
+		async applyTreatmentOrder() {
+			if (!this.detail.name || !(this.form.planned_treatments || []).length) return;
+			try {
+				const payload = await call(API.treatmentOrder, { consultation: this.detail.name });
+				const order = new Map((payload?.order || []).map((name, index) => [String(name), index]));
+				this.form.planned_treatments = [...this.form.planned_treatments].sort((left, right) => {
+					const leftIndex = order.has(String(left.name)) ? order.get(String(left.name)) : Number.MAX_SAFE_INTEGER;
+					const rightIndex = order.has(String(right.name)) ? order.get(String(right.name)) : Number.MAX_SAFE_INTEGER;
+					return leftIndex - rightIndex;
+				});
+			} catch (_error) {}
+		},
+		async startNewConsultation() {
+			if (!(await this.confirmDiscard())) return;
+			this.detail = blankDetail({ open: true, can_write: true });
+			this.form = blankForm(); this.activeTab = "visit"; this.dirty = false;
+			try {
+				const doctors = await this.contextSearch("practitioner", "");
+				if (doctors.length === 1) this.form.consulting_practitioner = doctors[0].value;
+			} catch (_error) {}
+			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace?new=1");
+		},
+		async backToList() {
+			if (!(await this.confirmDiscard())) return;
+			this.detail = blankDetail(); this.form = blankForm(); this.dirty = false;
+			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace"); this.refreshList();
+		},
+		markDirty() { this.dirty = true; },
+		updateField(field, value) { this.form[field] = value ?? ""; this.markDirty(); },
+		async selectPatient(value) {
+			this.updateField("patient", value);
+			this.form.primary_owner = ""; this.form.primary_owner_label = "";
+			if (!value) return;
+			try {
+				const context = await call(API.patientContext, { patient: value });
+				if (this.form.patient !== value) return;
+				this.form.primary_owner = context?.owner?.name || "";
+				this.form.primary_owner_label = context?.owner?.label || context?.owner?.name || "";
+				if (!this.form.service_branch && context?.patient?.default_branch) this.form.service_branch = context.patient.default_branch;
+			} catch (error) { this.error = message(error, __("Patient ownership context could not be loaded.")); }
+		},
+		updateChild(table, index, field, value) { this.form[table][index][field] = value ?? ""; this.markDirty(); },
+		addSymptom() { this.form.symptoms.push({ _key: rowKey(), symptom: "", notes: "" }); this.markDirty(); },
+		addDiagnosis() { this.form.diagnoses.push({ _key: rowKey(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); },
+		addTreatment() { this.form.planned_treatments.push({ _key: rowKey(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); },
+		removeChild(table, index) { this.form[table].splice(index, 1); this.markDirty(); },
+		async updateTreatmentItem(index, item) {
+			const row = this.form.planned_treatments[index]; row.item = item || ""; this.markDirty(); if (!item) return;
+			try {
+				const defaults = await call(API.defaults, { item, company: this.form.company, customer: this.form.primary_owner, branch: this.form.service_branch });
+				Object.assign(row, { uom: defaults?.uom || row.uom, rate: defaults?.rate ?? row.rate, service_type: defaults?.service_type || row.service_type, treatment_type: defaults?.treatment_type || row.treatment_type });
+			} catch (error) { frappe.show_alert({ message: message(error, "Treatment defaults could not load."), indicator: "orange" }); }
+		},
+		isDefaultConsultationFee(row) {
+			return row?.source_type === "Consultation" && row?.source_detail_name === this.feePolicy.default_consultation_source_detail;
+		},
+		treatmentRowLocked(row) {
+			if (this.detail.scope_locked) return true;
+			const billingLocked = !["Pending", "Skipped", "Cancelled", ""].includes(row?.billing_status || "Pending") || ["Paid", "Partly Paid", "Cancelled"].includes(row?.payment_status || "Not Billed");
+			if (billingLocked) return true;
+			if (this.isDefaultConsultationFee(row) && this.feePolicy.allow_editing_default_consultation_fee) return false;
+			return Boolean(row?.source_document || row?.source_detail_name || ["Consultation", "Lab Order", "Vaccination"].includes(row?.source_type));
+		},
+		async saveConsultation() {
+			if (this.busy) return null;
+			this.busy = true; this.error = "";
+			try {
+				const payload = {
+					...this.form,
+					name: this.detail.name || undefined,
+					modified: this.detail.modified || undefined,
+					consultation_datetime: serverDatetime(this.form.consultation_datetime),
+					symptoms: this.form.symptoms.map(({ _key, ...row }) => row),
+					diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row),
+					planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row),
+				};
+				const detail = await call(API.save, { payload });
+				this.applyDetail(detail); await this.applyTreatmentOrder();
+				frappe.show_alert({ message: "Consultation saved.", indicator: "green" });
+				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`);
+				return detail;
+			} catch (error) { this.error = message(error, "Consultation could not be saved."); return null; }
+			finally { this.busy = false; }
+		},
+		async runAction(action) {
+			if (this.dirty) { this.error = __("Save or discard consultation changes before running a workflow action."); return; }
+			this.busy = true;
+			try { this.applyDetail(await call(API.action, { name: this.detail.name, action: action.key, modified: this.detail.modified })); await this.applyTreatmentOrder(); frappe.show_alert({ message: `${action.label} completed.`, indicator: "green" }); }
+			catch (error) { this.error = message(error, "Workflow action failed."); }
+			finally { this.busy = false; }
+		},
+		openVitals() { if (!this.isNew && this.detail.capabilities.create_vitals) this.vitalsDialog = { open: true, values: {} }; },
+		closeVitals() { if (!this.busy) this.vitalsDialog = { open: false, values: {} }; },
+		setVital(field, value) { this.vitalsDialog.values = { ...this.vitalsDialog.values, [field]: value }; },
+		async saveVitals() {
+			this.busy = true;
+			try { const result = await call(API.vitals, { name: this.detail.name, values: this.vitalsDialog.values, modified: this.detail.modified }); this.applyDetail(result.detail); this.vitalsDialog = { open: false, values: {} }; frappe.show_alert({ message: "Vitals recorded.", indicator: "green" }); }
+			catch (error) { this.error = message(error, "Vitals could not be saved."); }
+			finally { this.busy = false; }
+		},
+		async openHistory() {
+			if (!this.detail.capabilities.view_history) return;
+			this.historyDialog = { open: true, loading: true, data: {} };
+			try { this.historyDialog.data = await call(API.history, { name: this.detail.name, limit: 20 }) || {}; }
+			catch (error) { this.error = message(error, "Medical history unavailable."); this.historyDialog.open = false; }
+			finally { this.historyDialog.loading = false; }
+		},
+		closeHistory() { this.historyDialog = { open: false, loading: false, data: {} }; },
+		async openDispensary() {
+			if (!this.detail.name) return;
+			this.dispensaryDialog = { ...blankDispensary(), open: true, loading: true };
+			try {
+				const context = await call(API.dispensaryContext, { consultation: this.detail.name });
+				this.dispensaryDialog.context = context || {};
+				this.dispensaryDialog.items = (context?.items || []).map((row) => ({ ...row }));
+			} catch (error) { this.error = message(error, __("Dispensary context could not be loaded.")); this.dispensaryDialog.open = false; }
+			finally { this.dispensaryDialog.loading = false; }
+		},
+		closeDispensary() { if (!this.busy) this.dispensaryDialog = blankDispensary(); },
+		updateDispensaryQty(index, value) { this.dispensaryDialog.items[index].dispensed_qty = value; },
+		async confirmDispensary() {
+			if (!this.detail.name || this.busy || !this.dispensaryDialog.context.can_confirm) return;
+			this.busy = true;
+			try {
+				const result = await call(API.confirmDispensary, { consultation: this.detail.name, modified: this.detail.modified, dispensed_items: this.dispensaryDialog.items });
+				this.applyDetail(result?.detail || await call(API.detail, { name: this.detail.name }));
+				this.dispensaryDialog = blankDispensary();
+				frappe.show_alert({ message: __("Dispensary issue confirmed."), indicator: "green" });
+			} catch (error) { this.error = message(error, __("Dispensary issue could not be confirmed.")); }
+			finally { this.busy = false; }
+		},
+		openBilling() {
+			if (!window.vetedgeBillingModal?.open || this.isNew || !this.detail.capabilities.open_billing) return;
+			const workspace = this;
+			window.vetedgeBillingModal.open({ doc: { doctype: "Veterinary Consultation", name: this.detail.name }, is_new: () => false, is_dirty: () => workspace.dirty, save: () => workspace.saveConsultation(), reload_doc: () => workspace.loadDetail(workspace.detail.name) });
+		},
+		openRelated(doctype) { frappe.route_options = { consultation: this.detail.name, patient: this.form.patient }; frappe.set_route("List", doctype); },
+		openDocument(doctype, name) { if (name) frappe.set_route("Form", doctype, name); },
+		openRoute(route) { if (route) window.location.assign(route); },
+		async linkSearch(kind, search) { return (await call(API.links, { kind, search, branch: this.form.service_branch || this.filters.branch || undefined, limit: 20 })) || []; },
+		async contextSearch(kind, search) { return (await call(API.contextLinks, { kind, search, limit: 50 })) || []; },
+		formatMoney(value) { return typeof format_currency === "function" ? format_currency(value || 0) : Number(value || 0).toFixed(2); },
+	},
 };
 </script>
 
 <style scoped>
-.clinical-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--edge-space-3,.75rem);margin-bottom:var(--edge-space-5,1.25rem)}.clinical-filter-grid,.clinical-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--edge-space-4,1rem);width:100%}.clinical-wide{grid-column:1/-1}.clinical-detail,.clinical-panel,.clinical-history,.clinical-history section,.clinical-invoices{display:grid;gap:var(--edge-space-4,1rem)}.clinical-statusbar,.clinical-workflow{align-items:center;background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:flex;gap:1rem;justify-content:space-between;padding:1rem}.clinical-context-badges,.clinical-row-actions{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.clinical-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.clinical-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-700,#334b61);display:grid;gap:.2rem;padding:.8rem;text-align:left}.clinical-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87)}.clinical-tab small,.clinical-subhead p,.clinical-workflow p{color:var(--edge-color-ink-500,#617589);margin:0}.clinical-panel{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);padding:1.15rem}.clinical-panel h3,.clinical-panel h4,.clinical-subhead h3,.clinical-subhead h4{margin:0}.clinical-subhead{align-items:center;border-top:1px solid var(--edge-color-border,#dfe6ec);display:flex;gap:1rem;justify-content:space-between;padding-top:1rem}.clinical-child-row,.clinical-treatment-row{align-items:end;background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.75rem;padding:.8rem}.clinical-child-row{grid-template-columns:1.2fr 1.5fr auto}.clinical-child-row--diagnosis{grid-template-columns:1.2fr .9fr 1.2fr auto}.clinical-treatment-row{grid-template-columns:1.2fr 1.4fr .55fr .65fr .9fr auto}.clinical-treatment-meta{display:grid;gap:.3rem}.clinical-vitals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.clinical-vitals>div{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.3rem;padding:.8rem}.clinical-vitals span,.clinical-history article span,.clinical-history article p{color:var(--edge-color-ink-500,#617589)}.clinical-empty{border:1px dashed var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-500,#617589);padding:1rem}.clinical-history article{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.3rem;padding:.75rem}.clinical-history article p{margin:0}@media(max-width:70rem){.clinical-summary{grid-template-columns:repeat(3,1fr)}.clinical-treatment-row{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:48rem){.clinical-summary,.clinical-filter-grid,.clinical-grid,.clinical-tabs,.clinical-vitals,.clinical-child-row,.clinical-child-row--diagnosis,.clinical-treatment-row{grid-template-columns:1fr}.clinical-wide{grid-column:auto}.clinical-statusbar,.clinical-workflow,.clinical-subhead{align-items:stretch;flex-direction:column}}
+.clinical-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--edge-space-3,.75rem);margin-bottom:var(--edge-space-5,1.25rem)}.clinical-filter-grid,.clinical-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--edge-space-4,1rem);width:100%}.clinical-wide{grid-column:1/-1}.clinical-detail,.clinical-panel,.clinical-history,.clinical-history section,.clinical-invoices,.clinical-dispensary{display:grid;gap:var(--edge-space-4,1rem)}.clinical-statusbar,.clinical-workflow{align-items:center;background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:flex;gap:1rem;justify-content:space-between;padding:1rem}.clinical-context-badges,.clinical-row-actions{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.clinical-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.clinical-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-700,#334b61);display:grid;gap:.2rem;padding:.8rem;text-align:left}.clinical-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87)}.clinical-tab small,.clinical-subhead p,.clinical-workflow p,.clinical-dispensary p{color:var(--edge-color-ink-500,#617589);margin:0}.clinical-panel{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);padding:1.15rem}.clinical-panel h3,.clinical-panel h4,.clinical-subhead h3,.clinical-subhead h4{margin:0}.clinical-subhead{align-items:center;border-top:1px solid var(--edge-color-border,#dfe6ec);display:flex;gap:1rem;justify-content:space-between;padding-top:1rem}.clinical-child-row,.clinical-treatment-row,.clinical-dispensary-row{align-items:end;background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.75rem;padding:.8rem}.clinical-child-row{grid-template-columns:1.2fr 1.5fr auto}.clinical-child-row--diagnosis{grid-template-columns:1.2fr .9fr 1.2fr auto}.clinical-treatment-row{grid-template-columns:1.2fr 1.4fr .55fr .65fr .9fr auto}.clinical-treatment-meta{display:grid;gap:.3rem}.clinical-vitals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.clinical-vitals>div{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.3rem;padding:.8rem}.clinical-vitals span,.clinical-history article span,.clinical-history article p,.clinical-dispensary-row small{color:var(--edge-color-ink-500,#617589)}.clinical-empty{border:1px dashed var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-500,#617589);padding:1rem}.clinical-history article{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.3rem;padding:.75rem}.clinical-history article p{margin:0}.clinical-dispensary-meta{display:grid;grid-template-columns:auto 1fr;gap:.45rem .75rem}.clinical-dispensary-meta span{color:var(--edge-color-ink-500,#617589)}.clinical-dispensary-row{grid-template-columns:1.2fr .7fr .7fr .8fr}.clinical-dispensary-row>div{display:grid;gap:.2rem}@media(max-width:70rem){.clinical-summary{grid-template-columns:repeat(3,1fr)}.clinical-treatment-row,.clinical-dispensary-row{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:48rem){.clinical-summary,.clinical-filter-grid,.clinical-grid,.clinical-tabs,.clinical-vitals,.clinical-child-row,.clinical-child-row--diagnosis,.clinical-treatment-row,.clinical-dispensary-row{grid-template-columns:1fr}.clinical-wide{grid-column:auto}.clinical-statusbar,.clinical-workflow,.clinical-subhead{align-items:stretch;flex-direction:column}}
 </style>
