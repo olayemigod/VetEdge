@@ -100,15 +100,15 @@ def test_recovered_editing_surfaces_use_shared_edgesuite_form_controls():
 	assert "frappe.ui.Dialog" not in medical_history
 
 
-def test_medical_history_preserves_tabbed_vital_charts_and_longitudinal_sections():
+def test_medical_history_preserves_page_and_rich_clinical_modal_contracts():
 	component = read(MIGRATED_PAGES["medical_history"]["component"])
 	clinical_bundle = read(MIGRATED_PAGES["clinical"]["bundle"])
+	modal = read(APP / "public/js/vetedge_clinical_workspace/VetEdgeMedicalHistoryModal.vue")
 	for contract in (
 		"temperature",
 		"weight",
 		"heart_rate",
 		"respiratory_rate",
-		"Clinical Trend Charts",
 		"Consultations",
 		"Vitals",
 		"Diagnoses",
@@ -120,7 +120,11 @@ def test_medical_history_preserves_tabbed_vital_charts_and_longitudinal_sections
 		"get_patient_medical_history_view",
 	):
 		assert contract in component
-	assert "/app/veterinary-medical-history?patient=" in clinical_bundle
+		assert contract in modal
+	assert "EdgeModal" in modal
+	assert "VetEdgeMedicalHistoryModal" in clinical_bundle
+	assert "historyView?.open?.({" in clinical_bundle
+	assert "/app/veterinary-medical-history?patient=" not in clinical_bundle
 
 
 def test_settings_brand_identity_is_restored_for_standalone_edgesuite_shell():
@@ -152,6 +156,7 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 		"/app/vetedge-pricing-master-workspace",
 		"/app/vetedge-front-desk-action-center",
 		"/app/vetedge-clinical-workspace",
+		"/app/veterinary-medical-history",
 	):
 		assert route in bridge
 	assert '"/app/veterinary-consultation"' in bridge
@@ -162,6 +167,7 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	assert '"Veterinary Species": "species"' in route_alignment
 	assert '"Consultation Type": "consultation-types"' in route_alignment
 	assert 'doctype === "Veterinary Vital Signs"' in route_alignment
+	assert 'path === "/app/veterinary-vital-signs"' not in route_alignment
 	assert "__vetedgeAcceptedRouteAlignment" in route_alignment
 	assert "/app/vetedge-resource-center" in home
 
@@ -204,16 +210,20 @@ def test_pricing_master_native_routes_are_redirected_to_edgesuite_workspace():
 			assert f"resource={resource}" in content
 
 
-def test_removed_hospitalisation_dashboard_cannot_be_reimported_or_relisted():
+def test_hospital_services_and_vital_signs_remain_while_obsolete_dashboard_stays_removed():
 	dashboard_install = read(APP / "install/dashboard.py")
+	sidebar = read(APP / "workspace_sidebar/vetedge.json")
 	obsolete_page = APP / "veterinary/page/veterinary_hospitalisation_dashboard"
 	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.js").exists()
 	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.json").exists()
 	assert "REMOVED_STANDARD_PAGES" in dashboard_install
 	assert '"veterinary-hospitalisation-dashboard"' in dashboard_install
 	assert '("Page", "veterinary-hospitalisation-dashboard")' in dashboard_install
-	assert '("DocType", "Veterinary Vital Signs")' in dashboard_install
+	assert '("DocType", "Veterinary Vital Signs")' not in dashboard_install
 	assert '"veterinary", "page", "veterinary_hospitalisation_dashboard"' not in dashboard_install
+	assert '"label": "Vital Signs"' in sidebar
+	assert '"link_to": "Veterinary Vital Signs"' in sidebar
+	assert '"label": "Hospital & Services"' in sidebar
 
 
 def test_clinical_workspace_safety_followups_are_restored_and_wired_into_ui():
