@@ -89,6 +89,8 @@ jobs:
           node --check vetedge/public/js/vetedge_front_desk_action_center.bundle.js
           node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
           node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js
+          node --check vetedge/public/js/veterinary_medical_history.bundle.js
           node --check vetedge/veterinary/page/vetedge/vetedge.js
 
   frappe-v16:
