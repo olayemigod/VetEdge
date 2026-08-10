@@ -155,7 +155,7 @@ const COLUMNS = Object.freeze({
 		{ key: "service_branch", label: "Branch" },
 		{ key: "status", label: "Status", type: "status" },
 		{ key: "presenting_complaint", label: "Complaint" },
-		{ key: "treatment_plan_text", label: "Treatment Plan" },
+		{ key: "treatment_plan_text", label: "Treatment Plan Summary" },
 	],
 	vitals: [
 		{ key: "timestamp", label: "Recorded On", type: "datetime" },
