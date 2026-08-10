@@ -8,6 +8,7 @@
 	const MASTER_WORKSPACE_PATH = "/app/vetedge-master-workspace";
 	const PRICING_WORKSPACE_PATH = "/app/vetedge-pricing-master-workspace";
 	const FRONT_DESK_PATH = "/app/vetedge-front-desk-action-center";
+	const SERVICE_WORKSPACE_PATH = "/app/vetedge-service-operations";
 	const SETTINGS_PATH = "/app/veterinary-settings-center";
 
 	const RESOURCE_DOCTYPES = Object.freeze({
@@ -50,12 +51,23 @@
 		"/app/veterinary-vaccine": "vaccines",
 		"/app/pet-grooming-service": "grooming-services",
 	});
+	const SERVICE_DOCTYPES = Object.freeze({
+		"Pet Boarding Stay": "boarding-stays",
+		"Pet Boarding Care Record": "boarding-care-records",
+		"Pet Grooming Session": "grooming-sessions",
+	});
+	const SERVICE_PATHS = Object.freeze({
+		"/app/pet-boarding-stay": "boarding-stays",
+		"/app/pet-boarding-care-record": "boarding-care-records",
+		"/app/pet-grooming-session": "grooming-sessions",
+	});
 	const SAME_TAB_PAGES = new Set([
 		"/app/vetedge",
 		RESOURCE_CENTER_PATH,
 		MASTER_WORKSPACE_PATH,
 		PRICING_WORKSPACE_PATH,
 		FRONT_DESK_PATH,
+		SERVICE_WORKSPACE_PATH,
 		SETTINGS_PATH,
 		CLINICAL_WORKSPACE_PATH,
 		MEDICAL_HISTORY_PATH,
@@ -93,6 +105,14 @@
 		return queryTarget(base, { resource, name });
 	}
 
+	function serviceWorkspaceTarget(resource, routeType, name, doctype) {
+		if (routeType === "List") return queryTarget(SERVICE_WORKSPACE_PATH, { resource });
+		if (routeType === "Form" && name && !isNewDocumentRoute(name, doctype)) {
+			return queryTarget(SERVICE_WORKSPACE_PATH, { resource, name });
+		}
+		return "";
+	}
+
 	function acceptedTargetFromFrappeRoute(route = currentRoute()) {
 		const routeType = String(route[0] || "");
 		const doctype = String(route[1] || "");
@@ -115,6 +135,9 @@
 		// dedicated EdgeSuite migration is accepted.
 		if (doctype === "Veterinary Vital Signs") return "";
 
+		if (SERVICE_DOCTYPES[doctype]) {
+			return serviceWorkspaceTarget(SERVICE_DOCTYPES[doctype], routeType, name, doctype);
+		}
 		if (RESOURCE_DOCTYPES[doctype]) {
 			return documentWorkspaceTarget(RESOURCE_CENTER_PATH, RESOURCE_DOCTYPES[doctype], routeType, name, doctype);
 		}
@@ -163,6 +186,9 @@
 		if (SAME_TAB_PAGES.has(path)) return `${path}${search}`;
 		if (path === "/app/veterinary-settings") return SETTINGS_PATH;
 		if (path === "/app/veterinary-appointment-queue") return `${FRONT_DESK_PATH}?tab=queue`;
+		if (path === "/app/kennel-availability" || path === "/app/kennel-availability-board") {
+			return queryTarget(SERVICE_WORKSPACE_PATH, { resource: "availability" });
+		}
 
 		const clinicalBase = "/app/veterinary-consultation";
 		if (path === clinicalBase) return CLINICAL_WORKSPACE_PATH;
@@ -173,6 +199,14 @@
 				: `${CLINICAL_WORKSPACE_PATH}?consultation=${encodeURIComponent(name)}`;
 		}
 
+		for (const [base, resource] of Object.entries(SERVICE_PATHS)) {
+			if (path === base) return queryTarget(SERVICE_WORKSPACE_PATH, { resource });
+			if (path.startsWith(`${base}/`)) {
+				const name = decodeURIComponent(path.slice(base.length + 1));
+				if (isNewDocumentRoute(name, base.slice(5))) return "";
+				return queryTarget(SERVICE_WORKSPACE_PATH, { resource, name });
+			}
+		}
 		for (const [base, resource] of Object.entries(RESOURCE_PATHS)) {
 			if (path === base) return queryTarget(RESOURCE_CENTER_PATH, { resource });
 			if (path.startsWith(`${base}/`)) {
