@@ -109,6 +109,7 @@ const COLUMNS = Object.freeze({
 		{ key: "service_branch", label: "Branch" },
 		{ key: "status", label: "Status", type: "status" },
 		{ key: "presenting_complaint", label: "Complaint" },
+		{ key: "treatment_plan_text", label: "Treatment Plan Summary" },
 	],
 	vitals: [
 		{ key: "timestamp", label: "Recorded On", type: "datetime" },
@@ -161,6 +162,13 @@ function addDays(date, days) {
 	value.setDate(value.getDate() + days);
 	return value.toISOString().slice(0, 10);
 }
+function stripHtml(value) {
+	if (!value) return "";
+	const container = document.createElement("div");
+	container.innerHTML = String(value);
+	container.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((node) => node.remove());
+	return (container.textContent || container.innerText || "").replace(/\s+/g, " ").trim();
+}
 
 export default {
 	name: "VetEdgeMedicalHistoryModal",
@@ -187,7 +195,7 @@ export default {
 		subtitle() { return this.summary.patient_name || this.patientLabel || this.patient || "Veterinary Patient"; },
 		activeTrendRows() { return this.data?.trends?.[this.activeTrend] || []; },
 		activeHistoryColumns() { return COLUMNS[this.activeHistory] || []; },
-		activeHistoryRows() { return this.rowsFor(this.activeHistory); },
+		activeHistoryRows() { return this.prepareRows(this.activeHistory, this.rowsFor(this.activeHistory)); },
 	},
 	watch: {
 		activeTrend() { this.$nextTick(() => this.renderTrendChart()); },
@@ -241,6 +249,13 @@ export default {
 			}
 		},
 		rowsFor(section) { return this.data?.[section] || []; },
+		prepareRows(section, rows) {
+			if (section !== "consultations") return rows;
+			return rows.map((row) => ({
+				...row,
+				treatment_plan_text: stripHtml(row.treatment_plan_summary) || "—",
+			}));
+		},
 		clearChart() {
 			this.chart = null;
 			const target = this.$refs.trendChart;
