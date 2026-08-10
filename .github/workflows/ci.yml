@@ -40,6 +40,7 @@ jobs:
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_recovered_workspace_integration.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
@@ -51,6 +52,7 @@ jobs:
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
 
@@ -67,6 +69,7 @@ jobs:
 
       - name: Check migrated EdgeSuite JavaScript
         run: |
+          node --check vetedge/public/js/edgesuite_product_menu.js
           node --check vetedge/public/js/vetedge_professional_ui.js
           node --check vetedge/public/js/vetedge_ui_bridge.js
           node --check vetedge/public/js/vetedge_clinical_route.js
