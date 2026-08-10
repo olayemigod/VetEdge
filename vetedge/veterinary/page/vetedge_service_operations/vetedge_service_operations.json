@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "creation": "2026-08-10 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "building",
+ "idx": 0,
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Veterinary",
+ "name": "vetedge-service-operations",
+ "owner": "Administrator",
+ "page_name": "vetedge-service-operations",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "VetEdge Administrator"},
+  {"role": "VetEdge Doctor"},
+  {"role": "Veterinary Nurse"},
+  {"role": "VetEdge Front Desk"},
+  {"role": "Branch Manager"},
+  {"role": "VetEdge Branch Manager"},
+  {"role": "VetEdge Groomer"}
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Hospital & Services Operations"
+}
