@@ -26,9 +26,19 @@ class TestRecoveredEdgeSuiteWorkspaces(FrappeTestCase):
 			"vetedge-pricing-master-workspace",
 			"vetedge-front-desk-action-center",
 			"vetedge-clinical-workspace",
+			"veterinary-medical-history",
 		):
 			with self.subTest(page=page):
 				self.assertTrue(frappe.db.exists("Page", page), page)
+
+	def test_obsolete_hospitalisation_dashboard_and_standalone_vitals_link_stay_removed(self):
+		self.assertFalse(frappe.db.exists("Page", "veterinary-hospitalisation-dashboard"))
+		self.assertTrue(frappe.db.exists("Workspace Sidebar", "VetEdge"))
+		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
+		links = {(row.link_type, row.link_to) for row in sidebar.get("items") if row.link_to}
+		self.assertNotIn(("Page", "veterinary-hospitalisation-dashboard"), links)
+		self.assertNotIn(("DocType", "Veterinary Vital Signs"), links)
+		self.assertIn(("Page", "veterinary-medical-history"), links)
 
 	def test_settings_provider_exposes_branding_and_editable_schema(self):
 		payload = get_veterinary_settings_page()
