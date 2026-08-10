@@ -23,13 +23,11 @@ REMOVED_STANDARD_PAGES = {
 	"veterinary-hospitalisation-dashboard",
 }
 
-# Phase 4 now uses the Clinical Workspace to capture vitals and Medical History
-# for longitudinal review. The standalone Vital Signs list remains available by
-# direct named-record access for audit/reference, but it is no longer a primary
-# Veterinary navigation destination.
+# The obsolete Hospitalisation Dashboard must not reappear during recurring
+# standard sidebar synchronization. Operational Hospital & Services links and
+# Veterinary Vital Signs remain valid Veterinary navigation destinations.
 REMOVED_SIDEBAR_LINKS = {
 	("Page", "veterinary-hospitalisation-dashboard"),
-	("DocType", "Veterinary Vital Signs"),
 }
 
 
