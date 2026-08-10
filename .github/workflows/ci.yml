@@ -41,6 +41,7 @@ jobs:
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
+            vetedge/tests/test_vetedge_recovered_workspace_integration.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
 
       - name: Validate EdgeSuite UI dependency and migration contracts
@@ -215,6 +216,10 @@ jobs:
       - name: Run recovered EdgeSuite migration contracts
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_edgesuite_migration_recovery
+
+      - name: Execute recovered workspace providers
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_recovered_workspace_integration
 
       - name: Run identity and resource center tests
         working-directory: frappe-bench
