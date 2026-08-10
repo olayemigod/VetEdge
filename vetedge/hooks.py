@@ -32,8 +32,9 @@ app_include_css = [
 ]
 app_include_js = [
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260718-3",
+	"/assets/vetedge/js/vetedge_clinical_route.js?v=20260810-1",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
-	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260720-2",
+	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260810-1",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
@@ -138,7 +139,12 @@ doc_events = {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.clinical_workspace_context.enforce_consultation_practitioner_ownership",
+			"vetedge.services.clinical_workspace_phase5.enforce_pending_dispensary_completion_invariant",
 		],
+	},
+	"Veterinary Vital Signs": {
+		"before_save": "vetedge.services.clinical_workspace_context.enforce_vitals_consultation_ownership",
 	},
 	"Veterinary Lab Order": {
 		"before_save": [
