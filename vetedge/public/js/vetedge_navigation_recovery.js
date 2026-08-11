@@ -1,10 +1,9 @@
-// Canonical VetEdge navigation recovery for the post-consolidation QA branch.
+// Canonical VetEdge navigation for Frappe/ERPNext v16.
 //
-// The accepted EdgeSuite migrations already exist in VetEdge, but the sidebar
-// still exposes several native DocType/Page targets and relies on multiple
-// redirect layers to reach those migrated surfaces. This late adapter makes the
-// accepted destination explicit and gives the shared EdgeAppShell one routing
-// path. Business logic and backend permission rules remain unchanged.
+// Frappe v16 serves Desk at /desk. VetEdge previously mixed /app and /desk
+// route forms across the shared shell, product menu and migration bridges. This
+// adapter makes /desk authoritative while preserving native DocType/Page/Report
+// semantics for destinations that have not migrated to EdgeSuite UI.
 (function () {
 	"use strict";
 
@@ -12,37 +11,38 @@
 
 	const PRODUCT_KEYS = new Set(["vetedge", "veterinary"]);
 	const LIFECYCLE_EVENTS = ["desktop_screen", "sidebar_setup", "toolbar_setup", "page-change"];
+	const DESK_PREFIX = "/desk";
 
 	const ACCEPTED_EDGEUI_ROUTES = Object.freeze({
-		"Page:veterinary-appointment-queue": "/app/vetedge-front-desk-action-center?tab=queue",
-		"DocType:Veterinary Patient": "/app/vetedge-resource-center?resource=patients",
-		"DocType:Veterinary Appointment": "/app/vetedge-resource-center?resource=appointments",
-		"DocType:Veterinary Guest Booking Request": "/app/vetedge-front-desk-action-center?tab=guest",
-		"DocType:Veterinary Missed Appointment": "/app/vetedge-front-desk-action-center?tab=missed",
-		"DocType:Veterinary Consultation": "/app/vetedge-clinical-workspace",
-		"DocType:Veterinary Lab Order": "/app/vetedge-resource-center?resource=lab-orders",
-		"DocType:Veterinary Vaccination Record": "/app/vetedge-resource-center?resource=vaccinations",
-		"DocType:Pet Grooming Appointment": "/app/vetedge-resource-center?resource=grooming",
-		"DocType:Pet Boarding Booking": "/app/vetedge-resource-center?resource=boarding",
-		"DocType:Kennel": "/app/vetedge-resource-center?resource=kennels",
-		"DocType:Veterinary Settings": "/app/veterinary-settings-center",
-		"DocType:Veterinary Species": "/app/vetedge-master-workspace?resource=species",
-		"DocType:Veterinary Breed": "/app/vetedge-master-workspace?resource=breeds",
-		"DocType:Veterinary Symptom": "/app/vetedge-master-workspace?resource=symptoms",
-		"DocType:Veterinary Diagnosis Category": "/app/vetedge-master-workspace?resource=diagnosis-categories",
-		"DocType:Veterinary Diagnosis": "/app/vetedge-master-workspace?resource=diagnoses",
-		"DocType:Veterinary Service Type": "/app/vetedge-master-workspace?resource=service-types",
-		"DocType:Consultation Type": "/app/vetedge-master-workspace?resource=consultation-types",
-		"DocType:Veterinary Treatment Item": "/app/vetedge-pricing-master-workspace?resource=treatment-items",
-		"DocType:Veterinary Treatment Type": "/app/vetedge-pricing-master-workspace?resource=treatment-types",
-		"DocType:Veterinary Lab Test": "/app/vetedge-pricing-master-workspace?resource=lab-tests",
-		"DocType:Veterinary Vaccine": "/app/vetedge-pricing-master-workspace?resource=vaccines",
-		"DocType:Pet Grooming Service": "/app/vetedge-pricing-master-workspace?resource=grooming-services",
-		"Page:kennel-availability": "/app/vetedge-service-operations?resource=availability",
-		"Page:kennel-availability-board": "/app/vetedge-service-operations?resource=availability",
-		"DocType:Pet Boarding Stay": "/app/vetedge-service-operations?resource=boarding-stays",
-		"DocType:Pet Boarding Care Record": "/app/vetedge-service-operations?resource=boarding-care-records",
-		"DocType:Pet Grooming Session": "/app/vetedge-service-operations?resource=grooming-sessions",
+		"Page:veterinary-appointment-queue": "/desk/vetedge-front-desk-action-center?tab=queue",
+		"DocType:Veterinary Patient": "/desk/vetedge-resource-center?resource=patients",
+		"DocType:Veterinary Appointment": "/desk/vetedge-resource-center?resource=appointments",
+		"DocType:Veterinary Guest Booking Request": "/desk/vetedge-front-desk-action-center?tab=guest",
+		"DocType:Veterinary Missed Appointment": "/desk/vetedge-front-desk-action-center?tab=missed",
+		"DocType:Veterinary Consultation": "/desk/vetedge-clinical-workspace",
+		"DocType:Veterinary Lab Order": "/desk/vetedge-resource-center?resource=lab-orders",
+		"DocType:Veterinary Vaccination Record": "/desk/vetedge-resource-center?resource=vaccinations",
+		"DocType:Pet Grooming Appointment": "/desk/vetedge-resource-center?resource=grooming",
+		"DocType:Pet Boarding Booking": "/desk/vetedge-resource-center?resource=boarding",
+		"DocType:Kennel": "/desk/vetedge-resource-center?resource=kennels",
+		"DocType:Veterinary Settings": "/desk/veterinary-settings-center",
+		"DocType:Veterinary Species": "/desk/vetedge-master-workspace?resource=species",
+		"DocType:Veterinary Breed": "/desk/vetedge-master-workspace?resource=breeds",
+		"DocType:Veterinary Symptom": "/desk/vetedge-master-workspace?resource=symptoms",
+		"DocType:Veterinary Diagnosis Category": "/desk/vetedge-master-workspace?resource=diagnosis-categories",
+		"DocType:Veterinary Diagnosis": "/desk/vetedge-master-workspace?resource=diagnoses",
+		"DocType:Veterinary Service Type": "/desk/vetedge-master-workspace?resource=service-types",
+		"DocType:Consultation Type": "/desk/vetedge-master-workspace?resource=consultation-types",
+		"DocType:Veterinary Treatment Item": "/desk/vetedge-pricing-master-workspace?resource=treatment-items",
+		"DocType:Veterinary Treatment Type": "/desk/vetedge-pricing-master-workspace?resource=treatment-types",
+		"DocType:Veterinary Lab Test": "/desk/vetedge-pricing-master-workspace?resource=lab-tests",
+		"DocType:Veterinary Vaccine": "/desk/vetedge-pricing-master-workspace?resource=vaccines",
+		"DocType:Pet Grooming Service": "/desk/vetedge-pricing-master-workspace?resource=grooming-services",
+		"Page:kennel-availability": "/desk/vetedge-service-operations?resource=availability",
+		"Page:kennel-availability-board": "/desk/vetedge-service-operations?resource=availability",
+		"DocType:Pet Boarding Stay": "/desk/vetedge-service-operations?resource=boarding-stays",
+		"DocType:Pet Boarding Care Record": "/desk/vetedge-service-operations?resource=boarding-care-records",
+		"DocType:Pet Grooming Session": "/desk/vetedge-service-operations?resource=grooming-sessions",
 	});
 
 	const HOME_GROUP = Object.freeze({
@@ -58,7 +58,8 @@
 				description: "Open the Veterinary home and resource centre",
 				link_type: "Page",
 				link_to: "vetedge",
-				route: "/app/vetedge",
+				route: "/desk/vetedge",
+				edgeui_migrated: true,
 				roles: [],
 				badge: "",
 			},
@@ -69,8 +70,11 @@
 		installed: false,
 		shellPatched: false,
 		menuPatched: false,
+		adapterPatched: false,
+		legacyClickBound: false,
 		lifecycleBound: false,
 		lastError: null,
+		routeItems: new Map(),
 	};
 
 	function runtime() {
@@ -97,43 +101,82 @@
 		return `${String(item?.link_type || item?.linkType || "Page")}:${String(item?.link_to || item?.linkTo || "").trim()}`;
 	}
 
+	function toDeskRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		try {
+			const url = new URL(raw, window.location.origin);
+			if (url.origin !== window.location.origin) return raw;
+			if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+				url.pathname = `${DESK_PREFIX}${url.pathname.slice(4)}`;
+			}
+			if (!url.pathname.startsWith("/")) url.pathname = `/${url.pathname}`;
+			return `${url.pathname}${url.search}${url.hash}`;
+		} catch (_error) {
+			const normalized = raw.replace(/^app\//, "").replace(/^desk\//, "").replace(/^\/+/, "");
+			return `${DESK_PREFIX}/${normalized}`;
+		}
+	}
+
 	function canonicalRoute(item) {
 		const accepted = ACCEPTED_EDGEUI_ROUTES[routeKey(item)];
 		if (accepted) return accepted;
 
 		const supplied = String(item?.route || "").trim();
-		if (supplied) return supplied.startsWith("/") ? supplied : `/app/${supplied.replace(/^\/+/, "")}`;
+		if (supplied) return toDeskRoute(supplied);
 
 		const target = String(item?.link_to || item?.linkTo || "").trim();
 		if (!target) return "";
 		const type = String(item?.link_type || item?.linkType || "Page");
-		if (type === "Report") return `/app/query-report/${encodeURIComponent(target)}`;
-		if (type === "DocType") return `/app/${slug(target)}`;
-		return `/app/${target.replace(/^\/+/, "")}`;
+		if (type === "Report") return `${DESK_PREFIX}/query-report/${encodeURIComponent(target)}`;
+		if (type === "DocType") return `${DESK_PREFIX}/${slug(target)}`;
+		return `${DESK_PREFIX}/${target.replace(/^\/+/, "")}`;
+	}
+
+	function routePath(route) {
+		try {
+			return new URL(toDeskRoute(route), window.location.origin).pathname.replace(/\/+$/, "") || DESK_PREFIX;
+		} catch (_error) {
+			return String(route || "").split("?")[0].replace(/\/+$/, "");
+		}
+	}
+
+	function rememberItem(item) {
+		if (!item?.route) return item;
+		state.routeItems.set(routePath(item.route), item);
+		return item;
 	}
 
 	function normalizeItem(item) {
-		return {
+		const accepted = ACCEPTED_EDGEUI_ROUTES[routeKey(item)];
+		return rememberItem({
 			...item,
 			link_type: item?.link_type || item?.linkType || "Page",
 			link_to: item?.link_to || item?.linkTo || "",
-			route: canonicalRoute(item),
-		};
+			route: accepted || canonicalRoute(item),
+			edgeui_migrated: Boolean(accepted || item?.edgeui_migrated),
+		});
 	}
 
 	function hasHome(groups) {
 		return (groups || []).some((group) =>
-			(group.items || []).some((item) => item?.link_to === "vetedge" || item?.route === "/app/vetedge")
+			(group.items || []).some((item) => item?.link_to === "vetedge" || routePath(item?.route) === "/desk/vetedge")
 		);
 	}
 
 	function rewriteGroups(groups) {
-		const rewritten = (Array.isArray(groups) ? groups : []).map((group) => ({
-			...group,
-			items: (group.items || []).map(normalizeItem).filter((item) => item.label && item.route),
-		})).filter((group) => group.items.length);
+		state.routeItems.clear();
+		const rewritten = (Array.isArray(groups) ? groups : [])
+			.map((group) => ({
+				...group,
+				items: (group.items || []).map(normalizeItem).filter((item) => item.label && item.route),
+			}))
+			.filter((group) => group.items.length);
 
-		if (!hasHome(rewritten)) rewritten.unshift({ ...HOME_GROUP, items: HOME_GROUP.items.map((item) => ({ ...item })) });
+		if (!hasHome(rewritten)) {
+			const home = { ...HOME_GROUP, items: HOME_GROUP.items.map((item) => normalizeItem({ ...item })) };
+			rewritten.unshift(home);
+		}
 		return rewritten;
 	}
 
@@ -162,26 +205,36 @@
 				group = { key: "navigation", label: "Navigation", icon: "grid", description: "Veterinary workspace", items: [] };
 				groups.push(group);
 			}
-			group.items.push(normalizeItem({
-				label: source.label || source.link_to,
-				icon: source.icon || "list",
-				description: source.description || source.link_type || "Veterinary workspace",
-				link_type: source.link_type || "Page",
-				link_to: source.link_to || "",
-				roles: Array.isArray(source.roles) ? source.roles : [],
-				badge: source.badge || "",
-			}));
+			group.items.push(
+				normalizeItem({
+					label: source.label || source.link_to,
+					icon: source.icon || "list",
+					description: source.description || source.link_type || "Veterinary workspace",
+					link_type: source.link_type || "Page",
+					link_to: source.link_to || "",
+					roles: Array.isArray(source.roles) ? source.roles : [],
+					badge: source.badge || "",
+				}),
+			);
 		}
 		return rewriteGroups(groups);
 	}
 
-	function applyDeskRoute(target) {
-		const route = String(target || "").trim();
+	function routeParts(url) {
+		return url.pathname
+			.replace(/^\/desk(?:\/|$)/, "")
+			.split("/")
+			.filter(Boolean)
+			.map(decodeURIComponent);
+	}
+
+	function applyDeskRoute(target, itemOverride = null) {
+		const route = toDeskRoute(target);
 		if (!route) return false;
 
 		try {
 			const url = new URL(route, window.location.origin);
-			if (url.origin !== window.location.origin || !/^\/(?:app|desk)(?:\/|$)/.test(url.pathname)) {
+			if (url.origin !== window.location.origin || !/^\/desk(?:\/|$)/.test(url.pathname)) {
 				window.location.assign(route);
 				return true;
 			}
@@ -195,11 +248,23 @@
 			for (const [key, value] of url.searchParams) window.frappe.route_options[key] = value;
 			window.frappe.route_hash = url.hash || null;
 
-			const parts = url.pathname
-				.replace(/^\/(?:app|desk)(?:\/|$)/, "")
-				.split("/")
-				.filter(Boolean)
-				.map(decodeURIComponent);
+			const item = itemOverride || state.routeItems.get(routePath(route));
+			if (item && !item.edgeui_migrated) {
+				if (item.link_type === "Report" && item.link_to) {
+					window.frappe.set_route("query-report", item.link_to);
+					return true;
+				}
+				if (item.link_type === "DocType" && item.link_to) {
+					window.frappe.set_route("List", item.link_to);
+					return true;
+				}
+				if (item.link_type === "Page" && item.link_to) {
+					window.frappe.set_route(item.link_to);
+					return true;
+				}
+			}
+
+			const parts = routeParts(url);
 			if (!parts.length) return false;
 			window.frappe.set_route(...parts);
 			return true;
@@ -210,8 +275,21 @@
 		}
 	}
 
+	function installNavigationAdapters(edgeUI) {
+		if (!edgeUI?.registerAdapter) return false;
+		const adapter = {
+			open(route) {
+				return applyDeskRoute(route);
+			},
+		};
+		edgeUI.registerAdapter("navigation:vetedge", adapter, { replace: true });
+		edgeUI.registerAdapter("navigation:veterinary", adapter, { replace: true });
+		state.adapterPatched = true;
+		return true;
+	}
+
 	function installShellPatch(edgeUI) {
-		if (edgeUI.__vetedgeCanonicalNavigationShellInstalled) {
+		if (edgeUI.__vetedgeCanonicalDeskNavigationShellInstalled) {
 			state.shellPatched = true;
 			return true;
 		}
@@ -220,13 +298,13 @@
 		if (!InnerShell || !Vue?.defineComponent || !Vue?.h || typeof edgeUI.registerComponent !== "function") return false;
 
 		const CanonicalVetEdgeShell = Vue.defineComponent({
-			name: "CanonicalVetEdgeShell",
+			name: "CanonicalVetEdgeDeskShell",
 			inheritAttrs: false,
 			setup(_props, context) {
 				return () => {
 					const attrs = context.attrs || {};
 					const groups = rewriteGroups(
-						Array.isArray(attrs.menuItems) && attrs.menuItems.length ? attrs.menuItems : groupsFromSidebar()
+						Array.isArray(attrs.menuItems) && attrs.menuItems.length ? attrs.menuItems : groupsFromSidebar(),
 					);
 					return Vue.h(
 						InnerShell,
@@ -235,14 +313,14 @@
 							menuItems: groups,
 							onNavigate: (route) => applyDeskRoute(route),
 						},
-						context.slots
+						context.slots,
 					);
 				};
 			},
 		});
 
 		edgeUI.registerComponent("EdgeAppShell", CanonicalVetEdgeShell, { replace: true });
-		edgeUI.__vetedgeCanonicalNavigationShellInstalled = true;
+		edgeUI.__vetedgeCanonicalDeskNavigationShellInstalled = true;
 		state.shellPatched = true;
 		return true;
 	}
@@ -252,10 +330,7 @@
 		if (!PRODUCT_KEYS.has(product)) return config;
 
 		const groups = rewriteGroups(
-			(config.sections || []).map((section) => ({
-				...section,
-				items: section.items || [],
-			}))
+			(config.sections || []).map((section) => ({ ...section, items: section.items || [] })),
 		);
 		return {
 			...config,
@@ -265,11 +340,15 @@
 				icon: group.icon || "layers",
 				items: group.items.map((item) => ({ ...item, route: canonicalRoute(item) })),
 			})),
+			navigate(item) {
+				const normalized = normalizeItem(item || {});
+				return applyDeskRoute(normalized.route, normalized);
+			},
 		};
 	}
 
 	function installProductMenuPatch(edgeUI) {
-		if (edgeUI.__vetedgeCanonicalNavigationMenuPatched) {
+		if (edgeUI.__vetedgeCanonicalDeskNavigationMenuPatched) {
 			state.menuPatched = true;
 			return true;
 		}
@@ -279,7 +358,7 @@
 		edgeUI.registerProductMenu = function registerCanonicalVetEdgeMenu(config) {
 			return previousRegister(rewriteProductMenuConfig(config));
 		};
-		edgeUI.__vetedgeCanonicalNavigationMenuPatched = true;
+		edgeUI.__vetedgeCanonicalDeskNavigationMenuPatched = true;
 		state.menuPatched = true;
 
 		const current = edgeUI.getProductMenuConfig?.();
@@ -290,14 +369,40 @@
 		return true;
 	}
 
+	function bindLegacyAppClickCompatibility() {
+		if (state.legacyClickBound) return;
+		state.legacyClickBound = true;
+		document.addEventListener(
+			"click",
+			(event) => {
+				if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+				const anchor = event.target?.closest?.("a[href]");
+				if (!anchor) return;
+				try {
+					const url = new URL(anchor.href, window.location.origin);
+					if (url.origin !== window.location.origin || !(url.pathname === "/app" || url.pathname.startsWith("/app/"))) return;
+					event.preventDefault();
+					event.stopPropagation();
+					applyDeskRoute(`${url.pathname}${url.search}${url.hash}`);
+				} catch (_error) {
+					// Leave malformed/external links to the browser.
+				}
+			},
+			true,
+		);
+	}
+
 	function install() {
 		state.lastError = null;
 		const edgeUI = runtime();
 		if (!edgeUI) return false;
 		try {
+			groupsFromSidebar();
+			installNavigationAdapters(edgeUI);
 			installShellPatch(edgeUI);
 			installProductMenuPatch(edgeUI);
-			state.installed = state.shellPatched && state.menuPatched;
+			bindLegacyAppClickCompatibility();
+			state.installed = state.adapterPatched && state.shellPatched && state.menuPatched;
 			return state.installed;
 		} catch (error) {
 			state.lastError = error?.message || String(error);
@@ -321,6 +426,7 @@
 			...state,
 			homePresent: hasHome(groupsFromSidebar()),
 			menuGroupCount: groupsFromSidebar().length,
+			deskPrefix: DESK_PREFIX,
 		};
 	}
 
@@ -330,6 +436,7 @@
 		canonicalRoute,
 		groupsFromSidebar,
 		navigate: applyDeskRoute,
+		toDeskRoute,
 	};
 
 	bindLifecycle();
