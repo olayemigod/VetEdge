@@ -1,3 +1,5 @@
+const VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS = 15000;
+
 frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -12,8 +14,26 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
+	// Keep the mounted EdgeSuite surface alive across Desk navigation. The
+	// product bundle owns route synchronization and decides whether its data is
+	// stale enough to require another API request.
+	if (wrapper.vue_app?.refresh) {
+		Promise.resolve(
+			wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS })
+		).catch((error) => {
+			console.error('Error refreshing Veterinary Resource Center:', error);
+		});
+		return;
+	}
+
+	// Backward-compatible cleanup for an older cached bundle that does not yet
+	// expose the reusable page contract.
 	if (wrapper.vue_app) {
-		wrapper.vue_app.unmount();
+		try {
+			wrapper.vue_app.unmount?.();
+		} catch (error) {
+			console.error('Error unmounting Veterinary Resource Center:', error);
+		}
 		wrapper.vue_app = null;
 	}
 
