@@ -7,22 +7,21 @@ from frappe.utils import cint, cstr
 from vetedge.services.permissions import (
 	get_assigned_branches,
 	get_current_user,
+	get_user_roles,
 	user_has_global_branch_access,
 )
-from vetedge.services.report_visibility import validate_dashboard_access
+from vetedge.services.report_visibility import (
+	BRANCH_SCOPED_ROLES,
+	normalize_dashboard_filters,
+	validate_dashboard_access,
+)
 
 DASHBOARD_BRANCH_SEARCH_MAX_PAGE_LENGTH = 20
 
 
 def _explicit_branch_scope(user: str | None) -> list[str]:
-	"""Return explicit Branch User Assignments, if the user is actually scoped by them.
-
-	VetEdge's existing branch-access contract treats a non-elevated user with no
-	Branch User Assignment rows as unrestricted by the assignment layer. The
-	low-data search must preserve that behaviour rather than interpreting an empty
-	assignment list as no access.
-	"""
-	if user_has_global_branch_access(user):
+	"""Return assignments only when the existing dashboard policy makes them restrictive."""
+	if user_has_global_branch_access(user) or not (get_user_roles(user) & BRANCH_SCOPED_ROLES):
 		return []
 	return sorted(
 		dict.fromkeys(
@@ -40,7 +39,7 @@ def search_dashboard_branches(
 	start: int = 0,
 	page_length: int = 20,
 ) -> list[dict]:
-	"""Return a small permission-aware Branch search window for dashboard filters."""
+	"""Return a small Branch search window using the established dashboard scope policy."""
 	user = get_current_user()
 	key = cstr(dashboard_key or "").strip()
 	validate_dashboard_access(key, user=user)
@@ -75,23 +74,18 @@ def search_dashboard_branches(
 
 
 def validate_dashboard_branch_selection(dashboard_key: str, branch: str) -> None:
-	"""Validate a concrete dashboard Branch selection without exposing extra records."""
+	"""Validate a concrete Branch using the same normalization as existing dashboards."""
 	branch = cstr(branch or "").strip()
 	if not branch:
 		return
 
 	user = get_current_user()
-	validate_dashboard_access(cstr(dashboard_key or "").strip(), user=user)
-	if not frappe.has_permission("Branch", "read"):
-		frappe.throw(_("You are not permitted to read Branch records."), frappe.PermissionError)
-
-	filters: list[list] = [["Branch", "name", "=", branch]]
-	explicit_scope = _explicit_branch_scope(user)
-	if explicit_scope:
-		filters.append(["Branch", "name", "in", explicit_scope])
-
-	rows = frappe.get_list("Branch", fields=["name"], filters=filters, page_length=1)
-	if not rows:
+	normalized = normalize_dashboard_filters(
+		cstr(dashboard_key or "").strip(),
+		{"branch": branch},
+		user=user,
+	)
+	if cstr(normalized.get("branch") or "").strip() != branch or not frappe.db.exists("Branch", branch):
 		frappe.throw(_("The selected Branch is not available to this user."), frappe.PermissionError)
 
 
