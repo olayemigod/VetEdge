@@ -97,8 +97,8 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 	def test_vetedge_home_stays_in_desk_and_routes_to_resource_center(self):
 		content = self.read(VETEDGE_HOME)
 		self.assertIn('title: __("Veterinary Home")', content)
-		self.assertIn('const target = "vetedge-resource-center";', content)
-		self.assertIn("frappe.set_route(target)", content)
+		self.assertIn('const target = "/app/vetedge-resource-center";', content)
+		self.assertIn('frappe.set_route("vetedge-resource-center")', content)
 		self.assertNotIn("window.location.replace", content)
 
 	def test_consumer_adapter_installs_professional_shell_and_menu_contract(self):
