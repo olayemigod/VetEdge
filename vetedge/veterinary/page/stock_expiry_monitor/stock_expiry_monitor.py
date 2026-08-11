@@ -2,86 +2,132 @@
 # Copyright (c) 2026, ProcessEdge Solutions and contributors
 # For license information, please see license.txt
 
-import frappe
-from frappe.utils import getdate, nowdate, flt
 import datetime
+
+import frappe
+from frappe.utils import cint, flt, nowdate
+
+FILTER_SEARCH_MAX_PAGE_LENGTH = 20
+FILTER_SEARCH_CONFIG = {
+	"warehouse": {"doctype": "Warehouse", "filters": {"is_group": 0}},
+	"item_group": {"doctype": "Item Group", "filters": {}},
+}
+
+
+@frappe.whitelist()
+def search_stock_expiry_filter_options(field: str, txt: str = "", start: int = 0, page_length: int = 20):
+	"""Return a small permission-aware search window for Stock Expiry filters."""
+	check_expiry_permissions()
+	config = FILTER_SEARCH_CONFIG.get(str(field or "").strip())
+	if not config:
+		frappe.throw("This Stock Expiry filter is not searchable.", frappe.PermissionError)
+
+	doctype = config["doctype"]
+	if not frappe.has_permission(doctype, "read"):
+		return []
+
+	filters = dict(config["filters"])
+	query = str(txt or "").strip()
+	if query:
+		filters["name"] = ["like", f"%{query}%"]
+
+	start = max(cint(start), 0)
+	page_length = min(max(cint(page_length) or FILTER_SEARCH_MAX_PAGE_LENGTH, 1), FILTER_SEARCH_MAX_PAGE_LENGTH)
+	rows = frappe.get_list(
+		doctype,
+		fields=["name"],
+		filters=filters,
+		order_by="name asc",
+		start=start,
+		page_length=page_length,
+	)
+	return [{"value": row.name, "label": row.name} for row in rows]
+
+
+def _validate_reference_filter(filters: dict, field: str) -> None:
+	value = str(filters.get(field) or "").strip()
+	if not value:
+		return
+
+	config = FILTER_SEARCH_CONFIG[field]
+	exact_filters = dict(config["filters"])
+	exact_filters["name"] = value
+	rows = frappe.get_list(
+		config["doctype"],
+		fields=["name"],
+		filters=exact_filters,
+		page_length=1,
+	)
+	if not rows:
+		frappe.throw(
+			f"The selected {field.replace('_', ' ')} is not available to this user.",
+			frappe.PermissionError,
+		)
+
 
 @frappe.whitelist()
 def get_stock_expiry_data(filters=None):
-	"""Fetches filtered and paginated stock expiry rows, along with overall summaries."""
-	# Assert user permissions
+	"""Fetch filtered and paginated stock expiry rows plus overall summaries."""
 	check_expiry_permissions()
-
-	# Parse filters
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
-	
-	# Coerce dates and settings
+
+	_validate_reference_filter(filters, "warehouse")
+	_validate_reference_filter(filters, "item_group")
+
 	today = filters.get("posting_date") or nowdate()
-	
-	# Configure threshold days for the core service
 	threshold = filters.get("days_threshold")
 	if threshold:
 		filters["expiry_buckets"] = str(threshold)
 
 	from vetedge.services.stock_expiry_monitor import get_stock_expiry_rows
 
-	# Get full filtered dataset from existing VetEdge stock expiry service
 	all_rows = get_stock_expiry_rows(filters)
-
-	# Calculate summary cards from the full filtered dataset (before table-specific window filter & pagination)
-	expired_rows = [r for r in all_rows if r.get("expiry_status") == "Expired"]
-	expiring_soon_rows = [r for r in all_rows if r.get("expiry_status") == "Expiring Soon"]
-	affected_rows = [r for r in all_rows if r.get("expiry_status") in ("Expired", "Expiring Soon")]
-
-	expired_count = len(expired_rows)
-	expiring_soon_count = len(expiring_soon_rows)
-	total_qty = sum(flt(r.get("qty")) for r in affected_rows)
-	unique_warehouses = len({r.get("warehouse") for r in affected_rows if r.get("warehouse")})
-	highest_risk_items = len({r.get("item_code") for r in expired_rows if r.get("item_code")})
-	last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	expired_rows = [row for row in all_rows if row.get("expiry_status") == "Expired"]
+	expiring_soon_rows = [row for row in all_rows if row.get("expiry_status") == "Expiring Soon"]
+	affected_rows = [row for row in all_rows if row.get("expiry_status") in ("Expired", "Expiring Soon")]
 
 	summary = {
-		"expired_items": expired_count,
-		"expiring_soon": expiring_soon_count,
-		"affected_qty": total_qty,
-		"affected_warehouses": unique_warehouses,
-		"highest_risk_items": highest_risk_items,
-		"last_updated": last_updated
+		"expired_items": len(expired_rows),
+		"expiring_soon": len(expiring_soon_rows),
+		"affected_qty": sum(flt(row.get("qty")) for row in affected_rows),
+		"affected_warehouses": len({row.get("warehouse") for row in affected_rows if row.get("warehouse")}),
+		"highest_risk_items": len({row.get("item_code") for row in expired_rows if row.get("item_code")}),
+		"last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 	}
 
-	# Apply table-specific window filter (expired, expiring soon, all)
 	window = filters.get("expiry_window") or "all"
 	table_rows = []
-	for r in all_rows:
-		status = r.get("expiry_status")
+	for row in all_rows:
+		status = row.get("expiry_status")
 		if window == "expired" and status != "Expired":
 			continue
 		if window == "expiring soon" and status != "Expiring Soon":
 			continue
-		table_rows.append(r)
+		table_rows.append(row)
 
-	# Paginate table rows
-	limit = min(int(filters.get("limit") or 50), 500)
-	offset = int(filters.get("offset") or 0)
-	paginated_rows = table_rows[offset:offset + limit]
+	limit = min(max(cint(filters.get("limit")) or 50, 1), 500)
+	offset = max(cint(filters.get("offset")), 0)
+	paginated_rows = table_rows[offset : offset + limit]
 
 	return {
 		"summary": summary,
 		"rows": paginated_rows,
 		"total_count": len(table_rows),
 		"limit": limit,
-		"offset": offset
+		"offset": offset,
+		"posting_date": today,
 	}
 
+
 def check_expiry_permissions():
-	"""Validate that the active user possesses stock manager or veterinary administrative roles."""
+	"""Validate that the active user possesses Stock Expiry Monitor access roles."""
 	roles = {
-		"System Manager", 
-		"VetEdge Administrator", 
-		"Dispensary User", 
-		"VetEdge Dispensary User", 
-		"Branch Manager", 
-		"VetEdge Branch Manager"
+		"System Manager",
+		"VetEdge Administrator",
+		"Dispensary User",
+		"VetEdge Dispensary User",
+		"Branch Manager",
+		"VetEdge Branch Manager",
 	}
 	user_roles = set(frappe.get_roles(frappe.session.user))
 	if not user_roles.intersection(roles):
