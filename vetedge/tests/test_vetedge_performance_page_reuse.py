@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest import TestCase
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
