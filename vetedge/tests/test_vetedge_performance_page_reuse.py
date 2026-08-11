@@ -48,11 +48,12 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		# again merely because the user navigated away and back.
 		self.assertIn("this.fetchMetadata();", component)
 		self.assertIn("limit_page_length: 500", component)
-		reuse_block = loader[
-			loader.index("if (wrapper.vue_app && wrapper.vue_view)") : loader.index("$(page.body).empty()")
-		]
+		reuse_start = loader.index("if (wrapper.vue_app && wrapper.vue_view)")
+		reuse_end = loader.index("// Backward-compatible cleanup", reuse_start)
+		reuse_block = loader[reuse_start:reuse_end]
 		self.assertNotIn("frappe.require(", reuse_block)
 		self.assertNotIn("unmount()", reuse_block)
+		self.assertIn("return;", reuse_block)
 
 	def test_executive_dashboard_reuses_branch_metadata_and_refreshes_payload_only_when_stale(self):
 		loader = self.read("vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js")
