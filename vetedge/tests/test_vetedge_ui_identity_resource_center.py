@@ -282,10 +282,12 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	assert "EdgeDropdown" in loader
 
 
-def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
+def test_hooks_load_bridge_then_canonical_desk_navigation_and_expose_identity():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
 	assert "edgesuite_product_menu.js?v=20260810-2" in content
-	assert "vetedge_clinical_route.js?v=20260810-2" in content
 	assert "vetedge_ui_bridge.js?v=20260810-2" in content
+	assert "vetedge_navigation_recovery.js?v=20260812-2" in content
+	assert "vetedge_clinical_route.js" not in content
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
+	assert content.index("vetedge_ui_bridge.js") < content.index("vetedge_navigation_recovery.js")
