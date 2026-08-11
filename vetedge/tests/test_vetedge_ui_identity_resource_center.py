@@ -80,8 +80,8 @@ def test_vetedge_registers_shared_notification_and_navigation_adapters():
 		"mark_my_notification_done",
 		"dismiss_my_notification",
 		"archive_my_notification",
-		'window.open(route, "_blank", "noopener,noreferrer")',
-		"/app/vetedge-resource-center?resource=",
+		'window.open(deskRoute(route), "_blank", "noopener,noreferrer")',
+		"/desk/vetedge-resource-center?resource=",
 	):
 		assert contract in content
 
@@ -89,19 +89,20 @@ def test_vetedge_registers_shared_notification_and_navigation_adapters():
 def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 	content = read(BRIDGE)
 	for route in (
-		"/app/veterinary-patient",
-		"/app/veterinary-appointment",
-		"/app/veterinary-consultation",
-		"/app/veterinary-lab-order",
-		"/app/veterinary-vaccination-record",
+		"/desk/veterinary-patient",
+		"/desk/veterinary-appointment",
+		"/desk/veterinary-consultation",
+		"/desk/veterinary-lab-order",
+		"/desk/veterinary-vaccination-record",
 	):
 		assert route in content
-	assert 'if (path.startsWith("/app/")) return openNewTab(route)' in content
+	assert 'if (path.startsWith("/desk/")) return openNewTab(route)' in content
 	assert "PRODUCT_ROUTES.has(path)" in content
 	assert "patchProductMenu" in content
 	assert "menuItemRoute" in content
 	assert "__vetedgeProductMenuNavigationPatched" in content
 	assert "productMenuPatched" in content
+	assert 'return `/desk/${route.replace(/^\\/+/, "")}`;' in content
 
 
 def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
