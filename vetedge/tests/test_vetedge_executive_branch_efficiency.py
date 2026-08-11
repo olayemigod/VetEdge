@@ -42,6 +42,7 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		self.assertIn("get_executive_dashboard_payload", bundle)
 		self.assertIn("validate_dashboard_branch_selection", service)
 		self.assertIn('validate_dashboard_access("executive")', service)
+		self.assertIn("normalize_dashboard_filters(", service)
 		self.assertIn('get_dashboard_payload("executive", payload_filters)', service)
 
 	def test_branch_search_is_permission_aware_and_hard_capped(self):
@@ -55,12 +56,13 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		self.assertIn("page_length = min(", service)
 		self.assertNotIn("ignore_permissions", service)
 
-	def test_branch_search_preserves_existing_unassigned_user_semantics(self):
+	def test_branch_scope_matches_existing_dashboard_visibility_policy(self):
 		service = self.read(SERVICE)
 
+		self.assertIn("BRANCH_SCOPED_ROLES", service)
+		self.assertIn("get_user_roles(user) & BRANCH_SCOPED_ROLES", service)
 		self.assertIn("def _explicit_branch_scope", service)
 		self.assertIn("if explicit_scope:", service)
-		self.assertIn("no access", service)
 		self.assertNotIn("if not assigned:", service)
 
 	def test_no_background_polling_is_added(self):
