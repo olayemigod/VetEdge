@@ -165,7 +165,16 @@
 		if (!target) return false;
 		const current = `${window.location.pathname}${window.location.search}`;
 		if (current === target) return false;
+
 		redirecting = true;
+		if (navigateAcceptedTarget(target, {
+			replace: true,
+			onSettled: () => { redirecting = false; },
+		})) {
+			return true;
+		}
+
+		redirecting = false;
 		window.location.replace(target);
 		return true;
 	}
@@ -179,6 +188,45 @@
 		} catch (_error) {
 			const [path, query = ""] = raw.split("?");
 			return { raw, path: path.replace(/\/$/, ""), search: query ? `?${query}` : "" };
+		}
+	}
+
+	function navigateAcceptedTarget(target, options = {}) {
+		try {
+			const url = new URL(String(target || "").trim(), window.location.origin);
+			const router = window.frappe?.router;
+			const isSameOrigin = url.origin === window.location.origin;
+			const isDeskRoute = /^\/(app|desk)(\/|$)/.test(url.pathname);
+			if (!isSameOrigin || !isDeskRoute || typeof router?.route !== "function") return false;
+
+			const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+			const next = `${url.pathname}${url.search}${url.hash}`;
+			if (current === next) {
+				options.onSettled?.();
+				return true;
+			}
+
+			window.frappe.route_options = {};
+			for (const [key, value] of url.searchParams) {
+				window.frappe.route_options[key] = value;
+			}
+			window.frappe.route_hash = url.hash || null;
+
+			const method = options.replace ? "replaceState" : "pushState";
+			window.history[method](null, "", next);
+			Promise.resolve(router.route())
+				.catch((error) => {
+					console.error("VetEdge accepted-route navigation failed:", error);
+					if (options.replace) window.location.replace(next);
+					else window.location.assign(next);
+				})
+				.finally(() => options.onSettled?.());
+			return true;
+		} catch (error) {
+			if (window.frappe?.boot?.developer_mode) {
+				console.warn("[VetEdgeRouteAlignment] Unable to use Desk routing", error);
+			}
+			return false;
 		}
 	}
 
@@ -263,6 +311,7 @@
 				const normalized = normalizeRoute(route);
 				const target = pathWorkspaceTarget(normalized.path, normalized.search);
 				if (target) {
+					if (navigateAcceptedTarget(target)) return true;
 					window.location.assign(target);
 					return true;
 				}
@@ -288,6 +337,7 @@
 		installNavigationAdapter,
 		acceptedTargetFromFrappeRoute,
 		pathWorkspaceTarget,
+		navigateAcceptedTarget,
 	});
 	window.VetEdgeClinicalRoute = Object.assign(window.VetEdgeClinicalRoute || {}, {
 		install: redirectAcceptedRoute,
