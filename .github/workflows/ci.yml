@@ -75,6 +75,7 @@ jobs:
           node --check vetedge/public/js/edgesuite_product_menu.js
           node --check vetedge/public/js/vetedge_professional_ui.js
           node --check vetedge/public/js/vetedge_ui_bridge.js
+          node --check vetedge/public/js/vetedge_navigation_recovery.js
           node --check vetedge/public/js/vetedge_clinical_route.js
           node --check vetedge/public/js/vetedge_workspace_safety.js
 
