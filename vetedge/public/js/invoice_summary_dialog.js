@@ -77,7 +77,7 @@ function openInvoiceWithFrappeRoute(invoiceName) {
 }
 
 function buildInvoiceUrl(invoiceName) {
-	const route = `/app/${frappe.router.slug("Sales Invoice")}/${encodeURIComponent(invoiceName)}`;
+	const route = `/desk/${frappe.router.slug("Sales Invoice")}/${encodeURIComponent(invoiceName)}`;
 	return frappe.urllib.get_full_url(route);
 }
 
