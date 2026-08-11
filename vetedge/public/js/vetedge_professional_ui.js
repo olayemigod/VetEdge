@@ -87,7 +87,7 @@
 
 	function canonicalSidebar() {
 		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
-		return sidebars && (sidebars.veterinary || sidebars.vetedge);
+		return sidebars && (sidebars.vetedge || sidebars.veterinary);
 	}
 
 	function slug(value) {
