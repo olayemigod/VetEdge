@@ -13,6 +13,13 @@ function lazyLoadError(message) {
 	}
 }
 
+function requestedPatient() {
+	const routePatient = window.frappe?.route_options?.patient;
+	if (routePatient) return String(routePatient).trim();
+	const params = new URLSearchParams(window.location.search || '');
+	return String(params.get('patient') || '').trim();
+}
+
 function installLazyMedicalHistory() {
 	if (VeterinaryMedicalHistory.__vetedgeLazyMedicalHistoryInstalled) return;
 
@@ -26,6 +33,7 @@ function installLazyMedicalHistory() {
 			loadedHistorySections: {},
 			loadedTrends: {},
 			lazyRequestGeneration: 0,
+			lastLazyLoadAt: 0,
 		};
 	};
 
@@ -67,6 +75,7 @@ function installLazyMedicalHistory() {
 				]);
 				if (generation !== this.lazyRequestGeneration) return;
 
+				this.lastLazyLoadAt = Date.now();
 				await this.$nextTick();
 				this.syncHistoryTabCounts();
 				this.renderTrendChart();
@@ -185,7 +194,31 @@ export function mountVeterinaryMedicalHistory(target) {
 	VeterinaryMedicalHistory.components = runtime.components;
 	const app = runtime.createEdgeApp(VeterinaryMedicalHistory);
 	const view = app.mount(target);
-	return { view, unmount: () => app.unmount() };
+	return {
+		view,
+		async refresh(options = {}) {
+			if (!view) return false;
+			const maxAgeMs = Math.max(Number(options.maxAgeMs || 0), 0);
+			const force = options.force === true;
+			const routePatient = requestedPatient();
+			const patientChanged = Boolean(routePatient && routePatient !== view.filters?.patient);
+			const isFresh = maxAgeMs > 0 && Date.now() - Number(view.lastLazyLoadAt || 0) < maxAgeMs;
+
+			if (patientChanged) {
+				view.filters.patient = routePatient;
+				view.patientLabel = '';
+				if (window.frappe?.route_options) window.frappe.route_options = null;
+				await view.resolvePatientLabel?.(routePatient);
+				await view.load?.();
+				return true;
+			}
+
+			if (!view.filters?.patient || (!force && isFresh)) return false;
+			await view.load?.();
+			return true;
+		},
+		unmount: () => app.unmount(),
+	};
 }
 
 if (typeof window !== 'undefined') {
