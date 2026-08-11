@@ -11,12 +11,12 @@ PRODUCT_DESCRIPTOR = {
 	"label": "Veterinary",
 	"product": "Veterinary",
 	"icon": "stethoscope",
-	"home_route": "/app/vetedge",
+	"home_route": "/desk/vetedge",
 	"route_patterns": [
-		"/app/vetedge*",
-		"/app/veterinary-*",
-		"/app/stock-expiry-monitor*",
-		"/app/query-report/Veterinary*",
+		"/desk/vetedge*",
+		"/desk/veterinary-*",
+		"/desk/stock-expiry-monitor*",
+		"/desk/query-report/Veterinary*",
 	],
 	"order": 30,
 }
