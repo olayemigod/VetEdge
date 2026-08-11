@@ -43,7 +43,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		content = self.read(PROFESSIONAL_JS)
 		for contract in (
 			"workspace_sidebar_item",
-			"sidebars.veterinary || sidebars.vetedge",
+			"sidebars.vetedge || sidebars.veterinary",
 			"source.hidden === 1",
 			"source.type === \"Section Break\"",
 			"source.type !== \"Link\"",
