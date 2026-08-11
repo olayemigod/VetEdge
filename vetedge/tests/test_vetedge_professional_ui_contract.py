@@ -6,7 +6,9 @@ from unittest import TestCase
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 HOOKS = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 PROFESSIONAL_JS = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_professional_ui.js"
+NAVIGATION_RECOVERY_JS = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_navigation_recovery.js"
 PROFESSIONAL_CSS = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "vetedge_professional_ui.css"
+VETEDGE_HOME = REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.js"
 EXECUTIVE_LOADER = (
 	REPOSITORY_ROOT
 	/ "vetedge"
@@ -30,14 +32,16 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		return path.read_text(encoding="utf-8")
 
 	def test_professional_assets_are_loaded_after_existing_vetedge_shell_assets(self):
-		for path in (PROFESSIONAL_JS, PROFESSIONAL_CSS):
+		for path in (PROFESSIONAL_JS, NAVIGATION_RECOVERY_JS, PROFESSIONAL_CSS):
 			self.assertTrue(path.exists(), path)
 
 		hooks = self.read(HOOKS)
 		self.assertIn("vetedge_professional_ui.css?v=20260719-1", hooks)
 		self.assertIn("vetedge_professional_ui.js?v=20260719-1", hooks)
+		self.assertIn("vetedge_navigation_recovery.js?v=20260811-1", hooks)
 		self.assertLess(hooks.index("dashboard_shell.css"), hooks.index("vetedge_professional_ui.css"))
 		self.assertLess(hooks.index("edgesuite_product_menu.js"), hooks.index("vetedge_professional_ui.js"))
+		self.assertLess(hooks.index("vetedge_ui_bridge.js"), hooks.index("vetedge_navigation_recovery.js"))
 
 	def test_consumer_adapter_uses_permission_filtered_workspace_navigation(self):
 		content = self.read(PROFESSIONAL_JS)
@@ -65,6 +69,37 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			self.assertIn(contract, content)
 		self.assertNotIn("window.history.pushState", content)
 		self.assertNotIn("Promise.resolve(router.route())", content)
+
+	def test_canonical_navigation_recovery_restores_home_and_migrated_edgeui_routes(self):
+		content = self.read(NAVIGATION_RECOVERY_JS)
+		for contract in (
+			'label: "Veterinary Home"',
+			'route: "/app/vetedge"',
+			'"DocType:Veterinary Patient": "/app/vetedge-resource-center?resource=patients"',
+			'"DocType:Veterinary Appointment": "/app/vetedge-resource-center?resource=appointments"',
+			'"DocType:Veterinary Consultation": "/app/vetedge-clinical-workspace"',
+			'"Page:veterinary-appointment-queue": "/app/vetedge-front-desk-action-center?tab=queue"',
+			'"DocType:Veterinary Settings": "/app/veterinary-settings-center"',
+			'"DocType:Veterinary Species": "/app/vetedge-master-workspace?resource=species"',
+			'"DocType:Veterinary Treatment Item": "/app/vetedge-pricing-master-workspace?resource=treatment-items"',
+			'"DocType:Pet Boarding Stay": "/app/vetedge-service-operations?resource=boarding-stays"',
+			'edgeUI.registerComponent("EdgeAppShell", CanonicalVetEdgeShell, { replace: true })',
+			"menuItems: groups",
+			"onNavigate: (route) => applyDeskRoute(route)",
+			"window.frappe.set_route(...parts)",
+			"VetEdgeNavigationRecovery",
+		):
+			self.assertIn(contract, content)
+
+		self.assertNotIn("coreedge/", content.lower())
+		self.assertNotIn("window.history.pushState", content)
+
+	def test_vetedge_home_stays_in_desk_and_routes_to_resource_center(self):
+		content = self.read(VETEDGE_HOME)
+		self.assertIn('title: __("Veterinary Home")', content)
+		self.assertIn('const target = "vetedge-resource-center";', content)
+		self.assertIn("frappe.set_route(target)", content)
+		self.assertNotIn("window.location.replace", content)
 
 	def test_consumer_adapter_installs_professional_shell_and_menu_contract(self):
 		content = self.read(PROFESSIONAL_JS)
