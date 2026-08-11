@@ -13,8 +13,9 @@ class TestVetEdgeProductAppAvailability(unittest.TestCase):
 		self.assertEqual(PRODUCT_DESCRIPTOR["key"], "vetedge")
 		self.assertEqual(PRODUCT_DESCRIPTOR["product_key"], "vetedge")
 		self.assertEqual(PRODUCT_DESCRIPTOR["label"], "Veterinary")
-		self.assertEqual(PRODUCT_DESCRIPTOR["home_route"], "/app/vetedge")
-		self.assertIn("/app/veterinary-*", PRODUCT_DESCRIPTOR["route_patterns"])
+		self.assertEqual(PRODUCT_DESCRIPTOR["home_route"], "/desk/vetedge")
+		self.assertIn("/desk/veterinary-*", PRODUCT_DESCRIPTOR["route_patterns"])
+		self.assertTrue(all(not pattern.startswith("/app/") for pattern in PRODUCT_DESCRIPTOR["route_patterns"]))
 
 	def test_guest_is_not_available(self):
 		original_user = frappe.session.user
