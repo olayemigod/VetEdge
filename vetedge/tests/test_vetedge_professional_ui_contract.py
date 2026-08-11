@@ -121,3 +121,29 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			".vetedge-notification-icon svg",
 		):
 			self.assertIn(contract, content)
+
+	def test_professional_css_reasserts_user_theme_after_legacy_shell_defaults(self):
+		content = self.read(PROFESSIONAL_CSS)
+		theme_section = content[content.index("/* EdgeSuite Theme System V1 compatibility.") :]
+		for contract in (
+			':root[data-edge-palette]',
+			"--edge-primary: var(--edge-color-brand-600)",
+			"--edge-primary-soft: var(--edge-color-brand-50)",
+			"--edge-text: var(--edge-color-ink-950)",
+			"--edge-text-muted: var(--edge-color-ink-500)",
+			"--edge-surface: var(--edge-color-surface)",
+			"--edge-bg: var(--edge-color-surface-muted)",
+			".vetedge-executive-dashboard-root .edge-topbar",
+			"color-mix(in srgb, var(--edge-color-surface) 94%, transparent)",
+			".vetedge-product-menu-panel",
+			".edge-alerts-container .alert-danger",
+		):
+			self.assertIn(contract, theme_section)
+
+		for forbidden in (
+			"--edge-surface: #fff",
+			"--edge-bg: #f6f9fc",
+			"--edge-text: #172033",
+			"background: rgba(255, 255, 255, .94)",
+		):
+			self.assertNotIn(forbidden, theme_section)
