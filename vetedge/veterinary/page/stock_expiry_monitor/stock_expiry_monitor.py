@@ -5,7 +5,7 @@
 import datetime
 
 import frappe
-from frappe.utils import cint, flt, nowdate
+from frappe.utils import cint, flt
 
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
@@ -74,7 +74,6 @@ def get_stock_expiry_data(filters=None):
 	_validate_reference_filter(filters, "warehouse")
 	_validate_reference_filter(filters, "item_group")
 
-	today = filters.get("posting_date") or nowdate()
 	threshold = filters.get("days_threshold")
 	if threshold:
 		filters["expiry_buckets"] = str(threshold)
@@ -115,7 +114,6 @@ def get_stock_expiry_data(filters=None):
 		"total_count": len(table_rows),
 		"limit": limit,
 		"offset": offset,
-		"posting_date": today,
 	}
 
 
