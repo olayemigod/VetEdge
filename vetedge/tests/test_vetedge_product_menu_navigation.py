@@ -32,6 +32,27 @@ def test_professional_sidebar_uses_desk_router_before_full_navigation_fallback()
 	assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
 
 
+def test_accepted_route_alignment_uses_desk_router_before_full_reload_fallback():
+	alignment = read(APP / "public/js/vetedge_clinical_route.js")
+
+	assert "function navigateAcceptedTarget(target, options = {})" in alignment
+	assert 'const method = options.replace ? "replaceState" : "pushState";' in alignment
+	assert 'window.history[method](null, "", next);' in alignment
+	assert "Promise.resolve(router.route())" in alignment
+
+	redirect_start = alignment.index("function redirectAcceptedRoute()")
+	redirect_end = alignment.index("function normalizeRoute", redirect_start)
+	redirect_block = alignment[redirect_start:redirect_end]
+	assert "navigateAcceptedTarget(target" in redirect_block
+	assert "window.location.replace(target);" in redirect_block
+
+	adapter_start = alignment.index("function installNavigationAdapter()")
+	adapter_end = alignment.index("function scheduleNavigationAdapter", adapter_start)
+	adapter_block = alignment[adapter_start:adapter_end]
+	assert "if (navigateAcceptedTarget(target)) return true;" in adapter_block
+	assert "window.location.assign(target);" in adapter_block
+
+
 def test_navigation_assets_are_cache_busted_after_service_route_migration():
 	hooks = read(APP / "hooks.py")
 	for asset in (
