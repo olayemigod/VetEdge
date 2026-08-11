@@ -52,6 +52,20 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		):
 			self.assertIn(contract, content)
 
+	def test_consumer_adapter_uses_frappe_route_semantics_for_sidebar_links(self):
+		content = self.read(PROFESSIONAL_JS)
+		for contract in (
+			"menuItemForRoute",
+			"applyFrappeRoute",
+			'window.frappe.set_route("query-report", item.link_to)',
+			'window.frappe.set_route("List", item.link_to)',
+			"window.frappe.set_route(item.link_to)",
+			"window.frappe.set_route(...parts)",
+		):
+			self.assertIn(contract, content)
+		self.assertNotIn("window.history.pushState", content)
+		self.assertNotIn("Promise.resolve(router.route())", content)
+
 	def test_consumer_adapter_installs_professional_shell_and_menu_contract(self):
 		content = self.read(PROFESSIONAL_JS)
 		for contract in (
@@ -147,3 +161,19 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			"background: rgba(255, 255, 255, .94)",
 		):
 			self.assertNotIn(forbidden, theme_section)
+
+	def test_executive_dashboard_theme_contract_covers_controls_cards_and_charts(self):
+		content = self.read(PROFESSIONAL_CSS)
+		qa_section = content[content.index("/* Executive Dashboard browser-QA fixes.") :]
+		for contract in (
+			".vetedge-executive-filter-grid .edge-control",
+			"select.edge-control option",
+			".vetedge-executive-section",
+			".vetedge-executive-chart-card",
+			".vetedge-executive-chart svg text",
+			"fill: var(--edge-color-ink-500) !important",
+			"stroke: var(--edge-color-border) !important",
+			".graph-svg-tip",
+			"background: var(--edge-color-surface)",
+		):
+			self.assertIn(contract, qa_section)
