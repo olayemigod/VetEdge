@@ -1,3 +1,14 @@
+const VETEDGE_STOCK_EXPIRY_REFRESH_MAX_AGE_MS = 15000;
+
+function getVetEdgeStockBranchContext() {
+	return (
+		frappe.boot?.session_defaults?.branch ||
+		frappe.boot?.edgesuite_product_menu?.branch ||
+		frappe.boot?.user_info?.[frappe.session?.user]?.branch ||
+		'All Branches'
+	);
+}
+
 frappe.pages['stock-expiry-monitor'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -14,6 +25,32 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visit_id = wrapper.current_visit_id;
 
+	// Reuse the mounted monitor when returning through Desk navigation. This is
+	// especially important because the current cold load resolves warehouse and
+	// item-group filter metadata. Reusing the Vue instance prevents those lists
+	// from being downloaded again on every page visit.
+	if (wrapper.vue_app && wrapper.vue_view) {
+		const now = Date.now();
+		const branchContext = getVetEdgeStockBranchContext();
+		const branchChanged = wrapper.vue_branch_context !== branchContext;
+		const stale = now - (wrapper.vue_last_refresh_at || 0) >= VETEDGE_STOCK_EXPIRY_REFRESH_MAX_AGE_MS;
+
+		wrapper.vue_view.syncShellContext?.();
+		wrapper.vue_branch_context = branchContext;
+
+		if (branchChanged || stale) {
+			try {
+				wrapper.vue_view.fetchData?.();
+				wrapper.vue_last_refresh_at = now;
+			} catch (error) {
+				console.error('Error refreshing Stock Expiry Monitor:', error);
+			}
+		}
+		return;
+	}
+
+	// Backward-compatible cleanup for an older cached page instance that did not
+	// retain the mounted component proxy.
 	if (wrapper.vue_app) {
 		try {
 			wrapper.vue_app.unmount();
@@ -22,6 +59,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		}
 
 		wrapper.vue_app = null;
+		wrapper.vue_view = null;
 	}
 
 	$(page.body).empty();
@@ -132,7 +170,9 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 						window.VetedgeStockExpiryMonitor
 					);
 
-					wrapper.vue_app.mount(root[0]);
+					wrapper.vue_view = wrapper.vue_app.mount(root[0]);
+					wrapper.vue_last_refresh_at = Date.now();
+					wrapper.vue_branch_context = getVetEdgeStockBranchContext();
 				} catch (error) {
 					console.error('Error mounting Stock Expiry Monitor:', error);
 					showLoadFailure(
