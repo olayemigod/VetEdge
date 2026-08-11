@@ -3,6 +3,6 @@ frappe.ui.form.on('Veterinary Missed Appointment', {
 		const query = frm.is_new()
 			? 'tab=missed'
 			: `tab=missed&name=${encodeURIComponent(frm.doc.name)}`;
-		window.location.replace(`/app/vetedge-front-desk-action-center?${query}`);
+		window.location.replace(`/desk/vetedge-front-desk-action-center?${query}`);
 	}
 });
