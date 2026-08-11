@@ -57,6 +57,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		'EdgePageLayout',
 		'EdgePageHeader',
 		'EdgeFilterBar',
+		'EdgeLinkField',
 		'EdgeStatCard',
 		'EdgeStatusBadge',
 		'EdgeLoadingState',
