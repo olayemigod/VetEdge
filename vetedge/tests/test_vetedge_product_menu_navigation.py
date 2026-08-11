@@ -17,19 +17,28 @@ def test_shared_product_menu_owns_same_tab_navigation():
 	assert 'menu_source: "workspace_sidebar"' in menu
 
 
-def test_professional_sidebar_uses_desk_router_before_full_navigation_fallback():
+def test_professional_sidebar_uses_frappe_routes_before_full_navigation_fallback():
 	professional = read(APP / "public/js/vetedge_professional_ui.js")
 	start = professional.index("function openRoute(route)")
 	end = professional.index("function injectStyles()", start)
 	block = professional[start:end]
 
 	assert 'const isDeskRoute = /^\\/(app|desk)(\\/|$)/.test(url.pathname);' in block
-	assert 'window.history.pushState(null, "", next);' in block
-	assert "Promise.resolve(router.route())" in block
-	assert "window.frappe.route_options = {};" in block
-	assert "for (const [key, value] of url.searchParams)" in block
+	assert "menuItemForRoute(url.pathname)" in block
+	assert "applyFrappeRoute(item, url)" in block
 	assert "window.location.assign(target);" in block
-	assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
+	assert "window.history.pushState" not in block
+	assert "router.route()" not in block
+
+	route_start = professional.index("function applyFrappeRoute(item, url)")
+	route_end = professional.index("function openRoute(route)", route_start)
+	route_block = professional[route_start:route_end]
+	assert "window.frappe.route_options = {};" in route_block
+	assert "for (const [key, value] of url.searchParams)" in route_block
+	assert 'window.frappe.set_route("query-report", item.link_to)' in route_block
+	assert 'window.frappe.set_route("List", item.link_to)' in route_block
+	assert "window.frappe.set_route(item.link_to)" in route_block
+	assert "window.frappe.set_route(...parts)" in route_block
 
 
 def test_accepted_route_alignment_uses_desk_router_before_full_reload_fallback():
