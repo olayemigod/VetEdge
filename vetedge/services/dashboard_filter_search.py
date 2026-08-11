@@ -78,3 +78,15 @@ def validate_dashboard_branch_selection(dashboard_key: str, branch: str) -> None
 	rows = frappe.get_list("Branch", fields=["name"], filters=filters, page_length=1)
 	if not rows:
 		frappe.throw(_("The selected Branch is not available to this user."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_executive_dashboard_payload(filters=None) -> dict:
+	"""Validate Executive Dashboard filters, then delegate to the existing reporting engine."""
+	payload_filters = frappe.parse_json(filters) if isinstance(filters, str) else dict(filters or {})
+	validate_dashboard_access("executive")
+	validate_dashboard_branch_selection("executive", payload_filters.get("branch"))
+
+	from vetedge.services.reporting_logic_v4 import get_dashboard_payload
+
+	return get_dashboard_payload("executive", payload_filters)
