@@ -32,10 +32,9 @@ app_include_css = [
 ]
 app_include_js = [
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260810-2",
-	"/assets/vetedge/js/vetedge_clinical_route.js?v=20260810-2",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
 	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260810-2",
-	"/assets/vetedge/js/vetedge_navigation_recovery.js?v=20260812-1",
+	"/assets/vetedge/js/vetedge_navigation_recovery.js?v=20260812-2",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
@@ -63,7 +62,7 @@ permission_query_conditions = {
 	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.get_veterinary_vaccination_record_query",
 	"Pet Grooming Appointment": "vetedge.services.permissions.get_pet_grooming_appointment_query",
-	"Pet Grooming Session": "vetedge.services.permissions.get_pet_grooming_session_query",
+	"Pet Grooming Session": "vetedge.services.permissions.get_pet_grooming_session_permission",
 	"Veterinary Guest Booking Request": "vetedge.services.permissions.get_veterinary_guest_booking_request_query",
 	"Sales Invoice": "vetedge.services.permissions.get_sales_invoice_query",
 	"Veterinary Notification Log": "vetedge.services.permissions.get_notification_admin_only_query",
