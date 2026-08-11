@@ -244,3 +244,70 @@ body.edge-suite-product-vetedge .edge-product-menu__trigger:focus-visible {
 :root[data-edge-palette] .vetedge-product-menu-section-heading span {
 	color: var(--edge-color-ink-500);
 }
+
+/* Executive Dashboard browser-QA fixes. The page bundle injects its own legacy
+   light styles after this stylesheet, so these selectors intentionally carry
+   higher specificity and use only shared EdgeSuite semantic tokens. */
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid .edge-control {
+	background: var(--edge-color-surface);
+	border-color: var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-xs, 0 1px 2px rgb(15 23 42 / 8%));
+	color-scheme: light dark;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid .edge-control:disabled {
+	background: var(--edge-color-surface-muted);
+	color: var(--edge-color-ink-500);
+	opacity: 1;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid select.edge-control option {
+	background: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart-card {
+	background: var(--edge-color-surface);
+	border-color: var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 8%));
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section-heading h2,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart-card h3,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table td,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table th {
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section-heading small,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg text,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart .chart-container text {
+	color: var(--edge-color-ink-500) !important;
+	fill: var(--edge-color-ink-500) !important;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .line-vertical,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .line-horizontal,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .axis-line,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg line.domain,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg path.domain {
+	stroke: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip {
+	background: var(--edge-color-surface);
+	border: 1px solid var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(0 0 0 / 20%));
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip .title,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip ul,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip li,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip .value {
+	color: var(--edge-color-ink-950);
+}
