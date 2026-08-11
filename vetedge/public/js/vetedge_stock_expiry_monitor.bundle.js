@@ -2,6 +2,8 @@ import { h } from 'vue';
 
 import LegacyStockExpiryMonitor from './vetedge_stock_expiry_monitor/VetedgeStockExpiryMonitor.vue';
 
+const FILTER_SEARCH_API = 'vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor.search_stock_expiry_filter_options';
+
 function getEdgeSuiteRuntime() {
 	return window.EdgeSuiteUI || window.EdgeUI || null;
 }
@@ -46,6 +48,7 @@ function createCanonicalStockExpiryMonitor(runtime) {
 		EdgePageLayout,
 		EdgePageHeader,
 		EdgeFilterBar,
+		EdgeLinkField,
 		EdgeStatCard,
 		EdgeDataTable,
 		EdgeLoadingState,
@@ -58,6 +61,7 @@ function createCanonicalStockExpiryMonitor(runtime) {
 		EdgePageLayout,
 		EdgePageHeader,
 		EdgeFilterBar,
+		EdgeLinkField,
 		EdgeStatCard,
 		EdgeDataTable,
 		EdgeLoadingState,
@@ -108,6 +112,45 @@ function createCanonicalStockExpiryMonitor(runtime) {
 				return resolveVetEdgeMenuItems();
 			},
 		},
+		methods: {
+			...(LegacyStockExpiryMonitor.methods || {}),
+			async searchFilterOptions(field, term) {
+				const options = await this.callFrappe(FILTER_SEARCH_API, {
+					field,
+					txt: term || '',
+					page_length: 20,
+				});
+				return Array.isArray(options) ? options : [];
+			},
+			searchWarehouses(term) {
+				return this.searchFilterOptions('warehouse', term);
+			},
+			searchItemGroups(term) {
+				return this.searchFilterOptions('item_group', term);
+			},
+			selectWarehouse(value) {
+				this.filters.warehouse = value || '';
+				this.currentPage = 1;
+				this.fetchData();
+			},
+			selectItemGroup(value) {
+				this.filters.item_group = value || '';
+				this.currentPage = 1;
+				this.fetchData();
+			},
+		},
+		mounted() {
+			window.VetedgeProductMenu?.mount?.();
+			this.syncShellContext();
+			if (window.jQuery) {
+				window.jQuery(document).on('branch-change.vetedge_stock_shell session-defaults-changed.vetedge_stock_shell', this.syncShellContext);
+			}
+			// Canonical EdgeSuite filters search on demand. Do not preload hundreds
+			// of Warehouse and Item Group records on every cold page load.
+			this.metadataLoading = false;
+			this.fetchData();
+			this.fetchNotifications();
+		},
 		render() {
 			const reportRows = (this.rows || []).map((row) => ({
 				...row,
@@ -120,45 +163,46 @@ function createCanonicalStockExpiryMonitor(runtime) {
 
 			const filters = h(EdgeFilterBar, { title: 'Filter Records' }, {
 				default: () => h('div', { class: 'edge-filter-grid' }, [
-					filterField('Warehouse', h('select', {
-						class: 'edge-select filter-select',
-						value: this.filters.warehouse,
-						disabled: this.metadataLoading,
-						onChange: (event) => { this.filters.warehouse = event.target.value; this.fetchData(); },
-					}, [option('', 'All Warehouses'), ...(this.warehouses || []).map((value) => option(value, value))])),
-					filterField('Item Group', h('select', {
-						class: 'edge-select filter-select',
-						value: this.filters.item_group,
-						disabled: this.metadataLoading,
-						onChange: (event) => { this.filters.item_group = event.target.value; this.fetchData(); },
-					}, [option('', 'All Item Groups'), ...(this.itemGroups || []).map((value) => option(value, value))])),
+					h(EdgeLinkField, {
+						modelValue: this.filters.warehouse,
+						selectedLabel: this.filters.warehouse,
+						label: 'Warehouse',
+						placeholder: 'All Warehouses',
+						searcher: this.searchWarehouses,
+						'onUpdate:modelValue': (value) => this.selectWarehouse(value),
+					}),
+					h(EdgeLinkField, {
+						modelValue: this.filters.item_group,
+						selectedLabel: this.filters.item_group,
+						label: 'Item Group',
+						placeholder: 'All Item Groups',
+						searcher: this.searchItemGroups,
+						'onUpdate:modelValue': (value) => this.selectItemGroup(value),
+					}),
 					filterField('Expiry Window', h('select', {
 						class: 'edge-select filter-select',
 						value: this.filters.expiry_window,
-						disabled: this.metadataLoading,
-						onChange: (event) => { this.filters.expiry_window = event.target.value; this.fetchData(); },
+						onChange: (event) => { this.filters.expiry_window = event.target.value; this.currentPage = 1; this.fetchData(); },
 					}, [option('all', 'All Inventory'), option('expired', 'Expired Batches'), option('expiring soon', 'Expiring Soon')])),
 					filterField('Days Threshold', h('select', {
 						class: 'edge-select filter-select',
 						value: this.filters.days_threshold,
-						disabled: this.metadataLoading,
-						onChange: (event) => { this.filters.days_threshold = Number(event.target.value); this.fetchData(); },
+						onChange: (event) => { this.filters.days_threshold = Number(event.target.value); this.currentPage = 1; this.fetchData(); },
 					}, [30, 60, 90, 180].map((days) => option(days, `${days} Days`)))),
 					filterField('Item Code', h('input', {
 						type: 'text',
 						class: 'edge-input filter-input',
 						value: this.filters.item,
 						placeholder: 'Enter Item Code',
-						disabled: this.metadataLoading,
 						onInput: (event) => { this.filters.item = event.target.value; },
-						onChange: () => this.fetchData(),
+						onChange: () => { this.currentPage = 1; this.fetchData(); },
 					})),
 					h('div', { class: 'edge-field filter-group filter-action-group' }, [
 						h('label', { class: 'edge-field-label filter-label', style: 'visibility:hidden' }, 'Action'),
 						h('button', {
 							type: 'button',
 							class: 'edge-button edge-button--primary filter-btn primary',
-							disabled: this.metadataLoading || this.loading,
+							disabled: this.loading,
 							onClick: () => this.fetchData(),
 						}, 'Apply / Refresh'),
 					]),
