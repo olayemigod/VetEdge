@@ -5,7 +5,7 @@ app_description = "VetEdge is a veterinary operations system built as a custom F
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
-app_home = "/app/vetedge"
+app_home = "/desk/vetedge"
 
 # The standalone EdgeSuite UI app must be installed before VetEdge so shared
 # product pages never depend on CoreEdge for their browser runtime.
@@ -35,7 +35,7 @@ app_include_js = [
 	"/assets/vetedge/js/vetedge_clinical_route.js?v=20260810-2",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
 	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260810-2",
-	"/assets/vetedge/js/vetedge_navigation_recovery.js?v=20260811-1",
+	"/assets/vetedge/js/vetedge_navigation_recovery.js?v=20260812-1",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
