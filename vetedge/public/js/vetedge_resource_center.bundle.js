@@ -25,10 +25,12 @@ export function mountVetEdgeResourceCenter(target) {
 
 	let resourceView = null;
 	let syncActionLabels = () => {};
+	let lastRefreshAt = Date.now();
 
 	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
+			lastRefreshAt = Date.now();
 			syncActionLabels();
 		},
 	});
@@ -37,6 +39,7 @@ export function mountVetEdgeResourceCenter(target) {
 	const quickEditorApp = runtime.createEdgeApp(VetEdgeResourceQuickEditor, {
 		onSaved: async () => {
 			await resourceView?.loadPage?.();
+			lastRefreshAt = Date.now();
 			syncActionLabels();
 		},
 	});
@@ -88,6 +91,47 @@ export function mountVetEdgeResourceCenter(target) {
 		flowView?.open?.();
 	};
 
+	const getRequestedState = () => {
+		const params = new URLSearchParams(window.location.search || '');
+		return {
+			resource: String(params.get('resource') || 'patients').trim() || 'patients',
+			search: String(params.get('search') || '').trim(),
+			name: String(params.get('name') || '').trim(),
+			isNew: params.get('new') === '1',
+		};
+	};
+
+	const applyRequestedState = () => {
+		if (!resourceView) return { routeChanged: false, state: getRequestedState() };
+		const state = getRequestedState();
+		let routeChanged = false;
+		const allowedResources = resourceView.resourceOptions || [];
+		const resourceIsValid = allowedResources.some((option) => option.value === state.resource);
+		if (resourceIsValid && resourceView.resource !== state.resource) {
+			resourceView.resource = state.resource;
+			resourceView.start = 0;
+			routeChanged = true;
+		}
+		if (resourceView.search !== state.search) {
+			resourceView.search = state.search;
+			resourceView.start = 0;
+			routeChanged = true;
+		}
+		return { routeChanged, state };
+	};
+
+	const openRequestedEditor = (state) => {
+		if (!state?.name && !state?.isNew) return;
+		if (state.isNew && isAppointments()) {
+			flowView?.open?.();
+			return;
+		}
+		quickEditorView?.open?.({
+			resource: resourceView?.resource,
+			name: state.name || null,
+		});
+	};
+
 	target.addEventListener('click', interceptAppointmentAction, true);
 	const observer = new MutationObserver(syncActionLabels);
 	observer.observe(target, { childList: true, subtree: true });
@@ -99,18 +143,31 @@ export function mountVetEdgeResourceCenter(target) {
 	if (requestedName || requestedNew) {
 		window.setTimeout(() => {
 			if (!resourceView) return;
-			if (requestedNew && isAppointments()) {
-				flowView?.open?.();
-				return;
-			}
-			quickEditorView?.open?.({
-				resource: resourceView.resource,
-				name: requestedName || null,
-			});
+			openRequestedEditor({ name: requestedName, isNew: requestedNew });
 		}, 0);
 	}
 
 	return {
+		async refresh(options = {}) {
+			if (!resourceView) return false;
+			const maxAgeMs = Math.max(Number(options.maxAgeMs || 0), 0);
+			const force = options.force === true;
+			const { routeChanged, state } = applyRequestedState();
+			const hasDeepLink = Boolean(state.name || state.isNew);
+			const isFresh = maxAgeMs > 0 && Date.now() - lastRefreshAt < maxAgeMs;
+
+			if (!force && !routeChanged && !hasDeepLink && isFresh) {
+				return false;
+			}
+
+			await resourceView.loadPage?.();
+			lastRefreshAt = Date.now();
+			syncActionLabels();
+			if (hasDeepLink) {
+				window.setTimeout(() => openRequestedEditor(state), 0);
+			}
+			return true;
+		},
 		unmount() {
 			observer.disconnect();
 			target.removeEventListener('click', interceptAppointmentAction, true);
