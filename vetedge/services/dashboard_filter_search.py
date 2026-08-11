@@ -14,6 +14,25 @@ from vetedge.services.report_visibility import validate_dashboard_access
 DASHBOARD_BRANCH_SEARCH_MAX_PAGE_LENGTH = 20
 
 
+def _explicit_branch_scope(user: str | None) -> list[str]:
+	"""Return explicit Branch User Assignments, if the user is actually scoped by them.
+
+	VetEdge's existing branch-access contract treats a non-elevated user with no
+	Branch User Assignment rows as unrestricted by the assignment layer. The
+	low-data search must preserve that behaviour rather than interpreting an empty
+	assignment list as no access.
+	"""
+	if user_has_global_branch_access(user):
+		return []
+	return sorted(
+		dict.fromkeys(
+			cstr(branch).strip()
+			for branch in get_assigned_branches(user)
+			if cstr(branch).strip()
+		)
+	)
+
+
 @frappe.whitelist()
 def search_dashboard_branches(
 	dashboard_key: str,
@@ -30,11 +49,9 @@ def search_dashboard_branches(
 		return []
 
 	filters: list[list] = []
-	if not user_has_global_branch_access(user):
-		assigned = [cstr(branch).strip() for branch in get_assigned_branches(user) if cstr(branch).strip()]
-		if not assigned:
-			return []
-		filters.append(["Branch", "name", "in", sorted(dict.fromkeys(assigned))])
+	explicit_scope = _explicit_branch_scope(user)
+	if explicit_scope:
+		filters.append(["Branch", "name", "in", explicit_scope])
 
 	query = cstr(txt or "").strip()
 	if query:
@@ -69,11 +86,9 @@ def validate_dashboard_branch_selection(dashboard_key: str, branch: str) -> None
 		frappe.throw(_("You are not permitted to read Branch records."), frappe.PermissionError)
 
 	filters: list[list] = [["Branch", "name", "=", branch]]
-	if not user_has_global_branch_access(user):
-		assigned = [cstr(value).strip() for value in get_assigned_branches(user) if cstr(value).strip()]
-		if not assigned:
-			frappe.throw(_("You are not permitted to use this Branch filter."), frappe.PermissionError)
-		filters.append(["Branch", "name", "in", sorted(dict.fromkeys(assigned))])
+	explicit_scope = _explicit_branch_scope(user)
+	if explicit_scope:
+		filters.append(["Branch", "name", "in", explicit_scope])
 
 	rows = frappe.get_list("Branch", fields=["name"], filters=filters, page_length=1)
 	if not rows:
