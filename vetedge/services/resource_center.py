@@ -260,7 +260,7 @@ def _branch_filters(meta) -> dict:
 
 def _full_form_route(doctype: str, name: str | None = None) -> str:
 	slug = frappe.scrub(doctype).replace("_", "-")
-	return f"/app/{slug}/{name}" if name else f"/app/{slug}"
+	return f"/desk/{slug}/{name}" if name else f"/desk/{slug}"
 
 
 def _column_schema(meta, fields: list[str]) -> list[dict]:
