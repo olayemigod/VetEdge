@@ -25,10 +25,12 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		component = self.read(COMPONENT)
 
 		self.assertIn("limit_page_length: 500", component)
-		mounted = bundle[
-			bundle.index("VetedgeExecutiveDashboard.mounted = function mountedLowDataDashboard") :
-			bundle.index("VetedgeExecutiveDashboard.beforeUnmount")
-		]
+		mounted_start = bundle.index("VetedgeExecutiveDashboard.mounted = function mountedLowDataDashboard")
+		mounted_end = bundle.index(
+			"VetedgeExecutiveDashboard.beforeUnmount = function beforeUnmountLowDataDashboard",
+			mounted_start,
+		)
+		mounted = bundle[mounted_start:mounted_end]
 		self.assertNotIn("loadBranches", mounted)
 		self.assertIn("this.fetchNotifications()", mounted)
 		self.assertIn("this.refresh()", mounted)
