@@ -45,6 +45,31 @@
 		"DocType:Pet Grooming Session": "/desk/vetedge-service-operations?resource=grooming-sessions",
 	});
 
+	const MIGRATED_DOCTYPES = Object.freeze({
+		"Veterinary Patient": { base: "/desk/vetedge-resource-center", resource: "patients" },
+		"Veterinary Appointment": { base: "/desk/vetedge-resource-center", resource: "appointments" },
+		"Veterinary Lab Order": { base: "/desk/vetedge-resource-center", resource: "lab-orders" },
+		"Veterinary Vaccination Record": { base: "/desk/vetedge-resource-center", resource: "vaccinations" },
+		"Pet Grooming Appointment": { base: "/desk/vetedge-resource-center", resource: "grooming" },
+		"Pet Boarding Booking": { base: "/desk/vetedge-resource-center", resource: "boarding" },
+		Kennel: { base: "/desk/vetedge-resource-center", resource: "kennels" },
+		"Veterinary Species": { base: "/desk/vetedge-master-workspace", resource: "species" },
+		"Veterinary Breed": { base: "/desk/vetedge-master-workspace", resource: "breeds" },
+		"Veterinary Symptom": { base: "/desk/vetedge-master-workspace", resource: "symptoms" },
+		"Veterinary Diagnosis Category": { base: "/desk/vetedge-master-workspace", resource: "diagnosis-categories" },
+		"Veterinary Diagnosis": { base: "/desk/vetedge-master-workspace", resource: "diagnoses" },
+		"Veterinary Service Type": { base: "/desk/vetedge-master-workspace", resource: "service-types" },
+		"Consultation Type": { base: "/desk/vetedge-master-workspace", resource: "consultation-types" },
+		"Veterinary Treatment Item": { base: "/desk/vetedge-pricing-master-workspace", resource: "treatment-items" },
+		"Veterinary Treatment Type": { base: "/desk/vetedge-pricing-master-workspace", resource: "treatment-types" },
+		"Veterinary Lab Test": { base: "/desk/vetedge-pricing-master-workspace", resource: "lab-tests" },
+		"Veterinary Vaccine": { base: "/desk/vetedge-pricing-master-workspace", resource: "vaccines" },
+		"Pet Grooming Service": { base: "/desk/vetedge-pricing-master-workspace", resource: "grooming-services" },
+		"Pet Boarding Stay": { base: "/desk/vetedge-service-operations", resource: "boarding-stays" },
+		"Pet Boarding Care Record": { base: "/desk/vetedge-service-operations", resource: "boarding-care-records" },
+		"Pet Grooming Session": { base: "/desk/vetedge-service-operations", resource: "grooming-sessions" },
+	});
+
 	const HOME_GROUP = Object.freeze({
 		key: "home",
 		label: "Home",
@@ -71,8 +96,10 @@
 		shellPatched: false,
 		menuPatched: false,
 		adapterPatched: false,
+		notificationPatched: false,
 		legacyClickBound: false,
 		lifecycleBound: false,
+		redirecting: false,
 		lastError: null,
 		routeItems: new Map(),
 	};
@@ -139,6 +166,70 @@
 		} catch (_error) {
 			return String(route || "").split("?")[0].replace(/\/+$/, "");
 		}
+	}
+
+	function queryTarget(base, params) {
+		const query = new URLSearchParams();
+		Object.entries(params || {}).forEach(([key, value]) => {
+			if (value !== undefined && value !== null && String(value) !== "") query.set(key, String(value));
+		});
+		const suffix = query.toString();
+		return suffix ? `${base}?${suffix}` : base;
+	}
+
+	function isNewDocumentRoute(name, doctype = "") {
+		const value = String(name || "").toLowerCase();
+		const doctypeSlug = slug(doctype);
+		return !value || value === "new" || (doctypeSlug && value.startsWith(`new-${doctypeSlug}`));
+	}
+
+	function acceptedTargetFromFrappeRoute() {
+		let route = [];
+		try {
+			route = window.frappe?.get_route?.() || [];
+		} catch (_error) {
+			return "";
+		}
+		const routeType = String(route[0] || "");
+		const doctype = String(route[1] || "");
+		const name = route[2];
+
+		if (doctype === "Veterinary Consultation") {
+			if (routeType === "List") return "/desk/vetedge-clinical-workspace";
+			if (routeType === "Form") {
+				return isNewDocumentRoute(name, doctype)
+					? "/desk/vetedge-clinical-workspace?new=1"
+					: queryTarget("/desk/vetedge-clinical-workspace", { consultation: name });
+			}
+		}
+		if (doctype === "Veterinary Settings" && ["List", "Form"].includes(routeType)) {
+			return "/desk/veterinary-settings-center";
+		}
+		// Vital Signs intentionally remains a native DocType destination. Clinical
+		// Workspace contains the accepted consultation-linked capture experience.
+		if (doctype === "Veterinary Vital Signs") return "";
+
+		const migrated = MIGRATED_DOCTYPES[doctype];
+		if (migrated) {
+			if (routeType === "List") return queryTarget(migrated.base, { resource: migrated.resource });
+			if (routeType === "Form") {
+				return isNewDocumentRoute(name, doctype)
+					? queryTarget(migrated.base, { resource: migrated.resource, new: 1 })
+					: queryTarget(migrated.base, { resource: migrated.resource, name });
+			}
+		}
+		if (doctype === "Veterinary Guest Booking Request") {
+			if (routeType === "List") return "/desk/vetedge-front-desk-action-center?tab=guest";
+			if (routeType === "Form") return queryTarget("/desk/vetedge-front-desk-action-center", { tab: "guest", name });
+		}
+		if (doctype === "Veterinary Missed Appointment") {
+			if (routeType === "List") return "/desk/vetedge-front-desk-action-center?tab=missed";
+			if (routeType === "Form") return queryTarget("/desk/vetedge-front-desk-action-center", { tab: "missed", name });
+		}
+		if (routeType === "veterinary-appointment-queue") {
+			return "/desk/vetedge-front-desk-action-center?tab=queue";
+		}
+		return "";
 	}
 
 	function rememberItem(item) {
@@ -275,6 +366,22 @@
 		}
 	}
 
+	function alignCurrentFrappeRoute() {
+		if (state.redirecting) return false;
+		const target = acceptedTargetFromFrappeRoute();
+		if (!target) return false;
+		const current = toDeskRoute(`${window.location.pathname}${window.location.search}`);
+		if (current === target) return false;
+		state.redirecting = true;
+		try {
+			return applyDeskRoute(target, { edgeui_migrated: true });
+		} finally {
+			window.setTimeout(() => {
+				state.redirecting = false;
+			}, 0);
+		}
+	}
+
 	function installNavigationAdapters(edgeUI) {
 		if (!edgeUI?.registerAdapter) return false;
 		const adapter = {
@@ -285,6 +392,29 @@
 		edgeUI.registerAdapter("navigation:vetedge", adapter, { replace: true });
 		edgeUI.registerAdapter("navigation:veterinary", adapter, { replace: true });
 		state.adapterPatched = true;
+		return true;
+	}
+
+	function installNotificationAdapter(edgeUI) {
+		if (!edgeUI?.getAdapter || !edgeUI?.registerAdapter) return false;
+		const current = edgeUI.getAdapter("notifications:vetedge") || edgeUI.getAdapter("notifications:veterinary");
+		if (!current) return false;
+		if (current.__vetedgeCanonicalDeskNotifications) {
+			state.notificationPatched = true;
+			return true;
+		}
+		const wrapped = {
+			...current,
+			__vetedgeCanonicalDeskNotifications: true,
+			open(item) {
+				const target = item?.target || item?.action_url || "";
+				if (target && applyDeskRoute(target)) return true;
+				return current.open?.(item) ?? false;
+			},
+		};
+		edgeUI.registerAdapter("notifications:vetedge", wrapped, { replace: true });
+		edgeUI.registerAdapter("notifications:veterinary", wrapped, { replace: true });
+		state.notificationPatched = true;
 		return true;
 	}
 
@@ -399,10 +529,12 @@
 		try {
 			groupsFromSidebar();
 			installNavigationAdapters(edgeUI);
+			installNotificationAdapter(edgeUI);
 			installShellPatch(edgeUI);
 			installProductMenuPatch(edgeUI);
 			bindLegacyAppClickCompatibility();
 			state.installed = state.adapterPatched && state.shellPatched && state.menuPatched;
+			window.setTimeout(alignCurrentFrappeRoute, 0);
 			return state.installed;
 		} catch (error) {
 			state.lastError = error?.message || String(error);
@@ -418,7 +550,10 @@
 		if (state.lifecycleBound) return;
 		state.lifecycleBound = true;
 		LIFECYCLE_EVENTS.forEach((eventName) => document.addEventListener(eventName, scheduleInstall));
-		window.frappe?.router?.on?.("change", scheduleInstall);
+		window.frappe?.router?.on?.("change", () => {
+			scheduleInstall();
+			window.setTimeout(alignCurrentFrappeRoute, 0);
+		});
 	}
 
 	function diagnose() {
@@ -437,6 +572,7 @@
 		groupsFromSidebar,
 		navigate: applyDeskRoute,
 		toDeskRoute,
+		alignCurrentFrappeRoute,
 	};
 
 	bindLifecycle();
