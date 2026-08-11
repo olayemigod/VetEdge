@@ -224,8 +224,38 @@
 
 	function openRoute(route) {
 		const target = String(route || "").trim();
-		if (!target) return;
+		if (!target) return false;
+
+		try {
+			const url = new URL(target, window.location.origin);
+			const router = window.frappe?.router;
+			const isSameOrigin = url.origin === window.location.origin;
+			const isDeskRoute = /^\/(app|desk)(\/|$)/.test(url.pathname);
+			if (isSameOrigin && isDeskRoute && typeof router?.route === "function") {
+				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+				const next = `${url.pathname}${url.search}${url.hash}`;
+				if (current === next) return true;
+
+				window.frappe.route_options = {};
+				for (const [key, value] of url.searchParams) {
+					window.frappe.route_options[key] = value;
+				}
+				window.frappe.route_hash = url.hash || null;
+				window.history.pushState(null, "", next);
+				Promise.resolve(router.route()).catch((error) => {
+					console.error("VetEdge Desk navigation failed:", error);
+					window.location.assign(next);
+				});
+				return true;
+			}
+		} catch (error) {
+			if (window.frappe?.boot?.developer_mode) {
+				console.warn("[VetEdgeProfessionalUI] Unable to use Desk routing", error);
+			}
+		}
+
 		window.location.assign(target);
+		return true;
 	}
 
 	function injectStyles() {
