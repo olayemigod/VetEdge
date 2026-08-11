@@ -8,7 +8,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
-VETEDGE_DESK_ROUTE = "/app/vetedge"
+VETEDGE_DESK_ROUTE = "/desk/vetedge"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -197,7 +197,7 @@ def ensure_vetedge_desktop_icon() -> None:
 		frappe.rename_doc("Desktop Icon", "Veterinary", "VetEdge", force=True)
 
 	# Clean up duplicate if both exist
-	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
+	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.db.exists("Desktop Icon", "VetEdge"):
 		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	from vetedge.services.branding import get_branding
