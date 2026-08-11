@@ -222,31 +222,67 @@
 		}));
 	}
 
+	function menuItemForRoute(route) {
+		const target = String(route || "").trim();
+		if (!target) return null;
+		let pathname = target;
+		try {
+			pathname = new URL(target, window.location.origin).pathname;
+		} catch (_error) {
+			// Keep the raw route and compare it below.
+		}
+		const normalized = String(pathname || "").replace(/\/+$/, "") || "/";
+		for (const group of state.menuGroups) {
+			for (const item of group.items || []) {
+				const itemPath = String(item.route || "").replace(/\/+$/, "") || "/";
+				if (itemPath === normalized) return item;
+			}
+		}
+		return null;
+	}
+
+	function applyFrappeRoute(item, url) {
+		if (typeof window.frappe?.set_route !== "function") return false;
+		window.frappe.route_options = {};
+		for (const [key, value] of url.searchParams) {
+			window.frappe.route_options[key] = value;
+		}
+		window.frappe.route_hash = url.hash || null;
+
+		if (item?.link_type === "Report" && item.link_to) {
+			window.frappe.set_route("query-report", item.link_to);
+			return true;
+		}
+		if (item?.link_type === "DocType" && item.link_to) {
+			window.frappe.set_route("List", item.link_to);
+			return true;
+		}
+		if (item?.link_type === "Page" && item.link_to) {
+			window.frappe.set_route(item.link_to);
+			return true;
+		}
+
+		const parts = url.pathname
+			.replace(/^\/(?:app|desk)(?:\/|$)/, "")
+			.split("/")
+			.filter(Boolean)
+			.map(decodeURIComponent);
+		if (!parts.length) return false;
+		window.frappe.set_route(...parts);
+		return true;
+	}
+
 	function openRoute(route) {
 		const target = String(route || "").trim();
 		if (!target) return false;
 
 		try {
 			const url = new URL(target, window.location.origin);
-			const router = window.frappe?.router;
 			const isSameOrigin = url.origin === window.location.origin;
 			const isDeskRoute = /^\/(app|desk)(\/|$)/.test(url.pathname);
-			if (isSameOrigin && isDeskRoute && typeof router?.route === "function") {
-				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-				const next = `${url.pathname}${url.search}${url.hash}`;
-				if (current === next) return true;
-
-				window.frappe.route_options = {};
-				for (const [key, value] of url.searchParams) {
-					window.frappe.route_options[key] = value;
-				}
-				window.frappe.route_hash = url.hash || null;
-				window.history.pushState(null, "", next);
-				Promise.resolve(router.route()).catch((error) => {
-					console.error("VetEdge Desk navigation failed:", error);
-					window.location.assign(next);
-				});
-				return true;
+			if (isSameOrigin && isDeskRoute && typeof window.frappe?.set_route === "function") {
+				const item = menuItemForRoute(url.pathname);
+				if (applyFrappeRoute(item, url)) return true;
 			}
 		} catch (error) {
 			if (window.frappe?.boot?.developer_mode) {
