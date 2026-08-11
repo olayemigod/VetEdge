@@ -1,6 +1,10 @@
 from pathlib import Path
 from unittest import TestCase
 
+from vetedge.tests.test_vetedge_executive_branch_efficiency import TestVetEdgeExecutiveBranchEfficiency
+from vetedge.tests.test_vetedge_medical_history_lazy_loading import TestVetEdgeMedicalHistoryLazyLoading
+from vetedge.tests.test_vetedge_stock_expiry_filter_efficiency import TestVetEdgeStockExpiryFilterEfficiency
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -74,3 +78,13 @@ class TestVetEdgePerformancePageReuse(TestCase):
 			"vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js",
 		):
 			self.assertNotIn("setInterval(", self.read(relative_path), relative_path)
+
+
+# Imported TestCase classes are intentionally exposed in this module so the
+# existing Fast Validation entrypoint executes all performance/data-efficiency
+# contracts together on the consolidated QA branch.
+PERFORMANCE_SUITES = (
+	TestVetEdgeExecutiveBranchEfficiency,
+	TestVetEdgeMedicalHistoryLazyLoading,
+	TestVetEdgeStockExpiryFilterEfficiency,
+)
