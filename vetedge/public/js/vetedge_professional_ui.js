@@ -108,13 +108,28 @@
 		return ICON_ALIASES[normalized] || normalized || fallback;
 	}
 
+	function deskRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		try {
+			const url = new URL(raw, window.location.origin);
+			if (url.origin !== window.location.origin) return raw;
+			if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+				url.pathname = `/desk${url.pathname.slice(4)}`;
+			}
+			return `${url.pathname}${url.search}${url.hash}`;
+		} catch (_error) {
+			return raw.replace(/^\/app(?=\/|$)/, "/desk");
+		}
+	}
+
 	function shellRoute(item) {
-		if (item.route) return item.route;
+		if (item.route) return deskRoute(item.route);
 		const target = String(item.link_to || "").trim();
 		if (!target) return "";
-		if (item.link_type === "Report") return `/app/query-report/${encodeURIComponent(target)}`;
-		if (item.link_type === "DocType") return `/app/${slug(target)}`;
-		return `/app/${target.replace(/^\/+/, "")}`;
+		if (item.link_type === "Report") return `/desk/query-report/${encodeURIComponent(target)}`;
+		if (item.link_type === "DocType") return `/desk/${slug(target)}`;
+		return `/desk/${target.replace(/^\/+/, "")}`;
 	}
 
 	function itemDescription(item) {
@@ -129,8 +144,8 @@
 				icon: "home",
 				description: "Veterinary operations and inventory overview",
 				items: [
-					{ label: "Executive Dashboard", route: "/app/vetedge-executive-dashboard", icon: "chart", description: ITEM_META["Executive Dashboard"].description, link_type: "Page", link_to: "vetedge-executive-dashboard" },
-					{ label: "Stock Expiry Monitor", route: "/app/stock-expiry-monitor", icon: "layers", description: ITEM_META["Stock Expiry Monitor"].description, link_type: "Page", link_to: "stock-expiry-monitor" },
+					{ label: "Executive Dashboard", route: "/desk/vetedge-executive-dashboard", icon: "chart", description: ITEM_META["Executive Dashboard"].description, link_type: "Page", link_to: "vetedge-executive-dashboard" },
+					{ label: "Stock Expiry Monitor", route: "/desk/stock-expiry-monitor", icon: "layers", description: ITEM_META["Stock Expiry Monitor"].description, link_type: "Page", link_to: "stock-expiry-monitor" },
 				],
 			},
 			{
@@ -140,7 +155,7 @@
 				description: "Veterinary configuration and controls",
 				defaultCollapsed: true,
 				items: [
-					{ label: "Veterinary Settings", route: "/app/veterinary-settings", icon: "settings", description: ITEM_META["Veterinary Settings"].description, link_type: "DocType", link_to: "Veterinary Settings" },
+					{ label: "Veterinary Settings", route: "/desk/veterinary-settings-center", icon: "settings", description: ITEM_META["Veterinary Settings"].description, link_type: "Page", link_to: "veterinary-settings-center" },
 				],
 			},
 		];
@@ -227,14 +242,19 @@
 		if (!target) return null;
 		let pathname = target;
 		try {
-			pathname = new URL(target, window.location.origin).pathname;
+			pathname = new URL(deskRoute(target), window.location.origin).pathname;
 		} catch (_error) {
 			// Keep the raw route and compare it below.
 		}
 		const normalized = String(pathname || "").replace(/\/+$/, "") || "/";
 		for (const group of state.menuGroups) {
 			for (const item of group.items || []) {
-				const itemPath = String(item.route || "").replace(/\/+$/, "") || "/";
+				let itemPath = String(item.route || "").replace(/\/+$/, "") || "/";
+				try {
+					itemPath = new URL(deskRoute(item.route), window.location.origin).pathname.replace(/\/+$/, "") || "/";
+				} catch (_error) {
+					// Keep deterministic string comparison.
+				}
 				if (itemPath === normalized) return item;
 			}
 		}
@@ -273,13 +293,13 @@
 	}
 
 	function openRoute(route) {
-		const target = String(route || "").trim();
+		const target = deskRoute(route);
 		if (!target) return false;
 
 		try {
 			const url = new URL(target, window.location.origin);
 			const isSameOrigin = url.origin === window.location.origin;
-			const isDeskRoute = /^\/(app|desk)(\/|$)/.test(url.pathname);
+			const isDeskRoute = /^\/desk(?:\/|$)/.test(url.pathname);
 			if (isSameOrigin && isDeskRoute && typeof window.frappe?.set_route === "function") {
 				const item = menuItemForRoute(url.pathname);
 				if (applyFrappeRoute(item, url)) return true;
@@ -342,12 +362,10 @@
 						let handled = false;
 						const listeners = Array.isArray(suppliedNavigate) ? suppliedNavigate : [suppliedNavigate];
 						listeners.forEach((listener) => {
-							if (typeof listener === "function") {
-								listener(route);
-								handled = true;
-							}
+							if (typeof listener === "function" && listener(route) === true) handled = true;
 						});
-						if (!handled) openRoute(route);
+						if (!handled) return openRoute(route);
+						return true;
 					};
 					return Vue.h(
 						OriginalShell,
