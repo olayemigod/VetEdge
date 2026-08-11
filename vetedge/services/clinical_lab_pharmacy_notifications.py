@@ -152,12 +152,12 @@ def resolve_recipients(
 			practitioner = doc.get("consulting_practitioner")
 		elif reference_doctype == "Veterinary Lab Order":
 			practitioner = doc.get("requested_by")
-		
+
 		if practitioner:
 			rec = get_user_recipient(practitioner, audience_type="Internal Staff")
 			if rec and rec.get("user"):
 				recipients.append(rec["user"])
-				
+
 		owner = doc.get("owner")
 		if owner:
 			rec = get_user_recipient(owner, audience_type="Internal Staff")
@@ -205,7 +205,7 @@ def resolve_recipients(
 def build_message(event_key: str, reference_name: str, context: dict) -> str:
 	patient = context.get("patient") or ""
 	item_code = context.get("item") or ""
-	
+
 	if event_key == "consultation_awaiting_payment":
 		return f"Veterinary consultation {reference_name} is awaiting payment for patient {patient}."
 	elif event_key == "consultation_sent_to_dispensary":
@@ -261,7 +261,7 @@ def build_idempotency_key(
 
 def get_action_url(reference_doctype: str, reference_name: str) -> str:
 	if reference_doctype == "Veterinary Consultation":
-		return f"/app/veterinary-consultation/{reference_name}"
+		return f"/desk/veterinary-consultation/{reference_name}"
 	if reference_doctype == "Veterinary Lab Order":
-		return f"/app/veterinary-lab-order/{reference_name}"
-	return f"/app/{reference_doctype.lower().replace(' ', '-')}/{reference_name}"
+		return f"/desk/veterinary-lab-order/{reference_name}"
+	return f"/desk/{reference_doctype.lower().replace(' ', '-')}/{reference_name}"
