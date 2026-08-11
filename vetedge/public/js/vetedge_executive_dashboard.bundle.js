@@ -3,6 +3,7 @@ import { h } from 'vue';
 import VetedgeExecutiveDashboard from './vetedge_executive_dashboard/VetedgeExecutiveDashboard.vue';
 
 const BRANCH_SEARCH_API = 'vetedge.services.dashboard_filter_search.search_dashboard_branches';
+const EXECUTIVE_PAYLOAD_API = 'vetedge.services.dashboard_filter_search.get_executive_dashboard_payload';
 const BRANCH_SEARCH_PAGE_LENGTH = 20;
 
 function getRuntime() {
@@ -17,7 +18,6 @@ function installLowDataBranchPicker(runtime) {
 
 	const EdgeLinkField = runtime.components.EdgeLinkField;
 	const legacyMethods = VetedgeExecutiveDashboard.methods || {};
-	const legacyRefresh = legacyMethods.refresh;
 	const legacyBeforeUnmount = VetedgeExecutiveDashboard.beforeUnmount;
 
 	VetedgeExecutiveDashboard.methods = {
@@ -102,11 +102,24 @@ function installLowDataBranchPicker(runtime) {
 			if (nativeLabel) nativeLabel.style.display = '';
 			if (nativeSelect) nativeSelect.style.display = '';
 		},
-		async refresh(...args) {
-			const result = await legacyRefresh?.apply(this, args);
-			await this.$nextTick?.();
-			this.mountBranchSearch();
-			return result;
+		async refresh() {
+			this.loading = true;
+			this.error = '';
+			frappe.route_options = { ...this.filters };
+			try {
+				this.payload = await this.call(EXECUTIVE_PAYLOAD_API, {
+					filters: this.filters,
+				}) || { kpis: [], charts: [], report_links: [] };
+				await this.$nextTick();
+				this.renderCharts();
+			} catch (error) {
+				this.error = error?.message || 'Unable to load Executive Dashboard data.';
+			} finally {
+				this.loading = false;
+				await this.$nextTick();
+				this.renderCharts();
+				this.mountBranchSearch();
+			}
 		},
 	};
 
