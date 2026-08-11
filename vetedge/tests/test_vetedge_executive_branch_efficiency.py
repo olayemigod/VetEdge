@@ -55,5 +55,13 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		self.assertIn("page_length = min(", service)
 		self.assertNotIn("ignore_permissions", service)
 
+	def test_branch_search_preserves_existing_unassigned_user_semantics(self):
+		service = self.read(SERVICE)
+
+		self.assertIn("def _explicit_branch_scope", service)
+		self.assertIn("if explicit_scope:", service)
+		self.assertIn("no access", service)
+		self.assertNotIn("if not assigned:", service)
+
 	def test_no_background_polling_is_added(self):
 		self.assertNotIn("setInterval(", self.read(BUNDLE))
