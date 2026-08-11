@@ -11,6 +11,8 @@ from typing import Iterable
 
 TEXT_EXTENSIONS = {".py", ".js", ".vue", ".css", ".json", ".html"}
 EXCLUDED_PARTS = {".git", "node_modules", "__pycache__", ".venv", "env", "dist"}
+NON_RUNTIME_PREFIXES = ("tests/", "tools/", "docs/")
+VENDORED_FRONTEND_PREFIXES = ("vetedge/public/js/lib/",)
 SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3}
 
 
@@ -72,9 +74,25 @@ def _constant_number(node: ast.AST | None) -> int | float | None:
 	return None
 
 
+def _is_runtime_python(relative: str) -> bool:
+	if relative.startswith(NON_RUNTIME_PREFIXES):
+		return False
+	name = Path(relative).name
+	if name.startswith("test_") or "/test_" in relative:
+		return False
+	return relative.startswith("vetedge/")
+
+
+def _is_vendored_frontend(relative: str) -> bool:
+	return relative.startswith(VENDORED_FRONTEND_PREFIXES)
+
+
 def scan_python(path: Path, root: Path, text: str, config: AuditConfig) -> list[Finding]:
 	findings: list[Finding] = []
 	relative = _repo_relative(path, root)
+	if not _is_runtime_python(relative):
+		return findings
+
 	try:
 		tree = ast.parse(text, filename=str(path))
 	except SyntaxError as error:
@@ -96,13 +114,14 @@ def scan_python(path: Path, root: Path, text: str, config: AuditConfig) -> list[
 
 		if name in {"frappe.get_all", "frappe.db.get_all"}:
 			has_limit = any(key in keywords for key in ("limit", "page_length", "limit_page_length"))
-			if not has_limit:
+			has_filters = "filters" in keywords
+			if not has_limit and not has_filters:
 				findings.append(
 					Finding(
 						"medium",
 						"unbounded_query",
 						relative,
-						"frappe.get_all() has no explicit limit. Review whether the result set is naturally bounded by its filters.",
+						"frappe.get_all() has neither an explicit limit nor filters. Review before using this path in an interactive workflow.",
 						getattr(node, "lineno", None),
 					)
 				)
@@ -127,6 +146,8 @@ def scan_python(path: Path, root: Path, text: str, config: AuditConfig) -> list[
 def scan_frontend(path: Path, root: Path, text: str, config: AuditConfig) -> list[Finding]:
 	findings: list[Finding] = []
 	relative = _repo_relative(path, root)
+	if _is_vendored_frontend(relative):
+		return findings
 
 	if "setInterval(" in text:
 		findings.append(
@@ -139,7 +160,7 @@ def scan_frontend(path: Path, root: Path, text: str, config: AuditConfig) -> lis
 			)
 		)
 
-	if "on_page_show" in text and ".unmount()" in text:
+	if relative.startswith("vetedge/veterinary/page/") and "on_page_show" in text and ".unmount()" in text:
 		findings.append(
 			Finding(
 				"medium",
@@ -186,6 +207,16 @@ def scan_file_size(path: Path, root: Path, config: AuditConfig) -> list[Finding]
 				metric=size_kb,
 			)
 		)
+	elif _is_vendored_frontend(relative) and size_kb >= config.large_source_warning_kb:
+		findings.append(
+			Finding(
+				"low",
+				"large_vendor_asset",
+				relative,
+				f"Vendored frontend asset is {size_kb:g} KB. Confirm it remains lazy-loaded and is not part of the normal VetEdge boot path.",
+				metric=size_kb,
+			)
+		)
 	elif path.suffix.lower() in {".js", ".vue"} and size_kb >= config.large_source_warning_kb:
 		findings.append(
 			Finding(
@@ -219,7 +250,8 @@ def audit_repository(root: Path, config: AuditConfig | None = None) -> dict:
 			findings.extend(scan_python(path, root, text, config))
 		elif path.suffix.lower() in {".js", ".vue", ".html"}:
 			findings.extend(scan_frontend(path, root, text, config))
-			frontend_calls += text.count("frappe.call(")
+			if not _is_vendored_frontend(_repo_relative(path, root)):
+				frontend_calls += text.count("frappe.call(")
 			if "edgeui.bundle.js" in text and "frappe.require(" in text:
 				edgesuite_loaders += 1
 
@@ -253,7 +285,9 @@ def audit_repository(root: Path, config: AuditConfig | None = None) -> dict:
 		"findings": [asdict(finding) for finding in findings],
 		"notes": [
 			"Static findings are review signals, not proof of a production bottleneck.",
-			"Browser Network/Lighthouse measurements and server query profiling remain required before changing business logic or indexes.",
+			"Filtered frappe.get_all calls are not automatically flagged because many are naturally bounded; live query profiling should evaluate them.",
+			"Vendored frontend internals are excluded from polling/API pattern scans; large vendored assets are still reported for lazy-load review.",
+			"Browser Network measurements and server query profiling remain required before changing business logic or indexes.",
 			"This audit performs no writes to the Frappe site, database, or source tree.",
 		],
 	}
