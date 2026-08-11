@@ -127,7 +127,7 @@ export function mountVetEdgeResourceCenter(target) {
 			return;
 		}
 		quickEditorView?.open?.({
-			resource: resourceView?.resource,
+			resource: resourceView.resource,
 			name: state.name || null,
 		});
 	};
