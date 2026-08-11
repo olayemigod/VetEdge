@@ -37,6 +37,7 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_sidebar_target_integrity.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
@@ -89,11 +90,10 @@ jobs:
           node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
           node --check vetedge/public/js/vetedge_master_workspace.bundle.js
           node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
-          node --check vetedge/public/js/vetedge_pricing_master_workspace.bundle.js
-          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
           node --check vetedge/public/js/vetedge_front_desk_action_center.bundle.js
-          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
+          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
           node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
           node --check vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js
           node --check vetedge/public/js/veterinary_medical_history.bundle.js
           node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
@@ -221,6 +221,10 @@ jobs:
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_professional_ui_contract
+
+      - name: Verify published sidebar target integrity
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_sidebar_target_integrity
 
       - name: Run recovered EdgeSuite migration contracts
         working-directory: frappe-bench
