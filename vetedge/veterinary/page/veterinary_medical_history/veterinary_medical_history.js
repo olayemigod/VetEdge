@@ -1,3 +1,5 @@
+const VETEDGE_MEDICAL_HISTORY_REFRESH_MAX_AGE_MS = 15000;
+
 frappe.pages['veterinary-medical-history'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Medical History'), single_column: true });
 	wrapper.page = page;
@@ -7,6 +9,24 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+
+	// Preserve lazy-loaded patient sections/trends across Desk navigation. The
+	// mounted bundle decides whether the active context is still fresh or whether
+	// a new deep-linked patient / stale view needs a read-only refresh.
+	if (wrapper.vue_app?.refresh) {
+		try {
+			Promise.resolve(
+				wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_MEDICAL_HISTORY_REFRESH_MAX_AGE_MS })
+			).catch((error) => {
+				console.error('Error refreshing Veterinary Medical History:', error);
+			});
+			return;
+		} catch (error) {
+			console.error('Error reusing Veterinary Medical History:', error);
+		}
+	}
+
+	// Backward-compatible cleanup for an older cached bundle without refresh().
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
 	$(page.body).empty();
