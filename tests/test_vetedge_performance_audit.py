@@ -92,6 +92,39 @@ def load_page():
 
 			self.assertFalse(any(item["category"] == "unbounded_query" for item in report["findings"]))
 
+	def test_filtered_get_all_is_left_for_live_query_profiling(self):
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = Path(temp_dir)
+			self.write(
+				root / "vetedge" / "services" / "filtered.py",
+				"""
+import frappe
+
+def load_patient_rows(patient):
+    return frappe.get_all('Veterinary Consultation', filters={'patient': patient}, fields=['name'])
+""",
+			)
+
+			report = self.tool.audit_repository(root)
+
+			self.assertFalse(any(item["category"] == "unbounded_query" for item in report["findings"]))
+
+	def test_vendored_frontend_internals_do_not_create_polling_false_positive(self):
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = Path(temp_dir)
+			vendor = root / "vetedge" / "public" / "js" / "lib" / "vendor.min.js"
+			vendor.parent.mkdir(parents=True, exist_ok=True)
+			vendor.write_text("setInterval(function(){}, 1000);" + ("x" * 4096), encoding="utf-8")
+
+			report = self.tool.audit_repository(
+				root,
+				self.tool.AuditConfig(large_source_warning_kb=1),
+			)
+
+			categories = {item["category"] for item in report["findings"]}
+			self.assertNotIn("polling", categories)
+			self.assertIn("large_vendor_asset", categories)
+
 	def test_markdown_renders_review_warning_and_live_baseline(self):
 		report = {
 			"files_scanned": 1,
