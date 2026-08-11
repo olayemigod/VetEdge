@@ -15,56 +15,56 @@
 	});
 
 	const RESOURCE_ROUTES = Object.freeze({
-		"/app/veterinary-patient": "patients",
-		"/app/veterinary-appointment": "appointments",
-		"/app/veterinary-lab-order": "lab-orders",
-		"/app/veterinary-vaccination-record": "vaccinations",
-		"/app/pet-grooming-appointment": "grooming",
-		"/app/pet-boarding-booking": "boarding",
-		"/app/kennel": "kennels",
+		"/desk/veterinary-patient": "patients",
+		"/desk/veterinary-appointment": "appointments",
+		"/desk/veterinary-lab-order": "lab-orders",
+		"/desk/veterinary-vaccination-record": "vaccinations",
+		"/desk/pet-grooming-appointment": "grooming",
+		"/desk/pet-boarding-booking": "boarding",
+		"/desk/kennel": "kennels",
 	});
 
 	const MASTER_ROUTES = Object.freeze({
-		"/app/veterinary-species": "species",
-		"/app/veterinary-breed": "breeds",
-		"/app/veterinary-symptom": "symptoms",
-		"/app/veterinary-diagnosis-category": "diagnosis-categories",
-		"/app/veterinary-diagnosis": "diagnoses",
-		"/app/veterinary-service-type": "service-types",
-		"/app/consultation-type": "consultation-types",
+		"/desk/veterinary-species": "species",
+		"/desk/veterinary-breed": "breeds",
+		"/desk/veterinary-symptom": "symptoms",
+		"/desk/veterinary-diagnosis-category": "diagnosis-categories",
+		"/desk/veterinary-diagnosis": "diagnoses",
+		"/desk/veterinary-service-type": "service-types",
+		"/desk/consultation-type": "consultation-types",
 	});
 
 	const PRICING_ROUTES = Object.freeze({
-		"/app/veterinary-treatment-item": "treatment-items",
-		"/app/veterinary-treatment-type": "treatment-types",
-		"/app/veterinary-lab-test": "lab-tests",
-		"/app/veterinary-vaccine": "vaccines",
-		"/app/pet-grooming-service": "grooming-services",
+		"/desk/veterinary-treatment-item": "treatment-items",
+		"/desk/veterinary-treatment-type": "treatment-types",
+		"/desk/veterinary-lab-test": "lab-tests",
+		"/desk/veterinary-vaccine": "vaccines",
+		"/desk/pet-grooming-service": "grooming-services",
 	});
 
 	const SERVICE_ROUTES = Object.freeze({
-		"/app/pet-boarding-stay": "boarding-stays",
-		"/app/pet-boarding-care-record": "boarding-care-records",
-		"/app/pet-grooming-session": "grooming-sessions",
+		"/desk/pet-boarding-stay": "boarding-stays",
+		"/desk/pet-boarding-care-record": "boarding-care-records",
+		"/desk/pet-grooming-session": "grooming-sessions",
 	});
 
 	const SERVICE_PAGES = Object.freeze({
-		"/app/kennel-availability": "availability",
-		"/app/kennel-availability-board": "availability",
+		"/desk/kennel-availability": "availability",
+		"/desk/kennel-availability-board": "availability",
 	});
 
 	const PRODUCT_ROUTES = new Set([
-		"/app/vetedge",
-		"/app/vetedge-executive-dashboard",
-		"/app/stock-expiry-monitor",
-		"/app/vetedge-resource-center",
-		"/app/veterinary-settings-center",
-		"/app/vetedge-master-workspace",
-		"/app/vetedge-pricing-master-workspace",
-		"/app/vetedge-front-desk-action-center",
-		"/app/vetedge-clinical-workspace",
-		"/app/veterinary-medical-history",
-		"/app/vetedge-service-operations",
+		"/desk/vetedge",
+		"/desk/vetedge-executive-dashboard",
+		"/desk/stock-expiry-monitor",
+		"/desk/vetedge-resource-center",
+		"/desk/veterinary-settings-center",
+		"/desk/vetedge-master-workspace",
+		"/desk/vetedge-pricing-master-workspace",
+		"/desk/vetedge-front-desk-action-center",
+		"/desk/vetedge-clinical-workspace",
+		"/desk/veterinary-medical-history",
+		"/desk/vetedge-service-operations",
 	]);
 
 	const state = {
@@ -103,9 +103,28 @@
 		if (!raw) return "";
 		try {
 			const url = new URL(raw, window.location.origin);
-			return url.pathname.replace(/\/$/, "") || "/";
+			let path = url.pathname.replace(/\/$/, "") || "/";
+			if (path === "/app" || path.startsWith("/app/")) path = `/desk${path.slice(4)}`;
+			return path;
 		} catch (_error) {
-			return raw.split("?")[0].replace(/\/$/, "");
+			let path = raw.split("?")[0].replace(/\/$/, "");
+			if (path === "/app" || path.startsWith("/app/")) path = `/desk${path.slice(4)}`;
+			return path;
+		}
+	}
+
+	function deskRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		try {
+			const url = new URL(raw, window.location.origin);
+			if (url.origin !== window.location.origin) return raw;
+			if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+				url.pathname = `/desk${url.pathname.slice(4)}`;
+			}
+			return `${url.pathname}${url.search}${url.hash}`;
+		} catch (_error) {
+			return raw.replace(/^\/app(?=\/|$)/, "/desk");
 		}
 	}
 
@@ -113,24 +132,24 @@
 		if (item?.route) {
 			const route = String(item.route).trim();
 			if (!route) return "";
-			if (route.startsWith("/")) return route;
-			return `/app/${route.replace(/^\/+/, "")}`;
+			if (route.startsWith("/")) return deskRoute(route);
+			return `/desk/${route.replace(/^\/+/, "")}`;
 		}
 		const target = String(item?.link_to || item?.linkTo || "").trim();
 		if (!target) return "";
 		const type = String(item?.link_type || item?.linkType || "Page");
-		if (type === "Report") return `/app/query-report/${encodeURIComponent(target)}`;
-		if (type === "DocType") return `/app/${slug(target)}`;
-		return `/app/${target.replace(/^\/+/, "")}`;
+		if (type === "Report") return `/desk/query-report/${encodeURIComponent(target)}`;
+		if (type === "DocType") return `/desk/${slug(target)}`;
+		return `/desk/${target.replace(/^\/+/, "")}`;
 	}
 
 	function openSameTab(route) {
-		window.location.assign(route);
+		window.location.assign(deskRoute(route));
 		return true;
 	}
 
 	function openNewTab(route) {
-		window.open(route, "_blank", "noopener,noreferrer");
+		window.open(deskRoute(route), "_blank", "noopener,noreferrer");
 		return true;
 	}
 
@@ -150,35 +169,35 @@
 
 	function serviceTarget(path) {
 		const pageResource = SERVICE_PAGES[path];
-		if (pageResource) return `/app/vetedge-service-operations?resource=${encodeURIComponent(pageResource)}`;
-		return migratedTarget(path, SERVICE_ROUTES, "/app/vetedge-service-operations");
+		if (pageResource) return `/desk/vetedge-service-operations?resource=${encodeURIComponent(pageResource)}`;
+		return migratedTarget(path, SERVICE_ROUTES, "/desk/vetedge-service-operations");
 	}
 
 	function clinicalTarget(path) {
-		const base = "/app/veterinary-consultation";
-		if (path === base) return "/app/vetedge-clinical-workspace";
+		const base = "/desk/veterinary-consultation";
+		if (path === base) return "/desk/vetedge-clinical-workspace";
 		if (!path.startsWith(`${base}/`)) return "";
 		const name = decodeURIComponent(path.slice(base.length + 1));
 		if (!name || name === "new" || name.toLowerCase().startsWith("new-veterinary-consultation")) {
-			return "/app/vetedge-clinical-workspace?new=1";
+			return "/desk/vetedge-clinical-workspace?new=1";
 		}
-		return `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`;
+		return `/desk/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`;
 	}
 
 	function frontDeskTarget(path) {
 		const routes = [
-			["/app/veterinary-guest-booking-request", "guest"],
-			["/app/veterinary-missed-appointment", "missed"],
+			["/desk/veterinary-guest-booking-request", "guest"],
+			["/desk/veterinary-missed-appointment", "missed"],
 		];
 		for (const [base, tab] of routes) {
-			if (path === base) return `/app/vetedge-front-desk-action-center?tab=${tab}`;
+			if (path === base) return `/desk/vetedge-front-desk-action-center?tab=${tab}`;
 			if (path.startsWith(`${base}/`)) {
 				const name = decodeURIComponent(path.slice(base.length + 1));
-				return `/app/vetedge-front-desk-action-center?tab=${tab}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
+				return `/desk/vetedge-front-desk-action-center?tab=${tab}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
 			}
 		}
-		if (path === "/app/veterinary-appointment-queue") {
-			return "/app/vetedge-front-desk-action-center?tab=queue";
+		if (path === "/desk/veterinary-appointment-queue") {
+			return "/desk/vetedge-front-desk-action-center?tab=queue";
 		}
 		return "";
 	}
@@ -189,11 +208,11 @@
 				const path = normalizePath(route);
 				if (!path) return false;
 
-				if (path === "/app/veterinary-settings") {
-					return openSameTab("/app/veterinary-settings-center");
+				if (path === "/desk/veterinary-settings") {
+					return openSameTab("/desk/veterinary-settings-center");
 				}
 
-				if (path === "/app/veterinary-vital-signs" || path.startsWith("/app/veterinary-vital-signs/")) {
+				if (path === "/desk/veterinary-vital-signs" || path.startsWith("/desk/veterinary-vital-signs/")) {
 					return openSameTab(route);
 				}
 
@@ -206,19 +225,19 @@
 				const frontDesk = frontDeskTarget(path);
 				if (frontDesk) return openSameTab(frontDesk);
 
-				const migratedMaster = migratedTarget(path, MASTER_ROUTES, "/app/vetedge-master-workspace");
+				const migratedMaster = migratedTarget(path, MASTER_ROUTES, "/desk/vetedge-master-workspace");
 				if (migratedMaster) return openSameTab(migratedMaster);
 
-				const migratedPricing = migratedTarget(path, PRICING_ROUTES, "/app/vetedge-pricing-master-workspace");
+				const migratedPricing = migratedTarget(path, PRICING_ROUTES, "/desk/vetedge-pricing-master-workspace");
 				if (migratedPricing) return openSameTab(migratedPricing);
 
 				const resource = RESOURCE_ROUTES[path];
 				if (resource) {
-					return openSameTab(`/app/vetedge-resource-center?resource=${encodeURIComponent(resource)}`);
+					return openSameTab(`/desk/vetedge-resource-center?resource=${encodeURIComponent(resource)}`);
 				}
 
 				if (PRODUCT_ROUTES.has(path)) return openSameTab(route);
-				if (path.startsWith("/app/")) return openNewTab(route);
+				if (path.startsWith("/desk/")) return openNewTab(route);
 				return false;
 			},
 		};
@@ -274,12 +293,12 @@
 	}
 
 	function targetForItem(item) {
-		if (item.action_url) return item.action_url;
+		if (item.action_url) return deskRoute(item.action_url);
 		if (item.reference_doctype && item.reference_name) {
 			const documentSlug = slug(item.reference_doctype);
-			return `/app/${documentSlug}/${encodeURIComponent(item.reference_name)}`;
+			return `/desk/${documentSlug}/${encodeURIComponent(item.reference_name)}`;
 		}
-		return item.name ? `/app/veterinary-notification-item/${encodeURIComponent(item.name)}` : "";
+		return item.name ? `/desk/veterinary-notification-item/${encodeURIComponent(item.name)}` : "";
 	}
 
 	function normalizeNotification(item) {
