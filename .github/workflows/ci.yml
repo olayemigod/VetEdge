@@ -40,6 +40,7 @@ jobs:
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_performance_page_reuse.py \
             vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_recovered_workspace_integration.py \
@@ -52,6 +53,7 @@ jobs:
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_performance_page_reuse.py \
             vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
