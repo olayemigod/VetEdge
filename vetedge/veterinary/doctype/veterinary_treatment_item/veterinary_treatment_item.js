@@ -3,6 +3,6 @@ frappe.ui.form.on('Veterinary Treatment Item', {
 		const query = frm.is_new()
 			? 'resource=treatment-items&new=1'
 			: `resource=treatment-items&name=${encodeURIComponent(frm.doc.name)}`;
-		window.location.replace(`/app/vetedge-pricing-master-workspace?${query}`);
+		window.location.replace(`/desk/vetedge-pricing-master-workspace?${query}`);
 	}
 });
