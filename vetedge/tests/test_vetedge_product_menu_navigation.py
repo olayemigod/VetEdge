@@ -17,6 +17,21 @@ def test_shared_product_menu_owns_same_tab_navigation():
 	assert 'menu_source: "workspace_sidebar"' in menu
 
 
+def test_professional_sidebar_uses_desk_router_before_full_navigation_fallback():
+	professional = read(APP / "public/js/vetedge_professional_ui.js")
+	start = professional.index("function openRoute(route)")
+	end = professional.index("function injectStyles()", start)
+	block = professional[start:end]
+
+	assert 'const isDeskRoute = /^\\/(app|desk)(\\/|$)/.test(url.pathname);' in block
+	assert 'window.history.pushState(null, "", next);' in block
+	assert "Promise.resolve(router.route())" in block
+	assert "window.frappe.route_options = {};" in block
+	assert "for (const [key, value] of url.searchParams)" in block
+	assert "window.location.assign(target);" in block
+	assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
+
+
 def test_navigation_assets_are_cache_busted_after_service_route_migration():
 	hooks = read(APP / "hooks.py")
 	for asset in (
