@@ -204,7 +204,7 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	assert 'doctype === "Veterinary Vital Signs"' in route_alignment
 	assert 'path === "/app/veterinary-vital-signs"' not in route_alignment
 	assert "__vetedgeAcceptedRouteAlignment" in route_alignment
-	assert "/app/vetedge-resource-center" in home
+	assert "/desk/vetedge-resource-center" in home
 
 	guest_form = read(APP / "veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request.js")
 	guest_list = read(APP / "veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request_list.js")
@@ -291,7 +291,8 @@ def test_clinical_workspace_safety_followups_are_restored_and_wired_into_ui():
 	stage3 = read(APP / "services/clinical_workspace_stage3.py")
 	component = read(MIGRATED_PAGES["clinical"]["component"])
 
-	assert "vetedge_clinical_route.js" in hooks
+	assert "vetedge_navigation_recovery.js" in hooks
+	assert "vetedge_clinical_route.js" not in hooks
 	assert "enforce_consultation_practitioner_ownership" in hooks
 	assert "enforce_pending_dispensary_completion_invariant" in hooks
 	assert "enforce_vitals_consultation_ownership" in hooks
