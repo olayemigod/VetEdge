@@ -52,7 +52,7 @@
 				<section class="history-summary" aria-label="Patient medical history summary">
 					<div class="history-patient-card">
 						<span>Patient</span>
-						<strong>{{ summary.patient_name || summary.patient || filters.patient }}</strong>
+						<strong>{{ summary.patient_name || patientLabel || summary.patient || filters.patient }}</strong>
 						<small>{{ [summary.species, summary.breed].filter(Boolean).join(' · ') || 'Veterinary Patient' }}</small>
 					</div>
 					<div class="history-summary-card"><span>Owner</span><strong>{{ summary.primary_owner || '—' }}</strong></div>
@@ -128,6 +128,7 @@
 <script>
 const API = Object.freeze({
 	history: "vetedge.services.medical_history.get_patient_medical_history_view",
+	patientSearch: "vetedge.services.appointment_edgeui.search_appointment_link",
 });
 
 const TREND_TABS = Object.freeze([
@@ -232,6 +233,7 @@ export default {
 			identity: window.frappe?.boot?.edgesuite_ui_identity?.veterinary || window.frappe?.boot?.vetedge_ui_identity || {},
 			filters: { patient: "", from_date: addDays(toDate, -90), to_date: toDate },
 			patientLabel: "",
+			patientLabels: {},
 			loading: false,
 			error: "",
 			data: {},
@@ -253,13 +255,13 @@ export default {
 	watch: {
 		activeTrend() { this.$nextTick(() => this.renderTrendChart()); },
 	},
-	mounted() {
+	async mounted() {
 		const params = new URLSearchParams(window.location.search || "");
 		const routePatient = window.frappe?.route_options?.patient || params.get("patient") || "";
 		if (routePatient) {
 			this.filters.patient = routePatient;
-			this.patientLabel = routePatient;
 			if (window.frappe?.route_options) window.frappe.route_options = null;
+			await this.resolvePatientLabel(routePatient);
 			this.load();
 		}
 	},
@@ -268,24 +270,46 @@ export default {
 	},
 	methods: {
 		async searchPatients(term) {
-			const response = await frappe.call("frappe.desk.search.search_link", {
-				doctype: "Veterinary Patient",
+			const response = await frappe.call(API.patientSearch, {
+				field: "patient",
 				txt: term || "",
 				page_length: 20,
-				filters: JSON.stringify({ status: ["!=", "Deceased"] }),
 			});
-			return (response.message || []).map((row) => ({
-				value: row.value || row.name,
-				label: row.description || row.label || row.value || row.name,
-				description: row.value || row.name,
-			}));
+			const options = response.message || [];
+			const labels = { ...this.patientLabels };
+			for (const option of options) {
+				if (option?.value) labels[option.value] = option.label || option.value;
+			}
+			this.patientLabels = labels;
+			return options;
 		},
-		selectPatient(value) {
+		async resolvePatientLabel(value) {
+			if (!value) {
+				this.patientLabel = "";
+				return "";
+			}
+			if (this.patientLabels[value]) {
+				this.patientLabel = this.patientLabels[value];
+				return this.patientLabel;
+			}
+			try {
+				const options = await this.searchPatients(value);
+				const exact = options.find((option) => option.value === value);
+				this.patientLabel = exact?.label || value;
+			} catch (_error) {
+				this.patientLabel = value;
+			}
+			return this.patientLabel;
+		},
+		async selectPatient(value) {
 			this.filters.patient = value || "";
-			this.patientLabel = value || "";
+			this.patientLabel = value ? this.patientLabels[value] || "" : "";
 			this.data = {};
 			this.error = "";
-			if (value) this.load();
+			if (value) {
+				await this.resolvePatientLabel(value);
+				this.load();
+			}
 		},
 		resetDates() {
 			const toDate = today();
@@ -305,7 +329,9 @@ export default {
 					limit: 100,
 				});
 				this.data = response.message || {};
-				this.patientLabel = this.data?.summary?.patient_name || this.filters.patient;
+				const readableLabel = this.data?.summary?.patient_name || this.patientLabels[this.filters.patient] || this.filters.patient;
+				this.patientLabel = readableLabel;
+				this.patientLabels = { ...this.patientLabels, [this.filters.patient]: readableLabel };
 				this.activeTrend = this.firstAvailableTrend();
 				this.activeHistory = this.firstAvailableHistory();
 				const url = new URL(window.location.href);

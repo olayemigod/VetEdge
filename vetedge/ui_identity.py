@@ -6,6 +6,7 @@ from vetedge.coreedge_adapter import get_current_vetedge_company, get_edge_platf
 from vetedge.services.branding import get_branding
 
 VETEDGE_LOGO = "/assets/vetedge/images/vetedge-app-icon.png"
+MEDICAL_HISTORY_PAGE = "veterinary-medical-history"
 
 
 def _company_identity(company: str | None) -> dict:
@@ -51,6 +52,18 @@ def _fallback_company() -> str | None:
 		return erpnext.get_default_company()
 	except Exception:
 		return frappe.db.get_value("Company", {}, "name")
+
+
+def _expose_medical_history_page(bootinfo) -> None:
+	"""Keep the permission-aware Medical History page discoverable in Frappe desk search."""
+	page_info = bootinfo.get("page_info") or {}
+	current = page_info.get(MEDICAL_HISTORY_PAGE) or {}
+	page_info[MEDICAL_HISTORY_PAGE] = {
+		**current,
+		"title": "Medical History",
+		"route": MEDICAL_HISTORY_PAGE,
+	}
+	bootinfo["page_info"] = page_info
 
 
 def build_vetedge_ui_identity() -> dict:
@@ -111,3 +124,4 @@ def extend_bootinfo(bootinfo) -> None:
 	shared["veterinary"] = identity
 	bootinfo["edgesuite_ui_identity"] = shared
 	bootinfo["vetedge_ui_identity"] = identity
+	_expose_medical_history_page(bootinfo)
