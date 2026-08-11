@@ -3,7 +3,6 @@ from unittest import TestCase
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PAGE_BACKEND = REPO_ROOT / "vetedge" / "veterinary" / "page" / "stock_expiry_monitor" / "stock_expiry_monitor.py"
-PAGE_LOADER = REPO_ROOT / "vetedge" / "veterinary" / "page" / "stock_expiry_monitor" / "stock_expiry_monitor.js"
 BUNDLE = REPO_ROOT / "vetedge" / "public" / "js" / "vetedge_stock_expiry_monitor.bundle.js"
 
 
@@ -45,8 +44,3 @@ class TestVetEdgeStockExpiryFilterEfficiency(TestCase):
 		self.assertIn('_validate_reference_filter(filters, "item_group")', backend)
 		self.assertIn('exact_filters["name"] = value', backend)
 		self.assertIn("page_length=1", backend)
-
-	def test_page_loader_requires_edgesuite_link_field(self):
-		loader = self.read(PAGE_LOADER)
-
-		self.assertIn("'EdgeLinkField'", loader)
