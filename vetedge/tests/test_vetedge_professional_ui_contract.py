@@ -38,7 +38,8 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		hooks = self.read(HOOKS)
 		self.assertIn("vetedge_professional_ui.css?v=20260719-1", hooks)
 		self.assertIn("vetedge_professional_ui.js?v=20260719-1", hooks)
-		self.assertIn("vetedge_navigation_recovery.js?v=20260811-1", hooks)
+		self.assertIn("vetedge_navigation_recovery.js?v=20260812-2", hooks)
+		self.assertNotIn("vetedge_clinical_route.js", hooks)
 		self.assertLess(hooks.index("dashboard_shell.css"), hooks.index("vetedge_professional_ui.css"))
 		self.assertLess(hooks.index("edgesuite_product_menu.js"), hooks.index("vetedge_professional_ui.js"))
 		self.assertLess(hooks.index("vetedge_ui_bridge.js"), hooks.index("vetedge_navigation_recovery.js"))
@@ -74,15 +75,15 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		content = self.read(NAVIGATION_RECOVERY_JS)
 		for contract in (
 			'label: "Veterinary Home"',
-			'route: "/app/vetedge"',
-			'"DocType:Veterinary Patient": "/app/vetedge-resource-center?resource=patients"',
-			'"DocType:Veterinary Appointment": "/app/vetedge-resource-center?resource=appointments"',
-			'"DocType:Veterinary Consultation": "/app/vetedge-clinical-workspace"',
-			'"Page:veterinary-appointment-queue": "/app/vetedge-front-desk-action-center?tab=queue"',
-			'"DocType:Veterinary Settings": "/app/veterinary-settings-center"',
-			'"DocType:Veterinary Species": "/app/vetedge-master-workspace?resource=species"',
-			'"DocType:Veterinary Treatment Item": "/app/vetedge-pricing-master-workspace?resource=treatment-items"',
-			'"DocType:Pet Boarding Stay": "/app/vetedge-service-operations?resource=boarding-stays"',
+			'route: "/desk/vetedge"',
+			'"DocType:Veterinary Patient": "/desk/vetedge-resource-center?resource=patients"',
+			'"DocType:Veterinary Appointment": "/desk/vetedge-resource-center?resource=appointments"',
+			'"DocType:Veterinary Consultation": "/desk/vetedge-clinical-workspace"',
+			'"Page:veterinary-appointment-queue": "/desk/vetedge-front-desk-action-center?tab=queue"',
+			'"DocType:Veterinary Settings": "/desk/veterinary-settings-center"',
+			'"DocType:Veterinary Species": "/desk/vetedge-master-workspace?resource=species"',
+			'"DocType:Veterinary Treatment Item": "/desk/vetedge-pricing-master-workspace?resource=treatment-items"',
+			'"DocType:Pet Boarding Stay": "/desk/vetedge-service-operations?resource=boarding-stays"',
 			'edgeUI.registerComponent("EdgeAppShell", CanonicalVetEdgeShell, { replace: true })',
 			"menuItems: groups",
 			"onNavigate: (route) => applyDeskRoute(route)",
@@ -97,7 +98,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 	def test_vetedge_home_stays_in_desk_and_routes_to_resource_center(self):
 		content = self.read(VETEDGE_HOME)
 		self.assertIn('title: __("Veterinary Home")', content)
-		self.assertIn('const target = "/app/vetedge-resource-center";', content)
+		self.assertIn('const target = "/desk/vetedge-resource-center";', content)
 		self.assertIn('frappe.set_route("vetedge-resource-center")', content)
 		self.assertNotIn("window.location.replace", content)
 
