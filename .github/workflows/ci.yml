@@ -37,6 +37,7 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_sidebar_target_integrity.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
@@ -51,6 +52,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
@@ -254,3 +256,7 @@ jobs:
       - name: Run Service Revenue tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_service_revenue
+
+      - name: Run Owner Register performance tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_owner_register_performance
