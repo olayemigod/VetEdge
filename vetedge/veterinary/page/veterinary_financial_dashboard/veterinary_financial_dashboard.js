@@ -1,10 +1,8 @@
 frappe.pages["veterinary-financial-dashboard"].on_page_load = function (wrapper) {
-	if (window.vetedgeFinancialDashboard && typeof window.vetedgeFinancialDashboard.mount === "function") {
-		return window.vetedgeFinancialDashboard.mount(wrapper);
-	}
-
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Financial Dashboard"), single_column: true });
-	frappe.require("/assets/vetedge/js/dashboard_shell.js", function () {
-		window.vetedgeDashboardShell.mount(page, { key: "financial", title: __("Financial Dashboard") });
+	frappe.require("vetedge_dashboard_host.bundle.js", function () {
+		window.mountVetEdgeDashboardHost(wrapper, {
+			key: "financial",
+			title: __("Financial Dashboard"),
+		});
 	});
 };
