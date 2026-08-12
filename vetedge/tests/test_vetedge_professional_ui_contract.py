@@ -8,6 +8,7 @@ HOOKS = REPOSITORY_ROOT / "vetedge" / "hooks.py"
 PROFESSIONAL_JS = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_professional_ui.js"
 NAVIGATION_RECOVERY_JS = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_navigation_recovery.js"
 PROFESSIONAL_CSS = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "vetedge_professional_ui.css"
+NAVIGATION_COMPAT_CSS = REPOSITORY_ROOT / "vetedge" / "public" / "css" / "vetedge_navigation_shell_compat.css"
 VETEDGE_HOME = REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / "vetedge.js"
 EXECUTIVE_LOADER = (
 	REPOSITORY_ROOT
@@ -32,15 +33,17 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		return path.read_text(encoding="utf-8")
 
 	def test_professional_assets_are_loaded_after_existing_vetedge_shell_assets(self):
-		for path in (PROFESSIONAL_JS, NAVIGATION_RECOVERY_JS, PROFESSIONAL_CSS):
+		for path in (PROFESSIONAL_JS, NAVIGATION_RECOVERY_JS, PROFESSIONAL_CSS, NAVIGATION_COMPAT_CSS):
 			self.assertTrue(path.exists(), path)
 
 		hooks = self.read(HOOKS)
 		self.assertIn("vetedge_professional_ui.css?v=20260719-1", hooks)
+		self.assertIn("vetedge_navigation_shell_compat.css?v=20260812-1", hooks)
 		self.assertIn("vetedge_professional_ui.js?v=20260719-1", hooks)
 		self.assertIn("vetedge_navigation_recovery.js?v=20260812-2", hooks)
 		self.assertNotIn("vetedge_clinical_route.js", hooks)
 		self.assertLess(hooks.index("dashboard_shell.css"), hooks.index("vetedge_professional_ui.css"))
+		self.assertLess(hooks.index("vetedge_professional_ui.css"), hooks.index("vetedge_navigation_shell_compat.css"))
 		self.assertLess(hooks.index("edgesuite_product_menu.js"), hooks.index("vetedge_professional_ui.js"))
 		self.assertLess(hooks.index("vetedge_ui_bridge.js"), hooks.index("vetedge_navigation_recovery.js"))
 
@@ -171,6 +174,29 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			".vetedge-notification-icon svg",
 		):
 			self.assertIn(contract, content)
+
+	def test_navigation_shell_v2_overrides_legacy_vetedge_menu_chrome_only(self):
+		content = self.read(NAVIGATION_COMPAT_CSS)
+		for contract in (
+			"EdgeSuite Navigation Shell V2",
+			".edge-app-shell.edge-nav-shell-v2 .edge-shell-body",
+			"display: grid !important",
+			"grid-template-columns: var(--edge-sidebar-width) minmax(0, 1fr) !important",
+			".edge-sidebar-item.active",
+			"var(--edge-color-brand-50)",
+			"var(--edge-color-brand-600)",
+			"var(--edge-color-surface)",
+			'data-edge-appearance="dark"',
+		):
+			self.assertIn(contract, content)
+
+		for forbidden in (
+			"#1769aa",
+			"#0f568f",
+			"#1f9d72",
+			"linear-gradient(90deg, var(--edge-primary-soft), var(--edge-accent-soft))",
+		):
+			self.assertNotIn(forbidden, content)
 
 	def test_professional_css_reasserts_user_theme_after_legacy_shell_defaults(self):
 		content = self.read(PROFESSIONAL_CSS)
