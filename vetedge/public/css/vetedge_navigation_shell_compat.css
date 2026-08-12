@@ -1,0 +1,75 @@
+/* VetEdge compatibility for EdgeSuite Navigation Shell V2.
+   Navigation presentation belongs to EdgeSuite UI. VetEdge supplies menu data,
+   routes and dashboard content only. All colors inherit the active EdgeSuite theme. */
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-body,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-body {
+	display: grid !important;
+	grid-template-columns: var(--edge-sidebar-width) minmax(0, 1fr) !important;
+	align-items: stretch;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell.edge-nav-shell-v2 .edge-app-shell__sidebar.edge-sidebar,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell.edge-nav-shell-v2 .edge-app-shell__sidebar.edge-sidebar {
+	flex: none !important;
+	width: var(--edge-sidebar-width) !important;
+	min-width: 0;
+}
+
+body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-main,
+body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-main {
+	flex: none !important;
+	width: auto !important;
+	max-width: none !important;
+	min-width: 0;
+}
+
+/* The shared shell owns brand and active-state presentation. These selectors
+   deliberately outrank the legacy VetEdge gradient without introducing a new
+   product palette. */
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar__brand {
+	color: var(--edge-color-ink-950);
+}
+
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item.active,
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item[aria-current="page"] {
+	background: color-mix(in srgb, var(--edge-color-brand-50) 78%, var(--edge-color-surface));
+	border-color: transparent;
+	box-shadow: inset 2px 0 0 var(--edge-color-brand-600);
+	color: var(--edge-color-brand-700);
+}
+
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item.active > .edge-icon,
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item[aria-current="page"] > .edge-icon {
+	background: color-mix(in srgb, var(--edge-color-brand-100) 65%, transparent);
+	border: 0;
+	box-shadow: none;
+	color: var(--edge-color-brand-700);
+}
+
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar__section-toggle:focus-visible,
+body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item:focus-visible {
+	outline: 3px solid color-mix(in srgb, var(--edge-color-brand-500) 25%, transparent);
+	outline-offset: 2px;
+}
+
+:root[data-edge-appearance="dark"] body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item.active,
+:root[data-edge-appearance="dark"] body.edge-suite-product-vetedge .edge-app-shell.edge-nav-shell-v2 .edge-sidebar-item[aria-current="page"] {
+	background: color-mix(in srgb, var(--edge-color-brand-700) 22%, var(--edge-color-surface));
+	color: var(--edge-color-ink-950);
+}
+
+@media (max-width: 61.99rem) {
+	body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-body,
+	body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell.edge-nav-shell-v2 .edge-shell-body {
+		display: block !important;
+	}
+
+	body.edge-suite-product-vetedge .vetedge-executive-dashboard-root .edge-app-shell.edge-nav-shell-v2 .edge-app-shell__sidebar.edge-sidebar,
+	body.edge-suite-product-vetedge .vetedge-expiry-monitor-root .edge-app-shell.edge-nav-shell-v2 .edge-app-shell__sidebar.edge-sidebar {
+		width: var(--edge-navigation-expanded-width, 15.5rem) !important;
+	}
+}
