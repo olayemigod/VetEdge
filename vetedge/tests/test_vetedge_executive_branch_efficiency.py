@@ -7,6 +7,8 @@ COMPONENT = REPO_ROOT / "vetedge" / "public" / "js" / "vetedge_executive_dashboa
 SERVICE = REPO_ROOT / "vetedge" / "services" / "dashboard_filter_search.py"
 OPTIMIZED = REPO_ROOT / "vetedge" / "services" / "executive_dashboard_optimized.py"
 FINANCIAL_METRICS = REPO_ROOT / "vetedge" / "services" / "executive_financial_metrics.py"
+SHARED_HOST_PAYLOAD = REPO_ROOT / "vetedge" / "services" / "dashboard_host_payload.py"
+HOOKS = REPO_ROOT / "vetedge" / "hooks.py"
 
 
 class TestVetEdgeExecutiveBranchEfficiency(TestCase):
@@ -92,6 +94,36 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		self.assertIn("if not branch or not invoices:", metrics)
 		for age_range in ("0-30", "31-60", "61-90", "90+"):
 			self.assertIn(f'age_range == "{age_range}"', metrics)
+
+	def test_shared_v5_rpc_routes_through_executive_optimized_adapter(self):
+		hooks = self.read(HOOKS)
+		adapter = self.read(SHARED_HOST_PAYLOAD)
+
+		self.assertIn(
+			'"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload"',
+			hooks,
+		)
+		self.assertIn('if key != "executive":', adapter)
+		self.assertIn("return v5.get_dashboard_payload(key, filters)", adapter)
+		self.assertIn("validate_dashboard_access(key)", adapter)
+		self.assertIn("normalize_dashboard_filters(key, v4._to_dict(filters))", adapter)
+
+	def test_shared_executive_preserves_v5_range_semantics_without_unpaid_report_rows(self):
+		adapter = self.read(SHARED_HOST_PAYLOAD)
+
+		self.assertIn("unpaid_count = count_executive_unpaid_invoices(filters)", adapter)
+		self.assertNotIn('v4._rows("Unpaid Invoice Report", filters)', adapter)
+		for label in (
+			"Consultations in Range",
+			"Revenue in Range",
+			"Unpaid Invoices in Range",
+			"Appointments in Range",
+			"Active Patients (Current)",
+		):
+			self.assertIn(label, adapter)
+		self.assertIn('"from_date": filters.get("from_date")', adapter)
+		self.assertIn('"to_date": filters.get("to_date")', adapter)
+		self.assertIn('"branch": filters.get("branch")', adapter)
 
 	def test_no_background_polling_is_added(self):
 		self.assertNotIn("setInterval(", self.read(BUNDLE))
