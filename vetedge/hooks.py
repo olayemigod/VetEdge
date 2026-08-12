@@ -85,6 +85,7 @@ has_permission = {
 
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
+	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
 }
 
 doc_events = {
