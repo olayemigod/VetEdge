@@ -1,7 +1,19 @@
 import { h } from "vue";
 
+const HOST_STYLE_ID = "vetedge-shared-dashboard-host-style";
+const HOST_STYLE_URL = "/assets/vetedge/css/vetedge_shared_dashboard_host.css?v=20260812-1";
+
 function getRuntime() {
 	return window.EdgeSuiteUI || window.EdgeUI || null;
+}
+
+function ensureHostStyles() {
+	if (document.getElementById(HOST_STYLE_ID)) return;
+	const link = document.createElement("link");
+	link.id = HOST_STYLE_ID;
+	link.rel = "stylesheet";
+	link.href = HOST_STYLE_URL;
+	document.head.appendChild(link);
 }
 
 function deskRoute(route) {
@@ -33,12 +45,58 @@ function currentProfile() {
 	};
 }
 
-function pageProxy(page, body) {
+function embeddedControl(parent, df) {
+	if (!parent) throw new Error("The EdgeSuite dashboard filter host is unavailable.");
+	if (!window.frappe?.ui?.form?.make_control) {
+		throw new Error("Frappe control runtime is unavailable.");
+	}
+
+	const fieldHost = document.createElement("div");
+	fieldHost.className = "vetedge-shared-dashboard-filter-field edge-field";
+	parent.appendChild(fieldHost);
+
+	const normalized = {
+		...df,
+		label: df.fieldname === "date_preset" ? __("Period") : df.label,
+		change: df.change,
+		onchange: df.change,
+	};
+	const control = window.frappe.ui.form.make_control({
+		parent: fieldHost,
+		df: normalized,
+		render_input: true,
+	});
+	control.value = df.default == null ? "" : df.default;
+	control.refresh?.();
+	return control;
+}
+
+function pageProxy(page, body, filterFieldsHost, filterActionsHost) {
 	const proxy = Object.create(page || null);
 	proxy.body = body;
-	for (const methodName of ["set_title", "add_field", "set_primary_action", "clear_primary_action"]) {
-		if (typeof page?.[methodName] === "function") proxy[methodName] = page[methodName].bind(page);
-	}
+	proxy.edgeSuiteEmbedded = true;
+	proxy.set_title = typeof page?.set_title === "function" ? page.set_title.bind(page) : () => {};
+	proxy.add_field = (df) => embeddedControl(filterFieldsHost, df);
+	proxy.set_primary_action = (label, action) => {
+		if (!filterActionsHost) return null;
+		let button = filterActionsHost.querySelector(".vetedge-shared-dashboard-refresh");
+		if (!button) {
+			button = document.createElement("button");
+			button.type = "button";
+			button.className =
+				"edge-button edge-button--primary edge-primary-button vetedge-shared-dashboard-refresh";
+			filterActionsHost.appendChild(button);
+		}
+		button.textContent = label || __("Apply / Refresh");
+		button.onclick = (event) => {
+			event.preventDefault();
+			action?.();
+		};
+		return button;
+	};
+	proxy.clear_primary_action = () => {
+		filterActionsHost?.querySelector(".vetedge-shared-dashboard-refresh")?.remove();
+	};
 	return proxy;
 }
 
@@ -55,6 +113,7 @@ function createDashboardComponent(page, config, runtime) {
 	const EdgeAppShell = runtime.components.EdgeAppShell;
 	const EdgePageLayout = runtime.components.EdgePageLayout;
 	const EdgePageHeader = runtime.components.EdgePageHeader;
+	const EdgeFilterBar = runtime.components.EdgeFilterBar;
 	const profile = currentProfile();
 	const activeRoute = deskRoute(config.route || window.location.pathname || "");
 
@@ -69,8 +128,16 @@ function createDashboardComponent(page, config, runtime) {
 					throw new Error("The VetEdge dashboard renderer is unavailable.");
 				}
 				const host = this.$refs.dashboardHost;
+				const filterFieldsHost = this.$refs.filterFieldsHost;
+				const filterActionsHost = this.$refs.filterActionsHost;
 				if (!host) throw new Error("The EdgeSuite dashboard host did not render.");
-				window.vetedgeDashboardShell.mount(pageProxy(page, host), config);
+				if (!filterFieldsHost || !filterActionsHost) {
+					throw new Error("The EdgeSuite dashboard filter bar did not render.");
+				}
+				window.vetedgeDashboardShell.mount(
+					pageProxy(page, host, filterFieldsHost, filterActionsHost),
+					config,
+				);
 				window.EdgeSuiteNavigation?.syncActiveSection?.(
 					host.closest?.(".edge-app-shell") || document.querySelector(".edge-app-shell"),
 				);
@@ -116,6 +183,23 @@ function createDashboardComponent(page, config, runtime) {
 											config.subtitle ||
 											"Branch-aware veterinary operational and performance insights.",
 									}),
+								filters: () =>
+									h(
+										EdgeFilterBar,
+										{ title: "Dashboard Filters" },
+										{
+											default: () =>
+												h("div", {
+													ref: "filterFieldsHost",
+													class: "vetedge-shared-dashboard-filter-grid",
+												}),
+											actions: () =>
+												h("div", {
+													ref: "filterActionsHost",
+													class: "vetedge-shared-dashboard-filter-actions",
+												}),
+										},
+									),
 								default: () => content,
 							},
 						),
@@ -133,6 +217,7 @@ function showFailure(page, message) {
 }
 
 function installDashboard(wrapper, config) {
+	ensureHostStyles();
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: __(config.title || "Veterinary Dashboard"),
@@ -145,7 +230,7 @@ function installDashboard(wrapper, config) {
 		.text(__("Loading EdgeSuite dashboard shell..."))
 		.appendTo(page.body);
 
-	const requiredComponents = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader"];
+	const requiredComponents = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader", "EdgeFilterBar"];
 	frappe.require("edgeui.bundle.js", () => {
 		const runtime = getRuntime();
 		const components = runtime?.components || runtime;
