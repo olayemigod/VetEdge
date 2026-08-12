@@ -250,3 +250,7 @@ jobs:
       - name: Run Executive Dashboard migration tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_executive_dashboard_edgeui
+
+      - name: Run Service Revenue tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_service_revenue
