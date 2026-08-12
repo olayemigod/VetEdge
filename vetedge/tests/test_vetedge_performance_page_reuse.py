@@ -70,6 +70,52 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertNotIn('rows = frappe.get_all("Branch", fields=fields)', block)
 		self.assertIn("for fieldname in mapping_fields:", block)
 
+	def test_stock_expiry_interactive_path_paginates_in_database(self):
+		page = self.read("vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.py")
+		service = self.read("vetedge/services/stock_expiry_interactive.py")
+
+		self.assertIn("get_stock_expiry_interactive_data", page)
+		self.assertNotIn("get_stock_expiry_rows", page)
+		self.assertNotIn("all_rows =", page)
+		self.assertNotIn("table_rows =", page)
+		self.assertIn("LIMIT %(limit)s OFFSET %(offset)s", service)
+		self.assertIn("SELECT COUNT(*) AS total_count", service)
+		self.assertIn("FROM ({classified_sql}) classified", service)
+		self.assertIn("MAX_INTERACTIVE_PAGE_LENGTH = 500", service)
+
+	def test_stock_expiry_interactive_summary_aggregates_without_materializing_rows(self):
+		service = self.read("vetedge/services/stock_expiry_interactive.py")
+
+		for contract in (
+			"AS expired_items",
+			"AS expiring_soon",
+			"AS affected_qty",
+			"AS affected_warehouses",
+			"AS highest_risk_items",
+			"COUNT(",
+			"DISTINCT CASE",
+			"SUM(",
+		):
+			self.assertIn(contract, service)
+		self.assertIn("CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC", service)
+		self.assertIn("DATEDIFF(expiry_date, %(today)s) AS days_to_expiry", service)
+
+	def test_stock_expiry_interactive_query_preserves_operational_filters(self):
+		service = self.read("vetedge/services/stock_expiry_interactive.py")
+
+		for contract in (
+			'w.company = %(company)s',
+			'sle.warehouse = %(warehouse)s',
+			'i.item_group = %(item_group)s',
+			'b.item = %(item)s',
+			'sle.warehouse = %(branch_warehouse)s',
+			'get_branch_dispensary_warehouse(',
+			'HAVING qty > 0',
+		):
+			self.assertIn(contract, service)
+		self.assertIn("get_stock_expiry_rows()", service)
+		self.assertIn("remains the full-dataset contract", service)
+
 	def test_executive_dashboard_reuses_branch_metadata_and_refreshes_payload_only_when_stale(self):
 		loader = self.read("vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js")
 		component = self.read("vetedge/public/js/vetedge_executive_dashboard/VetedgeExecutiveDashboard.vue")

@@ -5,7 +5,7 @@
 import datetime
 
 import frappe
-from frappe.utils import cint, flt
+from frappe.utils import cint
 
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
@@ -67,7 +67,7 @@ def _validate_reference_filter(filters: dict, field: str) -> None:
 
 @frappe.whitelist()
 def get_stock_expiry_data(filters=None):
-	"""Fetch filtered and paginated stock expiry rows plus overall summaries."""
+	"""Fetch Stock Expiry summary plus one server-paginated interactive window."""
 	check_expiry_permissions()
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 
@@ -78,43 +78,16 @@ def get_stock_expiry_data(filters=None):
 	if threshold:
 		filters["expiry_buckets"] = str(threshold)
 
-	from vetedge.services.stock_expiry_monitor import get_stock_expiry_rows
+	from vetedge.services.stock_expiry_interactive import get_stock_expiry_interactive_data
 
-	all_rows = get_stock_expiry_rows(filters)
-	expired_rows = [row for row in all_rows if row.get("expiry_status") == "Expired"]
-	expiring_soon_rows = [row for row in all_rows if row.get("expiry_status") == "Expiring Soon"]
-	affected_rows = [row for row in all_rows if row.get("expiry_status") in ("Expired", "Expiring Soon")]
-
-	summary = {
-		"expired_items": len(expired_rows),
-		"expiring_soon": len(expiring_soon_rows),
-		"affected_qty": sum(flt(row.get("qty")) for row in affected_rows),
-		"affected_warehouses": len({row.get("warehouse") for row in affected_rows if row.get("warehouse")}),
-		"highest_risk_items": len({row.get("item_code") for row in expired_rows if row.get("item_code")}),
-		"last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-	}
-
-	window = filters.get("expiry_window") or "all"
-	table_rows = []
-	for row in all_rows:
-		status = row.get("expiry_status")
-		if window == "expired" and status != "Expired":
-			continue
-		if window == "expiring soon" and status != "Expiring Soon":
-			continue
-		table_rows.append(row)
-
-	limit = min(max(cint(filters.get("limit")) or 50, 1), 500)
-	offset = max(cint(filters.get("offset")), 0)
-	paginated_rows = table_rows[offset : offset + limit]
-
-	return {
-		"summary": summary,
-		"rows": paginated_rows,
-		"total_count": len(table_rows),
-		"limit": limit,
-		"offset": offset,
-	}
+	result = get_stock_expiry_interactive_data(
+		filters,
+		expiry_window=filters.get("expiry_window") or "all",
+		limit=min(max(cint(filters.get("limit")) or 50, 1), 500),
+		offset=max(cint(filters.get("offset")), 0),
+	)
+	result["summary"]["last_updated"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	return result
 
 
 def check_expiry_permissions():
