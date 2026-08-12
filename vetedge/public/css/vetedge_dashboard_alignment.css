@@ -1,0 +1,162 @@
+/* Shared dashboard visual parity with the standalone Executive Dashboard.
+   EdgeSuite semantic tokens remain the single colour authority. */
+
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-actions .vetedge-dashboard-quick-reports {
+	display: none !important;
+}
+
+.vetedge-dashboard-bottom-reports {
+	margin-top: .15rem;
+}
+
+.vetedge-dashboard-bottom-report-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .65rem;
+}
+
+.vetedge-dashboard-bottom-report-links .edge-button {
+	min-height: 2.35rem;
+}
+
+/* Keep the filter bar and all of its labels visibly inside the EdgeSuite shell. */
+.vetedge-shared-dashboard-root .edge-filter-bar,
+.vetedge-shared-dashboard-root .edge-filter-bar__content,
+.vetedge-shared-dashboard-root .edge-filter-bar__body {
+	color: var(--edge-color-ink-950);
+}
+
+.vetedge-shared-dashboard-root .edge-filter-bar label,
+.vetedge-shared-dashboard-root .edge-field-label,
+.vetedge-shared-dashboard-root .edge-field__label,
+.vetedge-shared-dashboard-root .edge-input__label,
+.vetedge-shared-dashboard-root .edge-dropdown__label,
+.vetedge-shared-dashboard-root .edge-link-field__label,
+.vetedge-shared-dashboard-root .edge-control-label,
+.vetedge-shared-dashboard-root .form-label {
+	color: var(--edge-color-ink-950) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-root input,
+.vetedge-shared-dashboard-root select,
+.vetedge-shared-dashboard-root textarea,
+.vetedge-shared-dashboard-root .edge-control,
+.vetedge-shared-dashboard-root .edge-input,
+.vetedge-shared-dashboard-root .edge-dropdown__trigger,
+.vetedge-shared-dashboard-root .edge-link-field__control {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+	color-scheme: light dark;
+}
+
+.vetedge-shared-dashboard-root input:disabled,
+.vetedge-shared-dashboard-root select:disabled,
+.vetedge-shared-dashboard-root textarea:disabled,
+.vetedge-shared-dashboard-root .edge-control:disabled {
+	background: var(--edge-color-surface-muted) !important;
+	color: var(--edge-color-ink-500) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-root input::placeholder,
+.vetedge-shared-dashboard-root textarea::placeholder {
+	color: var(--edge-color-ink-500) !important;
+	opacity: 1;
+}
+
+.vetedge-shared-dashboard-root select option {
+	background: var(--edge-color-surface) !important;
+	color: var(--edge-color-ink-950) !important;
+}
+
+/* Explicitly reinforce component text that can otherwise inherit Frappe's light-only aliases. */
+.vetedge-shared-dashboard-root .edge-stat-card,
+.vetedge-shared-dashboard-root .edge-stat-card__label,
+.vetedge-shared-dashboard-root .edge-stat-card__value,
+.vetedge-shared-dashboard-root .edge-stat-card__helper,
+.vetedge-shared-dashboard-root .edge-data-table,
+.vetedge-shared-dashboard-root .edge-data-table td,
+.vetedge-shared-dashboard-root .edge-empty-state,
+.vetedge-shared-dashboard-root .edge-loading-state,
+.vetedge-shared-dashboard-root .edge-error-state,
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section,
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section h2,
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section h3 {
+	color: var(--edge-color-ink-950) !important;
+}
+
+.vetedge-shared-dashboard-root .edge-stat-card__label,
+.vetedge-shared-dashboard-root .edge-stat-card__helper,
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section__heading p,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg text,
+.vetedge-shared-dashboard-root .vetedge-edge-chart .chart-container text,
+.vetedge-shared-dashboard-root .graph-stats-container .stats,
+.vetedge-shared-dashboard-root .graph-stats-container .stats span {
+	color: var(--edge-color-ink-500) !important;
+	fill: var(--edge-color-ink-500) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table th {
+	background: var(--edge-color-surface-muted) !important;
+	border-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-500) !important;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table td,
+.vetedge-shared-dashboard-root .edge-data-table-card,
+.vetedge-shared-dashboard-root .vetedge-edge-chart-card,
+.vetedge-shared-dashboard-root .vetedge-edge-table-card {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .line-vertical,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .line-horizontal,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .axis-line,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg line.domain,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg path.domain {
+	stroke: var(--edge-color-border) !important;
+}
+
+/* Match Executive Dashboard's restrained themed page depth in both Light and Dark. */
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-shell-main {
+	background: linear-gradient(
+		180deg,
+		var(--edge-color-brand-50) 0,
+		var(--edge-color-surface-soft) 180px,
+		var(--edge-color-surface-muted) 420px
+	) !important;
+}
+
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-filter-bar,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .vetedge-edge-dashboard-section,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-stat-card,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .vetedge-edge-chart-card,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .vetedge-edge-table-card,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-data-table-card {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(0 0 0 / 18%));
+}
+
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-page-header,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-page-header h1,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-page-header p,
+:root[data-edge-appearance="dark"] .vetedge-shared-dashboard-root .edge-filter-bar__title {
+	color: var(--edge-color-ink-950) !important;
+}
+
+@media (max-width: 640px) {
+	.vetedge-dashboard-bottom-report-links {
+		display: grid;
+		grid-template-columns: 1fr;
+	}
+
+	.vetedge-dashboard-bottom-report-links .edge-button {
+		width: 100%;
+	}
+}
