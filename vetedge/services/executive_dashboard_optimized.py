@@ -11,7 +11,6 @@ from vetedge.services.reporting_logic_v4 import (
 	_appointments_today,
 	_branch_revenue_chart,
 	_consultation_by_branch_chart,
-	_consultation_chart,
 	_consultation_type_chart,
 	_currency,
 	_daily_revenue_chart,
@@ -20,6 +19,7 @@ from vetedge.services.reporting_logic_v4 import (
 	_kpi,
 	_to_dict,
 )
+from vetedge.services.reporting_logic_v5 import _consultation_chart
 from vetedge.services.report_visibility import normalize_dashboard_filters, validate_dashboard_access
 
 
@@ -81,6 +81,9 @@ def get_optimized_executive_dashboard_payload(filters=None) -> dict:
 	}
 
 	if _is_multi_day_range(month_filters):
+		# Consultation Register can expose consultation_datetime on the current
+		# report contract. The shared v5 helper deliberately accepts both
+		# consultation_datetime and the older consultation_date field.
 		payload["charts"].append(_consultation_chart(month_consultations))
 	payload["charts"].extend(
 		[
