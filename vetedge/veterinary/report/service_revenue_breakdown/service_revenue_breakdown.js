@@ -1,6 +1,6 @@
 frappe.query_reports["Service Revenue Breakdown"] = {
 	onload(report) {
-		window.vetedgeReportVisibility?.apply(report, "Service Revenue Breakdown");
+		window.vetedgeReportVisibility?.apply(report, "Revenue Summary");
 	},
 	filters: [
 		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.month_start() },
