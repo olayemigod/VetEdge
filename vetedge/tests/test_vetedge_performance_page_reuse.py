@@ -71,6 +71,24 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("wrapper.vue_view = wrapper.vue_app.mount(root[0])", loader)
 		self.assertIn("limit_page_length: 500", component)
 
+	def test_vaccination_scheduler_filters_dates_before_reading_rows(self):
+		service = self.read("vetedge/services/vaccination_notifications.py")
+
+		self.assertIn('"next_due_date": ["between", [today, add_days(today, due_soon_days)]]', service)
+		self.assertIn('"next_due_date": ["<", today]', service)
+		self.assertNotIn('frappe.db.get_value("Veterinary Patient", row.get("patient"), "status")', service)
+
+	def test_vaccination_scheduler_pages_rows_and_bulk_loads_patient_status(self):
+		service = self.read("vetedge/services/vaccination_notifications.py")
+
+		self.assertIn("VACCINATION_NOTIFICATION_PAGE_LENGTH = 100", service)
+		self.assertIn("start=start", service)
+		self.assertIn("limit_page_length=page_length", service)
+		self.assertIn('filters={"name": ["in", patient_names]}', service)
+		self.assertIn('fields=["name", "status"]', service)
+		self.assertIn("start += len(rows)", service)
+		self.assertIn("return min(max(value, 1), VACCINATION_NOTIFICATION_PAGE_LENGTH)", service)
+
 	def test_page_reuse_uses_no_background_polling(self):
 		for relative_path in (
 			"vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js",
