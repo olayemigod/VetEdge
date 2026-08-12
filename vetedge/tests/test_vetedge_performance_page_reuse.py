@@ -59,6 +59,17 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertNotIn("unmount()", reuse_block)
 		self.assertIn("return;", reuse_block)
 
+	def test_stock_expiry_branch_mapping_queries_only_relevant_warehouses(self):
+		service = self.read("vetedge/services/stock_expiry_monitor.py")
+		start = service.index("def _get_warehouse_branch_map")
+		end = service.index("def _expiry_bucket_label", start)
+		block = service[start:end]
+
+		self.assertIn("mapping_fields = fields[1:]", block)
+		self.assertIn('or_filters={fieldname: ["in", warehouses] for fieldname in mapping_fields}', block)
+		self.assertNotIn('rows = frappe.get_all("Branch", fields=fields)', block)
+		self.assertIn("for fieldname in mapping_fields:", block)
+
 	def test_executive_dashboard_reuses_branch_metadata_and_refreshes_payload_only_when_stale(self):
 		loader = self.read("vetedge/veterinary/page/vetedge_executive_dashboard/vetedge_executive_dashboard.js")
 		component = self.read("vetedge/public/js/vetedge_executive_dashboard/VetedgeExecutiveDashboard.vue")
