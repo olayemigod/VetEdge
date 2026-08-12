@@ -33,6 +33,76 @@ class TestServiceRevenue(unittest.TestCase):
 		self.assertEqual(mapping["TREATMENT-ITEM"], "Treatment")
 		self.assertEqual(mapping["REG-ITEM"], "Registration")
 
+	def test_relevant_master_lookup_uses_item_code_filter(self):
+		with (
+			patch.object(service_revenue, "_existing_doctype", return_value=True),
+			patch.object(service_revenue.frappe, "get_all", return_value=["ITEM-A"]) as get_all,
+		):
+			rows = service_revenue._pluck_items(
+				"Veterinary Treatment Item",
+				"item",
+				{"ITEM-Z", "ITEM-A"},
+			)
+
+		self.assertEqual(rows, {"ITEM-A"})
+		get_all.assert_called_once_with(
+			"Veterinary Treatment Item",
+			filters={"item": ("in", ["ITEM-A", "ITEM-Z"])},
+			pluck="item",
+		)
+
+	def test_empty_relevant_item_set_skips_master_query(self):
+		with (
+			patch.object(service_revenue, "_existing_doctype", return_value=True),
+			patch.object(service_revenue.frappe, "get_all") as get_all,
+		):
+			rows = service_revenue._pluck_items("Veterinary Vaccine", "default_item", set())
+
+		self.assertEqual(rows, set())
+		get_all.assert_not_called()
+
+	def test_service_revenue_classification_uses_only_invoice_item_codes(self):
+		dataset = [
+			{
+				"sales_invoice": "SINV-001",
+				"posting_date": "2026-08-12",
+				"customer": "CUST-001",
+				"branch": "Main Branch",
+				"grand_total": 500,
+				"paid_amount": 500,
+				"outstanding_amount": 0,
+				"service_source": "Lab",
+				"docstatus": 1,
+			}
+		]
+		items = [
+			{
+				"parent": "SINV-001",
+				"item_code": "LAB-ITEM",
+				"item_name": "CBC",
+				"description": "Complete blood count",
+				"qty": 1,
+				"rate": 500,
+				"net_amount": 500,
+			}
+		]
+
+		with (
+			patch.object(service_revenue, "_invoice_item_rows", return_value=items),
+			patch.object(
+				service_revenue,
+				"configured_item_categories",
+				return_value={"LAB-ITEM": "Lab"},
+			) as configured,
+			patch.object(service_revenue, "_consultation_practitioners", return_value={}),
+		):
+			rows = service_revenue.build_service_revenue_rows(dataset=dataset)
+
+		configured.assert_called_once_with({"LAB-ITEM"})
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["service_category"], "Lab")
+		self.assertEqual(rows[0]["revenue_amount"], 500)
+
 	def test_legacy_consultation_description_outranks_generic_treatment_mapping(self):
 		category = service_revenue.classify_service_line(
 			"OLD-CONSULT",
