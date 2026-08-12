@@ -350,10 +350,15 @@ def _get_warehouse_branch_map(warehouses) -> dict[str, str]:
 			fields.append(fieldname)
 	if len(fields) == 1:
 		return {}
-	rows = frappe.get_all("Branch", fields=fields)
+	mapping_fields = fields[1:]
+	rows = frappe.get_all(
+		"Branch",
+		fields=fields,
+		or_filters={fieldname: ["in", warehouses] for fieldname in mapping_fields},
+	)
 	branch_map = {}
 	for row in rows:
-		for fieldname in fields[1:]:
+		for fieldname in mapping_fields:
 			warehouse = row.get(fieldname)
 			if warehouse in warehouses:
 				branch_map[warehouse] = row.get("name")
