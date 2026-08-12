@@ -84,3 +84,24 @@ def test_hospital_service_routes_target_desk_operations_workspace():
 		'"Page:kennel-availability": "/desk/vetedge-service-operations?resource=availability"',
 	):
 		assert route in recovery
+
+
+def test_composite_edgesuite_pages_publish_exact_sidebar_focus_targets():
+	bridge = read(APP / "public/js/vetedge_ui_bridge.js")
+
+	for expected in (
+		'queue: { section: "Front Desk", items: ["Appointment Queue"] }',
+		'guest: { section: "Front Desk", items: ["Guest Booking Requests"] }',
+		'missed: { section: "Front Desk", items: ["Missed Appointments"] }',
+		'"/desk/vetedge-clinical-workspace": { section: "Clinical", items: ["Consultations"] }',
+		'"/desk/veterinary-medical-history": { section: "Clinical", items: ["Medical History"] }',
+		'boarding: { section: "Hospital & Services", items: ["Pet Boarding Booking"] }',
+		'grooming: { section: "Hospital & Services", items: ["Pet Grooming Appointment"] }',
+	):
+		assert expected in bridge
+
+	assert 'if (path === "/desk/vetedge-front-desk-action-center")' in bridge
+	assert 'if (path === "/desk/vetedge-resource-center")' in bridge
+	assert 'window.EdgeSuiteNavigation?.syncActiveSection?.(shell);' in bridge
+	assert 'for (const methodName of ["pushState", "replaceState"])' in bridge
+	assert 'resolveSidebarFocus: currentSidebarFocus' in bridge
