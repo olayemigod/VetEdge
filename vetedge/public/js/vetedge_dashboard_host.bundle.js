@@ -1,7 +1,9 @@
 import { h } from "vue";
 
 const HOST_STYLE_ID = "vetedge-shared-dashboard-host-style";
-const HOST_STYLE_URL = "/assets/vetedge/css/vetedge_shared_dashboard_host.css?v=20260812-1";
+const HOST_STYLE_URL = "/assets/vetedge/css/vetedge_shared_dashboard_host.css?v=20260812-2";
+const BRANCH_SEARCH_API = "vetedge.services.dashboard_filter_search.search_dashboard_branches";
+const BRANCH_SEARCH_PAGE_LENGTH = 20;
 
 function getRuntime() {
 	return window.EdgeSuiteUI || window.EdgeUI || null;
@@ -45,57 +47,79 @@ function currentProfile() {
 	};
 }
 
-function embeddedControl(parent, df) {
-	if (!parent) throw new Error("The EdgeSuite dashboard filter host is unavailable.");
-	if (!window.frappe?.ui?.form?.make_control) {
-		throw new Error("Frappe control runtime is unavailable.");
+function datePresetOptions() {
+	const options = window.frappe?.EdgeSuite?.DateRanges?.getOptions?.() || [];
+	if (Array.isArray(options) && options.length) {
+		return options.map((option) =>
+			typeof option === "string" ? { value: option, label: option } : option,
+		);
 	}
-
-	const fieldHost = document.createElement("div");
-	fieldHost.className = "vetedge-shared-dashboard-filter-field edge-field";
-	parent.appendChild(fieldHost);
-
-	const normalized = {
-		...df,
-		label: df.fieldname === "date_preset" ? __("Period") : df.label,
-		change: df.change,
-		onchange: df.change,
-	};
-	const control = window.frappe.ui.form.make_control({
-		parent: fieldHost,
-		df: normalized,
-		render_input: true,
-	});
-	control.value = df.default == null ? "" : df.default;
-	control.refresh?.();
-	return control;
+	return [
+		{ value: "today", label: "Today" },
+		{ value: "this_week", label: "This Week" },
+		{ value: "this_month", label: "This Month" },
+		{ value: "last_30_days", label: "Last 30 Days" },
+		{ value: "this_quarter", label: "This Quarter" },
+		{ value: "this_year", label: "This Year" },
+		{ value: "custom", label: "Custom Period" },
+	];
 }
 
-function pageProxy(page, body, filterFieldsHost, filterActionsHost) {
+function initialFilters() {
+	const routeOptions = window.frappe?.route_options || {};
+	const dateRanges = window.frappe?.EdgeSuite?.DateRanges;
+	const preset = routeOptions.date_preset || dateRanges?.getDefaultPreset?.() || "this_month";
+	let fromDate = routeOptions.from_date || "";
+	let toDate = routeOptions.to_date || "";
+	if (!fromDate || !toDate) {
+		const range = dateRanges?.getRange?.(preset);
+		fromDate = range?.start || window.frappe?.datetime?.month_start?.() || "";
+		toDate = range?.end || window.frappe?.datetime?.get_today?.() || "";
+	}
+	return {
+		branch: routeOptions.branch || "",
+		date_preset: preset,
+		from_date: fromDate,
+		to_date: toDate,
+	};
+}
+
+function createVirtualField(view, definition) {
+	const fieldname = definition.fieldname;
+	if (!(fieldname in view.filters)) view.filters[fieldname] = definition.default ?? "";
+	const field = {
+		df: { ...definition },
+		get_value() {
+			return view.filters[fieldname] ?? "";
+		},
+		set_value(value) {
+			view.filters[fieldname] = value ?? "";
+			view.$forceUpdate?.();
+			if (typeof definition.change === "function") return definition.change.call(field);
+			return value;
+		},
+		refresh() {
+			view.$forceUpdate?.();
+		},
+	};
+	view._filterFields[fieldname] = field;
+	return field;
+}
+
+function pageProxy(page, body, view) {
 	const proxy = Object.create(page || null);
 	proxy.body = body;
 	proxy.edgeSuiteEmbedded = true;
 	proxy.set_title = typeof page?.set_title === "function" ? page.set_title.bind(page) : () => {};
-	proxy.add_field = (df) => embeddedControl(filterFieldsHost, df);
+	proxy.add_field = (definition) => createVirtualField(view, definition);
 	proxy.set_primary_action = (label, action) => {
-		if (!filterActionsHost) return null;
-		let button = filterActionsHost.querySelector(".vetedge-shared-dashboard-refresh");
-		if (!button) {
-			button = document.createElement("button");
-			button.type = "button";
-			button.className =
-				"edge-button edge-button--primary edge-primary-button vetedge-shared-dashboard-refresh";
-			filterActionsHost.appendChild(button);
-		}
-		button.textContent = label || __("Apply / Refresh");
-		button.onclick = (event) => {
-			event.preventDefault();
-			action?.();
-		};
-		return button;
+		view.primaryActionLabel = label || __("Apply / Refresh");
+		view.primaryAction = typeof action === "function" ? action : null;
+		return action;
 	};
 	proxy.clear_primary_action = () => {
-		filterActionsHost?.querySelector(".vetedge-shared-dashboard-refresh")?.remove();
+		view.primaryAction = null;
+		view.primaryActionLabel = __("Apply / Refresh");
 	};
 	return proxy;
 }
@@ -114,13 +138,24 @@ function createDashboardComponent(page, config, runtime) {
 	const EdgePageLayout = runtime.components.EdgePageLayout;
 	const EdgePageHeader = runtime.components.EdgePageHeader;
 	const EdgeFilterBar = runtime.components.EdgeFilterBar;
+	const EdgeLinkField = runtime.components.EdgeLinkField;
 	const profile = currentProfile();
 	const activeRoute = deskRoute(config.route || window.location.pathname || "");
 
 	return {
 		name: "VetEdgeSharedDashboardHost",
 		data() {
-			return { mountError: "" };
+			return {
+				mountError: "",
+				filters: initialFilters(),
+				datePresets: datePresetOptions(),
+				quickReports: [],
+				reportsOpen: false,
+				primaryAction: null,
+				primaryActionLabel: __("Apply / Refresh"),
+				_filterFields: {},
+				_quickReportObserver: null,
+			};
 		},
 		mounted() {
 			try {
@@ -128,16 +163,9 @@ function createDashboardComponent(page, config, runtime) {
 					throw new Error("The VetEdge dashboard renderer is unavailable.");
 				}
 				const host = this.$refs.dashboardHost;
-				const filterFieldsHost = this.$refs.filterFieldsHost;
-				const filterActionsHost = this.$refs.filterActionsHost;
 				if (!host) throw new Error("The EdgeSuite dashboard host did not render.");
-				if (!filterFieldsHost || !filterActionsHost) {
-					throw new Error("The EdgeSuite dashboard filter bar did not render.");
-				}
-				window.vetedgeDashboardShell.mount(
-					pageProxy(page, host, filterFieldsHost, filterActionsHost),
-					config,
-				);
+				window.vetedgeDashboardShell.mount(pageProxy(page, host, this), config);
+				this.installQuickReportsBridge();
 				window.EdgeSuiteNavigation?.syncActiveSection?.(
 					host.closest?.(".edge-app-shell") || document.querySelector(".edge-app-shell"),
 				);
@@ -146,10 +174,172 @@ function createDashboardComponent(page, config, runtime) {
 				this.mountError = error?.message || String(error);
 			}
 		},
+		beforeUnmount() {
+			this._quickReportObserver?.disconnect?.();
+			this._quickReportObserver = null;
+		},
+		methods: {
+			searchBranches(term = "") {
+				return new Promise((resolve, reject) => {
+					frappe.call({
+						method: BRANCH_SEARCH_API,
+						args: {
+							dashboard_key: config.key,
+							txt: term || "",
+							page_length: BRANCH_SEARCH_PAGE_LENGTH,
+						},
+						callback: (response) => resolve(response.message || []),
+						error: reject,
+					});
+				});
+			},
+			setFilter(fieldname, value) {
+				const field = this._filterFields[fieldname];
+				if (field) return field.set_value(value);
+				this.filters[fieldname] = value ?? "";
+				return value;
+			},
+			applyFilters() {
+				if (typeof this.primaryAction === "function") return this.primaryAction();
+				return undefined;
+			},
+			syncQuickReports() {
+				const host = this.$refs.dashboardHost;
+				const linksHost = host?.querySelector?.(".vetedge-dashboard-links");
+				if (!linksHost) return;
+				this.quickReports = Array.from(linksHost.querySelectorAll(".vetedge-dashboard-report"))
+					.map((button) => ({
+						report: button.dataset.report || "",
+						label: button.textContent?.trim?.() || button.dataset.report || "",
+					}))
+					.filter((item) => item.report);
+				linksHost.hidden = true;
+			},
+			installQuickReportsBridge() {
+				const host = this.$refs.dashboardHost;
+				const linksHost = host?.querySelector?.(".vetedge-dashboard-links");
+				if (!linksHost) return;
+				this.syncQuickReports();
+				this._quickReportObserver?.disconnect?.();
+				if (window.MutationObserver) {
+					this._quickReportObserver = new MutationObserver(() => this.syncQuickReports());
+					this._quickReportObserver.observe(linksHost, { childList: true, subtree: true });
+				}
+			},
+			openReport(report) {
+				if (!report) return;
+				this.reportsOpen = false;
+				frappe.route_options = {
+					branch: this.filters.branch || "",
+					from_date: this.filters.from_date || "",
+					to_date: this.filters.to_date || "",
+					date_preset: this.filters.date_preset || "custom",
+				};
+				frappe.set_route("query-report", report);
+			},
+			renderFilters() {
+				return h("div", { class: "vetedge-shared-dashboard-filter-grid" }, [
+					h(EdgeLinkField, {
+						modelValue: this.filters.branch,
+						selectedLabel: this.filters.branch || __("All Branches"),
+						label: __("Branch"),
+						placeholder: __("Search branches"),
+						searcher: this.searchBranches,
+						clearable: true,
+						"onUpdate:modelValue": (value) => this.setFilter("branch", value),
+					}),
+					h("div", { class: "edge-field" }, [
+						h("label", { class: "edge-field-label" }, __("Period")),
+						h(
+							"select",
+							{
+								class: "edge-select edge-control",
+								value: this.filters.date_preset,
+								onChange: (event) => this.setFilter("date_preset", event.target.value),
+							},
+							this.datePresets.map((preset) =>
+								h("option", { value: preset.value }, preset.label || preset.value),
+							),
+						),
+					]),
+					h("div", { class: "edge-field" }, [
+						h("label", { class: "edge-field-label" }, __("From Date")),
+						h("input", {
+							class: "edge-input edge-control",
+							type: "date",
+							value: this.filters.from_date,
+							disabled: this.filters.date_preset !== "custom",
+							onChange: (event) => this.setFilter("from_date", event.target.value),
+						}),
+					]),
+					h("div", { class: "edge-field" }, [
+						h("label", { class: "edge-field-label" }, __("To Date")),
+						h("input", {
+							class: "edge-input edge-control",
+							type: "date",
+							value: this.filters.to_date,
+							disabled: this.filters.date_preset !== "custom",
+							onChange: (event) => this.setFilter("to_date", event.target.value),
+						}),
+					]),
+				]);
+			},
+			renderFilterActions() {
+				const actions = [
+					h(
+						"button",
+						{
+							class: "edge-button edge-button--primary edge-primary-button",
+							type: "button",
+							onClick: () => this.applyFilters(),
+						},
+						this.primaryActionLabel || __("Apply / Refresh"),
+					),
+				];
+				if (this.quickReports.length) {
+					actions.push(
+						h("div", { class: "vetedge-dashboard-quick-reports" }, [
+							h(
+								"button",
+								{
+									class: "edge-button edge-button--secondary edge-secondary-button",
+									type: "button",
+									"aria-haspopup": "menu",
+									"aria-expanded": this.reportsOpen ? "true" : "false",
+									onClick: () => {
+										this.reportsOpen = !this.reportsOpen;
+									},
+								},
+								__("Quick Reports") + " ▾",
+							),
+							this.reportsOpen
+								? h(
+									"div",
+									{ class: "vetedge-dashboard-quick-reports-menu", role: "menu" },
+									this.quickReports.map((link) =>
+										h(
+											"button",
+											{
+												class: "vetedge-dashboard-quick-report-item",
+												type: "button",
+												role: "menuitem",
+												onClick: () => this.openReport(link.report),
+											},
+											link.label || link.report,
+										),
+									),
+								)
+								: null,
+						]),
+					);
+				}
+				return actions;
+			},
+		},
 		render() {
 			const content = this.mountError
 				? h("div", { class: "edge-error-state vetedge-dashboard-host-error" }, [
-					h("strong", "Dashboard failed to load"),
+					h("strong", __("Dashboard failed to load")),
 					h("p", this.mountError),
 				])
 				: h("div", {
@@ -164,7 +354,7 @@ function createDashboardComponent(page, config, runtime) {
 					product: "vetedge",
 					title: "Veterinary",
 					tenantName: profile.tenantName,
-					branchName: profile.branchName,
+					branchName: this.filters.branch || profile.branchName,
 					userName: profile.userName,
 					activeRoute,
 					onNavigate: openRoute,
@@ -173,31 +363,23 @@ function createDashboardComponent(page, config, runtime) {
 					default: () =>
 						h(
 							EdgePageLayout,
-							null,
+							{ class: "vetedge-shared-dashboard-page" },
 							{
 								header: () =>
 									h(EdgePageHeader, {
-										eyebrow: "Veterinary Performance",
-										title: config.title || "Veterinary Dashboard",
+										eyebrow: __("Veterinary Performance"),
+										title: config.title || __("Veterinary Dashboard"),
 										subtitle:
 											config.subtitle ||
-											"Branch-aware veterinary operational and performance insights.",
+											__("Branch-aware veterinary operational and performance insights."),
 									}),
 								filters: () =>
 									h(
 										EdgeFilterBar,
-										{ title: "Dashboard Filters" },
+										{ title: __("Dashboard Filters") },
 										{
-											default: () =>
-												h("div", {
-													ref: "filterFieldsHost",
-													class: "vetedge-shared-dashboard-filter-grid",
-												}),
-											actions: () =>
-												h("div", {
-													ref: "filterActionsHost",
-													class: "vetedge-shared-dashboard-filter-actions",
-												}),
+											default: () => this.renderFilters(),
+											actions: () => this.renderFilterActions(),
 										},
 									),
 								default: () => content,
@@ -230,7 +412,13 @@ function installDashboard(wrapper, config) {
 		.text(__("Loading EdgeSuite dashboard shell..."))
 		.appendTo(page.body);
 
-	const requiredComponents = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader", "EdgeFilterBar"];
+	const requiredComponents = [
+		"EdgeAppShell",
+		"EdgePageLayout",
+		"EdgePageHeader",
+		"EdgeFilterBar",
+		"EdgeLinkField",
+	];
 	frappe.require("edgeui.bundle.js", () => {
 		const runtime = getRuntime();
 		const components = runtime?.components || runtime;
