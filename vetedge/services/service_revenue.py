@@ -33,26 +33,46 @@ def _single_value(fieldname: str) -> str:
 	return cstr(frappe.db.get_single_value("Veterinary Settings", fieldname) or "").strip()
 
 
-def _pluck_items(doctype: str, fieldname: str) -> set[str]:
+def _pluck_items(
+	doctype: str,
+	fieldname: str,
+	relevant_items: set[str] | None = None,
+) -> set[str]:
 	if not _existing_doctype(doctype):
 		return set()
+
+	filters = None
+	if relevant_items is not None:
+		relevant = {
+			cstr(item).strip()
+			for item in relevant_items
+			if cstr(item).strip()
+		}
+		if not relevant:
+			return set()
+		filters = {fieldname: ("in", sorted(relevant))}
+
 	try:
 		return {
 			cstr(value).strip()
-			for value in frappe.get_all(doctype, pluck=fieldname)
+			for value in frappe.get_all(doctype, filters=filters, pluck=fieldname)
 			if cstr(value).strip()
 		}
 	except Exception:
 		return set()
 
 
-def configured_item_categories() -> dict[str, str]:
+def configured_item_categories(relevant_items: set[str] | None = None) -> dict[str, str]:
 	"""Return VetEdge item classifications in specificity order.
 
 	Explicit Veterinary Settings mappings are authoritative. Specific service
 	masters come next, while Veterinary Treatment Item is deliberately the broad
 	fallback because consultation, vaccine and other service items can also be
 	registered there for pricing/treatment planning.
+
+	When ``relevant_items`` is provided, master lookups are restricted to those
+	invoice item codes. This preserves classification truth while avoiding full
+	master-table reads for a date/branch range that references only a subset.
 	"""
 	mapping: dict[str, str] = {}
 
@@ -65,13 +85,18 @@ def configured_item_categories() -> dict[str, str]:
 		if item:
 			mapping[item] = category
 
-	for item in _pluck_items("Veterinary Vaccine", "default_item"):
+	def master_items(doctype: str, fieldname: str) -> set[str]:
+		if relevant_items is None:
+			return _pluck_items(doctype, fieldname)
+		return _pluck_items(doctype, fieldname, relevant_items)
+
+	for item in master_items("Veterinary Vaccine", "default_item"):
 		mapping.setdefault(item, "Vaccination")
-	for item in _pluck_items("Veterinary Lab Test", "linked_item"):
+	for item in master_items("Veterinary Lab Test", "linked_item"):
 		mapping.setdefault(item, "Lab")
-	for item in _pluck_items("Pet Grooming Service", "default_item"):
+	for item in master_items("Pet Grooming Service", "default_item"):
 		mapping.setdefault(item, "Grooming")
-	for item in _pluck_items("Veterinary Treatment Item", "item"):
+	for item in master_items("Veterinary Treatment Item", "item"):
 		mapping.setdefault(item, "Treatment")
 
 	return mapping
@@ -307,9 +332,15 @@ def build_service_revenue_rows(filters=None, dataset: list[dict] | None = None) 
 	if not invoice_map:
 		return []
 
-	configured = configured_item_categories()
+	invoice_items = _invoice_item_rows(sorted(invoice_map))
+	relevant_items = {
+		cstr(item.get("item_code")).strip()
+		for item in invoice_items
+		if cstr(item.get("item_code")).strip()
+	}
+	configured = configured_item_categories(relevant_items)
 	items_by_invoice: dict[str, list[dict]] = defaultdict(list)
-	for item in _invoice_item_rows(sorted(invoice_map)):
+	for item in invoice_items:
 		items_by_invoice[cstr(item.get("parent"))].append(item)
 
 	practitioners_by_consultation = _consultation_practitioners(invoice_rows)

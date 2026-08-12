@@ -161,6 +161,18 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("count_executive_unpaid_invoices(filters)", service)
 		self.assertNotIn('_rows("Unpaid Invoice Report", filters)', service)
 
+	def test_service_revenue_scopes_master_queries_to_selected_invoice_items(self):
+		service = self.read("vetedge/services/service_revenue.py")
+
+		invoice_items_index = service.index("invoice_items = _invoice_item_rows(sorted(invoice_map))")
+		configured_index = service.index("configured = configured_item_categories(relevant_items)")
+		self.assertLess(invoice_items_index, configured_index)
+		self.assertIn('filters = {fieldname: ("in", sorted(relevant))}', service)
+		self.assertIn("if not relevant:", service)
+		self.assertIn("return set()", service)
+		self.assertIn("configured_item_categories(relevant_items)", service)
+		self.assertNotIn("configured = configured_item_categories()", service)
+
 	def test_vaccination_scheduler_filters_dates_before_reading_rows(self):
 		service = self.read("vetedge/services/vaccination_notifications.py")
 
