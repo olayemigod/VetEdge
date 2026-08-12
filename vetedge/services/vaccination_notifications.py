@@ -12,6 +12,18 @@ from vetedge.services.notifications import (
 )
 
 VACCINATION_RECORD_DOCTYPE = "Veterinary Vaccination Record"
+VACCINATION_NOTIFICATION_PAGE_LENGTH = 100
+VACCINATION_NOTIFICATION_FIELDS = [
+	"name",
+	"patient",
+	"primary_owner",
+	"vaccine",
+	"service_branch",
+	"next_due_date",
+	"administered_by",
+	"owner",
+]
+INACTIVE_PATIENT_STATUSES = {"Inactive", "Deceased", "Archived"}
 HIGH_VISIBILITY_ROLES = {
 	"VetEdge Front Desk",
 	"Branch Manager",
@@ -71,7 +83,7 @@ def create_vaccination_notifications(event_key: str, doc, **kwargs) -> list[dict
 		for recipient_user in recipients:
 			idempotency_key = f"{event_key}::{doc.get('name')}::{due_date}::{recipient_user}"
 			message = build_vaccination_notification_message(event_key, doc, **kwargs)
-			
+
 			results.append(
 				create_notification_item(
 					event_key=event_key,
@@ -102,7 +114,7 @@ def create_vaccination_notifications(event_key: str, doc, **kwargs) -> list[dict
 
 def resolve_vaccination_notification_recipients(doc) -> list[str]:
 	recipients = []
-	
+
 	# 1. Assigned practitioner (administered_by)
 	if doc.get("administered_by"):
 		recipient = get_user_recipient(doc.get("administered_by"), audience_type="Vaccination")
@@ -128,7 +140,7 @@ def resolve_vaccination_notification_recipients(doc) -> list[str]:
 		for recipient in get_role_recipients(fallback_roles, branch=branch, audience_type="Vaccination Follow-up"):
 			if recipient.get("user"):
 				recipients.append(recipient["user"])
-		
+
 		# If still empty, try System Manager or Administrator
 		if not recipients:
 			for recipient in get_role_recipients({"System Manager"}, branch=branch, audience_type="Vaccination Follow-up"):
@@ -148,7 +160,7 @@ def build_vaccination_notification_message(event_key: str, doc, **kwargs) -> str
 	vaccine = doc.get("vaccine")
 	patient = doc.get("patient")
 	due_date = doc.get("next_due_date")
-	
+
 	if event_key == "vaccination_due":
 		return f"Veterinary vaccination record {doc_name} for vaccine {vaccine} is due today ({due_date}) for patient {patient}."
 	if event_key == "vaccination_overdue":
@@ -168,7 +180,7 @@ def run_vaccination_notification_checks() -> dict:
 	}
 
 
-def send_due_vaccination_notifications(limit: int = 100) -> list[dict]:
+def send_due_vaccination_notifications(limit: int = VACCINATION_NOTIFICATION_PAGE_LENGTH) -> list[dict]:
 	if not _vaccination_notifications_available():
 		return []
 
@@ -176,31 +188,20 @@ def send_due_vaccination_notifications(limit: int = 100) -> list[dict]:
 	if not settings or not settings.get("enabled"):
 		return []
 
-	due_soon_days = int(settings.get("vaccination_due_reminder_days") or 7)
+	due_soon_days = max(int(settings.get("vaccination_due_reminder_days") or 7), 0)
 	today = getdate()
-	
-	rows = frappe.get_all(
-		VACCINATION_RECORD_DOCTYPE,
-		filters={"status": "Administered", "next_due_date": ["is", "set"]},
-		fields=["name", "patient", "primary_owner", "vaccine", "service_branch", "next_due_date", "administered_by", "owner"],
-		order_by="next_due_date asc",
-		limit_page_length=limit,
-	)
-	
+	filters = {
+		"status": "Administered",
+		"next_due_date": ["between", [today, add_days(today, due_soon_days)]],
+	}
+
 	results = []
-	for row in rows:
-		patient_status = frappe.db.get_value("Veterinary Patient", row.get("patient"), "status")
-		if patient_status in ("Inactive", "Deceased", "Archived"):
-			continue
-			
-		due_date = getdate(row.get("next_due_date"))
-		if due_date >= today and due_date <= add_days(today, due_soon_days):
-			results.extend(notify_vaccination_due(row))
-			
+	for row in _iter_active_vaccination_rows(filters, page_length=limit):
+		results.extend(notify_vaccination_due(row))
 	return results
 
 
-def send_overdue_vaccination_notifications(limit: int = 100) -> list[dict]:
+def send_overdue_vaccination_notifications(limit: int = VACCINATION_NOTIFICATION_PAGE_LENGTH) -> list[dict]:
 	if not _vaccination_notifications_available():
 		return []
 
@@ -209,26 +210,60 @@ def send_overdue_vaccination_notifications(limit: int = 100) -> list[dict]:
 		return []
 
 	today = getdate()
-	
-	rows = frappe.get_all(
-		VACCINATION_RECORD_DOCTYPE,
-		filters={"status": "Administered", "next_due_date": ["is", "set"]},
-		fields=["name", "patient", "primary_owner", "vaccine", "service_branch", "next_due_date", "administered_by", "owner"],
-		order_by="next_due_date asc",
-		limit_page_length=limit,
-	)
-	
+	filters = {
+		"status": "Administered",
+		"next_due_date": ["<", today],
+	}
+
 	results = []
-	for row in rows:
-		patient_status = frappe.db.get_value("Veterinary Patient", row.get("patient"), "status")
-		if patient_status in ("Inactive", "Deceased", "Archived"):
-			continue
-			
-		due_date = getdate(row.get("next_due_date"))
-		if due_date < today:
-			results.extend(notify_vaccination_overdue(row))
-			
+	for row in _iter_active_vaccination_rows(filters, page_length=limit):
+		results.extend(notify_vaccination_overdue(row))
 	return results
+
+
+def _iter_active_vaccination_rows(filters: dict, page_length: int = VACCINATION_NOTIFICATION_PAGE_LENGTH):
+	"""Yield eligible vaccination rows in bounded pages without per-row Patient lookups."""
+	page_length = _notification_page_length(page_length)
+	start = 0
+	while True:
+		rows = frappe.get_all(
+			VACCINATION_RECORD_DOCTYPE,
+			filters=filters,
+			fields=VACCINATION_NOTIFICATION_FIELDS,
+			order_by="next_due_date asc, name asc",
+			start=start,
+			limit_page_length=page_length,
+		)
+		if not rows:
+			break
+
+		patient_names = sorted({cstr(row.get("patient")).strip() for row in rows if cstr(row.get("patient")).strip()})
+		patient_status = {}
+		if patient_names:
+			patient_rows = frappe.get_all(
+				"Veterinary Patient",
+				filters={"name": ["in", patient_names]},
+				fields=["name", "status"],
+				limit_page_length=len(patient_names),
+			)
+			patient_status = {row.name: row.status for row in patient_rows}
+
+		for row in rows:
+			if patient_status.get(row.get("patient")) in INACTIVE_PATIENT_STATUSES:
+				continue
+			yield row
+
+		if len(rows) < page_length:
+			break
+		start += len(rows)
+
+
+def _notification_page_length(value: int | None) -> int:
+	try:
+		value = int(value or VACCINATION_NOTIFICATION_PAGE_LENGTH)
+	except (TypeError, ValueError):
+		value = VACCINATION_NOTIFICATION_PAGE_LENGTH
+	return min(max(value, 1), VACCINATION_NOTIFICATION_PAGE_LENGTH)
 
 
 @frappe.whitelist()
