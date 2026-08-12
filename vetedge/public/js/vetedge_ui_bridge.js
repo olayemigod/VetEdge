@@ -67,11 +67,46 @@
 		"/desk/vetedge-service-operations",
 	]);
 
+	const FRONT_DESK_FOCUS = Object.freeze({
+		queue: { section: "Front Desk", items: ["Appointment Queue"] },
+		guest: { section: "Front Desk", items: ["Guest Booking Requests"] },
+		missed: { section: "Front Desk", items: ["Missed Appointments"] },
+	});
+
+	const RESOURCE_FOCUS = Object.freeze({
+		patients: { section: "Front Desk", items: ["Patients"] },
+		appointments: { section: "Front Desk", items: ["Appointments"] },
+		"missed-appointments": { section: "Front Desk", items: ["Missed Appointments"] },
+		consultations: { section: "Clinical", items: ["Consultations"] },
+		"lab-orders": { section: "Clinical", items: ["Lab Orders", "Laboratory Orders"] },
+		vaccinations: { section: "Clinical", items: ["Vaccination Records", "Vaccinations"] },
+		boarding: { section: "Hospital & Services", items: ["Pet Boarding Booking"] },
+		grooming: { section: "Hospital & Services", items: ["Pet Grooming Appointment"] },
+		kennels: { section: "Hospital & Services", items: ["Kennel Availability Board", "Kennels"] },
+	});
+
+	const SERVICE_FOCUS = Object.freeze({
+		availability: { section: "Hospital & Services", items: ["Kennel Availability Board"] },
+		"boarding-stays": { section: "Hospital & Services", items: ["Pet Boarding Stay"] },
+		"boarding-care-records": { section: "Hospital & Services", items: ["Pet Boarding Care Record"] },
+		"grooming-sessions": { section: "Hospital & Services", items: ["Pet Grooming Session"] },
+	});
+
+	const PATH_FOCUS = Object.freeze({
+		"/desk/vetedge-clinical-workspace": { section: "Clinical", items: ["Consultations"] },
+		"/desk/veterinary-medical-history": { section: "Clinical", items: ["Medical History"] },
+	});
+
 	const state = {
 		installed: false,
 		lastError: null,
 		runtimeVersion: "",
 		productMenuPatched: false,
+		sidebarFocusInstalled: false,
+		sidebarFocusTarget: "",
+		sidebarFocusObserver: null,
+		sidebarFocusScheduled: false,
+		historyFocusPatched: false,
 	};
 
 	function runtime() {
@@ -278,6 +313,152 @@
 		if (currentConfig) edgeUI.registerProductMenu(currentConfig);
 	}
 
+	function sectionLabel(section) {
+		const toggle = section?.querySelector?.(".edge-sidebar__section-toggle");
+		if (!toggle) return "";
+		const children = [...toggle.children];
+		const labelNode = children.find((node) => !node.classList?.contains("edge-icon"));
+		return String(labelNode?.textContent || toggle.textContent || "").trim();
+	}
+
+	function itemLabel(item) {
+		return String(item?.querySelector?.(".edge-sidebar-item__label")?.textContent || "").trim();
+	}
+
+	function currentSidebarFocus() {
+		const path = normalizePath(`${window.location.pathname}${window.location.search}`);
+		const params = new URLSearchParams(window.location.search || "");
+
+		if (path === "/desk/vetedge-front-desk-action-center") {
+			return FRONT_DESK_FOCUS[params.get("tab") || "queue"] || FRONT_DESK_FOCUS.queue;
+		}
+		if (path === "/desk/vetedge-resource-center") {
+			return RESOURCE_FOCUS[params.get("resource") || "patients"] || null;
+		}
+		if (path === "/desk/vetedge-service-operations") {
+			return SERVICE_FOCUS[params.get("resource") || ""] || null;
+		}
+		return PATH_FOCUS[path] || null;
+	}
+
+	function findSidebarTarget(shell, focus) {
+		if (!shell || !focus) return null;
+		const section = [...shell.querySelectorAll(".edge-sidebar__section")].find(
+			(candidate) => sectionLabel(candidate) === focus.section,
+		);
+		if (!section) return null;
+		const wanted = new Set((focus.items || []).map((label) => String(label).trim()));
+		const item = [...section.querySelectorAll(".edge-sidebar-item")].find((candidate) =>
+			wanted.has(itemLabel(candidate)),
+		);
+		return item ? { section, item } : null;
+	}
+
+	function collapseOtherSidebarSections(shell, activeSection) {
+		shell.querySelectorAll(".edge-sidebar__section").forEach((section) => {
+			if (section === activeSection) return;
+			const toggle = section.querySelector(".edge-sidebar__section-toggle");
+			if (toggle?.getAttribute("aria-expanded") === "true") toggle.click();
+		});
+	}
+
+	function syncSidebarFocus() {
+		state.sidebarFocusScheduled = false;
+		const focus = currentSidebarFocus();
+		state.sidebarFocusTarget = focus ? `${focus.section}/${focus.items?.[0] || ""}` : "";
+		if (!focus) return false;
+
+		let applied = false;
+		document
+			.querySelectorAll(
+				".edge-app-shell[data-edge-product='vetedge'], .edge-app-shell[data-edge-product='veterinary']",
+			)
+			.forEach((shell) => {
+				const target = findSidebarTarget(shell, focus);
+				if (!target) return;
+				applied = true;
+
+				shell.querySelectorAll(".edge-sidebar-item").forEach((item) => {
+					const active = item === target.item;
+					if (item.classList.contains("active") !== active) item.classList.toggle("active", active);
+					if (active) {
+						if (item.getAttribute("aria-current") !== "page") item.setAttribute("aria-current", "page");
+					} else if (item.hasAttribute("aria-current")) {
+						item.removeAttribute("aria-current");
+					}
+				});
+
+				if (shell.classList.contains("edge-nav-shell--collapsed")) return;
+				const activeToggle = target.section.querySelector(".edge-sidebar__section-toggle");
+				if (activeToggle?.getAttribute("aria-expanded") !== "true") activeToggle?.click();
+				window.setTimeout(() => {
+					collapseOtherSidebarSections(shell, target.section);
+					window.EdgeSuiteNavigation?.syncActiveSection?.(shell);
+				}, 0);
+			});
+		return applied;
+	}
+
+	function scheduleSidebarFocus() {
+		if (state.sidebarFocusScheduled) return;
+		state.sidebarFocusScheduled = true;
+		window.setTimeout(syncSidebarFocus, 0);
+	}
+
+	function patchHistoryForSidebarFocus() {
+		if (state.historyFocusPatched || !window.history) return;
+		state.historyFocusPatched = true;
+		for (const methodName of ["pushState", "replaceState"]) {
+			const original = window.history[methodName];
+			if (typeof original !== "function" || original.__vetedgeSidebarFocusPatched) continue;
+			const wrapped = function (...args) {
+				const result = original.apply(this, args);
+				scheduleSidebarFocus();
+				return result;
+			};
+			wrapped.__vetedgeSidebarFocusPatched = true;
+			window.history[methodName] = wrapped;
+		}
+		window.addEventListener("popstate", scheduleSidebarFocus);
+	}
+
+	function installSidebarFocus() {
+		if (typeof document === "undefined") return false;
+		patchHistoryForSidebarFocus();
+		if (!state.sidebarFocusInstalled) {
+			state.sidebarFocusInstalled = true;
+			for (const eventName of ["page-change", "desktop_screen", "sidebar_setup", "toolbar_setup"]) {
+				document.addEventListener(eventName, scheduleSidebarFocus);
+			}
+			if (window.MutationObserver && document.body) {
+				state.sidebarFocusObserver = new MutationObserver((records) => {
+					const relevant = records.some((record) => {
+						if (record.type === "attributes") {
+							return record.target?.matches?.(".edge-sidebar-item");
+						}
+						return [...(record.addedNodes || [])].some(
+							(node) =>
+								node.nodeType === 1 &&
+								(node.matches?.(".edge-app-shell, .edge-sidebar") ||
+									node.querySelector?.(".edge-app-shell, .edge-sidebar")),
+						);
+					});
+					if (relevant) scheduleSidebarFocus();
+				});
+				state.sidebarFocusObserver.observe(document.body, {
+					childList: true,
+					subtree: true,
+					attributes: true,
+					attributeFilter: ["class", "aria-current"],
+				});
+			}
+		}
+		scheduleSidebarFocus();
+		window.setTimeout(syncSidebarFocus, 80);
+		window.setTimeout(syncSidebarFocus, 250);
+		return true;
+	}
+
 	function notificationActions(item) {
 		const status = item.status || "Unread";
 		return [
@@ -355,6 +536,7 @@
 
 	function install() {
 		state.lastError = null;
+		installSidebarFocus();
 		const edgeUI = runtime();
 		state.runtimeVersion = edgeUI?.version || "";
 		if (!edgeUI?.registerAdapter) return false;
@@ -373,6 +555,7 @@
 			patchProductMenu(edgeUI, navigation);
 			state.installed = true;
 			state.runtimeVersion = edgeUI.version || "";
+			scheduleSidebarFocus();
 			return true;
 		} catch (error) {
 			state.installed = false;
@@ -387,6 +570,8 @@
 			runtimeVersion: state.runtimeVersion,
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
+			sidebarFocusInstalled: state.sidebarFocusInstalled,
+			sidebarFocusTarget: state.sidebarFocusTarget,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
 			masterRouteCount: Object.keys(MASTER_ROUTES).length,
 			pricingRouteCount: Object.keys(PRICING_ROUTES).length,
@@ -397,6 +582,8 @@
 	window.VetEdgeUIBridge = Object.assign(window.VetEdgeUIBridge || {}, {
 		install,
 		diagnose,
+		resolveSidebarFocus: currentSidebarFocus,
+		syncSidebarFocus,
 		resourceRoutes: RESOURCE_ROUTES,
 		masterRoutes: MASTER_ROUTES,
 		pricingRoutes: PRICING_ROUTES,
