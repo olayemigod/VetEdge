@@ -9,11 +9,12 @@ from vetedge.services.reporting_structure import _col, _existing_field
 
 
 def execute_owner_register(filters=None):
-    """Build Owner Register while limiting dependent aggregates to visible owners.
+    """Build Owner Register while limiting filtered dependent aggregates to visible owners.
 
     Branch filtering determines which owners are visible, but pet counts retain the
     established report meaning: all pets belonging to each visible owner are counted,
-    regardless of the patient's branch.
+    regardless of the patient's branch. The unfiltered full report keeps the existing
+    grouped-query shape rather than creating a very large owner ``IN`` clause.
     """
     filters = frappe._dict(filters or {})
     customer_fields = ["name", "customer_name"]
@@ -61,26 +62,30 @@ def execute_owner_register(filters=None):
             and (branch_owner_names is None or cstr(customer.name).strip() in branch_owner_names)
         }
     )
+    visible_customer_set = set(visible_customer_names)
+    scope_dependents = branch_owner_names is not None or bool(filters.get("owner"))
 
     pet_counts = defaultdict(int)
-    if visible_customer_names and frappe.db.exists("DocType", "Veterinary Patient"):
+    if (visible_customer_names or not scope_dependents) and frappe.db.exists("DocType", "Veterinary Patient"):
         owner_field = _existing_field("Veterinary Patient", ["primary_owner", "owner"])
         if owner_field:
+            pet_filters = {owner_field: ("in", visible_customer_names)} if scope_dependents else {}
             for row in frappe.get_all(
                 "Veterinary Patient",
-                filters={owner_field: ("in", visible_customer_names)},
+                filters=pet_filters,
                 fields=[owner_field, {"COUNT": "name", "as": "pet_count"}],
                 group_by=owner_field,
             ):
                 pet_counts[row.get(owner_field)] = cint(row.get("pet_count"))
 
     outstanding = defaultdict(float)
-    if visible_customer_names:
+    if visible_customer_names or not scope_dependents:
         invoice_filters = {
             "docstatus": 1,
             "outstanding_amount": (">", 0),
-            "customer": ("in", visible_customer_names),
         }
+        if scope_dependents:
+            invoice_filters["customer"] = ("in", visible_customer_names)
         if filters.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
             invoice_filters["branch"] = filters.get("branch")
         for row in frappe.get_all(
@@ -94,7 +99,7 @@ def execute_owner_register(filters=None):
     data = []
     for customer in customers:
         customer_name = cstr(customer.name).strip()
-        if customer_name not in visible_customer_names:
+        if customer_name not in visible_customer_set:
             continue
         amount = flt(outstanding.get(customer.name))
         if cint(filters.get("outstanding_only")) and amount <= 0:
