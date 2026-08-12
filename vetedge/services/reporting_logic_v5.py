@@ -165,12 +165,42 @@ def _financial_payload(payload: dict, filters) -> dict:
 		}
 		for index, row in enumerate(composition)
 	]
+	_normalize_financial_health(payload, composition, total)
 	payload["charts"] = [
 		chart for chart in payload.get("charts", []) if cstr(chart.get("title")) != _("Revenue by Service Area")
 	]
 	payload["report_links"] = _append_report(payload.get("report_links"), "Service Revenue Breakdown")
 	payload["service_revenue_reconciles_to"] = total
 	return payload
+
+
+def _normalize_financial_health(payload: dict, composition: list[dict], total: float) -> None:
+	"""Keep health cards compact and keep concentration aligned to service-line analytics."""
+	for card in payload.get("health_indicators") or []:
+		card_id = cstr(card.get("id") or "")
+		if card_id in {"billing_completion_rate", "payment_completion_rate"}:
+			card["value"] = f"{round(flt(card.get('value')), 1)}%"
+			card.pop("value_type", None)
+			card.pop("fieldtype", None)
+
+	if not composition or not total:
+		return
+	top_service = max(composition, key=lambda row: flt(row.get("revenue_amount")), default=None)
+	if not top_service:
+		return
+	service_name = cstr(top_service.get("service_category") or _("Unassigned"))
+	service_pct = round((flt(top_service.get("revenue_amount")) / total) * 100.0, 1)
+	for card in payload.get("health_indicators") or []:
+		if cstr(card.get("id")) != "revenue_concentration":
+			continue
+		secondary = cstr(card.get("secondary_value") or "")
+		customer_marker = " / Customer:"
+		if customer_marker in secondary:
+			customer = secondary.split(customer_marker, 1)[1]
+			card["secondary_value"] = f"Service: {service_name} ({service_pct}%) / Customer:{customer}"
+		else:
+			card["secondary_value"] = f"Service: {service_name} ({service_pct}%)"
+		break
 
 
 def _branch_performance_payload(payload: dict, filters) -> dict:

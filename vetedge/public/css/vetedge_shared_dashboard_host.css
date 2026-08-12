@@ -133,6 +133,16 @@
 	min-width: 0;
 }
 
+/* Number cards deliberately use the same EdgeStatCard surface as Executive.
+   Financial percentage helpers do not add a second visual progress control. */
+.vetedge-shared-dashboard-root .edge-progress {
+	display: none;
+}
+
+.vetedge-shared-dashboard-root .edge-stat-card {
+	min-width: 0;
+}
+
 .edge-progress {
 	height: .4rem;
 	overflow: hidden;
@@ -236,6 +246,33 @@
 	stroke: var(--edge-color-border) !important;
 }
 
+/* Frappe Charts renders donut legends as a flex row that can truncate labels.
+   Wrap every legend entry so each status label/value remains visible and keeps
+   the exact colour marker assigned to its slice. */
+.vetedge-shared-dashboard-root .graph-stats-container {
+	display: grid !important;
+	grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+	gap: .55rem 1rem;
+	width: 100% !important;
+	height: auto !important;
+	max-height: none !important;
+	padding-top: .75rem;
+	overflow: visible !important;
+}
+
+.vetedge-shared-dashboard-root .graph-stats-container .stats {
+	min-width: 0;
+	margin: 0 !important;
+	color: var(--edge-color-ink-500) !important;
+	white-space: normal !important;
+}
+
+.vetedge-shared-dashboard-root .graph-stats-container .stats .stat-label,
+.vetedge-shared-dashboard-root .graph-stats-container .stats .stat-value,
+.vetedge-shared-dashboard-root .graph-stats-container .stats span {
+	color: var(--edge-color-ink-500) !important;
+}
+
 .vetedge-edge-composition-grid {
 	display: grid;
 	grid-template-columns: minmax(20rem, .9fr) minmax(24rem, 1.1fr);
@@ -266,18 +303,31 @@
 	color: var(--edge-color-ink-950);
 }
 
-.vetedge-shared-dashboard-root .graph-svg-tip {
+/* graph-svg-tip is appended outside the dashboard root by Frappe Charts, so
+   tooltip theming must be scoped from the document theme rather than the page. */
+:root[data-edge-palette] .graph-svg-tip,
+:root[data-edge-appearance] .graph-svg-tip {
 	background: var(--edge-color-surface) !important;
 	border: 1px solid var(--edge-color-border) !important;
 	color: var(--edge-color-ink-950) !important;
 	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(0 0 0 / 20%));
 }
 
-.vetedge-shared-dashboard-root .graph-svg-tip .title,
-.vetedge-shared-dashboard-root .graph-svg-tip ul,
-.vetedge-shared-dashboard-root .graph-svg-tip li,
-.vetedge-shared-dashboard-root .graph-svg-tip .value {
+:root[data-edge-palette] .graph-svg-tip .title,
+:root[data-edge-palette] .graph-svg-tip ul,
+:root[data-edge-palette] .graph-svg-tip li,
+:root[data-edge-palette] .graph-svg-tip .value,
+:root[data-edge-palette] .graph-svg-tip span,
+:root[data-edge-palette] .graph-svg-tip strong,
+:root[data-edge-appearance] .graph-svg-tip .title,
+:root[data-edge-appearance] .graph-svg-tip ul,
+:root[data-edge-appearance] .graph-svg-tip li,
+:root[data-edge-appearance] .graph-svg-tip .value,
+:root[data-edge-appearance] .graph-svg-tip span,
+:root[data-edge-appearance] .graph-svg-tip strong {
 	color: var(--edge-color-ink-950) !important;
+	fill: var(--edge-color-ink-950) !important;
+	opacity: 1 !important;
 }
 
 @media (max-width: 1100px) {
