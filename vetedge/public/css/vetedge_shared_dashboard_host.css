@@ -17,17 +17,11 @@
 	min-width: 0;
 }
 
-.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-field .frappe-control,
-.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-field .control-input-wrapper,
-.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-field .control-input {
-	width: 100%;
-	margin: 0;
-}
-
 .vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-actions {
 	display: flex;
 	align-items: center;
 	gap: .75rem;
+	flex-wrap: wrap;
 }
 
 .vetedge-shared-dashboard-root .vetedge-dashboard-root {
@@ -37,7 +31,13 @@
 	color: var(--edge-color-ink-950, var(--edge-text));
 }
 
-/* Quick Reports follows the Executive Dashboard action treatment. */
+/* The retained renderer still creates a legacy Quick Reports section. The
+   shared host reads those actions into the EdgeFilterBar Quick Reports button
+   and hides this source section without altering the reporting payload. */
+.vetedge-shared-dashboard-root .vetedge-dashboard-links[hidden] {
+	display: none !important;
+}
+
 .vetedge-shared-dashboard-root .vetedge-dashboard-links > .mb-4 {
 	margin-bottom: 1.5rem !important;
 	padding: 1.25rem;
@@ -75,6 +75,92 @@
 	outline-offset: 2px;
 }
 
+/* Executive Dashboard-style report action. */
+.vetedge-dashboard-quick-reports {
+	position: relative;
+}
+
+.vetedge-dashboard-quick-reports-menu {
+	position: absolute;
+	top: calc(100% + .5rem);
+	right: 0;
+	z-index: 40;
+	display: grid;
+	min-width: 15rem;
+	max-width: min(22rem, 80vw);
+	padding: .45rem;
+	gap: .2rem;
+	border: 1px solid var(--edge-color-border, var(--edge-border));
+	border-radius: var(--edge-radius-lg, .75rem);
+	background: var(--edge-color-surface, var(--edge-surface));
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(15 23 42 / 18%));
+}
+
+.vetedge-dashboard-quick-report-item {
+	width: 100%;
+	padding: .65rem .75rem;
+	border: 0;
+	border-radius: var(--edge-radius-md, .5rem);
+	background: transparent;
+	color: var(--edge-color-ink-950, var(--edge-text));
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+
+.vetedge-dashboard-quick-report-item:hover,
+.vetedge-dashboard-quick-report-item:focus-visible {
+	background: var(--edge-color-brand-50, var(--edge-primary-soft));
+	color: var(--edge-color-brand-700, var(--edge-primary-strong));
+	outline: none;
+}
+
+/* Match the Executive Dashboard visual hierarchy. */
+.vetedge-shared-dashboard-root .vetedge-dashboard-kpi-section,
+.vetedge-shared-dashboard-root .vetedge-dashboard-collection-section,
+.vetedge-shared-dashboard-root .vetedge-dashboard-composition-section,
+.vetedge-shared-dashboard-root .vetedge-dashboard-health-section,
+.vetedge-shared-dashboard-root .vetedge-dashboard-outstanding-section,
+.vetedge-shared-dashboard-root .vetedge-dashboard-trend-section {
+	margin-bottom: 1.25rem;
+	padding: clamp(1rem, 2vw, 1.4rem);
+	border: 1px solid var(--edge-color-border, var(--edge-border));
+	border-radius: var(--edge-radius-xl, 1rem);
+	background: var(--edge-color-surface, var(--edge-surface));
+	color: var(--edge-color-ink-950, var(--edge-text));
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 8%));
+}
+
+.vetedge-shared-dashboard-root .vetedge-dashboard-section-title {
+	margin-bottom: 1rem;
+	color: var(--edge-color-ink-950, var(--edge-text));
+	font-size: 1.05rem;
+	font-weight: 700;
+}
+
+.vetedge-shared-dashboard-root .vetedge-dashboard-section-title::before {
+	content: "Overview";
+	display: block;
+	margin-bottom: .25rem;
+	color: var(--edge-color-brand-600, var(--edge-primary));
+	font-size: .72rem;
+	font-weight: 800;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.vetedge-shared-dashboard-root .vetedge-dashboard-trend-section .vetedge-dashboard-section-title::before {
+	content: "Trends";
+}
+
+.vetedge-shared-dashboard-root .vetedge-dashboard-collection-section .vetedge-dashboard-section-title::before,
+.vetedge-shared-dashboard-root .vetedge-dashboard-composition-section .vetedge-dashboard-section-title::before,
+.vetedge-shared-dashboard-root .vetedge-dashboard-health-section .vetedge-dashboard-section-title::before,
+.vetedge-shared-dashboard-root .vetedge-dashboard-outstanding-section .vetedge-dashboard-section-title::before {
+	content: "Insights";
+}
+
 /* Legacy dashboard renderer compatibility. These declarations deliberately
    outrank Bootstrap's fixed light utility classes without changing payload or
    reporting behaviour. */
@@ -97,6 +183,7 @@
 :root[data-edge-palette] .vetedge-shared-dashboard-root h3,
 :root[data-edge-palette] .vetedge-shared-dashboard-root h4,
 :root[data-edge-palette] .vetedge-shared-dashboard-root label,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-field-label,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .control-label,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .form-control,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .input-with-feedback,
@@ -109,10 +196,13 @@
 :root[data-edge-palette] .vetedge-shared-dashboard-root .text-muted,
 :root[data-edge-palette] .vetedge-shared-dashboard-root small,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .help-box,
-:root[data-edge-palette] .vetedge-shared-dashboard-root .description {
+:root[data-edge-palette] .vetedge-shared-dashboard-root .description,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .vetedge-revenue-composition-name,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .vetedge-revenue-composition-share {
 	color: var(--edge-color-ink-500) !important;
 }
 
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-control,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .form-control,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .input-with-feedback,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .awesomplete > input,
@@ -124,11 +214,40 @@
 	color-scheme: light dark;
 }
 
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-control:disabled,
+:root[data-edge-palette] .vetedge-shared-dashboard-root input[type="date"]:disabled {
+	background: var(--edge-color-surface-muted) !important;
+	color: var(--edge-color-ink-500) !important;
+	opacity: 1;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root select option {
+	background: var(--edge-color-surface) !important;
+	color: var(--edge-color-ink-950) !important;
+}
+
 :root[data-edge-palette] .vetedge-shared-dashboard-root .form-control:focus,
 :root[data-edge-palette] .vetedge-shared-dashboard-root .input-with-feedback:focus,
-:root[data-edge-palette] .vetedge-shared-dashboard-root .awesomplete > input:focus {
+:root[data-edge-palette] .vetedge-shared-dashboard-root .awesomplete > input:focus,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-control:focus {
 	border-color: var(--edge-color-brand-500) !important;
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--edge-color-brand-600) 18%, transparent) !important;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root .border,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .border-bottom,
+:root[data-edge-palette] .vetedge-shared-dashboard-root .border-right {
+	border-color: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root .badge-light {
+	background: var(--edge-color-surface-muted) !important;
+	color: var(--edge-color-ink-950) !important;
+	border-color: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root .progress {
+	background: var(--edge-color-surface-muted) !important;
 }
 
 :root[data-edge-palette] .vetedge-shared-dashboard-root .table th {
@@ -139,6 +258,13 @@
 :root[data-edge-palette] .vetedge-shared-dashboard-root .table td {
 	background: var(--edge-color-surface) !important;
 	border-color: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root .vetedge-dashboard-charts > [class*="col-"] > .border {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 8%));
 }
 
 :root[data-edge-palette] .vetedge-shared-dashboard-root .vetedge-dashboard-charts svg text,
@@ -182,5 +308,16 @@
 @media (max-width: 640px) {
 	.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid {
 		grid-template-columns: 1fr;
+	}
+
+	.vetedge-dashboard-quick-reports,
+	.vetedge-dashboard-quick-reports > .edge-button {
+		width: 100%;
+	}
+
+	.vetedge-dashboard-quick-reports-menu {
+		left: 0;
+		right: auto;
+		min-width: min(18rem, 88vw);
 	}
 }
