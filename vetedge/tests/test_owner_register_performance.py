@@ -52,6 +52,38 @@ class TestOwnerRegisterPerformance(unittest.TestCase):
         self.assertEqual(data[0]["outstanding_amount"], 150)
         self.assertTrue(any(call[0] == "Veterinary Patient" and call[3] == "primary_owner" for call in calls))
 
+    def test_unfiltered_report_keeps_unscoped_grouped_aggregate_shape(self):
+        def get_all(doctype, filters=None, fields=None, order_by=None, group_by=None, pluck=None, **_kwargs):
+            if doctype == "Customer":
+                self.assertEqual(filters, {})
+                return [
+                    frappe._dict(name="CUST-001", customer_name="Jane Owner"),
+                    frappe._dict(name="CUST-002", customer_name="John Owner"),
+                ]
+            if doctype == "Veterinary Patient" and group_by == "primary_owner":
+                self.assertEqual(filters, {})
+                return [
+                    frappe._dict(primary_owner="CUST-001", pet_count=2),
+                    frappe._dict(primary_owner="CUST-002", pet_count=1),
+                ]
+            if doctype == "Sales Invoice":
+                self.assertNotIn("customer", filters)
+                return []
+            return []
+
+        with (
+            patch.object(owner_register_optimized.frappe, "get_all", side_effect=get_all),
+            patch.object(
+                owner_register_optimized.frappe.db,
+                "exists",
+                side_effect=lambda doctype, name=None: doctype == "DocType" and name == "Veterinary Patient",
+            ),
+            patch.object(owner_register_optimized, "_existing_field", side_effect=lambda _doctype, fields: fields[0]),
+        ):
+            _, data, _, _, _ = owner_register_optimized.execute_owner_register({})
+
+        self.assertEqual([row["number_of_pets"] for row in data], [2, 1])
+
     def test_empty_branch_owner_set_skips_pet_and_invoice_aggregates(self):
         aggregate_calls = []
 
