@@ -91,11 +91,11 @@ def validate_dashboard_branch_selection(dashboard_key: str, branch: str) -> None
 
 @frappe.whitelist()
 def get_executive_dashboard_payload(filters=None) -> dict:
-	"""Validate Executive filters, then build one request-local optimized payload."""
+	"""Validate Executive filters and delegate to get_optimized_executive_dashboard_payload via its compatibility wrapper."""
 	payload_filters = frappe.parse_json(filters) if isinstance(filters, str) else dict(filters or {})
 	validate_dashboard_access("executive")
 	validate_dashboard_branch_selection("executive", payload_filters.get("branch"))
 
-	from vetedge.services.executive_dashboard_optimized import get_optimized_executive_dashboard_payload
+	from vetedge.services.executive_dashboard_optimized import get_dashboard_payload
 
-	return get_optimized_executive_dashboard_payload(payload_filters)
+	return get_dashboard_payload("executive", payload_filters)

@@ -22,6 +22,14 @@ from vetedge.services.reporting_logic_v4 import (
 from vetedge.services.report_visibility import normalize_dashboard_filters, validate_dashboard_access
 
 
+def get_dashboard_payload(dashboard_key: str, filters=None) -> dict:
+	"""Compatibility wrapper for the established Executive payload contract."""
+	key = cstr(dashboard_key or "").strip()
+	if key != "executive":
+		frappe.throw(_("This optimized payload builder supports only the Executive Dashboard."), frappe.ValidationError)
+	return get_optimized_executive_dashboard_payload(filters)
+
+
 def get_optimized_executive_dashboard_payload(filters=None) -> dict:
 	"""Build the Executive Dashboard while reusing identical report datasets."""
 	filters = _to_dict(filters)
