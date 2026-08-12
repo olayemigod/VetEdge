@@ -79,7 +79,8 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertNotIn("all_rows =", page)
 		self.assertNotIn("table_rows =", page)
 		self.assertIn("LIMIT %(limit)s OFFSET %(offset)s", service)
-		self.assertIn("SELECT COUNT(*) AS total_count", service)
+		self.assertIn("COUNT(*) OVER() AS total_count", service)
+		self.assertIn("if not rows and offset:", service)
 		self.assertIn("FROM ({classified_sql}) classified", service)
 		self.assertIn("MAX_INTERACTIVE_PAGE_LENGTH = 500", service)
 
@@ -127,6 +128,37 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("wrapper.vue_view.refresh?.()", loader)
 		self.assertIn("wrapper.vue_view = wrapper.vue_app.mount(root[0])", loader)
 		self.assertIn("limit_page_length: 500", component)
+
+	def test_executive_payload_endpoint_uses_request_local_optimized_builder(self):
+		endpoint = self.read("vetedge/services/dashboard_filter_search.py")
+
+		self.assertIn("vetedge.services.executive_dashboard_optimized", endpoint)
+		self.assertIn("get_optimized_executive_dashboard_payload", endpoint)
+		self.assertNotIn("from vetedge.services.reporting_logic_v4 import get_dashboard_payload", endpoint)
+		self.assertIn('validate_dashboard_branch_selection("executive"', endpoint)
+
+	def test_executive_dashboard_loads_each_month_dataset_once(self):
+		service = self.read("vetedge/services/executive_dashboard_optimized.py")
+
+		self.assertEqual(service.count('_rows("Consultation Register", month_filters)'), 1)
+		self.assertEqual(service.count('_rows("Revenue Summary", month_filters)'), 1)
+		self.assertIn("month_consultations", service)
+		self.assertIn("month_revenue", service)
+		self.assertIn("_consultation_chart(month_consultations)", service)
+		self.assertIn("_consultation_by_branch_chart(month_consultations)", service)
+		self.assertIn("_consultation_type_chart(month_consultations)", service)
+		self.assertIn("_daily_revenue_chart(month_revenue)", service)
+		self.assertIn("_branch_revenue_chart(month_revenue)", service)
+
+	def test_executive_dashboard_reuses_today_dataset_for_single_day_range(self):
+		service = self.read("vetedge/services/executive_dashboard_optimized.py")
+
+		self.assertIn("same_range = (", service)
+		self.assertIn("today_consultations if same_range", service)
+		self.assertIn("today_revenue if same_range", service)
+		self.assertIn('_rows("Consultation Register", today_filters)', service)
+		self.assertIn('_rows("Revenue Summary", today_filters)', service)
+		self.assertIn('_rows("Unpaid Invoice Report", filters)', service)
 
 	def test_vaccination_scheduler_filters_dates_before_reading_rows(self):
 		service = self.read("vetedge/services/vaccination_notifications.py")
