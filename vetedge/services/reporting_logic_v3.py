@@ -3,14 +3,21 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cstr, flt
 
+from vetedge.services.owner_register_optimized import execute_owner_register
 from vetedge.services.reporting_logic_v2 import execute_structured_report as _base_execute_structured_report
 from vetedge.services.report_insights import build_report_summary
 from vetedge.services.report_visibility import normalize_report_filters
 
 
+def _execute_base_report(report_name: str, filters=None):
+    if report_name == "Owner Register":
+        return execute_owner_register(filters)
+    return _base_execute_structured_report(report_name, filters)
+
+
 def execute_structured_report(report_name: str, filters=None):
     filters = normalize_report_filters(report_name, filters)
-    columns, data, message, chart, summary = _base_execute_structured_report(report_name, filters)
+    columns, data, message, chart, summary = _execute_base_report(report_name, filters)
     filters = frappe._dict(filters or {})
     branch = cstr(filters.get("branch") or "").strip()
     
@@ -35,7 +42,7 @@ def execute_structured_report(report_name: str, filters=None):
                 prev_filters["from_date"] = prev_from.strftime("%Y-%m-%d")
                 prev_filters["to_date"] = prev_to.strftime("%Y-%m-%d")
                 
-                _, p_data, _, _, _ = _base_execute_structured_report(report_name, prev_filters)
+                _, p_data, _, _, _ = _execute_base_report(report_name, prev_filters)
                 prev_data = p_data
             except Exception:
                 pass
