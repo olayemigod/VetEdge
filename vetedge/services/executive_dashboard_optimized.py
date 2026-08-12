@@ -4,6 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, flt, getdate, nowdate
 
+from vetedge.services.executive_financial_metrics import count_executive_unpaid_invoices
 from vetedge.services.reporting_logic_v3 import execute_structured_report
 from vetedge.services.reporting_logic_v4 import (
 	_active_patients,
@@ -49,7 +50,7 @@ def get_optimized_executive_dashboard_payload(filters=None) -> dict:
 
 	today_consultations = _rows("Consultation Register", today_filters)
 	today_revenue = _rows("Revenue Summary", today_filters)
-	unpaid_rows = _rows("Unpaid Invoice Report", filters)
+	unpaid_count = count_executive_unpaid_invoices(filters)
 
 	same_range = (
 		cstr(month_filters.from_date) == cstr(today_filters.from_date)
@@ -70,7 +71,7 @@ def get_optimized_executive_dashboard_payload(filters=None) -> dict:
 				_("Today's Revenue"),
 				_currency(sum(flt(row.get("grand_total")) for row in today_revenue)),
 			),
-			_kpi(_("Unpaid Invoices"), len(unpaid_rows)),
+			_kpi(_("Unpaid Invoices"), unpaid_count),
 			_kpi(_("Appointments Today"), _appointments_today(filters)),
 			_kpi(_("Active Patients"), _active_patients(filters)),
 		],
