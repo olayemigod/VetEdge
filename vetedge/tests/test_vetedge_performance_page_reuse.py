@@ -158,7 +158,8 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("today_revenue if same_range", service)
 		self.assertIn('_rows("Consultation Register", today_filters)', service)
 		self.assertIn('_rows("Revenue Summary", today_filters)', service)
-		self.assertIn('_rows("Unpaid Invoice Report", filters)', service)
+		self.assertIn("count_executive_unpaid_invoices(filters)", service)
+		self.assertNotIn('_rows("Unpaid Invoice Report", filters)', service)
 
 	def test_vaccination_scheduler_filters_dates_before_reading_rows(self):
 		service = self.read("vetedge/services/vaccination_notifications.py")
