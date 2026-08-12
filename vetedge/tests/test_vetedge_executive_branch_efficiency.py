@@ -5,6 +5,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = REPO_ROOT / "vetedge" / "public" / "js" / "vetedge_executive_dashboard.bundle.js"
 COMPONENT = REPO_ROOT / "vetedge" / "public" / "js" / "vetedge_executive_dashboard" / "VetedgeExecutiveDashboard.vue"
 SERVICE = REPO_ROOT / "vetedge" / "services" / "dashboard_filter_search.py"
+OPTIMIZED = REPO_ROOT / "vetedge" / "services" / "executive_dashboard_optimized.py"
+FINANCIAL_METRICS = REPO_ROOT / "vetedge" / "services" / "executive_financial_metrics.py"
 
 
 class TestVetEdgeExecutiveBranchEfficiency(TestCase):
@@ -64,6 +66,32 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		self.assertIn("def _explicit_branch_scope", service)
 		self.assertIn("if explicit_scope:", service)
 		self.assertNotIn("if not assigned:", service)
+
+	def test_executive_unpaid_kpi_uses_lightweight_count_path(self):
+		optimized = self.read(OPTIMIZED)
+		metrics = self.read(FINANCIAL_METRICS)
+
+		self.assertIn("count_executive_unpaid_invoices", optimized)
+		self.assertIn("unpaid_count = count_executive_unpaid_invoices(filters)", optimized)
+		self.assertIn('_kpi(_("Unpaid Invoices"), unpaid_count)', optimized)
+		self.assertNotIn('unpaid_rows = _rows("Unpaid Invoice Report", filters)', optimized)
+		self.assertIn("def count_executive_unpaid_invoices", metrics)
+		self.assertNotIn("build_financial_dataset", metrics)
+		self.assertNotIn("_get_patient_title_map", metrics)
+
+	def test_executive_unpaid_count_preserves_branch_and_report_filter_truth(self):
+		metrics = self.read(FINANCIAL_METRICS)
+
+		self.assertIn("_get_sales_invoice_rows(filters, unpaid_only=not draft_mode)", metrics)
+		self.assertIn('docstatus_value in (0, "0")', metrics)
+		self.assertNotIn('cint(filters.get("docstatus")) == 0', metrics)
+		self.assertIn('flt(row.get("outstanding_amount")) > 0', metrics)
+		self.assertIn("_build_invoice_context_map(invoice_names)", metrics)
+		self.assertIn("_resolve_invoice_report_branch", metrics)
+		self.assertIn('branch = cstr(filters.get("branch") or "").strip()', metrics)
+		self.assertIn("if not branch or not invoices:", metrics)
+		for age_range in ("0-30", "31-60", "61-90", "90+"):
+			self.assertIn(f'age_range == "{age_range}"', metrics)
 
 	def test_no_background_polling_is_added(self):
 		self.assertNotIn("setInterval(", self.read(BUNDLE))
