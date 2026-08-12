@@ -97,17 +97,6 @@ def get_stock_expiry_interactive_data(
 	summary["highest_risk_items"] = cint(summary.get("highest_risk_items"))
 
 	window_condition = _window_condition(expiry_window)
-	count_rows = frappe.db.sql(
-		f"""
-		SELECT COUNT(*) AS total_count
-		FROM ({classified_sql}) classified
-		{window_condition}
-		""",
-		values,
-		as_dict=True,
-	)
-	total_count = cint(count_rows[0].get("total_count")) if count_rows else 0
-
 	rows = frappe.db.sql(
 		f"""
 		SELECT
@@ -121,7 +110,8 @@ def get_stock_expiry_interactive_data(
 			stock_uom,
 			expiry_date,
 			DATEDIFF(expiry_date, %(today)s) AS days_to_expiry,
-			expiry_status
+			expiry_status,
+			COUNT(*) OVER() AS total_count
 		FROM ({classified_sql}) classified
 		{window_condition}
 		ORDER BY
@@ -134,11 +124,24 @@ def get_stock_expiry_interactive_data(
 		values,
 		as_dict=True,
 	)
+	total_count = cint(rows[0].get("total_count")) if rows else 0
+	if not rows and offset:
+		count_rows = frappe.db.sql(
+			f"""
+			SELECT COUNT(*) AS total_count
+			FROM ({classified_sql}) classified
+			{window_condition}
+			""",
+			values,
+			as_dict=True,
+		)
+		total_count = cint(count_rows[0].get("total_count")) if count_rows else 0
 
 	branch_map = _get_warehouse_branch_map(row.get("warehouse") for row in rows)
 	result_rows = []
 	for row in rows:
 		row = dict(row)
+		row.pop("total_count", None)
 		row["qty"] = flt(row.get("qty"))
 		row["branch"] = branch_map.get(row.get("warehouse"))
 		row["expiry_bucket"] = _expiry_bucket_label(
