@@ -1,7 +1,8 @@
-import { h } from "vue";
+import { h, nextTick } from "vue";
 
 const HOST_STYLE_ID = "vetedge-shared-dashboard-host-style";
-const HOST_STYLE_URL = "/assets/vetedge/css/vetedge_shared_dashboard_host.css?v=20260812-2";
+const HOST_STYLE_URL = "/assets/vetedge/css/vetedge_shared_dashboard_host.css?v=20260812-3";
+const DASHBOARD_API = "vetedge.services.reporting_logic_v5.get_dashboard_payload";
 const BRANCH_SEARCH_API = "vetedge.services.dashboard_filter_search.search_dashboard_branches";
 const BRANCH_SEARCH_PAGE_LENGTH = 20;
 
@@ -58,7 +59,6 @@ function datePresetOptions() {
 		{ value: "today", label: "Today" },
 		{ value: "this_week", label: "This Week" },
 		{ value: "this_month", label: "This Month" },
-		{ value: "last_30_days", label: "Last 30 Days" },
 		{ value: "this_quarter", label: "This Quarter" },
 		{ value: "this_year", label: "This Year" },
 		{ value: "custom", label: "Custom Period" },
@@ -84,46 +84,6 @@ function initialFilters() {
 	};
 }
 
-function createVirtualField(view, definition) {
-	const fieldname = definition.fieldname;
-	if (!(fieldname in view.filters)) view.filters[fieldname] = definition.default ?? "";
-	const field = {
-		df: { ...definition },
-		get_value() {
-			return view.filters[fieldname] ?? "";
-		},
-		set_value(value) {
-			view.filters[fieldname] = value ?? "";
-			view.$forceUpdate?.();
-			if (typeof definition.change === "function") return definition.change.call(field);
-			return value;
-		},
-		refresh() {
-			view.$forceUpdate?.();
-		},
-	};
-	view._filterFields[fieldname] = field;
-	return field;
-}
-
-function pageProxy(page, body, view) {
-	const proxy = Object.create(page || null);
-	proxy.body = body;
-	proxy.edgeSuiteEmbedded = true;
-	proxy.set_title = typeof page?.set_title === "function" ? page.set_title.bind(page) : () => {};
-	proxy.add_field = (definition) => createVirtualField(view, definition);
-	proxy.set_primary_action = (label, action) => {
-		view.primaryActionLabel = label || __("Apply / Refresh");
-		view.primaryAction = typeof action === "function" ? action : null;
-		return action;
-	};
-	proxy.clear_primary_action = () => {
-		view.primaryAction = null;
-		view.primaryActionLabel = __("Apply / Refresh");
-	};
-	return proxy;
-}
-
 function openRoute(route) {
 	const professional = window.VetEdgeProfessionalUI;
 	if (typeof professional?.openRoute === "function") return professional.openRoute(route);
@@ -133,12 +93,77 @@ function openRoute(route) {
 	return true;
 }
 
+function call(method, args = {}) {
+	return new Promise((resolve, reject) => {
+		frappe.call({
+			method,
+			args,
+			callback: (response) => resolve(response.message || {}),
+			error: reject,
+		});
+	});
+}
+
+function cssToken(name, fallback) {
+	const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+	return value || fallback;
+}
+
+function themeChartPalette() {
+	return [
+		cssToken("--edge-color-brand-600", "#2563eb"),
+		cssToken("--edge-color-success", "#16a34a"),
+		cssToken("--edge-color-accent", "#7c3aed"),
+		cssToken("--edge-color-warning", "#d97706"),
+		cssToken("--edge-color-info", "#0891b2"),
+		cssToken("--edge-color-danger", "#dc2626"),
+		cssToken("--edge-color-brand-400", "#60a5fa"),
+		cssToken("--edge-color-accent-strong", "#0f766e"),
+	];
+}
+
+function formatCurrency(value) {
+	const currency = frappe.boot?.sysdefaults?.currency || "NGN";
+	try {
+		return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(value || 0));
+	} catch (_error) {
+		return `${currency} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+	}
+}
+
+function formatMetric(card = {}) {
+	const type = String(card.value_type || card.fieldtype || "").toLowerCase();
+	const value = card.value;
+	if (type === "currency") return formatCurrency(value);
+	if (type === "percent" && Number.isFinite(Number(value))) return `${Number(value).toFixed(1)}%`;
+	if (type === "float" && Number.isFinite(Number(value))) return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+	if (type === "int" || type === "integer") return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+	return value ?? 0;
+}
+
+function chartHasData(chart) {
+	const labels = chart?.data?.labels || [];
+	const datasets = chart?.data?.datasets || [];
+	return Boolean(labels.length && datasets.some((dataset) => Array.isArray(dataset.values) && dataset.values.length));
+}
+
 function createDashboardComponent(page, config, runtime) {
-	const EdgeAppShell = runtime.components.EdgeAppShell;
-	const EdgePageLayout = runtime.components.EdgePageLayout;
-	const EdgePageHeader = runtime.components.EdgePageHeader;
-	const EdgeFilterBar = runtime.components.EdgeFilterBar;
-	const EdgeLinkField = runtime.components.EdgeLinkField;
+	const {
+		EdgeAppShell,
+		EdgePageLayout,
+		EdgePageHeader,
+		EdgeFilterBar,
+		EdgeLinkField,
+		EdgeDropdown,
+		EdgeInput,
+		EdgeDashboardLayout,
+		EdgeStatCard,
+		EdgeDataTable,
+		EdgeStatusBadge,
+		EdgeLoadingState,
+		EdgeErrorState,
+		EdgeEmptyState,
+	} = runtime.components;
 	const profile = currentProfile();
 	const activeRoute = deskRoute(config.route || window.location.pathname || "");
 
@@ -146,96 +171,136 @@ function createDashboardComponent(page, config, runtime) {
 		name: "VetEdgeSharedDashboardHost",
 		data() {
 			return {
-				mountError: "",
+				loading: false,
+				error: "",
+				payload: {
+					kpis: [],
+					charts: [],
+					report_links: [],
+					supporting_tables: [],
+					alerts: [],
+					collection_metrics: [],
+					revenue_composition: [],
+					health_indicators: [],
+				},
 				filters: initialFilters(),
 				datePresets: datePresetOptions(),
-				quickReports: [],
 				reportsOpen: false,
-				primaryAction: null,
-				primaryActionLabel: __("Apply / Refresh"),
-				_filterFields: {},
-				_quickReportObserver: null,
+				chartInstances: [],
 			};
 		},
 		mounted() {
-			try {
-				if (!window.vetedgeDashboardShell?.mount) {
-					throw new Error("The VetEdge dashboard renderer is unavailable.");
-				}
-				const host = this.$refs.dashboardHost;
-				if (!host) throw new Error("The EdgeSuite dashboard host did not render.");
-				window.vetedgeDashboardShell.mount(pageProxy(page, host, this), config);
-				this.installQuickReportsBridge();
-				window.EdgeSuiteNavigation?.syncActiveSection?.(
-					host.closest?.(".edge-app-shell") || document.querySelector(".edge-app-shell"),
-				);
-			} catch (error) {
-				console.error(`Unable to mount ${config.title || "VetEdge dashboard"}`, error);
-				this.mountError = error?.message || String(error);
-			}
+			this.refresh();
+			window.EdgeSuiteNavigation?.syncActiveSection?.(
+				this.$el?.closest?.(".edge-app-shell") || document.querySelector(".edge-app-shell"),
+			);
 		},
 		beforeUnmount() {
-			this._quickReportObserver?.disconnect?.();
-			this._quickReportObserver = null;
+			this.destroyCharts();
 		},
 		methods: {
 			searchBranches(term = "") {
-				return new Promise((resolve, reject) => {
-					frappe.call({
-						method: BRANCH_SEARCH_API,
-						args: {
-							dashboard_key: config.key,
-							txt: term || "",
-							page_length: BRANCH_SEARCH_PAGE_LENGTH,
-						},
-						callback: (response) => resolve(response.message || []),
-						error: reject,
-					});
+				return call(BRANCH_SEARCH_API, {
+					dashboard_key: config.key,
+					txt: term || "",
+					page_length: BRANCH_SEARCH_PAGE_LENGTH,
 				});
 			},
-			setFilter(fieldname, value) {
-				const field = this._filterFields[fieldname];
-				if (field) return field.set_value(value);
-				this.filters[fieldname] = value ?? "";
-				return value;
+			setBranch(value) {
+				this.filters.branch = value || "";
 			},
-			applyFilters() {
-				if (typeof this.primaryAction === "function") return this.primaryAction();
-				return undefined;
-			},
-			syncQuickReports() {
-				const host = this.$refs.dashboardHost;
-				const linksHost = host?.querySelector?.(".vetedge-dashboard-links");
-				if (!linksHost) return;
-				this.quickReports = Array.from(linksHost.querySelectorAll(".vetedge-dashboard-report"))
-					.map((button) => ({
-						report: button.dataset.report || "",
-						label: button.textContent?.trim?.() || button.dataset.report || "",
-					}))
-					.filter((item) => item.report);
-				linksHost.hidden = true;
-			},
-			installQuickReportsBridge() {
-				const host = this.$refs.dashboardHost;
-				const linksHost = host?.querySelector?.(".vetedge-dashboard-links");
-				if (!linksHost) return;
-				this.syncQuickReports();
-				this._quickReportObserver?.disconnect?.();
-				if (window.MutationObserver) {
-					this._quickReportObserver = new MutationObserver(() => this.syncQuickReports());
-					this._quickReportObserver.observe(linksHost, { childList: true, subtree: true });
+			setPreset(value) {
+				this.filters.date_preset = value || "custom";
+				if (this.filters.date_preset !== "custom") {
+					const range = frappe.EdgeSuite?.DateRanges?.getRange?.(this.filters.date_preset);
+					if (range) {
+						this.filters.from_date = range.start || "";
+						this.filters.to_date = range.end || "";
+					}
 				}
 			},
-			openReport(report) {
+			setDate(fieldname, value) {
+				this.filters[fieldname] = value || "";
+				this.filters.date_preset = "custom";
+			},
+			async refresh() {
+				this.loading = true;
+				this.error = "";
+				this.reportsOpen = false;
+				frappe.route_options = { ...this.filters };
+				try {
+					this.payload = (await call(DASHBOARD_API, {
+						dashboard_key: config.key,
+						filters: this.filters,
+					})) || this.payload;
+					await nextTick();
+					this.renderCharts();
+				} catch (error) {
+					this.error = error?.message || __("Unable to load dashboard data.");
+				} finally {
+					this.loading = false;
+					await nextTick();
+					this.renderCharts();
+				}
+			},
+			openReport(report, extraFilters = {}) {
 				if (!report) return;
 				this.reportsOpen = false;
 				frappe.route_options = {
-					branch: this.filters.branch || "",
-					from_date: this.filters.from_date || "",
-					to_date: this.filters.to_date || "",
-					date_preset: this.filters.date_preset || "custom",
+					...this.filters,
+					...extraFilters,
 				};
 				frappe.set_route("query-report", report);
+			},
+			openAction(action) {
+				if (action?.type === "report" && action.target) this.openReport(action.target, action.filters || {});
+			},
+			destroyCharts() {
+				this.chartInstances.forEach((instance) => instance?.destroy?.());
+				this.chartInstances = [];
+			},
+			renderChart(target, chart, paletteOffset = 0) {
+				if (!target || !chartHasData(chart) || !frappe.Chart) return;
+				const palette = themeChartPalette();
+				const datasetCount = Math.max(1, chart.data?.datasets?.length || 1);
+				const colors = Array.from({ length: Math.max(datasetCount, chart.data?.labels?.length || 1) }, (_item, index) =>
+					palette[(index + paletteOffset) % palette.length],
+				);
+				try {
+					const instance = new frappe.Chart(target, {
+						title: "",
+						data: chart.data,
+						type: chart.type || "bar",
+						colors,
+						barOptions: chart.barOptions || { stacked: 0 },
+						height: 280,
+						tooltipOptions: {
+							formatTooltipY: (value) => formatMetric({ value, ...chart }),
+						},
+					});
+					this.chartInstances.push(instance);
+				} catch (error) {
+					console.warn("VetEdge EdgeSuite chart failed to render", error);
+				}
+			},
+			renderCharts() {
+				this.destroyCharts();
+				const root = this.$el;
+				if (!root) return;
+				if (this.payload.revenue_composition?.length) {
+					const composition = this.payload.revenue_composition;
+					this.renderChart(root.querySelector("[data-edge-chart='revenue-composition']"), {
+						type: "donut",
+						value_type: "currency",
+						data: {
+							labels: composition.map((row) => row.label || row.title),
+							datasets: [{ name: __("Revenue"), values: composition.map((row) => Number(row.value || 0)) }],
+						},
+					});
+				}
+				(this.payload.charts || []).forEach((chart, index) => {
+					this.renderChart(root.querySelector(`[data-edge-chart-index='${index}']`), chart, index);
+				});
 			},
 			renderFilters() {
 				return h("div", { class: "vetedge-shared-dashboard-filter-grid" }, [
@@ -245,43 +310,29 @@ function createDashboardComponent(page, config, runtime) {
 						label: __("Branch"),
 						placeholder: __("Search branches"),
 						searcher: this.searchBranches,
-						clearable: true,
-						"onUpdate:modelValue": (value) => this.setFilter("branch", value),
+						allowClear: true,
+						"onUpdate:modelValue": this.setBranch,
 					}),
-					h("div", { class: "edge-field" }, [
-						h("label", { class: "edge-field-label" }, __("Period")),
-						h(
-							"select",
-							{
-								class: "edge-select edge-control",
-								value: this.filters.date_preset,
-								onChange: (event) => this.setFilter("date_preset", event.target.value),
-							},
-							this.datePresets.map((preset) =>
-								h("option", { value: preset.value }, preset.label || preset.value),
-							),
-						),
-					]),
-					h("div", { class: "edge-field" }, [
-						h("label", { class: "edge-field-label" }, __("From Date")),
-						h("input", {
-							class: "edge-input edge-control",
-							type: "date",
-							value: this.filters.from_date,
-							disabled: this.filters.date_preset !== "custom",
-							onChange: (event) => this.setFilter("from_date", event.target.value),
-						}),
-					]),
-					h("div", { class: "edge-field" }, [
-						h("label", { class: "edge-field-label" }, __("To Date")),
-						h("input", {
-							class: "edge-input edge-control",
-							type: "date",
-							value: this.filters.to_date,
-							disabled: this.filters.date_preset !== "custom",
-							onChange: (event) => this.setFilter("to_date", event.target.value),
-						}),
-					]),
+					h(EdgeDropdown, {
+						modelValue: this.filters.date_preset,
+						label: __("Period"),
+						options: this.datePresets,
+						"onUpdate:modelValue": this.setPreset,
+					}),
+					h(EdgeInput, {
+						modelValue: this.filters.from_date,
+						label: __("From Date"),
+						type: "date",
+						disabled: this.filters.date_preset !== "custom",
+						"onUpdate:modelValue": (value) => this.setDate("from_date", value),
+					}),
+					h(EdgeInput, {
+						modelValue: this.filters.to_date,
+						label: __("To Date"),
+						type: "date",
+						disabled: this.filters.date_preset !== "custom",
+						"onUpdate:modelValue": (value) => this.setDate("to_date", value),
+					}),
 				]);
 			},
 			renderFilterActions() {
@@ -291,12 +342,13 @@ function createDashboardComponent(page, config, runtime) {
 						{
 							class: "edge-button edge-button--primary edge-primary-button",
 							type: "button",
-							onClick: () => this.applyFilters(),
+							disabled: this.loading,
+							onClick: () => this.refresh(),
 						},
-						this.primaryActionLabel || __("Apply / Refresh"),
+						this.loading ? __("Refreshing…") : __("Apply / Refresh"),
 					),
 				];
-				if (this.quickReports.length) {
+				if (this.payload.report_links?.length) {
 					actions.push(
 						h("div", { class: "vetedge-dashboard-quick-reports" }, [
 							h(
@@ -316,7 +368,7 @@ function createDashboardComponent(page, config, runtime) {
 								? h(
 									"div",
 									{ class: "vetedge-dashboard-quick-reports-menu", role: "menu" },
-									this.quickReports.map((link) =>
+									this.payload.report_links.map((link) =>
 										h(
 											"button",
 											{
@@ -333,21 +385,205 @@ function createDashboardComponent(page, config, runtime) {
 						]),
 					);
 				}
-				return actions;
+				return h("div", { class: "vetedge-shared-dashboard-filter-actions" }, actions);
+			},
+			renderStatCard(card, index = 0) {
+				const component = h(EdgeStatCard, {
+					label: card.label || card.title || "Metric",
+					value: formatMetric(card),
+					helper: card.secondary_value || card.helper || "",
+					tone: card.severity || ["primary", "success", "warning", "info", "neutral"][index % 5],
+					tooltip: card.tooltip || "",
+				});
+				const progress = String(card.value_type || "").toLowerCase() === "percent"
+					? h("div", { class: "edge-progress", role: "progressbar", "aria-valuenow": Number(card.value || 0), "aria-valuemin": 0, "aria-valuemax": 100 }, [
+						h("span", { class: "edge-progress__bar", style: { width: `${Math.min(100, Math.max(0, Number(card.value || 0)))}%` } }),
+					])
+					: null;
+				const content = h("div", { class: "vetedge-edge-stat-wrap" }, [component, progress]);
+				if (!card.action) return content;
+				return h(
+					"button",
+					{
+						class: "vetedge-edge-stat-action",
+						type: "button",
+						onClick: () => this.openAction(card.action),
+					},
+					[content],
+				);
+			},
+			renderCardSection(title, eyebrow, cards) {
+				if (!cards?.length) return null;
+				return h("section", { class: "vetedge-edge-dashboard-section" }, [
+					h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
+						h("div", [
+							eyebrow ? h("span", eyebrow) : null,
+							h("h2", title),
+						]),
+					]),
+					h(
+						EdgeDashboardLayout,
+						{ minColumnWidth: "12rem" },
+						{ default: () => cards.map((card, index) => this.renderStatCard(card, index)) },
+					),
+				]);
+			},
+			renderAlerts() {
+				if (!this.payload.alerts?.length) return null;
+				return h(
+					"section",
+					{ class: "vetedge-edge-alerts", "aria-label": __("Dashboard alerts") },
+					this.payload.alerts.map((alert) =>
+						h("article", { class: ["vetedge-edge-alert", `is-${alert.severity || "info"}`] }, [
+							h("div", { class: "vetedge-edge-alert__copy" }, [
+								h("strong", alert.title || __("Attention")),
+								h("p", alert.description || ""),
+							]),
+							h("div", { class: "vetedge-edge-alert__actions" }, [
+								alert.supporting_metric
+									? h(EdgeStatusBadge, { label: String(alert.supporting_metric), tone: alert.severity || "info" })
+									: null,
+								alert.action
+									? h("button", { class: "edge-button edge-button--compact", type: "button", onClick: () => this.openAction(alert.action) }, __("View Details"))
+									: null,
+							]),
+						]),
+					),
+				);
+			},
+			renderRevenueComposition() {
+				const composition = this.payload.revenue_composition || [];
+				if (!composition.length) return null;
+				const rows = composition.map((row) => ({
+					service: row.label || row.title,
+					revenue: formatMetric({ value: row.value, value_type: "currency" }),
+					share: `${Number(row.share_percent || 0).toFixed(1)}%`,
+				}));
+				return h("section", { class: "vetedge-edge-dashboard-section" }, [
+					h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
+						h("div", [h("span", __("Revenue Mix")), h("h2", __("Revenue Composition"))]),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: () => this.openReport("Service Revenue Breakdown") }, __("View Service Revenue Report")),
+				]),
+					h("div", { class: "vetedge-edge-composition-grid" }, [
+						h("article", { class: "vetedge-edge-chart-card" }, [
+							h("div", { class: "vetedge-edge-chart", "data-edge-chart": "revenue-composition" }),
+						]),
+						h(EdgeDataTable, {
+							columns: [
+								{ fieldname: "service", label: __("Service Line") },
+								{ fieldname: "revenue", label: __("Revenue") },
+								{ fieldname: "share", label: __("Share") },
+							],
+							rows,
+							rowKey: "service",
+							compact: true,
+						}),
+					]),
+				]);
+			},
+			renderChartsSection() {
+				const charts = this.payload.charts || [];
+				if (!charts.length) return null;
+				return h("section", { class: "vetedge-edge-dashboard-section" }, [
+					h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
+						h("div", [h("span", __("Trends")), h("h2", __("Performance Trends"))]),
+					]),
+					h(
+						"div",
+						{ class: "vetedge-edge-chart-grid" },
+						charts.map((chart, index) =>
+							h("article", { class: "vetedge-edge-chart-card" }, [
+								h("header", [h("h3", chart.title || __("Chart"))]),
+								chartHasData(chart)
+									? h("div", { class: "vetedge-edge-chart", "data-edge-chart-index": String(index) })
+									: h(EdgeEmptyState, { title: __("No chart data"), description: chart.empty_state || __("No values are available for this metric in the selected range.") }),
+							]),
+						),
+					),
+				]);
+			},
+			renderSupportingTables() {
+				const tables = this.payload.supporting_tables || [];
+				if (!tables.length) return null;
+				return tables.map((table) => {
+					const currencyFields = new Set((table.columns || []).filter((column) => String(column.fieldtype).toLowerCase() === "currency").map((column) => column.fieldname));
+					const rows = (table.rows || []).map((row) => {
+						const next = { ...row };
+						currencyFields.forEach((fieldname) => {
+							next[fieldname] = formatCurrency(row[fieldname]);
+						});
+						return next;
+					});
+					const columns = (table.columns || []).map((column) => ({ ...column, fieldtype: currencyFields.has(column.fieldname) ? "Data" : column.fieldtype }));
+					return h("section", { class: "vetedge-edge-dashboard-section", key: table.title }, [
+						h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
+							h("div", [
+								h("span", __("Detail")),
+								h("h2", table.title || __("Performance Detail")),
+								table.description ? h("p", table.description) : null,
+							]),
+						]),
+						h(EdgeDataTable, {
+							columns,
+							rows,
+							rowKey: table.row_key || "name",
+							emptyTitle: __("No detail rows"),
+							emptyDescription: __("No matching rows were found for the selected range."),
+						}),
+					]);
+				});
+			},
+			renderOutstanding() {
+				const groups = this.payload.outstanding_breakdowns;
+				if (!groups) return null;
+				const definitions = [
+					["by_branch", __("Outstanding by Branch")],
+					["by_service", __("Outstanding by Service")],
+					["by_customer", __("Outstanding by Customer")],
+					["by_doctor", __("Outstanding by Practitioner")],
+				];
+				const tables = definitions
+					.map(([key, title]) => ({ title, rows: groups[key] || [] }))
+					.filter((table) => table.rows.length);
+				if (!tables.length) return null;
+				return h("section", { class: "vetedge-edge-dashboard-section" }, [
+					h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
+						h("div", [h("span", __("Receivables")), h("h2", __("Outstanding Insights"))]),
+					]),
+					h("div", { class: "vetedge-edge-table-grid" }, tables.map((table) =>
+						h("article", { class: "vetedge-edge-table-card" }, [
+							h("h3", table.title),
+							h(EdgeDataTable, {
+								columns: [
+									{ fieldname: "name", label: __("Name") },
+									{ fieldname: "display_value", label: __("Outstanding") },
+								],
+								rows: table.rows.map((row) => ({ ...row, display_value: formatCurrency(row.value) })),
+								rowKey: "name",
+								compact: true,
+							}),
+						]),
+					)),
+				]);
+			},
+			renderContent() {
+				if (this.error) return h(EdgeErrorState, { title: __("Dashboard Fetch Failed"), message: this.error, onRetry: () => this.refresh() });
+				if (this.loading && !this.payload.kpis?.length) return h(EdgeLoadingState, { message: __("Loading dashboard data…"), skeleton: true });
+				const sections = [
+					this.renderAlerts(),
+					this.renderCardSection(__("Executive Summary"), __("Overview"), this.payload.kpis),
+					this.renderCardSection(__("Collection Performance"), __("Collections"), this.payload.collection_metrics),
+					this.renderRevenueComposition(),
+					this.renderCardSection(__("Financial Health & Concentration"), __("Health"), this.payload.health_indicators),
+					this.renderOutstanding(),
+					this.renderChartsSection(),
+					...(this.renderSupportingTables() || []),
+				].filter(Boolean);
+				if (!sections.length) return h(EdgeEmptyState, { title: __("No dashboard data"), description: __("No information was found for the selected filters.") });
+				return h("div", { class: "vetedge-edge-dashboard-content" }, sections);
 			},
 		},
 		render() {
-			const content = this.mountError
-				? h("div", { class: "edge-error-state vetedge-dashboard-host-error" }, [
-					h("strong", __("Dashboard failed to load")),
-					h("p", this.mountError),
-				])
-				: h("div", {
-					ref: "dashboardHost",
-					class: "vetedge-dashboard-legacy-content",
-					"data-dashboard-key": config.key || "",
-				});
-
 			return h(
 				EdgeAppShell,
 				{
@@ -360,31 +596,26 @@ function createDashboardComponent(page, config, runtime) {
 					onNavigate: openRoute,
 				},
 				{
-					default: () =>
-						h(
-							EdgePageLayout,
-							{ class: "vetedge-shared-dashboard-page" },
-							{
-								header: () =>
-									h(EdgePageHeader, {
-										eyebrow: __("Veterinary Performance"),
-										title: config.title || __("Veterinary Dashboard"),
-										subtitle:
-											config.subtitle ||
-											__("Branch-aware veterinary operational and performance insights."),
-									}),
-								filters: () =>
-									h(
-										EdgeFilterBar,
-										{ title: __("Dashboard Filters") },
-										{
-											default: () => this.renderFilters(),
-											actions: () => this.renderFilterActions(),
-										},
-									),
-								default: () => content,
-							},
-						),
+					default: () => h(
+						EdgePageLayout,
+						null,
+						{
+							header: () => h(EdgePageHeader, {
+								eyebrow: __("Veterinary Performance"),
+								title: config.title || this.payload.title || __("Veterinary Dashboard"),
+								subtitle: config.subtitle || __("Branch-aware veterinary operational and performance insights."),
+							}),
+							filters: () => h(
+								EdgeFilterBar,
+								{ title: __("Dashboard Filters") },
+								{
+									default: () => this.renderFilters(),
+									actions: () => this.renderFilterActions(),
+								},
+							),
+							default: () => this.renderContent(),
+						},
+					),
 				},
 			);
 		},
@@ -418,6 +649,15 @@ function installDashboard(wrapper, config) {
 		"EdgePageHeader",
 		"EdgeFilterBar",
 		"EdgeLinkField",
+		"EdgeDropdown",
+		"EdgeInput",
+		"EdgeDashboardLayout",
+		"EdgeStatCard",
+		"EdgeDataTable",
+		"EdgeStatusBadge",
+		"EdgeLoadingState",
+		"EdgeErrorState",
+		"EdgeEmptyState",
 	];
 	frappe.require("edgeui.bundle.js", () => {
 		const runtime = getRuntime();
@@ -438,37 +678,25 @@ function installDashboard(wrapper, config) {
 			const professional = window.VetEdgeProfessionalUI?.install?.();
 			if (!professional?.installed) {
 				loading.remove();
-				showFailure(
-					page,
-					professional?.message ||
-						__("VetEdge requires the shared EdgeSuite professional shell."),
-				);
+				showFailure(page, professional?.message || __("VetEdge requires the shared EdgeSuite professional shell."));
 				return;
 			}
-
-			frappe.require("/assets/vetedge/js/dashboard_shell.js", () => {
-				try {
-					loading.remove();
-					$(page.body).empty();
-					const root = $(
-						'<div class="vetedge-shared-dashboard-root" data-edge-product="vetedge"></div>',
-					).appendTo(page.body);
-					const component = createDashboardComponent(page, config, runtime);
-					wrapper.edge_dashboard_app?.unmount?.();
-					wrapper.edge_dashboard_app = runtime.createEdgeApp(component);
-					wrapper.edge_dashboard_view = wrapper.edge_dashboard_app.mount(root[0]);
-				} catch (error) {
-					console.error("Unable to mount shared VetEdge dashboard shell", error);
-					showFailure(page, error?.message || String(error));
-				}
-			});
+			try {
+				loading.remove();
+				$(page.body).empty();
+				const root = $('<div class="vetedge-shared-dashboard-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+				const component = createDashboardComponent(page, config, runtime);
+				wrapper.edge_dashboard_app?.unmount?.();
+				wrapper.edge_dashboard_app = runtime.createEdgeApp(component);
+				wrapper.edge_dashboard_view = wrapper.edge_dashboard_app.mount(root[0]);
+			} catch (error) {
+				console.error("Unable to mount shared VetEdge dashboard shell", error);
+				showFailure(page, error?.message || String(error));
+			}
 		};
 
-		if (window.VetEdgeProfessionalUI?.install) {
-			mountDashboard();
-		} else {
-			frappe.require("/assets/vetedge/js/vetedge_professional_ui.js", mountDashboard);
-		}
+		if (window.VetEdgeProfessionalUI?.install) mountDashboard();
+		else frappe.require("/assets/vetedge/js/vetedge_professional_ui.js", mountDashboard);
 	});
 
 	return page;
@@ -479,8 +707,6 @@ export function mountVetEdgeDashboardHost(wrapper, config = {}) {
 	return installDashboard(wrapper, config);
 }
 
-if (typeof window !== "undefined") {
-	window.mountVetEdgeDashboardHost = mountVetEdgeDashboardHost;
-}
+if (typeof window !== "undefined") window.mountVetEdgeDashboardHost = mountVetEdgeDashboardHost;
 
 export default mountVetEdgeDashboardHost;
