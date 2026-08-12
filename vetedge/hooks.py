@@ -83,6 +83,10 @@ has_permission = {
 	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
 }
 
+override_whitelisted_methods = {
+	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
+}
+
 doc_events = {
 	"Sales Invoice": {
 		"before_validate": "vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
