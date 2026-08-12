@@ -237,7 +237,14 @@ def _allocate_invoice(
 def build_service_revenue_rows(filters=None, dataset: list[dict] | None = None) -> list[dict]:
 	"""Build a line-level, total-preserving service revenue dataset for submitted invoices."""
 	filters = frappe._dict(filters or {})
-	invoice_rows = list(dataset if dataset is not None else build_financial_dataset(filters))
+	base_filters = frappe._dict(
+		{
+			key: value
+			for key, value in filters.items()
+			if key not in {"service_category", "item", "practitioner"}
+		}
+	)
+	invoice_rows = list(dataset if dataset is not None else build_financial_dataset(base_filters))
 	invoice_rows = [row for row in invoice_rows if cint(row.get("docstatus")) == 1]
 	invoice_map = {
 		cstr(row.get("sales_invoice")): row
