@@ -186,9 +186,15 @@ async function runAction(context, task, successMessage) {
 		await task();
 		frappe.show_alert({ message: successMessage, indicator: "green" });
 		context.values = { ...context.values, reason: "" };
+		await context.clinicalView?.loadDetail?.(context.consultation);
+		if (String(context.clinicalView?.detail?.status || "") !== "Completed") {
+			context.modal?.update({ busy: false });
+			context.modal?.close();
+			context.syncButton?.();
+			return;
+		}
 		await refreshContext(context);
 		updateModal(context, { busy: false });
-		await context.clinicalView?.loadDetail?.(context.consultation);
 		context.syncButton?.();
 	} catch (error) {
 		updateModal(context, { busy: false, error: error?.message || __("Consultation resolution action failed."), errorTitle: __("Resolution action failed") });
