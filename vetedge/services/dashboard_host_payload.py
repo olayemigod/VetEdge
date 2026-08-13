@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 import frappe
 from frappe import _
 from frappe.utils import cstr, flt
@@ -12,10 +14,11 @@ from vetedge.services.report_visibility import normalize_dashboard_filters, vali
 
 @frappe.whitelist()
 def get_dashboard_payload(dashboard_key: str, filters=None):
-	"""Shared-dashboard adapter with an optimized Executive unpaid KPI path."""
+	"""Shared-dashboard adapter with optimized Executive and QA chart enrichments."""
 	key = cstr(dashboard_key or "").strip()
 	if key != "executive":
-		return v5.get_dashboard_payload(key, filters)
+		payload = v5.get_dashboard_payload(key, filters)
+		return _enhance_performance_charts(key, payload)
 
 	validate_dashboard_access(key)
 	normalized = normalize_dashboard_filters(key, v4._to_dict(filters))
@@ -54,3 +57,71 @@ def _executive_payload(filters) -> dict:
 		"message": _("KPI cards and charts use the same selected date range. Active Patients is a current-state snapshot."),
 	}
 	return payload
+
+
+def _enhance_performance_charts(key: str, payload: dict) -> dict:
+	if key == "branch_performance":
+		rows = _supporting_rows(payload)
+		labels = [cstr(row.get("branch") or "").strip() for row in rows]
+		values = [int(row.get("consultation_count") or 0) for row in rows]
+		_append_chart(payload, _bar_chart(_("Consultations by Branch"), labels, values))
+	elif key == "practitioner_performance":
+		rows = _supporting_rows(payload)
+		consultations: dict[str, int] = defaultdict(int)
+		vaccinations: dict[str, int] = defaultdict(int)
+		for row in rows:
+			practitioner = cstr(row.get("practitioner") or "").strip()
+			if not practitioner:
+				continue
+			consultations[practitioner] += int(row.get("number_of_consultations") or 0)
+			vaccinations[practitioner] += int(row.get("vaccinations_administered") or 0)
+		labels = sorted(set(consultations) | set(vaccinations))
+		_append_chart(
+			payload,
+			_bar_chart(
+				_("Consultations by Practitioner"),
+				labels,
+				[consultations.get(label, 0) for label in labels],
+			),
+		)
+		_append_chart(
+			payload,
+			_bar_chart(
+				_("Vaccinations by Practitioner"),
+				labels,
+				[vaccinations.get(label, 0) for label in labels],
+			),
+		)
+	return payload
+
+
+def _supporting_rows(payload: dict) -> list[dict]:
+	for table in payload.get("supporting_tables") or []:
+		rows = table.get("rows") or []
+		if rows:
+			return rows
+	return []
+
+
+def _bar_chart(title: str, labels: list[str], values: list[int]) -> dict:
+	pairs = [(label, value) for label, value in zip(labels, values) if label]
+	return {
+		"title": title,
+		"type": "bar",
+		"data": {
+			"labels": [label for label, _value in pairs],
+			"datasets": [{"name": title, "values": [value for _label, value in pairs]}],
+		},
+		"value_type": "int",
+		"fieldtype": "Int",
+	}
+
+
+def _append_chart(payload: dict, chart: dict) -> None:
+	if not chart.get("data", {}).get("labels"):
+		return
+	title = cstr(chart.get("title"))
+	charts = payload.setdefault("charts", [])
+	if any(cstr(existing.get("title")) == title for existing in charts):
+		return
+	charts.append(chart)
