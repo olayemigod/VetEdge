@@ -27,13 +27,19 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 			const professional = window.VetEdgeProfessionalUI?.install?.();
 			window.VetEdgeUIBridge?.install?.();
 			if (!professional?.installed) { showFailure(professional?.message || __('The VetEdge professional shell is unavailable.')); return; }
-			frappe.require('vetedge_clinical_workspace.bundle.js', () => {
-				if (wrapper.current_visit_id !== visitId || !window.mountVetEdgeClinicalWorkspace) return;
-				try {
-					$loading.remove();
-					const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-					wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
-				} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
+			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+				if (wrapper.current_visit_id !== visitId || !window.VetEdgeEdgeModalPresenter?.ready?.()) {
+					showFailure(__('The EdgeSuite clinical modal presenter is unavailable.'));
+					return;
+				}
+				frappe.require('vetedge_clinical_workspace.bundle.js', () => {
+					if (wrapper.current_visit_id !== visitId || !window.mountVetEdgeClinicalWorkspace) return;
+					try {
+						$loading.remove();
+						const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+						wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
+					} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
+				});
 			});
 		};
 		if (window.VetEdgeProfessionalUI?.install) mountWorkspace();
