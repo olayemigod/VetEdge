@@ -44,6 +44,10 @@ frappe.pages['vetedge-service-operations'].on_page_show = function(wrapper) {
 			const professional = window.VetEdgeProfessionalUI?.install?.();
 			window.VetEdgeUIBridge?.install?.();
 			window.VetEdgeRouteAlignment?.installNavigationAdapter?.();
+			// VetEdgeUIBridge historically restored a generic /desk fallback that
+			// opened unknown destinations in a new tab. Re-assert the canonical
+			// Frappe v16 Desk router after all compatibility adapters have mounted.
+			window.VetEdgeNavigationRecovery?.install?.();
 			if (!professional?.installed) {
 				showFailure(professional?.message || __('The VetEdge professional shell is unavailable.'));
 				return;
