@@ -7,6 +7,8 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+	wrapper.clinical_workflow?.destroy?.();
+	wrapper.clinical_workflow = null;
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
 	$(page.body).empty();
@@ -37,13 +39,20 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 						showFailure(__('The EdgeSuite billing modal is unavailable.'));
 						return;
 					}
-					frappe.require('vetedge_clinical_workspace.bundle.js', () => {
-						if (wrapper.current_visit_id !== visitId || !window.mountVetEdgeClinicalWorkspace) return;
-						try {
-							$loading.remove();
-							const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-							wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
-						} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
+					frappe.require('vetedge_clinical_workflow_modal.bundle.js', () => {
+						if (wrapper.current_visit_id !== visitId || !window.installVetEdgeClinicalWorkflowModal) {
+							showFailure(__('The completed consultation resolution workflow is unavailable.'));
+							return;
+						}
+						frappe.require('vetedge_clinical_workspace.bundle.js', () => {
+							if (wrapper.current_visit_id !== visitId || !window.mountVetEdgeClinicalWorkspace) return;
+							try {
+								$loading.remove();
+								const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+								wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
+								wrapper.clinical_workflow = window.installVetEdgeClinicalWorkflowModal(root[0], wrapper.vue_app?.view);
+							} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
+						});
 					});
 				});
 			});
