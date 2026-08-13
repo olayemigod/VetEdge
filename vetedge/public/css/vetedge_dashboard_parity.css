@@ -1,0 +1,315 @@
+/* Dashboard parity layer: shared VetEdge dashboards follow the established
+   Executive Dashboard rhythm while EdgeSuite semantic tokens remain the only
+   colour authority. */
+
+.vetedge-shared-dashboard-root,
+.vetedge-shared-dashboard-root .edge-app-shell,
+.vetedge-shared-dashboard-root .edge-shell-body,
+.vetedge-shared-dashboard-root .edge-shell-main,
+.vetedge-shared-dashboard-root .edge-page-layout,
+.vetedge-shared-dashboard-root .edge-page-layout-body,
+.vetedge-shared-dashboard-root .edge-page-layout__content {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+.vetedge-shared-dashboard-root .edge-page-layout__content {
+	padding: 0 28px 32px;
+}
+
+.vetedge-shared-dashboard-root .edge-page-layout__header,
+.vetedge-shared-dashboard-root .edge-page-layout__filters {
+	padding-left: 28px;
+	padding-right: 28px;
+}
+
+.vetedge-shared-dashboard-root .edge-filter-bar {
+	border: 1px solid var(--edge-color-border);
+	border-radius: 12px;
+	background: var(--edge-color-surface);
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 6%));
+}
+
+.vetedge-shared-dashboard-root .edge-filter-bar__title,
+.vetedge-shared-dashboard-root .edge-filter-bar label,
+.vetedge-shared-dashboard-root .edge-field-label,
+.vetedge-shared-dashboard-root .edge-field__label,
+.vetedge-shared-dashboard-root .edge-input__label,
+.vetedge-shared-dashboard-root .edge-dropdown__label,
+.vetedge-shared-dashboard-root .edge-link-field__label,
+.vetedge-shared-dashboard-root .edge-control-label,
+.vetedge-shared-dashboard-root .form-label {
+	color: var(--edge-color-ink-950) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-filter-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(150px, 1fr));
+	gap: 14px;
+	width: 100%;
+	align-items: end;
+}
+
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid input,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid select,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid .edge-control,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid .edge-input,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid .edge-dropdown__trigger,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid .edge-link-field__control {
+	width: 100%;
+	min-height: 38px;
+	padding: 8px 11px;
+	border: 1px solid var(--edge-color-border) !important;
+	border-radius: 8px;
+	background: var(--edge-color-surface) !important;
+	color: var(--edge-color-ink-950) !important;
+	box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+	color-scheme: light dark;
+}
+
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid input:disabled,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid select:disabled,
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-grid .edge-control:disabled {
+	background: var(--edge-color-surface-muted) !important;
+	color: var(--edge-color-ink-500) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-root input::placeholder,
+.vetedge-shared-dashboard-root textarea::placeholder {
+	color: var(--edge-color-ink-500) !important;
+	opacity: 1;
+}
+
+.vetedge-shared-dashboard-root select option {
+	background: var(--edge-color-surface) !important;
+	color: var(--edge-color-ink-950) !important;
+}
+
+.vetedge-shared-dashboard-filter-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.vetedge-shared-dashboard-root .vetedge-shared-dashboard-filter-actions .vetedge-dashboard-quick-reports {
+	display: block !important;
+	position: relative;
+}
+
+.vetedge-dashboard-bottom-reports {
+	display: none !important;
+}
+
+.vetedge-edge-dashboard-content {
+	display: grid;
+	gap: 22px;
+	padding-top: 20px;
+	container-type: inline-size;
+	container-name: vetedge-shared-dashboard-content;
+}
+
+.vetedge-edge-dashboard-section {
+	min-width: 0;
+	padding: 20px;
+	border: 1px solid var(--edge-color-border);
+	border-radius: 12px;
+	background: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 6%));
+}
+
+.vetedge-edge-dashboard-section__heading {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.vetedge-edge-dashboard-section__heading span {
+	color: var(--edge-color-brand-600);
+	font-size: .72rem;
+	font-weight: 700;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.vetedge-edge-dashboard-section__heading h2,
+.vetedge-edge-dashboard-section__heading h3 {
+	margin: 3px 0 0;
+	color: var(--edge-color-ink-950);
+}
+
+.vetedge-edge-dashboard-section__heading h2 {
+	font-size: 1.05rem;
+}
+
+.vetedge-edge-dashboard-section__heading p,
+.vetedge-edge-dashboard-section__heading small {
+	color: var(--edge-color-ink-500);
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section .edge-stat-card {
+	min-width: 0;
+	border-top: 3px solid var(--edge-color-brand-600) !important;
+	background: var(--edge-color-surface) !important;
+	border-right-color: var(--edge-color-border) !important;
+	border-bottom-color: var(--edge-color-border) !important;
+	border-left-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section .edge-stat-card__label,
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section .edge-stat-card__helper {
+	color: var(--edge-color-ink-500) !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section .edge-stat-card__value {
+	color: var(--edge-color-ink-950) !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-dashboard-section .edge-dashboard-layout {
+	display: grid !important;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+	gap: 14px !important;
+	width: 100%;
+	min-width: 0;
+}
+
+.vetedge-edge-chart-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+}
+
+.vetedge-edge-chart-card,
+.vetedge-edge-table-card {
+	min-width: 0;
+	padding: 16px;
+	border: 1px solid var(--edge-color-border);
+	border-radius: 10px;
+	background: var(--edge-color-surface);
+}
+
+.vetedge-edge-chart-card h3,
+.vetedge-edge-table-card h3 {
+	margin: 0 0 10px;
+	color: var(--edge-color-ink-950);
+	font-size: .95rem;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table,
+.vetedge-shared-dashboard-root .edge-data-table td,
+.vetedge-shared-dashboard-root .edge-empty-state,
+.vetedge-shared-dashboard-root .edge-loading-state,
+.vetedge-shared-dashboard-root .edge-error-state {
+	color: var(--edge-color-ink-950) !important;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table th {
+	background: var(--edge-color-surface-muted) !important;
+	border-color: var(--edge-color-border) !important;
+	color: var(--edge-color-ink-500) !important;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table td,
+.vetedge-shared-dashboard-root .edge-data-table-card {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg text,
+.vetedge-shared-dashboard-root .vetedge-edge-chart .chart-container text,
+.vetedge-shared-dashboard-root .graph-stats-container .stats,
+.vetedge-shared-dashboard-root .graph-stats-container .stats span {
+	color: var(--edge-color-ink-500) !important;
+	fill: var(--edge-color-ink-500) !important;
+	opacity: 1 !important;
+}
+
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .line-vertical,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .line-horizontal,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg .axis-line,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg line.domain,
+.vetedge-shared-dashboard-root .vetedge-edge-chart svg path.domain {
+	stroke: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-shared-dashboard-root .edge-shell-main {
+	background: linear-gradient(
+		180deg,
+		var(--edge-color-brand-50) 0,
+		var(--edge-color-surface-soft) 180px,
+		var(--edge-color-surface-muted) 420px
+	) !important;
+}
+
+:root[data-edge-palette] .graph-svg-tip,
+:root[data-edge-appearance] .graph-svg-tip {
+	background: var(--edge-color-surface) !important;
+	border: 1px solid var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(0 0 0 / 20%));
+}
+
+:root[data-edge-palette] .graph-svg-tip *,
+:root[data-edge-appearance] .graph-svg-tip * {
+	color: var(--edge-color-ink-950) !important;
+	fill: var(--edge-color-ink-950) !important;
+	opacity: 1 !important;
+}
+
+@container vetedge-shared-dashboard-content (min-width: 1180px) {
+	.vetedge-edge-dashboard-section .edge-dashboard-layout {
+		grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+	}
+}
+
+@container vetedge-shared-dashboard-content (min-width: 900px) and (max-width: 1179px) {
+	.vetedge-edge-dashboard-section .edge-dashboard-layout {
+		grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+	}
+}
+
+@container vetedge-shared-dashboard-content (min-width: 640px) and (max-width: 899px) {
+	.vetedge-edge-dashboard-section .edge-dashboard-layout {
+		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+	}
+}
+
+@media (max-width: 900px) {
+	.vetedge-shared-dashboard-filter-grid {
+		grid-template-columns: repeat(2, minmax(150px, 1fr));
+	}
+	.vetedge-shared-dashboard-root .edge-page-layout__content,
+	.vetedge-shared-dashboard-root .edge-page-layout__header,
+	.vetedge-shared-dashboard-root .edge-page-layout__filters {
+		padding-left: 18px;
+		padding-right: 18px;
+	}
+}
+
+@media (max-width: 576px) {
+	.vetedge-shared-dashboard-filter-grid,
+	.vetedge-edge-chart-grid {
+		grid-template-columns: 1fr;
+	}
+	.vetedge-edge-dashboard-section {
+		padding: 14px;
+	}
+	.vetedge-shared-dashboard-root .edge-page-layout__content,
+	.vetedge-shared-dashboard-root .edge-page-layout__header,
+	.vetedge-shared-dashboard-root .edge-page-layout__filters {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+	.vetedge-shared-dashboard-filter-actions,
+	.vetedge-dashboard-quick-reports,
+	.vetedge-dashboard-quick-reports > .edge-button {
+		width: 100%;
+	}
+}
