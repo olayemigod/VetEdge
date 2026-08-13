@@ -1,6 +1,7 @@
 const ALIGNMENT_STYLE_ID = "vetedge-dashboard-parity-style";
 const ALIGNMENT_STYLE_URL = "/assets/vetedge/css/vetedge_dashboard_parity.css?v=20260813-2";
 const BOTTOM_REPORTS_ATTR = "data-vetedge-dashboard-bottom-reports";
+const REPORT_CENTER_PATH = "/desk/vetedge-report-center";
 
 const DASHBOARD_PATHS = new Set([
 	"/desk/vetedge-executive-dashboard",
@@ -91,18 +92,37 @@ function navigateSameTab(route) {
 function reportFilters() {
 	const source = window.frappe?.route_options || {};
 	const result = {};
-	for (const fieldname of ["from_date", "to_date", "branch"]) {
+	for (const fieldname of ["from_date", "to_date", "branch", "date_preset", "customer", "practitioner", "service_category", "item"]) {
 		const value = source[fieldname];
 		if (value !== undefined && value !== null && String(value) !== "") result[fieldname] = value;
 	}
 	return result;
 }
 
-function openReport(reportName) {
-	if (!reportName || typeof window.frappe?.set_route !== "function") return false;
-	window.frappe.route_options = reportFilters();
-	window.frappe.set_route("query-report", reportName);
-	return true;
+function reportCenterTarget(reportName, extraFilters = {}) {
+	const report = String(reportName || "").trim();
+	if (!report) return "";
+	const source = canonicalPath(window.location.pathname) || "/desk/vetedge-executive-dashboard";
+	const params = new URLSearchParams({ report, source });
+	const filters = { ...reportFilters(), ...(extraFilters || {}) };
+	for (const [key, value] of Object.entries(filters)) {
+		if (value !== undefined && value !== null && String(value) !== "") params.set(key, String(value));
+	}
+	return `${REPORT_CENTER_PATH}?${params.toString()}`;
+}
+
+function openReport(reportName, extraFilters = {}) {
+	const target = reportCenterTarget(reportName, extraFilters);
+	if (!target) return false;
+	return navigateSameTab(target);
+}
+
+function quickReportButton(event) {
+	const target = event.target;
+	if (!target?.closest) return null;
+	return target.closest(
+		".vetedge-dashboard-quick-report-item, .vetedge-executive-report-actions .edge-button",
+	);
 }
 
 function alignRoot(root) {
@@ -133,6 +153,18 @@ function bindDashboardClicks() {
 		"click",
 		(event) => {
 			if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+			const reportButton = quickReportButton(event);
+			if (reportButton) {
+				const reportName = String(reportButton.textContent || "").replace(/\s+/g, " ").trim();
+				if (reportName) {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					openReport(reportName);
+					return;
+				}
+			}
+
 			const anchor = event.target?.closest?.("a[href]");
 			if (!anchor || !isDashboardRoute(anchor.href)) return;
 			event.preventDefault();
@@ -156,7 +188,7 @@ function patchNavigationAdapter() {
 		...current,
 		__vetedgeDashboardSameTab: true,
 		open(route) {
-			if (isDashboardRoute(route)) return navigateSameTab(route);
+			if (isDashboardRoute(route) || canonicalPath(route) === REPORT_CENTER_PATH) return navigateSameTab(route);
 			return current.open?.(route) ?? false;
 		},
 	};
@@ -203,6 +235,7 @@ if (typeof window !== "undefined") {
 		install,
 		apply,
 		openReport,
+		reportCenterTarget,
 		navigateSameTab,
 	});
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install, { once: true });
