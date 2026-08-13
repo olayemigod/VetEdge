@@ -1,9 +1,21 @@
+const VETEDGE_CLINICAL_MODAL_STYLE_ID = 'vetedge-clinical-modal-edgesuite-style';
+
+function ensureVetEdgeClinicalModalStyles() {
+	if (document.getElementById(VETEDGE_CLINICAL_MODAL_STYLE_ID)) return;
+	const link = document.createElement('link');
+	link.id = VETEDGE_CLINICAL_MODAL_STYLE_ID;
+	link.rel = 'stylesheet';
+	link.href = '/assets/vetedge/css/vetedge_clinical_modal_edgesuite.css?v=20260813-1';
+	document.head.appendChild(link);
+}
+
 frappe.pages['vetedge-clinical-workspace'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Veterinary Clinical Workspace'), single_column: true });
 	wrapper.page = page;
 };
 
 frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
+	ensureVetEdgeClinicalModalStyles();
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
