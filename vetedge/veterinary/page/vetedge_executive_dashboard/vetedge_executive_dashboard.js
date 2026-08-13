@@ -1,4 +1,24 @@
 const VETEDGE_EXECUTIVE_REFRESH_MAX_AGE_MS = 15000;
+const VETEDGE_EXECUTIVE_CANONICAL_API = 'vetedge.services.dashboard_host_payload.get_dashboard_payload';
+
+function patchExecutivePayloadContract() {
+	const component = window.VetedgeExecutiveDashboard;
+	const methods = component?.methods;
+	if (!methods || methods.__vetedgeCanonicalDashboardPayloadPatched) return;
+	const originalCall = methods.call;
+	if (typeof originalCall !== 'function') return;
+
+	methods.call = function(method, args = {}) {
+		const nextMethod = (
+			method === 'vetedge.services.reporting_logic_v4.get_dashboard_payload' &&
+			args?.dashboard_key === 'executive'
+		)
+			? VETEDGE_EXECUTIVE_CANONICAL_API
+			: method;
+		return originalCall.call(this, nextMethod, args);
+	};
+	methods.__vetedgeCanonicalDashboardPayloadPatched = true;
+}
 
 frappe.pages['vetedge-executive-dashboard'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -106,17 +126,23 @@ frappe.pages['vetedge-executive-dashboard'].on_page_show = function(wrapper) {
 					return;
 				}
 
-				try {
-					$loading.remove();
-					const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
-						.appendTo(page.body);
-					wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
-					wrapper.vue_view = wrapper.vue_app.mount(root[0]);
-					wrapper.vue_last_refresh_at = Date.now();
-				} catch (error) {
-					console.error('Error mounting Executive Dashboard:', error);
-					showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
-				}
+				frappe.require('vetedge_dashboard_alignment.bundle.js', () => {
+					if (wrapper.current_visit_id !== visitId) return;
+					window.VetEdgeDashboardAlignment?.install?.();
+					patchExecutivePayloadContract();
+
+					try {
+						$loading.remove();
+						const root = $('<div class="vetedge-executive-dashboard-root" data-edge-product="vetedge"></div>')
+							.appendTo(page.body);
+						wrapper.vue_app = runtime.createEdgeApp(window.VetedgeExecutiveDashboard);
+						wrapper.vue_view = wrapper.vue_app.mount(root[0]);
+						wrapper.vue_last_refresh_at = Date.now();
+					} catch (error) {
+						console.error('Error mounting Executive Dashboard:', error);
+						showFailure(__('Error mounting Executive Dashboard: {0}', [error.message || String(error)]));
+					}
+				});
 			});
 		};
 
