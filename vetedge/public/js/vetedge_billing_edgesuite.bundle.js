@@ -47,6 +47,15 @@ function invoiceHistory(state = {}) {
 	return state.invoice_history || state.billing_group_invoice_history || state.billing_session?.invoices || [];
 }
 
+function payableInvoices(state = {}) {
+	const rows = invoiceHistory(state).filter((row) => (row.can_pay_outstanding || row.can_pay) && Number(row.outstanding_amount || 0) > 0);
+	const current = state.invoice;
+	if (current?.name && Number(current.docstatus) === 1 && Number(current.outstanding_amount || 0) > 0 && !rows.some((row) => (row.name || row.invoice) === current.name)) {
+		rows.unshift(current);
+	}
+	return rows;
+}
+
 function ledgerRows(state = {}) {
 	return invoiceHistory(state).map((row) => ({
 		name: row.name || row.invoice,
@@ -57,6 +66,18 @@ function ledgerRows(state = {}) {
 		paid_amount: money(row.paid_amount, row.currency),
 		outstanding_amount: money(row.outstanding_amount, row.currency),
 		source: row.source_label || row.relation_type || "",
+	}));
+}
+
+function currentInvoiceItemRows(state = {}) {
+	const invoice = state.invoice || {};
+	return (invoice.items || []).map((row, index) => ({
+		name: `${invoice.name || "invoice"}-${index + 1}`,
+		item_code: row.item_code || "",
+		item_name: row.item_name || row.description || row.item_code || "",
+		qty: Number(row.qty || 0),
+		rate: money(row.rate, invoice.currency),
+		amount: money(row.amount, invoice.currency),
 	}));
 }
 
@@ -96,10 +117,28 @@ function billingSections(state = {}) {
 			metrics: sourceMetrics(state),
 		},
 	];
+	const itemRows = currentInvoiceItemRows(state);
+	if (state.invoice?.name) {
+		sections.push({
+			title: __("Current Invoice Items"),
+			message: `${state.invoice.name} · ${invoiceStatus(state.invoice)}`,
+			columns: [
+				{ fieldname: "item_code", label: __("Item") },
+				{ fieldname: "item_name", label: __("Description") },
+				{ fieldname: "qty", label: __("Qty") },
+				{ fieldname: "rate", label: __("Rate") },
+				{ fieldname: "amount", label: __("Amount") },
+			],
+			rows: itemRows,
+			rowKey: "name",
+			emptyTitle: __("No invoice items"),
+			emptyDescription: __("The current invoice does not contain billable items yet."),
+		});
+	}
 	const ledger = ledgerRows(state);
 	sections.push({
 		title: __("Linked Invoice History"),
-		message: __("All invoices in this VetEdge billing cycle are shown here. Open or pay an invoice using the actions below."),
+		message: __("All invoices in this VetEdge billing cycle are shown here. Select a row to open that invoice in the same tab."),
 		columns: [
 			{ fieldname: "name", label: __("Invoice") },
 			{ fieldname: "status", label: __("Status"), fieldtype: "Status" },
@@ -112,6 +151,7 @@ function billingSections(state = {}) {
 		],
 		rows: ledger,
 		rowKey: "name",
+		onRowClick: (row) => openInvoiceSameTab(row?.name),
 		emptyTitle: __("No linked invoices"),
 		emptyDescription: __("Create the first invoice when billing is ready."),
 	});
@@ -128,6 +168,7 @@ function billingSections(state = {}) {
 			],
 			rows: outstanding,
 			rowKey: "name",
+			onRowClick: (row) => openInvoiceSameTab(row?.name),
 		});
 	}
 	return sections;
@@ -135,18 +176,33 @@ function billingSections(state = {}) {
 
 function openInvoiceSameTab(invoice) {
 	if (!invoice) return;
-	frappe.open_in_new_tab = false;
 	frappe.set_route("Form", "Sales Invoice", invoice);
 }
 
 function findPayableInvoice(state = {}) {
-	const current = state.invoice;
-	if (current?.name && Number(current.docstatus) === 1 && Number(current.outstanding_amount || 0) > 0) return current;
-	return invoiceHistory(state).find((row) => (row.can_pay_outstanding || row.can_pay) && Number(row.outstanding_amount || 0) > 0) || null;
+	return payableInvoices(state)[0] || null;
 }
 
 function paymentFields(state, invoice) {
+	const payable = payableInvoices(state);
+	const selectedName = invoice?.name || invoice?.invoice || "";
 	return [
+		{
+			fieldname: "invoice",
+			label: __("Invoice"),
+			type: "select",
+			required: true,
+			options: payable.map((row) => {
+				const name = row.name || row.invoice;
+				return { value: name, label: `${name} · ${money(row.outstanding_amount, row.currency)} ${__("outstanding")}` };
+			}),
+			default: selectedName,
+			onChange(value, values, modalView) {
+				const selected = payable.find((row) => (row.name || row.invoice) === value);
+				if (!selected) return;
+				modalView.update({ values: { ...values, invoice: value, amount: selected.outstanding_amount || 0 } });
+			},
+		},
 		{ fieldname: "amount", label: __("Amount"), type: "number", required: true, min: 0, step: "0.01", default: invoice.outstanding_amount || 0 },
 		{ fieldname: "mode_of_payment", label: __("Mode of Payment"), type: "select", options: (state.payment_modes || []).map((value) => ({ value, label: value })), default: state.payment_modes?.[0] || "" },
 		{ fieldname: "posting_date", label: __("Posting Date"), type: "date", required: true, default: frappe.datetime?.get_today?.() || "" },
@@ -157,14 +213,16 @@ function paymentFields(state, invoice) {
 }
 
 function openPaymentModal(frm, state, invoice, reopen) {
-	if (!invoice?.name) return;
+	if (!invoice?.name && !invoice?.invoice) return;
+	const invoiceName = invoice.name || invoice.invoice;
 	let paymentModal;
 	paymentModal = presenter().open({
 		title: __("Record Payment"),
-		subtitle: invoice.name,
+		subtitle: __("Select any payable invoice in the current billing cycle."),
 		size: "md",
 		fields: paymentFields(state, invoice),
 		values: {
+			invoice: invoiceName,
 			amount: invoice.outstanding_amount || 0,
 			mode_of_payment: state.payment_modes?.[0] || "",
 			posting_date: frappe.datetime?.get_today?.() || "",
@@ -180,7 +238,7 @@ function openPaymentModal(frm, state, invoice, reopen) {
 				try {
 					await call(API.payment, {
 						...sourceContext(frm),
-						invoice: invoice.name,
+						invoice: values.invoice,
 						amount: values.amount,
 						mode_of_payment: values.mode_of_payment,
 						posting_date: values.posting_date,
@@ -219,7 +277,7 @@ function buildBillingSpec(frm, state, controller) {
 	const payable = findPayableInvoice(state);
 	if (payable) buttons.push({ label: __("Pay Outstanding"), primary: true, onClick: () => controller.payment(payable) });
 	const openInvoice = actions.open_invoice_name || state.open_invoice_name || invoice?.name;
-	if (openInvoice) buttons.push({ label: __("Open Invoice"), onClick: () => openInvoiceSameTab(openInvoice) });
+	if (openInvoice) buttons.push({ label: actions.open_invoice_label || __("Open Invoice"), onClick: () => openInvoiceSameTab(openInvoice) });
 
 	const message = gate.message || state.billing_session?.session_warning || "";
 	return {
@@ -278,8 +336,8 @@ function openBilling(frm) {
 	};
 	const controller = {
 		invoice: () => run(API.invoice, sourceContext(frm), __("Invoice updated.")),
-		submit: (invoice) => run(API.submit, { ...sourceContext(frm), invoice }, __("Invoice submitted.")),
-		payment: (invoice) => openPaymentModal(frm, state, invoice, refresh),
+		submit: (invoiceName) => run(API.submit, { ...sourceContext(frm), invoice: invoiceName }, __("Invoice submitted.")),
+		payment: (payable) => openPaymentModal(frm, state, payable, refresh),
 	};
 	refresh();
 }
