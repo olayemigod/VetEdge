@@ -17,6 +17,8 @@ def get_dashboard_payload(dashboard_key: str, filters=None):
 	"""Shared-dashboard adapter with optimized Executive and QA chart enrichments."""
 	key = cstr(dashboard_key or "").strip()
 	if key != "executive":
+		if key not in {"branch_performance", "practitioner_performance"}:
+			return v5.get_dashboard_payload(key, filters)
 		payload = v5.get_dashboard_payload(key, filters)
 		return _enhance_performance_charts(key, payload)
 
@@ -63,7 +65,7 @@ def _enhance_performance_charts(key: str, payload: dict) -> dict:
 	if key == "branch_performance":
 		rows = _supporting_rows(payload)
 		labels = [cstr(row.get("branch") or "").strip() for row in rows]
-		values = [int(row.get("consultation_count") or 0) for row in rows]
+		values = [int(flt(row.get("consultation_count"))) for row in rows]
 		_append_chart(payload, _bar_chart(_("Consultations by Branch"), labels, values))
 	elif key == "practitioner_performance":
 		rows = _supporting_rows(payload)
@@ -73,8 +75,8 @@ def _enhance_performance_charts(key: str, payload: dict) -> dict:
 			practitioner = cstr(row.get("practitioner") or "").strip()
 			if not practitioner:
 				continue
-			consultations[practitioner] += int(row.get("number_of_consultations") or 0)
-			vaccinations[practitioner] += int(row.get("vaccinations_administered") or 0)
+			consultations[practitioner] += int(flt(row.get("number_of_consultations")))
+			vaccinations[practitioner] += int(flt(row.get("vaccinations_administered")))
 		labels = sorted(set(consultations) | set(vaccinations))
 		_append_chart(
 			payload,
