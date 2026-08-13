@@ -13,6 +13,9 @@ function createPresenter(edge) {
 		EdgeStatCard,
 		EdgeDashboardLayout,
 		EdgeStatusBadge,
+		EdgeInput,
+		EdgeDropdown,
+		EdgeTextarea,
 		EdgeLoadingState,
 		EdgeErrorState,
 		EdgeEmptyState,
@@ -25,16 +28,51 @@ function createPresenter(edge) {
 		},
 		methods: {
 			show(spec = {}) {
-				this.spec = { ...spec };
+				this.spec = { values: {}, ...spec, values: { ...(spec.values || {}) } };
 				this.open = true;
 			},
 			update(patch = {}) {
-				this.spec = { ...this.spec, ...patch };
+				this.spec = {
+					...this.spec,
+					...patch,
+					values: patch.values ? { ...patch.values } : { ...(this.spec.values || {}) },
+				};
 			},
 			close() {
 				if (this.spec.busy) return;
 				this.open = false;
 				this.spec.onClose?.();
+			},
+			setField(field, value) {
+				const values = { ...(this.spec.values || {}), [field.fieldname]: value };
+				this.spec = { ...this.spec, values };
+				field.onChange?.(value, values, this);
+			},
+			renderField(field, index) {
+				const value = this.spec.values?.[field.fieldname] ?? field.default ?? "";
+				const common = {
+					modelValue: value,
+					label: field.label || field.fieldname,
+					description: field.description || "",
+					disabled: Boolean(field.disabled || field.readOnly || this.spec.busy),
+					required: Boolean(field.required),
+					"data-edge-autofocus": index === 0 ? "true" : undefined,
+					"onUpdate:modelValue": (next) => this.setField(field, next),
+				};
+				if (field.type === "select") {
+					return h(EdgeDropdown, { ...common, options: field.options || [], placeholder: field.placeholder || __("Select") });
+				}
+				if (field.type === "textarea") {
+					return h(EdgeTextarea, { ...common, rows: field.rows || 3, placeholder: field.placeholder || "" });
+				}
+				return h(EdgeInput, {
+					...common,
+					type: field.type || "text",
+					placeholder: field.placeholder || "",
+					min: field.min,
+					max: field.max,
+					step: field.step,
+				});
 			},
 			renderBody() {
 				const spec = this.spec || {};
@@ -59,6 +97,9 @@ function createPresenter(edge) {
 					}))));
 				}
 				if (spec.message) blocks.push(h("p", { class: "vetedge-edge-modal-message" }, spec.message));
+				if (spec.fields?.length) {
+					blocks.push(h("div", { class: "vetedge-edge-modal-form" }, spec.fields.map((field, index) => this.renderField(field, index))));
+				}
 				if (spec.columns?.length) {
 					blocks.push(spec.rows?.length
 						? h(EdgeDataTable, { columns: spec.columns, rows: spec.rows, rowKey: spec.rowKey || "name", onRowClick: spec.onRowClick })
@@ -66,13 +107,24 @@ function createPresenter(edge) {
 				}
 				if (spec.sections?.length) {
 					for (const section of spec.sections) {
-						blocks.push(h("section", { class: "vetedge-edge-modal-section" }, [
-							h("h3", section.title || ""),
-							section.message ? h("p", section.message) : null,
-							section.columns?.length
-								? h(EdgeDataTable, { columns: section.columns, rows: section.rows || [], rowKey: section.rowKey || "name", onRowClick: section.onRowClick })
-								: null,
-						]));
+						const sectionBlocks = [h("h3", section.title || "")];
+						if (section.message) sectionBlocks.push(h("p", section.message));
+						if (section.metrics?.length) {
+							sectionBlocks.push(h(EdgeDashboardLayout, { minColumnWidth: "9rem" }, {
+								default: () => section.metrics.map((metric) => h(EdgeStatCard, {
+									label: metric.label,
+									value: metric.value,
+									helper: metric.helper || "",
+									tone: metric.tone || "neutral",
+								})),
+							}));
+						}
+						if (section.columns?.length) {
+							sectionBlocks.push(section.rows?.length
+								? h(EdgeDataTable, { columns: section.columns, rows: section.rows, rowKey: section.rowKey || "name", onRowClick: section.onRowClick })
+								: h(EdgeEmptyState, { title: section.emptyTitle || __("No records"), description: section.emptyDescription || "" }));
+						}
+						blocks.push(h("section", { class: "vetedge-edge-modal-section" }, sectionBlocks));
 					}
 				}
 				return blocks.length
@@ -85,7 +137,7 @@ function createPresenter(edge) {
 						type: "button",
 						class: ["edge-button", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""],
 						disabled: Boolean(this.spec.busy || action.disabled),
-						onClick: () => action.onClick?.(this),
+						onClick: () => action.onClick?.(this.spec.values || {}, this),
 					}, action.label)),
 					h("button", { type: "button", class: "edge-button", disabled: Boolean(this.spec.busy), onClick: this.close }, this.spec.closeLabel || __("Close")),
 				]);
