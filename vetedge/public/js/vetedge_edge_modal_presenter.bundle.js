@@ -96,6 +96,23 @@ function createPresenter(edge) {
 				}
 				closing.onClose?.();
 			},
+			async runFooterAction(action, id) {
+				const nested = this.stack.length > 0;
+				let succeeded = false;
+				try {
+					await action.onClick?.(this.spec.values || {}, this);
+					succeeded = true;
+				} catch (error) {
+					console.error("VetEdge EdgeSuite modal action failed", error);
+					if (this.spec?.__modalId === id && !this.spec.error) {
+						this.spec = { ...this.spec, busy: false, error: error?.message || __("The action could not be completed."), errorTitle: __("Action failed") };
+					}
+				}
+				if (succeeded && nested && action.closeOnSuccess !== false && this.spec?.__modalId === id && !this.spec.error) {
+					this.spec = { ...this.spec, busy: false };
+					this.close(id);
+				}
+			},
 			setField(field, value) {
 				const values = { ...(this.spec.values || {}), [field.fieldname]: value };
 				this.spec = { ...this.spec, values };
@@ -173,7 +190,7 @@ function createPresenter(edge) {
 			renderFooter() {
 				const id = this.spec.__modalId;
 				return h("div", { class: "vetedge-edge-modal-actions", style: { display: "flex", flexWrap: "wrap", gap: ".65rem", justifyContent: "flex-end", width: "100%" } }, [
-					...(this.spec.actions || []).map((action) => h("button", { type: "button", class: ["edge-button", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""], disabled: Boolean(this.spec.busy || action.disabled), onClick: () => action.onClick?.(this.spec.values || {}, this) }, action.label)),
+					...(this.spec.actions || []).map((action) => h("button", { type: "button", class: ["edge-button", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""], disabled: Boolean(this.spec.busy || action.disabled), onClick: () => this.runFooterAction(action, id) }, action.label)),
 					h("button", { type: "button", class: "edge-button", disabled: Boolean(this.spec.busy), onClick: () => this.close(id) }, this.spec.closeLabel || __("Close")),
 				]);
 			},
