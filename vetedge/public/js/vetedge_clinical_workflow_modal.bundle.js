@@ -33,10 +33,21 @@ function optionRows(rows = []) {
 	}).filter((row) => row.value);
 }
 
+function recordAction(record = {}) {
+	return String(record.resolution_action_key || "").trim();
+}
+
+function humanAction(value) {
+	return String(value || "").replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function summaryMessage(preflight = {}) {
 	const parts = [];
 	const recommended = preflight.recommended_next_action;
-	if (recommended) parts.push(`${__("Recommended")}: ${recommended.label || recommended.title || recommended.action || recommended}`);
+	if (recommended) {
+		const value = recommended.label || recommended.title || recommended.action || recommended;
+		parts.push(`${__("Recommended")}: ${typeof value === "string" ? humanAction(value) : value}`);
+	}
 	for (const blocker of preflight.blockers || []) parts.push(`${__("Blocker")}: ${blocker.message || blocker.label || blocker.type || blocker}`);
 	for (const warning of preflight.warnings || []) parts.push(`${__("Warning")}: ${warning.message || warning.label || warning.type || warning}`);
 	if (!parts.length) parts.push(__("No blocking dependency was found. VetEdge will preserve submitted accounting and stock records."));
@@ -45,7 +56,7 @@ function summaryMessage(preflight = {}) {
 
 function fieldsFor(context) {
 	const record = context.record || {};
-	const action = context.values.resolution_action || record.resolution_action || "";
+	const action = context.values.resolution_action || recordAction(record);
 	const fields = [
 		{ fieldname: "reason", label: __("Reason / Resolution Note"), type: "textarea", rows: 3 },
 	];
@@ -93,7 +104,8 @@ function fieldsFor(context) {
 
 function actionsFor(context) {
 	const record = context.record || {};
-	const action = context.values.resolution_action || record.resolution_action || "";
+	const action = context.values.resolution_action || recordAction(record);
+	const status = String(record.resolution_status || "");
 	const actions = [];
 	if (context.preflight.can_cancel) {
 		actions.push({ label: __("Cancel Consultation Safely"), danger: true, onClick: () => executeDirectCancel(context) });
@@ -101,19 +113,17 @@ function actionsFor(context) {
 	if (!record.name && context.canRecord && action) {
 		actions.push({ label: __("Record Resolution"), primary: true, onClick: (values) => recordDecision(context, values) });
 	}
-	if (record.name && action === "retain_payment_clinical_cancel_only") {
+	if (record.name && !["Approved", "Completed", "Rejected"].includes(status)) {
+		actions.push({ label: __("Approve Resolution"), onClick: (values) => approve(context, values) });
+	}
+	if (record.name && status === "Approved" && action === "retain_payment_clinical_cancel_only") {
 		actions.push({ label: __("Retain Payment & Cancel"), primary: true, onClick: (values) => retainPayment(context, values) });
 	}
-	if (record.name && action === "reschedule_consultation") {
+	if (record.name && status === "Approved" && action === "reschedule_consultation") {
 		actions.push({ label: __("Complete Reschedule"), primary: true, onClick: (values) => reschedule(context, values) });
 	}
-	if (record.name && MANUAL_ACTIONS.has(action)) {
-		if (!["Approved", "Completed"].includes(record.resolution_status)) {
-			actions.push({ label: __("Approve Resolution"), onClick: (values) => approve(context, values) });
-		}
-		if (record.resolution_status !== "Completed") {
-			actions.push({ label: __("Complete Financial Resolution"), primary: true, onClick: (values) => completeManual(context, values) });
-		}
+	if (record.name && status === "Approved" && MANUAL_ACTIONS.has(action)) {
+		actions.push({ label: __("Complete Financial Resolution"), primary: true, onClick: (values) => completeManual(context, values) });
 	}
 	return actions;
 }
@@ -128,11 +138,14 @@ function modalSpec(context) {
 		size: "lg",
 		metrics: [
 			{ label: __("Consultation Status"), value: preflight.current_status || "—", tone: "neutral" },
-			{ label: __("Linked Invoices"), value: Number(billing.invoice_count || (preflight.linked_invoices || []).length || 0), tone: "info" },
+			{ label: __("Linked Invoices"), value: Number(billing.linked_invoice_count || (preflight.linked_invoices || []).length || 0), tone: "info" },
 			{ label: __("Paid Amount"), value: money(billing.paid_amount), tone: "success" },
 			{ label: __("Outstanding"), value: money(billing.outstanding_amount), tone: Number(billing.outstanding_amount || 0) > 0 ? "warning" : "success" },
 		],
-		badges: record.name ? [{ label: `${__("Resolution")}: ${record.resolution_status || __("Draft")}`, status: record.resolution_status || "Draft" }] : [],
+		badges: record.name ? [
+			{ label: `${__("Resolution")}: ${record.resolution_status || __("Draft")}`, status: record.resolution_status || "Draft" },
+			{ label: record.resolution_action || humanAction(recordAction(record)), status: record.resolution_action || recordAction(record) },
+		] : [],
 		message: summaryMessage(preflight),
 		fields: fieldsFor(context),
 		values: context.values,
@@ -150,9 +163,16 @@ async function refreshContext(context) {
 	context.record = options?.existing_resolution || preflight?.existing_resolution || {};
 	context.canRecord = Boolean(options?.can_record_resolution);
 	context.actionOptions = optionRows(options?.allowed_action_options || preflight?.allowed_action_options || []);
-	if (!context.values.resolution_action) {
-		context.values.resolution_action = context.record.resolution_action || context.actionOptions[0]?.value || "";
-	}
+	context.values = {
+		...context.values,
+		resolution_action: recordAction(context.record) || context.values.resolution_action || context.actionOptions[0]?.value || "",
+		accounting_reference_doctype: context.record.accounting_reference_doctype || context.values.accounting_reference_doctype || "",
+		accounting_reference_name: context.record.accounting_reference_name || context.values.accounting_reference_name || "",
+		resolution_amount: context.record.resolution_amount || context.values.resolution_amount || "",
+		resolution_date: context.record.resolution_date || context.values.resolution_date || frappe.datetime?.get_today?.() || "",
+		status_outcome: context.record.status_outcome || context.values.status_outcome || "no_status_change",
+		completion_note: context.record.completion_note || context.values.completion_note || "",
+	};
 	return context;
 }
 
