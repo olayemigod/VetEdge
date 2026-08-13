@@ -28,7 +28,7 @@ function createPresenter(edge) {
 		},
 		methods: {
 			show(spec = {}) {
-				this.spec = { values: {}, ...spec, values: { ...(spec.values || {}) } };
+				this.spec = { ...spec, values: { ...(spec.values || {}) } };
 				this.open = true;
 			},
 			update(patch = {}) {
