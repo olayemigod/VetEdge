@@ -59,7 +59,7 @@ function sourceMetrics(state = {}) {
 	return [
 		{ label: __("Patient"), value: source.patient_name || source.patient || "—" },
 		{ label: __("Owner / Customer"), value: source.owner_name || source.owner || "—" },
-		{ label: __("Branch"), value: source.service_branch || "—" },
+		{ label: __("Branch"), value: source.service_branch || source.branch || "—" },
 		{ label: __("Company"), value: source.company || "—" },
 	];
 }
@@ -71,29 +71,20 @@ function openInvoice(invoice) {
 function sections(state = {}) {
 	const invoice = state.invoice || {};
 	const result = [{ title: __("Source Summary"), metrics: sourceMetrics(state) }];
-	if (invoice.name) {
-		result.push({
-			title: __("Current Invoice Items"),
-			message: `${invoice.name} · ${invoiceStatus(invoice)}`,
-			columns: [
-				{ fieldname: "item_code", label: __("Item") },
-				{ fieldname: "item_name", label: __("Description") },
-				{ fieldname: "qty", label: __("Qty") },
-				{ fieldname: "rate", label: __("Rate") },
-				{ fieldname: "amount", label: __("Amount") },
-			],
-			rows: (invoice.items || []).map((row, index) => ({
-				name: `${invoice.name}-${index + 1}`,
-				item_code: row.item_code || "",
-				item_name: row.item_name || row.description || row.item_code || "",
-				qty: Number(row.qty || 0),
-				rate: money(row.rate, invoice.currency),
-				amount: money(row.amount, invoice.currency),
-			})),
-			rowKey: "name",
-			emptyTitle: __("No invoice items"),
-		});
-	}
+	if (invoice.name) result.push({
+		title: __("Current Invoice Items"),
+		message: `${invoice.name} · ${invoiceStatus(invoice)}`,
+		columns: [
+			{ fieldname: "item_code", label: __("Item") },
+			{ fieldname: "item_name", label: __("Description") },
+			{ fieldname: "qty", label: __("Qty") },
+			{ fieldname: "rate", label: __("Rate") },
+			{ fieldname: "amount", label: __("Amount") },
+		],
+		rows: (invoice.items || []).map((row, index) => ({ name: `${invoice.name}-${index + 1}`, item_code: row.item_code || "", item_name: row.item_name || row.description || row.item_code || "", qty: Number(row.qty || 0), rate: money(row.rate, invoice.currency), amount: money(row.amount, invoice.currency) })),
+		rowKey: "name",
+		emptyTitle: __("No invoice items"),
+	});
 	result.push({
 		title: __("Linked Invoice History"),
 		message: __("All invoices in this VetEdge billing cycle are shown here. Select a row to open it in the same tab."),
@@ -105,24 +96,12 @@ function sections(state = {}) {
 			{ fieldname: "paid_amount", label: __("Paid") },
 			{ fieldname: "outstanding_amount", label: __("Outstanding") },
 		],
-		rows: historyRows(state).map((row) => ({
-			name: row.name || row.invoice,
-			status: row.payment_status || row.status || (Number(row.docstatus) === 0 ? __("Draft") : __("Submitted")),
-			posting_date: row.posting_date || "",
-			grand_total: money(row.grand_total || row.rounded_total, row.currency),
-			paid_amount: money(row.paid_amount, row.currency),
-			outstanding_amount: money(row.outstanding_amount, row.currency),
-		})),
+		rows: historyRows(state).map((row) => ({ name: row.name || row.invoice, status: row.payment_status || row.status || (Number(row.docstatus) === 0 ? __("Draft") : __("Submitted")), posting_date: row.posting_date || "", grand_total: money(row.grand_total || row.rounded_total, row.currency), paid_amount: money(row.paid_amount, row.currency), outstanding_amount: money(row.outstanding_amount, row.currency) })),
 		rowKey: "name",
 		onRowClick: (row) => openInvoice(row?.name),
 		emptyTitle: __("No linked invoices"),
 	});
-	const otherOutstanding = (state.patient_outstanding_context || []).map((row) => ({
-		name: row.name || row.invoice,
-		posting_date: row.posting_date || "",
-		outstanding_amount: money(row.outstanding_amount, row.currency),
-		status: row.payment_status || row.status || __("Outstanding"),
-	}));
+	const otherOutstanding = (state.patient_outstanding_context || []).map((row) => ({ name: row.name || row.invoice, posting_date: row.posting_date || "", outstanding_amount: money(row.outstanding_amount, row.currency), status: row.payment_status || row.status || __("Outstanding") }));
 	if (otherOutstanding.length) result.push({
 		title: __("Patient Outstanding Context"),
 		message: __("Other patient invoices are shown for context and are not merged into the current billing cycle."),
@@ -141,9 +120,16 @@ function sections(state = {}) {
 
 function paymentFields(state, invoice) {
 	const payable = payableRows(state);
-	const selected = invoice.name || invoice.invoice;
 	return [
-		{ fieldname: "invoice", label: __("Invoice"), type: "select", required: true, options: payable.map((row) => ({ value: row.name || row.invoice, label: `${row.name || row.invoice} · ${money(row.outstanding_amount, row.currency)}` })), default: selected },
+		{
+			fieldname: "invoice", label: __("Invoice"), type: "select", required: true,
+			options: payable.map((row) => ({ value: row.name || row.invoice, label: `${row.name || row.invoice} · ${money(row.outstanding_amount, row.currency)}` })),
+			default: invoice.name || invoice.invoice,
+			onChange(value, values, modalView) {
+				const selected = payable.find((row) => (row.name || row.invoice) === value);
+				if (selected) modalView.update({ values: { ...values, invoice: value, amount: selected.outstanding_amount || 0 } });
+			},
+		},
 		{ fieldname: "amount", label: __("Amount"), type: "number", required: true, min: 0, step: "0.01", default: invoice.outstanding_amount || 0 },
 		{ fieldname: "mode_of_payment", label: __("Mode of Payment"), type: "select", options: (state.payment_modes || []).map((value) => ({ value, label: value })), default: state.payment_modes?.[0] || "" },
 		{ fieldname: "posting_date", label: __("Posting Date"), type: "date", required: true, default: frappe.datetime?.get_today?.() || "" },
@@ -153,30 +139,26 @@ function paymentFields(state, invoice) {
 	];
 }
 
-function openPayment(frm, state, invoice, reopen) {
-	let modal;
-	modal = presenter().open({
-		title: __("Record Payment"),
-		subtitle: __("Select a payable invoice in the current billing cycle."),
-		size: "md",
+function openPayment(frm, state, invoice, returnToBilling) {
+	const view = presenter().open({
+		title: __("Record Payment"), subtitle: __("Select a payable invoice in the current billing cycle."), size: "md",
 		fields: paymentFields(state, invoice),
 		values: { invoice: invoice.name || invoice.invoice, amount: invoice.outstanding_amount || 0, mode_of_payment: state.payment_modes?.[0] || "", posting_date: frappe.datetime?.get_today?.() || "" },
 		actions: [{ label: __("Submit Payment"), primary: true, async onClick(values) {
-			modal.update({ busy: true, error: "" });
+			view.update({ busy: true, error: "" });
 			try {
 				await call(API.payment, { ...sourceContext(frm), ...values });
-				modal.close();
 				frappe.show_alert({ message: __("Payment recorded."), indicator: "green" });
 				await frm.reload_doc?.();
-				reopen();
+				await returnToBilling();
 			} catch (error) {
-				modal.update({ busy: false, error: error?.message || __("Payment could not be recorded."), errorTitle: __("Payment failed") });
+				view.update({ busy: false, error: error?.message || __("Payment could not be recorded."), errorTitle: __("Payment failed") });
 			}
 		} }],
 	});
 }
 
-function spec(frm, state, controller) {
+function buildSpec(frm, state, controller) {
 	const invoice = state.invoice || {};
 	const actions = state.actions || {};
 	const gate = state.payment_gate || {};
@@ -188,9 +170,7 @@ function spec(frm, state, controller) {
 	const openName = actions.open_invoice_name || state.open_invoice_name || invoice.name;
 	if (openName) buttons.push({ label: actions.open_invoice_label || __("Open Invoice"), onClick: () => openInvoice(openName) });
 	return {
-		title: __("Billing & Payment"),
-		subtitle: `${state.source?.doctype || frm.doc.doctype} ${state.source?.name || frm.doc.name}`,
-		size: "xl",
+		title: __("Billing & Payment"), subtitle: `${state.source?.doctype || frm.doc.doctype} ${state.source?.name || frm.doc.name}`, size: "xl",
 		metrics: metrics(state),
 		badges: [
 			{ label: `${__("Invoice Status")}: ${invoiceStatus(invoice)}`, status: invoiceStatus(invoice), tone: tone(invoiceStatus(invoice)) },
@@ -198,8 +178,7 @@ function spec(frm, state, controller) {
 			...(state.payment_gate ? [{ label: `${__("Payment Gate")}: ${gate.can_proceed ? __("Allowed") : __("Blocked")}`, status: gate.can_proceed ? "Allowed" : "Blocked", tone: gate.can_proceed ? "success" : "danger" }] : []),
 		],
 		message: gate.message || state.billing_session?.session_warning || "",
-		sections: sections(state),
-		actions: buttons,
+		sections: sections(state), actions: buttons,
 	};
 }
 
@@ -208,13 +187,14 @@ function openBilling(frm) {
 	if (frm.is_dirty?.()) return frappe.msgprint(__("Please save or discard changes before opening billing and payment."));
 	const modal = presenter().open({ title: __("Billing & Payment"), subtitle: `${frm.doc.doctype} ${frm.doc.name}`, size: "xl", loading: true, loadingMessage: __("Loading billing details...") });
 	let state = {};
+	let controller;
 	const refresh = async () => {
 		modal.update({ loading: true, busy: false, error: "" });
 		try {
 			state = await call(API.state, sourceContext(frm));
-			modal.update({ loading: false, busy: false, ...spec(frm, state, controller) });
+			modal.update({ loading: false, busy: false, ...buildSpec(frm, state, controller) });
 		} catch (error) {
-			modal.update({ loading: false, error: error?.message || __("Unable to load billing details."), errorTitle: __("Billing Details Unavailable"), onRetry: refresh });
+			modal.update({ loading: false, busy: false, error: error?.message || __("Unable to load billing details."), errorTitle: __("Billing Details Unavailable"), onRetry: refresh });
 		}
 	};
 	const run = async (method, args, message) => {
@@ -223,13 +203,13 @@ function openBilling(frm) {
 			const result = await call(method, args);
 			state = result.state || state;
 			await frm.reload_doc?.();
-			modal.update({ busy: false, ...spec(frm, state, controller) });
+			modal.update({ busy: false, ...buildSpec(frm, state, controller) });
 			frappe.show_alert({ message, indicator: "green" });
 		} catch (error) {
 			modal.update({ busy: false, error: error?.message || __("Billing action failed."), errorTitle: __("Billing action failed") });
 		}
 	};
-	const controller = {
+	controller = {
 		invoice: () => run(API.invoice, sourceContext(frm), __("Invoice updated.")),
 		submit: (invoice) => run(API.submit, { ...sourceContext(frm), invoice }, __("Invoice submitted.")),
 		payment: (invoice) => openPayment(frm, state, invoice, refresh),
