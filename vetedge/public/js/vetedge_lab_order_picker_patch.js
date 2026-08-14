@@ -21,14 +21,15 @@
 		return response.message || [];
 	}
 
-	function linkField(field) {
+	function linkField(field, initialValues = {}) {
+		const initialValue = initialValues[field.fieldname] || "";
 		return {
 			fieldname: field.fieldname,
 			label: field.label,
 			type: "link",
 			required: Boolean(field.reqd),
 			description: field.description || "",
-			selectedLabel: field.selected_label || "",
+			selectedLabel: initialValues[`${field.fieldname}_label`] || initialValue || field.selected_label || "",
 			searcher: (query) => searchLink(field.options, query),
 			placeholder: __("Search {0}", [field.label || field.options || __("records")]),
 		};
@@ -84,7 +85,7 @@
 		};
 	}
 
-	async function openLabOrderCreate(onSaved) {
+	async function openLabOrderCreate(onSaved, initialValues = {}) {
 		if (!presenter()?.ready?.()) throw new Error(__("The EdgeSuite clinical record creator is unavailable."));
 
 		const modal = presenter().open({
@@ -97,7 +98,12 @@
 		let selected = [];
 		let baseFields = [];
 		let testOptions = [];
-		let values = { patient: "", service_branch: "", sample_notes: "", lab_test_picker: "" };
+		let values = {
+			patient: initialValues.patient || "",
+			service_branch: initialValues.service_branch || "",
+			sample_notes: "",
+			lab_test_picker: "",
+		};
 
 		const paint = () => {
 			const remove = (value) => {
@@ -123,8 +129,10 @@
 				loading: false,
 				busy: false,
 				title: __("Create Lab Order"),
-				subtitle: __("Standalone Laboratory Service"),
-				message: __("Choose the Patient, then add one or more Lab Tests from the dropdown. Result format, upload/review permissions and billing remain controlled by each Lab Test master and the server workflow."),
+				subtitle: initialValues.patient
+					? __("New standalone Laboratory Order for {0}", [initialValues.patient_label || initialValues.patient])
+					: __("Standalone Laboratory Service"),
+				message: __("Choose the Patient, then add one or more Lab Tests from the dropdown. A patient may have multiple Lab Orders over time; creating this order never replaces an earlier one. Result format, permissions and billing remain server-controlled."),
 				fields: [...baseFields, picker],
 				values,
 				sections: [selectedSection(selected, remove)],
@@ -167,8 +175,8 @@
 			testOptions = (testField?.options || []).map(normalizeTestOption).filter((row) => row.value);
 			baseFields = (schema.fields || [])
 				.filter((field) => field.fieldname !== "lab_tests")
-				.map((field) => field.fieldtype === "Link" ? linkField(field) : textField(field));
-			values = Object.fromEntries(baseFields.map((field) => [field.fieldname, ""]));
+				.map((field) => field.fieldtype === "Link" ? linkField(field, initialValues) : textField(field));
+			values = Object.fromEntries(baseFields.map((field) => [field.fieldname, initialValues[field.fieldname] || ""]));
 			values.lab_test_picker = "";
 			paint();
 		} catch (error) {
@@ -186,6 +194,16 @@
 		return true;
 	}
 
-	window.VetEdgeLabOrderPickerPatch = { install };
+	window.VetEdgeLabOrderPickerPatch = {
+		install,
+		open({ onSaved = null, patient = "", patientLabel = "", serviceBranch = "" } = {}) {
+			return openLabOrderCreate(onSaved, {
+				patient,
+				patient_label: patientLabel || patient,
+				service_branch: serviceBranch,
+				service_branch_label: serviceBranch,
+			});
+		},
+	};
 	install();
 })();
