@@ -76,7 +76,10 @@
 		}
 		for (const cell of cells) {
 			const raw = cell.dataset.patientId;
-			if (raw && patientLabels.has(raw)) cell.textContent = patientLabels.get(raw);
+			const label = raw ? patientLabels.get(raw) : "";
+			if (label && String(cell.textContent || "").trim() !== String(label)) {
+				cell.textContent = label;
+			}
 		}
 	}
 
@@ -110,14 +113,25 @@
 		schedulePatientHydration(root);
 	}
 
-	function install() {
-		const root = document.querySelector(".vetedge-resource-center-root");
+	function mutationNeedsDecoration(record) {
+		if (record.type !== "childList") return false;
+		const target = record.target?.nodeType === 1 ? record.target : record.target?.parentElement;
+		// Patient display-name hydration changes only the text node inside a cell.
+		// Ignore that mutation so the bridge never schedules itself forever.
+		if (target?.matches?.("td[data-patient-id]")) return false;
+		return Boolean(record.addedNodes?.length || record.removedNodes?.length);
+	}
+
+	function install(explicitRoot = null) {
+		const root = explicitRoot || document.querySelector(".vetedge-resource-center-root");
 		if (!root) return false;
 		decorate(root);
 		if (observedRoot === root && observer) return true;
 		observer?.disconnect?.();
 		observedRoot = root;
-		observer = new MutationObserver(() => decorate(root));
+		observer = new MutationObserver((records) => {
+			if (records.some(mutationNeedsDecoration)) decorate(root);
+		});
 		observer.observe(root, { childList: true, subtree: true });
 		return true;
 	}
