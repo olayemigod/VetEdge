@@ -14,9 +14,6 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
-	// Keep the mounted EdgeSuite surface alive across Desk navigation. The
-	// product bundle owns route synchronization and decides whether its data is
-	// stale enough to require another API request.
 	if (wrapper.vue_app?.refresh) {
 		Promise.resolve(
 			wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS })
@@ -26,8 +23,6 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 		return;
 	}
 
-	// Backward-compatible cleanup for an older cached bundle that does not yet
-	// expose the reusable page contract.
 	if (wrapper.vue_app) {
 		try {
 			wrapper.vue_app.unmount?.();
@@ -92,12 +87,13 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 			}
 
 			const loadClinicalEnhancements = (root) => {
-				// CRUD, result entry and billing are progressive enhancements. They must
-				// never block the permission-safe Resource Center list from mounting.
+				// The canonical Consultation Billing & Payment modal is already loaded
+				// globally from hooks.py. Clinical record editing is only a caller of
+				// that shared modal; it must not install a second billing renderer.
 				frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
-					frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
-						window.installVetEdgeBillingEdgeSuite?.();
-						frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+					frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+						frappe.require('/assets/vetedge/js/vetedge_lab_order_picker_patch.js', () => {
+							window.VetEdgeLabOrderPickerPatch?.install?.();
 							frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
 								if (wrapper.current_visit_id !== visitId) return;
 								window.VetEdgeResourceClinicalBridge?.install?.(root);
