@@ -137,7 +137,7 @@ def test_resource_center_count_uses_frappe_v16_aggregate_field_syntax():
 	assert 'count(name) as total' not in content
 
 
-def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
+def test_resource_center_page_uses_edgesuite_shell_and_same_tab_full_forms():
 	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT, RESOURCE_QUICK_EDITOR):
 		assert path.exists(), path
 
@@ -152,7 +152,8 @@ def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
 	assert "get_resource_editor" in component
 	assert "save_resource_record" in component
 	assert "delete_resource_record" in component
-	assert '"_blank", "noopener,noreferrer"' in component
+	assert 'active-route="/desk/vetedge-resource-center"' in component
+	assert '"_blank", "noopener,noreferrer"' not in component
 
 
 def test_resource_center_quick_edit_uses_shared_edgesuite_fields_not_local_native_controls():
