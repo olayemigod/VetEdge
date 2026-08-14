@@ -173,25 +173,58 @@ function createPresenter(edge) {
 				if (field.type === "textarea") return h(EdgeTextarea, { ...common, rows: field.rows || 3, placeholder: field.placeholder || "" });
 				return h(EdgeInput, { ...common, type: field.type || "text", placeholder: field.placeholder || "", min: field.min, max: field.max, step: field.step });
 			},
-			renderRowActions(section, id) {
+			renderInlineActionTable(section, id) {
+				const rows = Array.isArray(section.rows) ? section.rows : [];
+				if (!rows.length) {
+					return h(EdgeEmptyState, { title: section.emptyTitle || __("No records"), description: section.emptyDescription || "" });
+				}
+				const columns = Array.isArray(section.columns) ? section.columns : [];
 				const groups = Array.isArray(section.rowActions) ? section.rowActions : [];
-				if (!groups.length) return null;
-				return h("div", { class: "vetedge-edge-modal-row-actions" }, groups.map((group) =>
-					h("div", { class: "vetedge-edge-modal-row-action", key: group.key || group.label }, [
-						h("div", { class: "vetedge-edge-modal-row-action__copy" }, [
-							h("strong", group.label || group.key || __("Invoice")),
-							group.helper ? h("small", group.helper) : null,
+				if (!groups.length) {
+					return h(EdgeDataTable, { columns, rows, rowKey: section.rowKey || "name", onRowClick: section.onRowClick });
+				}
+				const rowKey = section.rowKey || "name";
+				const groupMap = new Map(groups.map((group) => [String(group.key ?? group.row?.[rowKey] ?? ""), group]));
+				const renderCell = (column, row) => {
+					const value = row?.[column.fieldname] ?? "";
+					if (column.fieldtype === "Status") return h(EdgeStatusBadge, { label: String(value || __("Unknown")), status: String(value || "") });
+					return String(value);
+				};
+				return h("div", { class: "vetedge-edge-inline-table-wrap" }, [
+					h("table", { class: "vetedge-edge-inline-table" }, [
+						h("thead", [
+							h("tr", [
+								...columns.map((column) => h("th", { key: column.fieldname }, column.label || column.fieldname)),
+								h("th", { class: "vetedge-edge-inline-table__action-heading" }, __("Action")),
+							]),
 						]),
-						h("div", { class: "vetedge-edge-modal-row-action__buttons" }, (group.actions || []).map((action) =>
-							h("button", {
-								type: "button",
-								class: ["edge-button", "edge-button--compact", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""],
-								disabled: Boolean(this.spec.busy || action.disabled),
-								onClick: () => this.runInlineAction(action, group.row || group, id),
-							}, action.label),
-						)),
+						h("tbody", rows.map((row) => {
+							const key = String(row?.[rowKey] ?? "");
+							const group = groupMap.get(key);
+							const actions = group?.actions || [];
+							return h("tr", {
+								key,
+								class: section.onRowClick ? "is-clickable" : "",
+								onClick: () => section.onRowClick?.(row),
+							}, [
+								...columns.map((column) => h("td", { key: `${key}-${column.fieldname}` }, renderCell(column, row))),
+								h("td", {
+									class: "vetedge-edge-inline-table__actions",
+									onClick: (event) => event.stopPropagation(),
+								}, [
+									h("div", { class: "vetedge-edge-inline-table__action-buttons" }, actions.length ? actions.map((action) =>
+										h("button", {
+											type: "button",
+											class: ["edge-button", "edge-button--compact", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""],
+											disabled: Boolean(this.spec.busy || action.disabled),
+											onClick: () => this.runInlineAction(action, group?.row || row, id),
+										}, action.label),
+									) : [h("span", { class: "vetedge-edge-inline-table__no-action" }, "—")]),
+								]),
+							]);
+						})),
 					]),
-				));
+				]);
 			},
 			renderBody() {
 				const spec = this.spec || {};
@@ -211,9 +244,7 @@ function createPresenter(edge) {
 						const sectionBlocks = [h("h3", { style: { margin: "0" } }, section.title || "")];
 						if (section.message) sectionBlocks.push(h("p", { style: { whiteSpace: "pre-line" } }, section.message));
 						if (section.metrics?.length) sectionBlocks.push(h(EdgeDashboardLayout, { minColumnWidth: "9rem" }, { default: () => section.metrics.map((metric) => h(EdgeStatCard, { label: metric.label, value: metric.value, helper: metric.helper || "", tone: metric.tone || "neutral" })) }));
-						if (section.columns?.length) sectionBlocks.push(section.rows?.length ? h(EdgeDataTable, { columns: section.columns, rows: section.rows, rowKey: section.rowKey || "name", onRowClick: section.onRowClick }) : h(EdgeEmptyState, { title: section.emptyTitle || __("No records"), description: section.emptyDescription || "" }));
-						const inlineActions = this.renderRowActions(section, spec.__modalId);
-						if (inlineActions) sectionBlocks.push(inlineActions);
+						if (section.columns?.length) sectionBlocks.push(this.renderInlineActionTable(section, spec.__modalId));
 						blocks.push(h("section", { class: "vetedge-edge-modal-section", style: { display: "grid", gap: ".8rem", paddingTop: ".85rem", borderTop: "1px solid var(--edge-color-border)" } }, sectionBlocks));
 					}
 				}
