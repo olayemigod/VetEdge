@@ -13,13 +13,16 @@ def test_resource_center_mounts_before_optional_clinical_enhancements():
     resource_bundle = "frappe.require('vetedge_resource_center.bundle.js'"
     clinical_presenter = "frappe.require('vetedge_edge_modal_presenter.bundle.js'"
     clinical_editor = "frappe.require('vetedge_clinical_record_editor.bundle.js'"
+    mount_call = "wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0])"
+    enhancement_call = "loadClinicalEnhancements(root[0])"
 
     assert resource_bundle in loader
     assert clinical_presenter in loader
     assert clinical_editor in loader
-    assert loader.index(resource_bundle) < loader.index(clinical_presenter)
-    assert loader.index("wrapper.vue_app = window.mountVetEdgeResourceCenter") < loader.index(clinical_presenter)
-    assert "progressive enhancements" in loader
+    assert mount_call in loader
+    assert enhancement_call in loader
+    assert loader.index(mount_call) < loader.index(enhancement_call)
+    assert "must not install a second billing renderer" in loader
 
 
 def test_resource_center_clinical_bridge_is_idempotent_and_ignores_its_own_mutations():
