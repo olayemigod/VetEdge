@@ -38,6 +38,8 @@ jobs:
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
+            vetedge/tests/test_resource_center_loading_regression.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_sidebar_target_integrity.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
@@ -53,6 +55,8 @@ jobs:
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
+            vetedge/tests/test_resource_center_loading_regression.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
@@ -87,6 +91,9 @@ jobs:
           node --check vetedge/public/js/vetedge_executive_dashboard.bundle.js
           node --check vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js
           node --check vetedge/public/js/vetedge_resource_center.bundle.js
+          node --check vetedge/public/js/vetedge_resource_center_clinical_bridge.js
+          node --check vetedge/public/js/vetedge_lab_order_picker_patch.js
+          node --check vetedge/public/js/vetedge_billing_edgesuite.bundle.js
 
           node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
           node --check vetedge/public/js/veterinary_settings_center.bundle.js
