@@ -23,10 +23,16 @@ def test_resource_center_mounts_before_optional_clinical_enhancements():
     assert "progressive enhancements" in loader
 
 
-def test_patient_name_hydration_does_not_retrigger_its_mutation_observer_forever():
+def test_resource_center_clinical_bridge_is_idempotent_and_ignores_its_own_mutations():
     bridge = read(APP / "public/js/vetedge_resource_center_clinical_bridge.js")
 
-    assert 'target?.matches?.("td[data-patient-id]")' in bridge
+    assert 'String(existing.textContent || "").trim() !== label' in bridge
+    assert "function isBridgeOwnedNode" in bridge
+    assert "data-edge-clinical-create" in bridge
+    assert "data-edge-clinical-editor" in bridge
+    assert "td[data-patient-id]" in bridge
+    assert "changedNodes.every(isBridgeOwnedNode)" in bridge
     assert "records.some(mutationNeedsDecoration)" in bridge
+    assert "scheduleDecoration(root)" in bridge
     assert 'String(cell.textContent || "").trim() !== String(label)' in bridge
     assert "get_patient_labels" in bridge
