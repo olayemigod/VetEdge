@@ -51,14 +51,22 @@ def test_shared_billing_server_supports_all_billable_service_sources_and_registr
         assert contract in service
 
 
-def test_billing_action_visibility_uses_same_erpnext_permissions_as_mutations():
+def test_billing_action_visibility_and_mutation_responses_use_same_erpnext_permissions():
     hooks = read(APP / "hooks.py")
     security = read(APP / "services/billing_state_security.py")
 
-    assert "billing_state_security.get_billing_modal_state" in hooks
+    for endpoint in (
+        "get_billing_modal_state",
+        "create_or_update_modal_invoice",
+        "submit_modal_invoice",
+        "record_modal_invoice_payment",
+    ):
+        assert f'billing_modal.{endpoint}": "vetedge.services.billing_state_security.{endpoint}' in hooks
+        assert f"def {endpoint}" in security
     assert 'frappe.has_permission("Sales Invoice", "submit", doc=invoice)' in security
     assert 'frappe.has_permission("Payment Entry", "create")' in security
     assert 'frappe.has_permission("Payment Entry", "submit")' in security
+    assert "_normalize_result_state" in security
     assert "can_submit_invoice" in security
     assert "can_pay_outstanding" in security
     assert "patient_outstanding_context" in security
@@ -140,6 +148,7 @@ def test_lab_workflow_permissions_result_formats_and_completion_gate_remain_serv
 
 def test_edgesuite_clinical_workflow_actions_are_server_preflighted_and_not_status_edits():
     workflow = read(APP / "services/clinical_workflow_ui.py")
+    review = read(APP / "services/lab_workflow_actions.py")
     editor = read(APP / "public/js/vetedge_clinical_record_editor.bundle.js")
 
     for contract in (
@@ -148,11 +157,24 @@ def test_edgesuite_clinical_workflow_actions_are_server_preflighted_and_not_stat
         "can_request_lab_tests",
         "can_enter_lab_results",
         "can_review_lab_results",
+        "get_source_payment_gate_status",
+        "enforce_vaccination_payment_before_administration",
         "can_administer_vaccine",
         "Administer Vaccination",
         "Complete Lab Order",
+        "lab_workflow_actions.review_lab_order_results",
     ):
         assert contract in workflow
+    for contract in (
+        "review_lab_order_results",
+        "can_review_lab_results",
+        "require_vetedge_platform_access",
+        'row.result_status = "Reviewed"',
+        'doc.status = "Reviewed"',
+        "doctor_reviewed_by",
+        "doctor_reviewed_on",
+    ):
+        assert contract in review
     assert "clinical_workflow_ui.get_clinical_workflow_actions" in editor
     assert "runWorkflowAction" in editor
     assert "Workflow action blocked" in editor
