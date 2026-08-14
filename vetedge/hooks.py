@@ -41,6 +41,7 @@ app_include_js = [
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/billing_modal.js",
 	"/assets/vetedge/js/vetedge_billing_modal_alignment.js?v=20260814-1",
+	"/assets/vetedge/js/vetedge_billing_modal_layering.js?v=20260814-1",
 	"/assets/vetedge/js/vetedge_sidebar_qa_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
@@ -88,10 +89,13 @@ has_permission = {
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
+	"vetedge.services.resource_center.get_resource_page": "vetedge.services.resource_center_v2.get_resource_page",
 	"vetedge.services.billing_modal.get_billing_modal_state": "vetedge.services.billing_state_security.get_billing_modal_state",
 	"vetedge.services.billing_modal.create_or_update_modal_invoice": "vetedge.services.billing_state_security.create_or_update_modal_invoice",
 	"vetedge.services.billing_modal.submit_modal_invoice": "vetedge.services.billing_state_security.submit_modal_invoice",
 	"vetedge.services.billing_modal.record_modal_invoice_payment": "vetedge.services.billing_state_security.record_modal_invoice_payment",
+	"vetedge.services.clinical_record_editor.get_clinical_record_editor": "vetedge.services.clinical_record_state.get_clinical_record_editor",
+	"vetedge.services.clinical_record_editor.get_lab_result_editor": "vetedge.services.clinical_record_state.get_lab_result_editor",
 	"vetedge.services.clinical_record_editor.create_clinical_record": "vetedge.services.mutation_security.create_clinical_record",
 	"vetedge.services.clinical_record_editor.save_clinical_record_editor": "vetedge.services.mutation_security.save_clinical_record_editor",
 	"vetedge.services.clinical_record_editor.delete_clinical_record": "vetedge.services.mutation_security.delete_clinical_record",
@@ -154,6 +158,9 @@ doc_events = {
 		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_stock_entry_branch",
 		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",
 	},
+	"Veterinary Patient": {
+		"after_insert": "vetedge.services.registration_state_alignment.align_patient_registration_state",
+	},
 	"Veterinary Consultation": {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
@@ -169,6 +176,7 @@ doc_events = {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.lab_payment_workflow.enforce_lab_service_payment_gate",
 		],
 	},
 	"Veterinary Vaccination Record": {
