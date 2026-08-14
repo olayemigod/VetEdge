@@ -6,6 +6,8 @@
 		"lab-orders": "Veterinary Lab Order",
 		vaccinations: "Veterinary Vaccination Record",
 	});
+	let observedRoot = null;
+	let observer = null;
 
 	function currentResource() {
 		return new URLSearchParams(window.location.search || "").get("resource") || "patients";
@@ -41,12 +43,15 @@
 		const root = document.querySelector(".vetedge-resource-center-root");
 		if (!root) return false;
 		decorate(root);
-		const observer = new MutationObserver(() => decorate(root));
+		if (observedRoot === root && observer) return true;
+		observer?.disconnect?.();
+		observedRoot = root;
+		observer = new MutationObserver(() => decorate(root));
 		observer.observe(root, { childList: true, subtree: true });
-		window.addEventListener("popstate", () => decorate(root));
 		return true;
 	}
 
 	window.VetEdgeResourceClinicalBridge = { install };
+	window.addEventListener("popstate", () => observedRoot && decorate(observedRoot));
 	window.setTimeout(install, 0);
 })();
