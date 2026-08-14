@@ -25,6 +25,12 @@ async function searchLink(field, query) {
 	return response.message || [];
 }
 
+function fieldValue(field) {
+	const value = field.value ?? "";
+	if (field.fieldtype === "Datetime" && value) return String(value).replace(" ", "T").slice(0, 16);
+	return value;
+}
+
 function fieldSpec(field) {
 	const typeMap = {
 		Select: "select",
@@ -43,14 +49,16 @@ function fieldSpec(field) {
 		Email: "email",
 		Phone: "tel",
 	};
+	const isReadOnly = Boolean(field.read_only);
 	const spec = {
 		fieldname: field.fieldname,
 		label: field.label,
 		type: typeMap[field.fieldtype] || "text",
 		description: field.description || "",
 		required: Boolean(field.reqd),
-		readOnly: Boolean(field.read_only),
-		default: field.value ?? "",
+		readOnly: isReadOnly,
+		disabled: isReadOnly && ["Select", "Link", "Check"].includes(field.fieldtype),
+		default: fieldValue(field),
 	};
 	if (field.fieldtype === "Select") spec.options = normalizedOptions(field);
 	if (field.fieldtype === "Link") {
@@ -87,6 +95,23 @@ function openNative(doctype, name) {
 	frappe.set_route("Form", doctype, name);
 }
 
+function serializedValues(schema, values) {
+	const fieldMap = Object.fromEntries((schema.fields || []).map((field) => [field.fieldname, field]));
+	const payload = {};
+	for (const [fieldname, raw] of Object.entries(values || {})) {
+		const field = fieldMap[fieldname];
+		if (!field || field.read_only) continue;
+		let value = raw;
+		if (field.fieldtype === "Datetime" && value) {
+			value = String(value).replace("T", " ");
+			if (value.length === 16) value = `${value}:00`;
+		}
+		if (field.fieldtype === "Check") value = value ? 1 : 0;
+		payload[fieldname] = value ?? "";
+	}
+	return payload;
+}
+
 export async function openVetEdgeClinicalRecordEditor({ doctype, name, onSaved } = {}) {
 	if (!doctype || !name || !presenter()?.ready?.()) {
 		throw new Error("The EdgeSuite clinical record editor is unavailable.");
@@ -104,7 +129,7 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name, onSaved }
 		modal.update({ loading: true, busy: false, error: "" });
 		try {
 			schema = await call(API.get, { doctype, name });
-			const values = Object.fromEntries((schema.fields || []).map((field) => [field.fieldname, field.value ?? ""]));
+			const values = Object.fromEntries((schema.fields || []).map((field) => [field.fieldname, fieldValue(field)]));
 			const actions = [];
 			if (schema.can_save) {
 				actions.push({
@@ -114,7 +139,7 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name, onSaved }
 					async onClick(nextValues) {
 						modal.update({ busy: true, error: "" });
 						try {
-							schema = await call(API.save, { doctype, name, values: nextValues });
+							schema = await call(API.save, { doctype, name, values: serializedValues(schema, nextValues) });
 							frappe.show_alert({ message: __("Clinical record updated."), indicator: "green" });
 							await onSaved?.(schema);
 							await load();
@@ -131,11 +156,13 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name, onSaved }
 					onClick: () => window.vetedgeBillingModal.open(billingFrame(doctype, name, load)),
 				});
 			}
-			actions.push({
-				label: __("Open Native Form"),
-				closeOnSuccess: false,
-				onClick: () => openNative(doctype, name),
-			});
+			if (doctype !== "Veterinary Vital Signs") {
+				actions.push({
+					label: __("Open Native Form"),
+					closeOnSuccess: false,
+					onClick: () => openNative(doctype, name),
+				});
+			}
 			modal.update({
 				loading: false,
 				busy: false,
