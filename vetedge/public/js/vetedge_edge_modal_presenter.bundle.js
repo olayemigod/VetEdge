@@ -113,6 +113,16 @@ function createPresenter(edge) {
 					this.close(id);
 				}
 			},
+			async runInlineAction(action, row, id) {
+				try {
+					await action.onClick?.(row, this);
+				} catch (error) {
+					console.error("VetEdge EdgeSuite inline modal action failed", error);
+					if (this.spec?.__modalId === id && !this.spec.error) {
+						this.spec = { ...this.spec, busy: false, error: error?.message || __("The invoice action could not be completed."), errorTitle: __("Invoice action failed") };
+					}
+				}
+			},
 			setField(field, value) {
 				const values = { ...(this.spec.values || {}), [field.fieldname]: value };
 				this.spec = { ...this.spec, values };
@@ -163,6 +173,26 @@ function createPresenter(edge) {
 				if (field.type === "textarea") return h(EdgeTextarea, { ...common, rows: field.rows || 3, placeholder: field.placeholder || "" });
 				return h(EdgeInput, { ...common, type: field.type || "text", placeholder: field.placeholder || "", min: field.min, max: field.max, step: field.step });
 			},
+			renderRowActions(section, id) {
+				const groups = Array.isArray(section.rowActions) ? section.rowActions : [];
+				if (!groups.length) return null;
+				return h("div", { class: "vetedge-edge-modal-row-actions" }, groups.map((group) =>
+					h("div", { class: "vetedge-edge-modal-row-action", key: group.key || group.label }, [
+						h("div", { class: "vetedge-edge-modal-row-action__copy" }, [
+							h("strong", group.label || group.key || __("Invoice")),
+							group.helper ? h("small", group.helper) : null,
+						]),
+						h("div", { class: "vetedge-edge-modal-row-action__buttons" }, (group.actions || []).map((action) =>
+							h("button", {
+								type: "button",
+								class: ["edge-button", "edge-button--compact", action.primary ? "edge-button--primary" : "", action.danger ? "edge-button--danger" : ""],
+								disabled: Boolean(this.spec.busy || action.disabled),
+								onClick: () => this.runInlineAction(action, group.row || group, id),
+							}, action.label),
+						)),
+					]),
+				));
+			},
 			renderBody() {
 				const spec = this.spec || {};
 				if (spec.loading) return h(EdgeLoadingState, { message: spec.loadingMessage || __("Loading…"), skeleton: true });
@@ -182,6 +212,8 @@ function createPresenter(edge) {
 						if (section.message) sectionBlocks.push(h("p", { style: { whiteSpace: "pre-line" } }, section.message));
 						if (section.metrics?.length) sectionBlocks.push(h(EdgeDashboardLayout, { minColumnWidth: "9rem" }, { default: () => section.metrics.map((metric) => h(EdgeStatCard, { label: metric.label, value: metric.value, helper: metric.helper || "", tone: metric.tone || "neutral" })) }));
 						if (section.columns?.length) sectionBlocks.push(section.rows?.length ? h(EdgeDataTable, { columns: section.columns, rows: section.rows, rowKey: section.rowKey || "name", onRowClick: section.onRowClick }) : h(EdgeEmptyState, { title: section.emptyTitle || __("No records"), description: section.emptyDescription || "" }));
+						const inlineActions = this.renderRowActions(section, spec.__modalId);
+						if (inlineActions) sectionBlocks.push(inlineActions);
 						blocks.push(h("section", { class: "vetedge-edge-modal-section", style: { display: "grid", gap: ".8rem", paddingTop: ".85rem", borderTop: "1px solid var(--edge-color-border)" } }, sectionBlocks));
 					}
 				}
