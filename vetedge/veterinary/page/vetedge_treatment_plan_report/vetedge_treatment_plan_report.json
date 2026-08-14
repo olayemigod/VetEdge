@@ -1,0 +1,13 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Veterinary",
+ "name": "vetedge-treatment-plan-report",
+ "page_name": "vetedge-treatment-plan-report",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Planned Treatment"
+}
