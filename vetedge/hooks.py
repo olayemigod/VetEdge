@@ -104,6 +104,9 @@ override_whitelisted_methods = {
 	"vetedge.services.clinical_record_editor.save_lab_test_rate": "vetedge.services.mutation_security.save_lab_test_rate",
 	"vetedge.services.lab.transition_lab_order_status": "vetedge.services.mutation_security.transition_lab_order_status",
 	"vetedge.services.registration_billing.create_manual_registration_invoice": "vetedge.services.mutation_security.create_manual_registration_invoice",
+	"vetedge.services.grooming.transition_grooming_session_status": "vetedge.services.grooming_payment_workflow.transition_grooming_session_status",
+	"vetedge.services.service_operations.get_service_operation_detail": "vetedge.services.service_operations_state.get_service_operation_detail",
+	"vetedge.services.service_operations.transition_grooming_session": "vetedge.services.service_operations_state.transition_grooming_session",
 }
 
 doc_events = {
@@ -202,6 +205,7 @@ doc_events = {
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.grooming_payment_workflow.enforce_grooming_service_payment_gate",
 		],
 	},
 	"Pet Boarding Booking": {
