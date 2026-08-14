@@ -8,20 +8,26 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_one_canonical_billing_modal_is_shared_across_services():
+def test_one_canonical_billing_modal_is_shared_across_services_and_layers_above_editors():
     hooks = read(APP / "hooks.py")
     canonical = read(APP / "public/js/billing_modal.js")
     compatibility = read(APP / "public/js/vetedge_billing_edgesuite.bundle.js")
+    layering = read(APP / "public/js/vetedge_billing_modal_layering.js")
     resource_loader = read(APP / "veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
     history_loader = read(APP / "veterinary/page/veterinary_medical_history/veterinary_medical_history.js")
 
     assert '"/assets/vetedge/js/billing_modal.js"' in hooks
+    assert "vetedge_billing_modal_layering.js" in hooks
     assert "window.vetedgeBillingModal" in canonical
     assert "vetedge.services.billing_modal.get_billing_modal_state" in canonical
     assert "must never replace window.vetedgeBillingModal" in compatibility
     assert "window.vetedgeBillingModal =" not in compatibility
     assert "vetedge_billing_edgesuite.bundle.js" not in resource_loader
     assert "vetedge_billing_edgesuite.bundle.js" not in history_loader
+    assert "Billing & Payment" in layering
+    assert "Record Payment" in layering
+    assert "highestLayer" in layering
+    assert "modal.__layeringWrapped" in layering
 
 
 def test_shared_billing_server_supports_all_billable_service_sources_and_registration():
@@ -72,10 +78,13 @@ def test_billing_action_visibility_and_mutation_responses_use_same_erpnext_permi
     assert "patient_outstanding_context" in security
 
 
-def test_registration_has_standalone_shared_billing_and_payment_path():
+def test_registration_has_state_aware_standalone_shared_billing_and_payment_path():
     registration = read(APP / "services/registration_billing.py")
+    alignment = read(APP / "services/registration_state_alignment.py")
     patient_form = read(APP / "veterinary/doctype/veterinary_patient/veterinary_patient.js")
-    bridge = read(APP / "public/js/vetedge_resource_center_clinical_bridge.js")
+    resource_api = read(APP / "services/resource_center_v2.py")
+    resource_component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    action_alignment = read(APP / "public/js/vetedge_resource_center_action_alignment.js")
     hooks = read(APP / "hooks.py")
 
     for contract in (
@@ -88,14 +97,44 @@ def test_registration_has_standalone_shared_billing_and_payment_path():
     ):
         assert contract in registration
     assert 'window.vetedgeBillingModal.open(frm)' in patient_form
-    assert "Registration Billing / Payment" in bridge
-    assert 'billingFrame("Veterinary Patient"' in bridge
-    assert "update_registration_status_from_invoice" in hooks
-    assert "update_registration_status_from_payment_entry" in hooks
+    for label in (
+        "Bill Registration",
+        "Submit Registration Invoice",
+        "Pay Registration",
+        "Pay Registration Balance",
+        "View Registration Payment",
+        "Rebill Registration",
+    ):
+        assert label in resource_api
+    assert "registration_payment_state" in resource_api
+    assert "row._registration_action.label" in resource_component
+    assert 'billingFrame("Veterinary Patient"' in resource_component
+    assert "data-edge-registration-billing" in action_alignment
+    assert "button.hidden = true" in action_alignment
+    assert "align_patient_registration_state" in alignment
+    assert "update_registration_status_from_invoice_aligned" in hooks
+    assert "update_registration_status_from_payment_entry_aligned" in hooks
 
 
-def test_lab_order_creation_uses_dropdown_picker_without_losing_multi_test_orders():
+def test_patient_resource_filters_are_relevant_bounded_and_branch_aware():
+    hooks = read(APP / "hooks.py")
+    resource_api = read(APP / "services/resource_center_v2.py")
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+
+    assert "resource_center_v2.get_resource_page" in hooks
+    for branch_field in ('"branch"', '"service_branch"', '"default_branch"'):
+        assert branch_field in resource_api
+    for fieldname in ("default_branch", "status", "registration_status", "species"):
+        assert fieldname in resource_api
+    for label in ("Branch", "Patient Status", "Registration", "Species"):
+        assert f'label="{label}"' in component
+    assert "microchip_id" in resource_api
+    assert "PAGE_LENGTH_MAX" in resource_api
+
+
+def test_multiple_lab_orders_per_patient_use_dropdown_picker_and_do_not_replace_prior_orders():
     picker = read(APP / "public/js/vetedge_lab_order_picker_patch.js")
+    resource_component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     workspace = read(APP / "public/js/vetedge_clinical_workspace.bundle.js")
     editor = read(APP / "services/clinical_record_editor.py")
     lab = read(APP / "services/lab.py")
@@ -106,14 +145,55 @@ def test_lab_order_creation_uses_dropdown_picker_without_losing_multi_test_order
         "Select one test at a time",
         "selected.map((row) => row.value)",
         "Remove",
+        "A patient may have multiple Lab Orders over time",
+        "VetEdgeLabOrderPickerPatch =",
+        "open({ onSaved = null, patient",
     ):
         assert contract in picker
+    assert "New Lab Order" in resource_component
+    assert "VetEdgeLabOrderPickerPatch.open" in resource_component
     assert "Select tests one at a time from the dropdown" in workspace
     assert "Selected Lab Tests" in workspace
     assert "lab_test_picker" in workspace
     assert '"fieldname": "lab_tests"' in editor
     assert "create_standalone_lab_order" in editor
     assert "normalize_lab_tests_payload" in lab
+
+
+def test_lab_payment_gate_blocks_processing_and_result_entry_in_ui_and_server():
+    hooks = read(APP / "hooks.py")
+    gate = read(APP / "services/lab_payment_workflow.py")
+    workflow = read(APP / "services/clinical_workflow_ui.py")
+    state = read(APP / "services/clinical_record_state.py")
+
+    assert "lab_payment_workflow.enforce_lab_service_payment_gate" in hooks
+    for status in (
+        "Sample Collected",
+        "Sent to Lab",
+        "In Progress",
+        "Result Pending",
+        "Result Entered",
+        "Awaiting Review",
+        "Reviewed",
+        "Completed",
+    ):
+        assert f'"{status}"' in gate
+    for contract in (
+        "resolve_billing_session",
+        "get_payment_gate_status",
+        "_result_content_changed",
+        "lab_change_starts_or_advances_service",
+        "enforce_lab_service_payment_gate",
+    ):
+        assert contract in gate
+    assert "SERVICE_PROGRESS_STATUSES" in workflow
+    assert "billing_required" in workflow
+    assert "_lab_payment_gate" in workflow
+    assert "clinical_record_state.get_clinical_record_editor" in hooks
+    assert "clinical_record_state.get_lab_result_editor" in hooks
+    assert 'state["can_save"] = False' in state
+    assert 'state["can_upload"] = False' in state
+    assert 'row["can_edit_result"] = False' in state
 
 
 def test_lab_workflow_permissions_result_formats_and_completion_gate_remain_server_authoritative():
@@ -157,7 +237,7 @@ def test_edgesuite_clinical_workflow_actions_are_server_preflighted_and_not_stat
         "can_request_lab_tests",
         "can_enter_lab_results",
         "can_review_lab_results",
-        "get_source_payment_gate_status",
+        "get_lab_service_payment_gate_state",
         "enforce_vaccination_payment_before_administration",
         "can_administer_vaccine",
         "Administer Vaccination",
@@ -205,8 +285,8 @@ def test_payment_and_invoice_events_refresh_registration_and_service_billing_sta
     for contract in (
         "update_billing_sessions_from_invoice",
         "update_billing_sessions_from_payment_entry",
-        "update_registration_status_from_invoice",
-        "update_registration_status_from_payment_entry",
+        "update_registration_status_from_invoice_aligned",
+        "update_registration_status_from_payment_entry_aligned",
         "update_vaccination_status_from_invoice",
         "update_vaccination_status_from_payment_entry",
     ):
@@ -235,3 +315,14 @@ def test_edgesuite_mutations_are_platform_gated_without_replacing_domain_permiss
     assert "require_vetedge_platform_access" in security
     assert "can_access_patient" in security
     assert "can_access_branch_data" in security
+
+
+def test_resource_center_internal_full_forms_use_desk_same_tab_contract():
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    alignment = read(APP / "public/js/vetedge_resource_center_action_alignment.js")
+
+    assert 'active-route="/desk/vetedge-resource-center"' in component
+    assert '"_blank", "noopener,noreferrer"' not in component
+    assert "FULL_FORM_ROUTES" in alignment
+    assert "window.location.assign(route)" in alignment
+    assert "stopImmediatePropagation" in alignment
