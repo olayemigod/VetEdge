@@ -10,9 +10,6 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
-	// Preserve lazy-loaded patient sections/trends across Desk navigation. The
-	// mounted bundle decides whether the active context is still fresh or whether
-	// a new deep-linked patient / stale view needs a read-only refresh.
 	if (wrapper.vue_app?.refresh) {
 		try {
 			Promise.resolve(
@@ -26,7 +23,6 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 		}
 	}
 
-	// Backward-compatible cleanup for an older cached bundle without refresh().
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
 	$(page.body).empty();
@@ -99,11 +95,10 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 				});
 			};
 
+			// Clinical records call the globally shared Consultation Billing & Payment
+			// modal. Only the EdgeSuite record presenter/editor is page-specific.
 			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
-				frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
-					window.installVetEdgeBillingEdgeSuite?.();
-					frappe.require('vetedge_clinical_record_editor.bundle.js', mountHistoryBundle);
-				});
+				frappe.require('vetedge_clinical_record_editor.bundle.js', mountHistoryBundle);
 			});
 		};
 
