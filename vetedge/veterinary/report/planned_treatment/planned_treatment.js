@@ -1,6 +1,6 @@
 frappe.query_reports["Planned Treatment"] = {
-	onload(report) {
-		window.vetedgeReportVisibility?.apply(report, "Planned Treatment");
+	onload() {
+		window.location.replace("/desk/vetedge-treatment-plan-report");
 	},
 	filters: [
 		{ fieldname: "from_date", label: __("From Date"), fieldtype: "Date", default: frappe.datetime.add_days(frappe.datetime.get_today(), -30) },
