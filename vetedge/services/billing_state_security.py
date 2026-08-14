@@ -45,9 +45,7 @@ def _primary_invoice_name(state: dict) -> str | None:
     )
 
 
-@frappe.whitelist()
-def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
-    require_internal_user()
+def _permission_aware_state(source_doctype: str, source_name: str) -> dict:
     from vetedge.services.billing_modal import get_billing_modal_state as original
 
     state = original(source_doctype=source_doctype, source_name=source_name)
@@ -64,7 +62,66 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
     _apply_row_permissions(state.get("billing_group_invoice_history"), can_pay)
     _apply_row_permissions(state.get("patient_outstanding_context"), can_pay)
 
-    # Keep top-level compatibility fields synchronized with the permission-aware
-    # action object consumed by the shared billing modal.
     state["actions"] = actions
     return state
+
+
+def _normalize_result_state(result: dict | None, source_doctype: str, source_name: str) -> dict:
+    payload = dict(result or {})
+    payload["state"] = _permission_aware_state(source_doctype, source_name)
+    return payload
+
+
+@frappe.whitelist()
+def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
+    require_internal_user()
+    return _permission_aware_state(source_doctype, source_name)
+
+
+@frappe.whitelist()
+def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dict:
+    require_internal_user()
+    from vetedge.services.billing_modal import create_or_update_modal_invoice as original
+
+    result = original(source_doctype=source_doctype, source_name=source_name)
+    return _normalize_result_state(result, source_doctype, source_name)
+
+
+@frappe.whitelist()
+def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | None = None) -> dict:
+    require_internal_user()
+    from vetedge.services.billing_modal import submit_modal_invoice as original
+
+    result = original(source_doctype=source_doctype, source_name=source_name, invoice=invoice)
+    return _normalize_result_state(result, source_doctype, source_name)
+
+
+@frappe.whitelist()
+def record_modal_invoice_payment(
+    source_doctype: str,
+    source_name: str,
+    invoice: str | None = None,
+    amount: float | None = None,
+    mode_of_payment: str | None = None,
+    paid_to: str | None = None,
+    posting_date: str | None = None,
+    reference_no: str | None = None,
+    reference_date: str | None = None,
+    remarks: str | None = None,
+) -> dict:
+    require_internal_user()
+    from vetedge.services.billing_modal import record_modal_invoice_payment as original
+
+    result = original(
+        source_doctype=source_doctype,
+        source_name=source_name,
+        invoice=invoice,
+        amount=amount,
+        mode_of_payment=mode_of_payment,
+        paid_to=paid_to,
+        posting_date=posting_date,
+        reference_no=reference_no,
+        reference_date=reference_date,
+        remarks=remarks,
+    )
+    return _normalize_result_state(result, source_doctype, source_name)
