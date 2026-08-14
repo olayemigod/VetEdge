@@ -79,7 +79,7 @@ def _patient_columns() -> list[dict]:
         {"fieldname": "name", "label": _("ID"), "fieldtype": "Data"},
         {"fieldname": "patient_name", "label": _("Patient Name"), "fieldtype": "Data"},
         {"fieldname": "status", "label": _("Status"), "fieldtype": "Select"},
-        {"fieldname": "registration_status", "label": _("Registration"), "fieldtype": "Data"},
+        {"fieldname": "registration_payment_state", "label": _("Registration"), "fieldtype": "Data"},
         {"fieldname": "primary_owner", "label": _("Primary Owner"), "fieldtype": "Link"},
         {"fieldname": "default_branch", "label": _("Default Branch"), "fieldtype": "Link"},
         {"fieldname": "species", "label": _("Species"), "fieldtype": "Link"},
