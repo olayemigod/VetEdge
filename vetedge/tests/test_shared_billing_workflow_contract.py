@@ -155,3 +155,24 @@ def test_payment_and_invoice_events_refresh_registration_and_service_billing_sta
     assert "refreshSourceForm" in billing_modal
     assert "response.message?.state" in billing_modal
     assert "await refreshSourceForm()" in billing_modal
+
+
+def test_edgesuite_mutations_are_platform_gated_without_replacing_domain_permissions():
+    hooks = read(APP / "hooks.py")
+    security = read(APP / "services/mutation_security.py")
+
+    for endpoint in (
+        "create_clinical_record",
+        "save_clinical_record_editor",
+        "delete_clinical_record",
+        "save_lab_result_editor",
+        "save_lab_test_rate",
+        "transition_lab_order_status",
+        "create_manual_registration_invoice",
+    ):
+        assert f"mutation_security.{endpoint}" in hooks
+        assert f"def {endpoint}" in security
+    assert "require_internal_user" in security
+    assert "require_vetedge_platform_access" in security
+    assert "can_access_patient" in security
+    assert "can_access_branch_data" in security
