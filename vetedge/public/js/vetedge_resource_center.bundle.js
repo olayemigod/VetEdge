@@ -2,6 +2,39 @@ import VetEdgeAppointmentFlow from './vetedge_resource_center/VetEdgeAppointment
 import VetEdgeResourceCenter from './vetedge_resource_center/VetEdgeResourceCenter.vue';
 import VetEdgeResourceQuickEditor from './vetedge_resource_center/VetEdgeResourceQuickEditor.vue';
 
+const RESOURCE_ROUTE_KEYS = Object.freeze([
+	'resource',
+	'search',
+	'name',
+	'new',
+	'branch',
+	'status',
+	'registration_status',
+	'species',
+]);
+
+function getRequestedRouteParams() {
+	const params = new URLSearchParams(window.location.search || '');
+	const routeOptions = window.frappe?.route_options || {};
+	const consumed = [];
+
+	for (const key of RESOURCE_ROUTE_KEYS) {
+		const value = routeOptions[key];
+		if (value === undefined || value === null || String(value) === '') continue;
+		if (!params.has(key)) params.set(key, String(value));
+		consumed.push(key);
+	}
+
+	if (consumed.length && window.location.pathname === '/desk/vetedge-resource-center') {
+		const query = params.toString();
+		const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`;
+		window.history.replaceState(window.history.state, '', nextUrl);
+		for (const key of consumed) delete routeOptions[key];
+	}
+
+	return params;
+}
+
 export function mountVetEdgeResourceCenter(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
@@ -11,7 +44,7 @@ export function mountVetEdgeResourceCenter(target) {
 		throw new Error('VetEdge Resource Center requires the EdgeSuite UI 0.6.2 form runtime.');
 	}
 
-	const requestedRoute = new URLSearchParams(window.location.search || '');
+	const requestedRoute = getRequestedRouteParams();
 	const requestedName = String(requestedRoute.get('name') || '').trim();
 	const requestedNew = requestedRoute.get('new') === '1';
 
@@ -92,7 +125,7 @@ export function mountVetEdgeResourceCenter(target) {
 	};
 
 	const getRequestedState = () => {
-		const params = new URLSearchParams(window.location.search || '');
+		const params = getRequestedRouteParams();
 		return {
 			resource: String(params.get('resource') || 'patients').trim() || 'patients',
 			search: String(params.get('search') || '').trim(),
