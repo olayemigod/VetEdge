@@ -194,6 +194,9 @@ def test_lab_payment_gate_blocks_processing_and_result_entry_in_ui_and_server():
     assert 'state["can_save"] = False' in state
     assert 'state["can_upload"] = False' in state
     assert 'row["can_edit_result"] = False' in state
+    assert 'LAB_REDUNDANT_FIELDNAMES = {"status"}' in state
+    assert "LAB_HIDE_WHEN_EMPTY_READ_ONLY" in state
+    assert "_normalize_datetime_value" in state
 
 
 def test_lab_workflow_permissions_result_formats_and_completion_gate_remain_server_authoritative():
@@ -259,6 +262,29 @@ def test_edgesuite_clinical_workflow_actions_are_server_preflighted_and_not_stat
     assert "runWorkflowAction" in editor
     assert "Workflow action blocked" in editor
     assert 'fieldname: "status"' not in editor
+
+
+def test_grooming_cannot_bypass_payment_with_direct_in_progress_transition():
+    hooks = read(APP / "hooks.py")
+    gate = read(APP / "services/grooming_payment_workflow.py")
+    service_state = read(APP / "services/service_operations_state.py")
+
+    assert "grooming_payment_workflow.enforce_grooming_service_payment_gate" in hooks
+    assert "grooming_payment_workflow.transition_grooming_session_status" in hooks
+    assert "service_operations_state.get_service_operation_detail" in hooks
+    assert "service_operations_state.transition_grooming_session" in hooks
+    for contract in (
+        "GROOMING_PROGRESS_STATUSES",
+        "get_grooming_service_payment_gate_state",
+        "resolve_billing_session",
+        "get_billing_session_summary",
+        "outstanding <= 0",
+        "require_vetedge_platform_access",
+    ):
+        assert contract in gate
+    assert 'blocked_keys = {"start-grooming", "complete-grooming"}' in service_state
+    assert "Billing / Payment Required" in service_state
+    assert "require_vetedge_platform_access" in service_state
 
 
 def test_draft_price_sync_and_submitted_invoice_locks_are_preserved():
