@@ -84,6 +84,8 @@ jobs:
           node --check vetedge/public/js/vetedge_navigation_recovery.js
           node --check vetedge/public/js/vetedge_clinical_route.js
           node --check vetedge/public/js/vetedge_workspace_safety.js
+          node --check vetedge/public/js/vetedge_billing_modal_layering.js
+          node --check vetedge/public/js/vetedge_resource_center_action_alignment.js
 
           node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
           node --check vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
