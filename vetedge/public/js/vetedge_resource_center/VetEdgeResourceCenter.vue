@@ -5,7 +5,7 @@
 		:tenant-name="identity.tenant_name || ''"
 		:branch-name="branchName"
 		:user-name="userName"
-		active-route="/app/vetedge-resource-center"
+		active-route="/desk/vetedge-resource-center"
 		@navigate="openRoute"
 	>
 		<EdgePageLayout>
@@ -21,7 +21,7 @@
 
 			<template #filters>
 				<EdgeFilterBar title="Find records">
-					<div class="vetedge-resource-filters">
+					<div class="vetedge-resource-filters" :class="{ 'is-patient-filters': isPatients }">
 						<label class="vetedge-resource-field">
 							<span>Resource</span>
 							<select v-model="resource" class="form-control" @change="changeResource">
@@ -30,17 +30,52 @@
 								</option>
 							</select>
 						</label>
+
 						<label class="vetedge-resource-field vetedge-resource-field--search">
 							<span>Search</span>
 							<input
 								v-model.trim="search"
 								type="search"
 								class="form-control"
-								placeholder="Name, status or visible field"
+								placeholder="Patient, owner, ID, species or visible field"
 								@keyup.enter="applySearch"
 							/>
 						</label>
+
+						<template v-if="isPatients">
+							<EdgeLinkField
+								v-model="patientFilters.default_branch"
+								:selected-label="patientFilterLabels.default_branch"
+								label="Branch"
+								placeholder="All visible branches"
+								:searcher="searchBranchFilter"
+								@select="onBranchFilterSelect"
+								@clear="clearBranchFilter"
+							/>
+							<EdgeDropdown
+								v-model="patientFilters.status"
+								label="Patient Status"
+								:options="patientStatusOptions"
+								placeholder="All statuses"
+							/>
+							<EdgeDropdown
+								v-model="patientFilters.registration_status"
+								label="Registration"
+								:options="registrationStatusOptions"
+								placeholder="All registration states"
+							/>
+							<EdgeLinkField
+								v-model="patientFilters.species"
+								:selected-label="patientFilterLabels.species"
+								label="Species"
+								placeholder="All species"
+								:searcher="searchSpeciesFilter"
+								@select="onSpeciesFilterSelect"
+								@clear="clearSpeciesFilter"
+							/>
+						</template>
 					</div>
+
 					<template #actions>
 						<button type="button" class="edge-button edge-button--primary" :disabled="loading" @click="applySearch">
 							Apply
@@ -60,6 +95,7 @@
 				action-label="Try again"
 				@retry="loadPage"
 			/>
+
 			<template v-else>
 				<section v-if="page.unsupported_required_fields?.length" class="vetedge-resource-notice">
 					<div>
@@ -69,7 +105,7 @@
 							{{ page.unsupported_required_fields.join(', ') }}.
 						</p>
 					</div>
-					<button type="button" class="edge-button" @click="openFullList">Open full form in new tab</button>
+					<button type="button" class="edge-button" @click="openFullList">Open full form</button>
 				</section>
 
 				<section class="vetedge-resource-summary" aria-label="Resource summary">
@@ -90,7 +126,7 @@
 				<EdgeEmptyState
 					v-if="!page.rows?.length"
 					title="No matching records"
-					description="Change the search term or choose another Veterinary resource."
+					description="Change the search or filters, or choose another Veterinary resource."
 					:action-label="page.can_create ? 'Add Record' : ''"
 					@action="openEditor()"
 				/>
@@ -112,6 +148,23 @@
 										</span>
 									</td>
 									<td class="vetedge-resource-row-actions" data-label="Actions">
+										<button
+											v-if="isPatients && row._registration_action?.label"
+											type="button"
+											class="edge-button edge-button--compact"
+											:class="registrationActionClass(row)"
+											@click="openRegistrationBilling(row)"
+										>
+											{{ row._registration_action.label }}
+										</button>
+										<button
+											v-if="isPatients"
+											type="button"
+											class="edge-button edge-button--compact"
+											@click="openNewLabOrder(row)"
+										>
+											New Lab Order
+										</button>
 										<button
 											v-if="canEditRow(row)"
 											type="button"
@@ -139,12 +192,8 @@
 					<footer class="vetedge-resource-pagination">
 						<span>Showing {{ firstVisible }}–{{ lastVisible }} of {{ page.total }}</span>
 						<div>
-							<button type="button" class="edge-button edge-button--compact" :disabled="!hasPrevious || loading" @click="previousPage">
-								Previous
-							</button>
-							<button type="button" class="edge-button edge-button--compact" :disabled="!hasNext || loading" @click="nextPage">
-								Next
-							</button>
+							<button type="button" class="edge-button edge-button--compact" :disabled="!hasPrevious || loading" @click="previousPage">Previous</button>
+							<button type="button" class="edge-button edge-button--compact" :disabled="!hasNext || loading" @click="nextPage">Next</button>
 						</div>
 					</footer>
 				</section>
@@ -166,6 +215,14 @@ const RESOURCE_OPTIONS = Object.freeze([
 	{ value: "kennels", label: "Kennels and Care Locations" },
 ]);
 
+function emptyPatientFilters() {
+	return { default_branch: "", status: "", registration_status: "", species: "" };
+}
+
+function emptyPatientFilterLabels() {
+	return { default_branch: "", species: "" };
+}
+
 export default {
 	name: "VetEdgeResourceCenter",
 	data() {
@@ -178,6 +235,16 @@ export default {
 			resource: RESOURCE_OPTIONS.some((option) => option.value === requested) ? requested : "patients",
 			start: 0,
 			pageLength: 25,
+			patientFilters: {
+				default_branch: parameters.get("branch") || "",
+				status: parameters.get("status") || "",
+				registration_status: parameters.get("registration_status") || "",
+				species: parameters.get("species") || "",
+			},
+			patientFilterLabels: {
+				default_branch: parameters.get("branch") || "",
+				species: parameters.get("species") || "",
+			},
 			page: {
 				title: "Veterinary Resource Center",
 				subtitle: "Permission-safe Veterinary records.",
@@ -198,16 +265,21 @@ export default {
 			return frappe.boot?.edgesuite_ui_identity?.vetedge || frappe.boot?.vetedge_ui_identity || {};
 		},
 		branchName() {
-			return (
-				frappe.boot?.edgesuite_product_menu?.branch ||
-				frappe.defaults?.get_user_default?.("branch") ||
-				"All Branches"
-			);
+			return frappe.boot?.edgesuite_product_menu?.branch || frappe.defaults?.get_user_default?.("branch") || "All Branches";
 		},
 		userName() {
 			const user = frappe.session?.user || "";
 			const info = frappe.boot?.user_info?.[user] || {};
 			return info.fullname || info.full_name || user;
+		},
+		isPatients() {
+			return this.resource === "patients";
+		},
+		patientStatusOptions() {
+			return ["Active", "Inactive", "Deceased"].map((value) => ({ value, label: value }));
+		},
+		registrationStatusOptions() {
+			return ["Registered", "Awaiting Registration Payment", "Registration Paid"].map((value) => ({ value, label: value }));
 		},
 		currentPage() {
 			return Math.floor((this.page.start || 0) / (this.page.page_length || this.pageLength)) + 1;
@@ -242,10 +314,57 @@ export default {
 			if (adapter?.open?.(route) === true) return;
 			window.location.assign(route);
 		},
+		async searchLink(doctype, query) {
+			const response = await frappe.call("frappe.desk.search.search_link", {
+				doctype,
+				txt: String(query || ""),
+				page_length: 20,
+				ignore_user_permissions: 0,
+			});
+			return response.message || [];
+		},
+		searchBranchFilter(query) {
+			return this.searchLink("Branch", query);
+		},
+		searchSpeciesFilter(query) {
+			return this.searchLink("Veterinary Species", query);
+		},
+		normalizeLinkSelection(selection) {
+			if (!selection) return { value: "", label: "" };
+			if (typeof selection === "string") return { value: selection, label: selection };
+			return {
+				value: selection.value || selection.name || selection.id || "",
+				label: selection.label || selection.description || selection.value || selection.name || "",
+			};
+		},
+		onBranchFilterSelect(selection) {
+			const normalized = this.normalizeLinkSelection(selection);
+			this.patientFilters.default_branch = normalized.value;
+			this.patientFilterLabels.default_branch = normalized.label;
+		},
+		clearBranchFilter() {
+			this.patientFilters.default_branch = "";
+			this.patientFilterLabels.default_branch = "";
+		},
+		onSpeciesFilterSelect(selection) {
+			const normalized = this.normalizeLinkSelection(selection);
+			this.patientFilters.species = normalized.value;
+			this.patientFilterLabels.species = normalized.label;
+		},
+		clearSpeciesFilter() {
+			this.patientFilters.species = "";
+			this.patientFilterLabels.species = "";
+		},
 		updateLocation() {
 			const parameters = new URLSearchParams();
 			parameters.set("resource", this.resource);
 			if (this.search) parameters.set("search", this.search);
+			if (this.isPatients) {
+				if (this.patientFilters.default_branch) parameters.set("branch", this.patientFilters.default_branch);
+				if (this.patientFilters.status) parameters.set("status", this.patientFilters.status);
+				if (this.patientFilters.registration_status) parameters.set("registration_status", this.patientFilters.registration_status);
+				if (this.patientFilters.species) parameters.set("species", this.patientFilters.species);
+			}
 			window.history.replaceState({}, "", `${window.location.pathname}?${parameters.toString()}`);
 		},
 		async loadPage() {
@@ -257,8 +376,16 @@ export default {
 					search: this.search,
 					start: this.start,
 					page_length: this.pageLength,
+					default_branch: this.isPatients ? this.patientFilters.default_branch : "",
+					status: this.isPatients ? this.patientFilters.status : "",
+					registration_status: this.isPatients ? this.patientFilters.registration_status : "",
+					species: this.isPatients ? this.patientFilters.species : "",
 				});
 				this.page = response.message || this.page;
+				if (this.isPatients && this.page.context_branch && !this.patientFilters.default_branch) {
+					this.patientFilters.default_branch = this.page.context_branch;
+					this.patientFilterLabels.default_branch = this.page.context_branch;
+				}
 				this.updateLocation();
 			} catch (error) {
 				this.error = error?.message || __("The Veterinary resource could not be loaded.");
@@ -269,6 +396,8 @@ export default {
 		changeResource() {
 			this.start = 0;
 			this.search = "";
+			this.patientFilters = emptyPatientFilters();
+			this.patientFilterLabels = emptyPatientFilterLabels();
 			this.loadPage();
 		},
 		applySearch() {
@@ -277,6 +406,8 @@ export default {
 		},
 		resetSearch() {
 			this.search = "";
+			this.patientFilters = emptyPatientFilters();
+			this.patientFilterLabels = emptyPatientFilterLabels();
 			this.start = 0;
 			this.loadPage();
 		},
@@ -290,23 +421,19 @@ export default {
 		},
 		formatValue(column, value) {
 			if (value === null || value === undefined || value === "") return "—";
-			if (column.fieldname === "docstatus") {
-				return { 0: "Draft", 1: "Submitted", 2: "Cancelled" }[Number(value)] || String(value);
-			}
+			if (column.fieldname === "docstatus") return { 0: "Draft", 1: "Submitted", 2: "Cancelled" }[Number(value)] || String(value);
 			if (column.fieldtype === "Check") return Number(value) ? "Yes" : "No";
-			if (column.fieldtype === "Datetime" && frappe.datetime?.str_to_user) {
-				return frappe.datetime.str_to_user(value);
-			}
-			if (column.fieldtype === "Date" && frappe.datetime?.str_to_user) {
-				return frappe.datetime.str_to_user(value);
-			}
+			if (["Datetime", "Date"].includes(column.fieldtype) && frappe.datetime?.str_to_user) return frappe.datetime.str_to_user(value);
 			return String(value);
 		},
 		cellClass(column, value) {
-			if (column.fieldname === "status" || column.fieldname === "docstatus") {
+			if (["status", "docstatus", "registration_status"].includes(column.fieldname)) {
 				return `vetedge-resource-status status-${String(this.formatValue(column, value)).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 			}
 			return "";
+		},
+		registrationActionClass(row) {
+			return row?._registration_action?.tone === "primary" ? "edge-button--primary" : "";
 		},
 		canEditRow(row) {
 			return Boolean(this.page.can_quick_edit && Number(row.docstatus || 0) === 0);
@@ -315,11 +442,39 @@ export default {
 			return Boolean(this.page.can_delete && Number(row.docstatus || 0) === 0);
 		},
 		openFullList() {
-			if (this.page.full_form_route) window.open(this.page.full_form_route, "_blank", "noopener,noreferrer");
+			if (this.page.full_form_route) this.openRoute(this.page.full_form_route);
 		},
 		openFullRecord(name) {
 			if (!this.page.full_form_route || !name) return;
-			window.open(`${this.page.full_form_route}/${encodeURIComponent(name)}`, "_blank", "noopener,noreferrer");
+			this.openRoute(`${this.page.full_form_route}/${encodeURIComponent(name)}`);
+		},
+		billingFrame(doctype, name) {
+			return {
+				doc: { doctype, name },
+				is_new: () => false,
+				is_dirty: () => false,
+				reload_doc: async () => this.loadPage(),
+			};
+		},
+		openRegistrationBilling(row) {
+			if (!row?.name || !window.vetedgeBillingModal?.open) {
+				frappe.msgprint(__("The shared VetEdge Billing & Payment modal is unavailable. Refresh the page and try again."));
+				return;
+			}
+			window.vetedgeBillingModal.open(this.billingFrame("Veterinary Patient", row.name));
+		},
+		openNewLabOrder(row) {
+			if (!row?.name) return;
+			if (window.VetEdgeLabOrderPickerPatch?.open) {
+				window.VetEdgeLabOrderPickerPatch.open({
+					patient: row.name,
+					patientLabel: row.patient_name || row.name,
+					serviceBranch: row.default_branch || "",
+					onSaved: () => this.loadPage(),
+				});
+				return;
+			}
+			window.VetEdgeClinicalRecordEditor?.create?.("Veterinary Lab Order", () => this.loadPage());
 		},
 		fieldDefinition(field) {
 			return {
@@ -336,16 +491,12 @@ export default {
 		},
 		async openEditor(name = null) {
 			try {
-				const response = await frappe.call("vetedge.services.resource_center.get_resource_editor", {
-					resource: this.resource,
-					name,
-				});
+				const response = await frappe.call("vetedge.services.resource_center.get_resource_editor", { resource: this.resource, name });
 				const schema = response.message || {};
 				if (!schema.can_save) {
 					this.openFullRecord(name);
 					return;
 				}
-
 				const dialog = new frappe.ui.Dialog({
 					title: schema.title || __("Veterinary Record"),
 					fields: (schema.fields || []).map(this.fieldDefinition),
@@ -353,20 +504,12 @@ export default {
 					primary_action: async (values) => {
 						dialog.disable_primary_action();
 						try {
-							await frappe.call("vetedge.services.resource_center.save_resource_record", {
-								resource: this.resource,
-								name,
-								values,
-							});
+							await frappe.call("vetedge.services.resource_center.save_resource_record", { resource: this.resource, name, values });
 							dialog.hide();
 							frappe.show_alert({ message: name ? __("Record updated") : __("Record created"), indicator: "green" });
 							await this.loadPage();
 						} catch (error) {
-							frappe.msgprint({
-								title: __("Unable to save record"),
-								message: error?.message || __("The record could not be saved."),
-								indicator: "red",
-							});
+							frappe.msgprint({ title: __("Unable to save record"), message: error?.message || __("The record could not be saved."), indicator: "red" });
 						} finally {
 							dialog.enable_primary_action();
 						}
@@ -375,11 +518,7 @@ export default {
 				dialog.show();
 				dialog.set_values(schema.values || {});
 			} catch (error) {
-				frappe.msgprint({
-					title: __("Quick editor unavailable"),
-					message: error?.message || __("Use the full ERPNext form for this record."),
-					indicator: "orange",
-				});
+				frappe.msgprint({ title: __("Quick editor unavailable"), message: error?.message || __("Use the full ERPNext form for this record."), indicator: "orange" });
 				if (name) this.openFullRecord(name);
 				else this.openFullList();
 			}
@@ -389,18 +528,11 @@ export default {
 				__("Delete {0}? This is only allowed for an unsubmitted record you have permission to delete.", [row.name]),
 				async () => {
 					try {
-						await frappe.call("vetedge.services.resource_center.delete_resource_record", {
-							resource: this.resource,
-							name: row.name,
-						});
+						await frappe.call("vetedge.services.resource_center.delete_resource_record", { resource: this.resource, name: row.name });
 						frappe.show_alert({ message: __("Record deleted"), indicator: "green" });
 						await this.loadPage();
 					} catch (error) {
-						frappe.msgprint({
-							title: __("Unable to delete record"),
-							message: error?.message || __("The record could not be deleted."),
-							indicator: "red",
-						});
+						frappe.msgprint({ title: __("Unable to delete record"), message: error?.message || __("The record could not be deleted."), indicator: "red" });
 					}
 				}
 			);
@@ -413,8 +545,12 @@ export default {
 .vetedge-resource-filters {
 	display: grid;
 	gap: var(--edge-card-gap, .75rem);
-	grid-template-columns: minmax(12rem, .7fr) minmax(16rem, 1.3fr);
+	grid-template-columns: minmax(12rem, .7fr) minmax(18rem, 1.3fr);
 	width: 100%;
+}
+
+.vetedge-resource-filters.is-patient-filters {
+	grid-template-columns: repeat(3, minmax(12rem, 1fr));
 }
 
 .vetedge-resource-field {
@@ -479,17 +615,12 @@ export default {
 	font-size: 1rem;
 }
 
-.vetedge-resource-table-card {
-	overflow: hidden;
-}
-
-.vetedge-resource-table-scroll {
-	overflow-x: auto;
-}
+.vetedge-resource-table-card { overflow: hidden; }
+.vetedge-resource-table-scroll { overflow-x: auto; }
 
 .vetedge-resource-table {
 	border-collapse: collapse;
-	min-width: 58rem;
+	min-width: 62rem;
 	width: 100%;
 }
 
@@ -513,13 +644,8 @@ export default {
 	white-space: nowrap;
 }
 
-.vetedge-resource-table tbody tr:hover {
-	background: var(--edge-color-brand-50, #eef7ff);
-}
-
-.vetedge-resource-actions-column {
-	min-width: 17rem;
-}
+.vetedge-resource-table tbody tr:hover { background: var(--edge-color-brand-50, #eef7ff); }
+.vetedge-resource-actions-column { min-width: 19rem; }
 
 .vetedge-resource-row-actions,
 .vetedge-resource-pagination,
@@ -562,19 +688,33 @@ export default {
 .status-submitted,
 .status-completed,
 .status-paid,
-.status-active {
+.status-active,
+.status-registration-paid {
 	background: #e8f8f0;
 	color: #137a50;
 }
 
+.status-awaiting-registration-payment,
+.status-draft,
+.status-partly-paid {
+	background: #fff8e6;
+	color: #8a5a00;
+}
+
 .status-cancelled,
-.status-closed {
+.status-closed,
+.status-deceased {
 	background: #fef3f2;
 	color: #b42318;
 }
 
+@media (max-width: 74rem) {
+	.vetedge-resource-filters.is-patient-filters { grid-template-columns: repeat(2, minmax(12rem, 1fr)); }
+}
+
 @media (max-width: 47.99rem) {
 	.vetedge-resource-filters,
+	.vetedge-resource-filters.is-patient-filters,
 	.vetedge-resource-summary {
 		grid-template-columns: minmax(0, 1fr);
 	}
