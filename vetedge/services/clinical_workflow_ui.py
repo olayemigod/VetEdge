@@ -4,6 +4,7 @@ from typing import Any
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from vetedge.services.portal_access import require_internal_user
 
@@ -82,18 +83,32 @@ def _lab_review_is_required_and_pending(doc) -> bool:
 
 
 def _lab_completion_gate(doc) -> tuple[bool, str]:
+    from vetedge.services.lab import lab_order_has_billable_items, use_billing_core_for_lab_order
+
     if _lab_review_is_required_and_pending(doc):
         return False, _("Review all required Lab Test results before completing this Lab Order.")
-    try:
-        from vetedge.services.billing_core import get_source_payment_gate_status
+    if not lab_order_has_billable_items(doc):
+        return True, ""
 
-        gate = get_source_payment_gate_status(doc.doctype, doc.name)
-        if gate and not gate.get("can_proceed"):
-            return False, gate.get("message") or _("Complete the required Billing & Payment step before closing this Lab Order.")
-    except Exception as error:
-        # A missing/unready billing session is a workflow blocker, not a reason to
-        # expose an action that will immediately fail at execution time.
-        return False, str(error) or _("Billing & Payment is not ready for completion.")
+    if use_billing_core_for_lab_order() and doc.get("name"):
+        try:
+            from vetedge.services.billing_core import get_source_payment_gate_status
+
+            gate = get_source_payment_gate_status(doc.doctype, doc.name)
+            if gate and not gate.get("can_proceed"):
+                return False, gate.get("message") or _(
+                    "Complete the required Billing & Payment step before closing this Lab Order."
+                )
+            return True, ""
+        except Exception as error:
+            return False, str(error) or _("Billing & Payment is not ready for completion.")
+
+    invoice_name = doc.get("linked_invoice")
+    if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+        return False, _("Create a Sales Invoice before completing this Lab Order.")
+    docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
+    if docstatus != 1:
+        return False, _("Submit the linked Sales Invoice before completing this Lab Order.")
     return True, ""
 
 
