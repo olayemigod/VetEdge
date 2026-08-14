@@ -14,6 +14,7 @@
 	let observedRoot = null;
 	let observer = null;
 	let patientHydrationScheduled = false;
+	let decorationScheduled = false;
 
 	function currentResource() {
 		return new URLSearchParams(window.location.search || "").get("resource") || "patients";
@@ -33,16 +34,19 @@
 	function decorateCreateAction(root, resource, doctype) {
 		const host = root.querySelector(".edge-page-header__actions");
 		if (!host) return;
+		const label = CREATE_LABELS[resource] || "New Record";
 		const existing = host.querySelector("[data-edge-clinical-create]");
 		if (existing) {
-			existing.textContent = CREATE_LABELS[resource] || "New Record";
+			// Do not rewrite identical text: textContent replacement is itself a
+			// childList mutation and previously created an observer feedback loop.
+			if (String(existing.textContent || "").trim() !== label) existing.textContent = label;
 			return;
 		}
 		const button = document.createElement("button");
 		button.type = "button";
 		button.className = "edge-button edge-button--primary";
 		button.dataset.edgeClinicalCreate = "1";
-		button.textContent = CREATE_LABELS[resource] || "New Record";
+		button.textContent = label;
 		button.addEventListener("click", () => {
 			window.VetEdgeClinicalRecordEditor?.create?.(doctype, () => refreshResourceCenter(root));
 		});
@@ -113,13 +117,31 @@
 		schedulePatientHydration(root);
 	}
 
+	function isBridgeOwnedNode(node) {
+		if (!node) return false;
+		const element = node.nodeType === 1 ? node : node.parentElement;
+		return Boolean(
+			element?.closest?.("[data-edge-clinical-create], [data-edge-clinical-editor], td[data-patient-id]")
+		);
+	}
+
 	function mutationNeedsDecoration(record) {
 		if (record.type !== "childList") return false;
-		const target = record.target?.nodeType === 1 ? record.target : record.target?.parentElement;
-		// Patient display-name hydration changes only the text node inside a cell.
-		// Ignore that mutation so the bridge never schedules itself forever.
-		if (target?.matches?.("td[data-patient-id]")) return false;
-		return Boolean(record.addedNodes?.length || record.removedNodes?.length);
+		if (isBridgeOwnedNode(record.target)) return false;
+		const changedNodes = [...(record.addedNodes || []), ...(record.removedNodes || [])];
+		if (!changedNodes.length) return false;
+		// Ignore mutations composed entirely of controls/text inserted by this bridge.
+		if (changedNodes.every(isBridgeOwnedNode)) return false;
+		return true;
+	}
+
+	function scheduleDecoration(root) {
+		if (decorationScheduled) return;
+		decorationScheduled = true;
+		window.requestAnimationFrame(() => {
+			decorationScheduled = false;
+			if (root === observedRoot || root?.isConnected) decorate(root);
+		});
 	}
 
 	function install(explicitRoot = null) {
@@ -130,13 +152,13 @@
 		observer?.disconnect?.();
 		observedRoot = root;
 		observer = new MutationObserver((records) => {
-			if (records.some(mutationNeedsDecoration)) decorate(root);
+			if (records.some(mutationNeedsDecoration)) scheduleDecoration(root);
 		});
 		observer.observe(root, { childList: true, subtree: true });
 		return true;
 	}
 
 	window.VetEdgeResourceClinicalBridge = { install };
-	window.addEventListener("popstate", () => observedRoot && decorate(observedRoot));
+	window.addEventListener("popstate", () => observedRoot && scheduleDecoration(observedRoot));
 	window.setTimeout(install, 0);
 })();
