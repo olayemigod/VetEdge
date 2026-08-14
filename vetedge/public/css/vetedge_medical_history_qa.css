@@ -1,0 +1,39 @@
+/* Medical History QA readability: use only EdgeSuite semantic theme tokens. */
+.veterinary-medical-history-root .history-patient-card strong,
+.veterinary-medical-history-root .history-summary-card strong,
+.veterinary-medical-history-root .history-card-header h2,
+.veterinary-medical-history-root .history-card h2,
+.veterinary-medical-history-root .history-card h3,
+.veterinary-medical-history-root .history-chart .chart-title,
+.veterinary-medical-history-root .history-chart text {
+	color: var(--edge-color-ink-950) !important;
+	fill: var(--edge-color-ink-950) !important;
+}
+.veterinary-medical-history-root .history-patient-card span,
+.veterinary-medical-history-root .history-summary-card span,
+.veterinary-medical-history-root .history-patient-card small,
+.veterinary-medical-history-root .history-card-header p,
+.veterinary-medical-history-root .history-period,
+.veterinary-medical-history-root .history-tab,
+.veterinary-medical-history-root .history-chart .chart-label,
+.veterinary-medical-history-root .history-chart .dataset-units {
+	color: var(--edge-color-ink-700) !important;
+	fill: var(--edge-color-ink-700) !important;
+}
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-patient-card,
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-summary-card,
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-card,
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-tab,
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-period {
+	background: var(--edge-color-surface) !important;
+	border-color: var(--edge-color-border) !important;
+}
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-tab.is-active {
+	background: color-mix(in srgb, var(--edge-color-brand-600) 20%, var(--edge-color-surface)) !important;
+	border-color: var(--edge-color-brand-500) !important;
+	color: var(--edge-color-ink-950) !important;
+}
+:root[data-edge-appearance="dark"] .veterinary-medical-history-root .history-chart .graph-svg-tip {
+	background: var(--edge-color-surface-soft) !important;
+	color: var(--edge-color-ink-950) !important;
+}
