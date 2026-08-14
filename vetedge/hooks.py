@@ -88,6 +88,7 @@ has_permission = {
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
+	"vetedge.services.billing_modal.get_billing_modal_state": "vetedge.services.billing_state_security.get_billing_modal_state",
 	"vetedge.services.clinical_record_editor.create_clinical_record": "vetedge.services.mutation_security.create_clinical_record",
 	"vetedge.services.clinical_record_editor.save_clinical_record_editor": "vetedge.services.mutation_security.save_clinical_record_editor",
 	"vetedge.services.clinical_record_editor.delete_clinical_record": "vetedge.services.mutation_security.delete_clinical_record",
