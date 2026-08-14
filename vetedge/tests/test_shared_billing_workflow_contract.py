@@ -51,6 +51,19 @@ def test_shared_billing_server_supports_all_billable_service_sources_and_registr
         assert contract in service
 
 
+def test_billing_action_visibility_uses_same_erpnext_permissions_as_mutations():
+    hooks = read(APP / "hooks.py")
+    security = read(APP / "services/billing_state_security.py")
+
+    assert "billing_state_security.get_billing_modal_state" in hooks
+    assert 'frappe.has_permission("Sales Invoice", "submit", doc=invoice)' in security
+    assert 'frappe.has_permission("Payment Entry", "create")' in security
+    assert 'frappe.has_permission("Payment Entry", "submit")' in security
+    assert "can_submit_invoice" in security
+    assert "can_pay_outstanding" in security
+    assert "patient_outstanding_context" in security
+
+
 def test_registration_has_standalone_shared_billing_and_payment_path():
     registration = read(APP / "services/registration_billing.py")
     patient_form = read(APP / "veterinary/doctype/veterinary_patient/veterinary_patient.js")
@@ -75,6 +88,7 @@ def test_registration_has_standalone_shared_billing_and_payment_path():
 
 def test_lab_order_creation_uses_dropdown_picker_without_losing_multi_test_orders():
     picker = read(APP / "public/js/vetedge_lab_order_picker_patch.js")
+    workspace = read(APP / "public/js/vetedge_clinical_workspace.bundle.js")
     editor = read(APP / "services/clinical_record_editor.py")
     lab = read(APP / "services/lab.py")
 
@@ -86,6 +100,9 @@ def test_lab_order_creation_uses_dropdown_picker_without_losing_multi_test_order
         "Remove",
     ):
         assert contract in picker
+    assert "Select tests one at a time from the dropdown" in workspace
+    assert "Selected Lab Tests" in workspace
+    assert "lab_test_picker" in workspace
     assert '"fieldname": "lab_tests"' in editor
     assert "create_standalone_lab_order" in editor
     assert "normalize_lab_tests_payload" in lab
@@ -119,6 +136,27 @@ def test_lab_workflow_permissions_result_formats_and_completion_gate_remain_serv
         "get_payment_gate_status",
     ):
         assert contract in lab
+
+
+def test_edgesuite_clinical_workflow_actions_are_server_preflighted_and_not_status_edits():
+    workflow = read(APP / "services/clinical_workflow_ui.py")
+    editor = read(APP / "public/js/vetedge_clinical_record_editor.bundle.js")
+
+    for contract in (
+        "get_clinical_workflow_actions",
+        "VALID_LAB_ORDER_STATUS_TRANSITIONS",
+        "can_request_lab_tests",
+        "can_enter_lab_results",
+        "can_review_lab_results",
+        "can_administer_vaccine",
+        "Administer Vaccination",
+        "Complete Lab Order",
+    ):
+        assert contract in workflow
+    assert "clinical_workflow_ui.get_clinical_workflow_actions" in editor
+    assert "runWorkflowAction" in editor
+    assert "Workflow action blocked" in editor
+    assert 'fieldname: "status"' not in editor
 
 
 def test_draft_price_sync_and_submitted_invoice_locks_are_preserved():
