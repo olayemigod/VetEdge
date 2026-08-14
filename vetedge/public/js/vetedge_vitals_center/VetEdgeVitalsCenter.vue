@@ -5,7 +5,7 @@
 		:tenant-name="identity.tenant_name || ''"
 		:branch-name="branchName"
 		:user-name="userName"
-		active-route="/desk/veterinary-vital-signs"
+		active-route="/desk/vetedge-vitals-center"
 		@navigate="openRoute"
 	>
 		<EdgePageLayout>
@@ -13,9 +13,9 @@
 				<EdgePageHeader
 					eyebrow="Clinical Operations"
 					title="Vital Signs"
-					subtitle="Review recorded patient vitals and update safe clinical measurements without leaving EdgeSuite."
-					action-label="Refresh"
-					@action="load"
+					subtitle="Create, review and safely maintain patient vitals without leaving EdgeSuite."
+					action-label="New Vital Signs"
+					@action="createRecord"
 				/>
 			</template>
 
@@ -24,11 +24,11 @@
 					<div class="vitals-filter-grid">
 						<EdgeLinkField
 							:model-value="filters.patient"
-							:selected-label="filters.patient"
+							:selected-label="patientLabel"
 							label="Veterinary Patient"
 							placeholder="All patients"
 							:searcher="(query) => searchLink('Veterinary Patient', query)"
-							@update:model-value="(value) => filters.patient = value || ''"
+							@update:model-value="selectPatient"
 						/>
 						<EdgeLinkField
 							:model-value="filters.branch"
@@ -44,6 +44,7 @@
 					<template #actions>
 						<button type="button" class="edge-button edge-button--primary" :disabled="loading" @click="applyFilters">Apply</button>
 						<button type="button" class="edge-button" :disabled="loading" @click="resetFilters">Reset</button>
+						<button type="button" class="edge-button" :disabled="loading" @click="load">Refresh</button>
 					</template>
 				</EdgeFilterBar>
 			</template>
@@ -60,6 +61,8 @@
 				v-else-if="!rows.length"
 				title="No vital signs found"
 				description="No records match the selected patient, branch and date range."
+				action-label="New Vital Signs"
+				@action="createRecord"
 			/>
 			<EdgeDataTable
 				v-else
@@ -83,9 +86,12 @@
 
 <script>
 const PAGE_LENGTH = 25;
+const SERVER_FIELDS = Object.freeze([
+	"name", "patient", "recorded_on", "temperature", "weight", "heart_rate", "respiratory_rate", "service_branch",
+]);
 const COLUMNS = Object.freeze([
 	{ fieldname: "name", label: "Vital Signs" },
-	{ fieldname: "patient", label: "Patient" },
+	{ fieldname: "patient_name", label: "Patient" },
 	{ fieldname: "recorded_on", label: "Recorded On", fieldtype: "Datetime" },
 	{ fieldname: "temperature", label: "Temperature" },
 	{ fieldname: "weight", label: "Weight" },
@@ -118,6 +124,7 @@ export default {
 			start: 0,
 			pageLength: PAGE_LENGTH,
 			columns: COLUMNS,
+			patientLabels: {},
 			filters: {
 				patient: params.get("patient") || "",
 				branch: params.get("branch") || "",
@@ -130,6 +137,7 @@ export default {
 	computed: {
 		identity() { return frappe.boot?.edgesuite_ui_identity?.vetedge || frappe.boot?.vetedge_ui_identity || {}; },
 		branchName() { return this.filters.branch || frappe.boot?.edgesuite_product_menu?.branch || frappe.defaults?.get_user_default?.("branch") || "All Branches"; },
+		patientLabel() { return this.patientLabels[this.filters.patient] || this.filters.patient || ""; },
 		userName() {
 			const user = frappe.session?.user || "";
 			const info = frappe.boot?.user_info?.[user] || {};
@@ -144,6 +152,7 @@ export default {
 		rangeLabel() { return `${this.filters.from_date || "Any"} → ${this.filters.to_date || "Any"}`; },
 	},
 	async mounted() {
+		if (this.filters.patient) await this.resolvePatientLabels([this.filters.patient]);
 		await this.load();
 		if (this.requestedName) {
 			window.setTimeout(() => this.openRecord({ name: this.requestedName }), 0);
@@ -163,6 +172,12 @@ export default {
 			}
 			return filters;
 		},
+		async resolvePatientLabels(names) {
+			const missing = [...new Set((names || []).filter(Boolean))].filter((name) => !this.patientLabels[name]);
+			if (!missing.length) return;
+			const response = await frappe.call("vetedge.services.display_names.get_patient_labels", { names: missing });
+			this.patientLabels = { ...this.patientLabels, ...(response.message || {}) };
+		},
 		async load() {
 			if (this.loading) return;
 			this.loading = true;
@@ -172,7 +187,7 @@ export default {
 				const [listResponse, countResponse] = await Promise.all([
 					frappe.call("frappe.client.get_list", {
 						doctype: "Veterinary Vital Signs",
-						fields: COLUMNS.map((column) => column.fieldname),
+						fields: SERVER_FIELDS,
 						filters,
 						order_by: "recorded_on desc",
 						limit_start: this.start,
@@ -183,7 +198,9 @@ export default {
 						filters,
 					}),
 				]);
-				this.rows = listResponse.message || [];
+				const rawRows = listResponse.message || [];
+				await this.resolvePatientLabels(rawRows.map((row) => row.patient));
+				this.rows = rawRows.map((row) => ({ ...row, patient_name: this.patientLabels[row.patient] || row.patient || "—" }));
 				this.total = Number(countResponse.message || 0);
 				this.updateLocation();
 			} catch (error) {
@@ -205,7 +222,21 @@ export default {
 		nextPage() { if (this.hasNext) { this.start += this.pageLength; this.load(); } },
 		async searchLink(doctype, query) {
 			const response = await frappe.call("frappe.desk.search.search_link", { doctype, txt: query || "", page_length: 20, ignore_user_permissions: 0 });
-			return response.message || [];
+			const options = response.message || [];
+			if (doctype === "Veterinary Patient") {
+				const labels = { ...this.patientLabels };
+				for (const option of options) {
+					if (option?.value) labels[option.value] = option.label || option.description || option.value;
+				}
+				this.patientLabels = labels;
+			}
+			return options;
+		},
+		selectPatient(value) {
+			this.filters.patient = value || "";
+		},
+		createRecord() {
+			window.VetEdgeClinicalRecordEditor?.create?.("Veterinary Vital Signs", () => this.load());
 		},
 		openRecord(row) {
 			const name = row?.name;
