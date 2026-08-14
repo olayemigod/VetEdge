@@ -7,6 +7,7 @@ const API = Object.freeze({
 	labResult: "vetedge.services.clinical_record_editor.get_lab_result_editor",
 	saveLabResult: "vetedge.services.clinical_record_editor.save_lab_result_editor",
 	saveLabRate: "vetedge.services.clinical_record_editor.save_lab_test_rate",
+	workflow: "vetedge.services.clinical_workflow_ui.get_clinical_workflow_actions",
 });
 
 const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message || {});
@@ -222,11 +223,17 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 		loadingMessage: __("Loading clinical record..."),
 	});
 	let schema = {};
+	let workflow = { actions: [], message: "" };
 
 	const load = async () => {
 		modal.update({ loading: true, busy: false, error: "" });
 		try {
-			schema = await call(API.get, { doctype, name });
+			const [recordSchema, workflowSchema] = await Promise.all([
+				call(API.get, { doctype, name }),
+				call(API.workflow, { doctype, name }),
+			]);
+			schema = recordSchema || {};
+			workflow = workflowSchema || { actions: [], message: "" };
 			const values = valuesFromFields(schema.fields || []);
 			const context = {
 				openLabResult: (row) => openLabResult(row),
@@ -259,6 +266,15 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 					onClick: () => window.vetedgeBillingModal.open(billingFrame(doctype, name, load)),
 				});
 			}
+			for (const workflowAction of workflow.actions || []) {
+				actions.push({
+					label: workflowAction.label,
+					primary: Boolean(workflowAction.primary),
+					danger: Boolean(workflowAction.danger),
+					closeOnSuccess: false,
+					onClick: () => runWorkflowAction(workflowAction),
+				});
+			}
 			if (schema.can_delete) {
 				actions.push({ label: __("Delete"), danger: true, closeOnSuccess: false, onClick: () => confirmDelete() });
 			}
@@ -277,6 +293,7 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 				],
 				message: [
 					billingMessage,
+					workflow.message,
 					schema.can_save
 						? __("Edit the permitted fields below. Workflow, submitted billing and stock protections remain server-enforced.")
 						: __("This record is read-only for its current permission, workflow or billing state."),
@@ -295,6 +312,49 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 				onRetry: load,
 			});
 		}
+	};
+
+	const executeWorkflowAction = async (action, confirmationModal = null) => {
+		modal.update({ busy: true, error: "" });
+		confirmationModal?.update?.({ busy: true, error: "" });
+		try {
+			const result = await call(action.method, action.args || {});
+			confirmationModal?.update?.({ busy: false });
+			confirmationModal?.close?.();
+			frappe.show_alert({ message: __("Workflow updated to {0}.", [result.status || action.target_status || action.label]), indicator: "green" });
+			await onSaved?.(result);
+			await load();
+		} catch (error) {
+			modal.update({ busy: false });
+			const payload = {
+				busy: false,
+				error: error?.message || __("The workflow action could not be completed."),
+				errorTitle: __("Workflow action blocked"),
+			};
+			if (confirmationModal) confirmationModal.update(payload);
+			else modal.update(payload);
+		}
+	};
+
+	const runWorkflowAction = async (action) => {
+		if (!action?.method) return;
+		if (!action.confirm) {
+			await executeWorkflowAction(action);
+			return;
+		}
+		const confirmModal = presenter().open({
+			title: action.label,
+			subtitle: name,
+			size: "sm",
+			message: action.confirm,
+			actions: [{
+				label: action.label,
+				primary: !action.danger,
+				danger: Boolean(action.danger),
+				closeOnSuccess: false,
+				onClick: () => executeWorkflowAction(action, confirmModal),
+			}],
+		});
 	};
 
 	const openLabResult = async (row) => {
