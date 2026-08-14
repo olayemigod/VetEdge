@@ -33,6 +33,7 @@ CLINICAL_LOADER = (
 CLINICAL_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
 MODAL_PRESENTER = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_edge_modal_presenter.bundle.js"
 BILLING_EDGE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_billing_edgesuite.bundle.js"
+CANONICAL_BILLING = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "billing_modal.js"
 CLINICAL_WORKFLOW = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workflow_modal.bundle.js"
 CANCELLATION_SERVICE = REPOSITORY_ROOT / "vetedge" / "services" / "consultation_cancellation.py"
 
@@ -93,19 +94,17 @@ def test_stock_expiry_bundle_uses_shared_runtime_without_coreedge():
 	assert "coreedge" not in content.lower()
 
 
-def test_clinical_loader_installs_edgesuite_modal_layers_before_workspace():
+def test_clinical_loader_uses_global_shared_billing_before_workspace():
 	content = CLINICAL_LOADER.read_text(encoding="utf-8")
-	for asset in (
+	for contract in (
 		"vetedge_edge_modal_presenter.bundle.js",
-		"vetedge_billing_edgesuite.bundle.js",
+		"window.vetedgeBillingModal?.open",
 		"vetedge_clinical_workflow_modal.bundle.js",
 		"vetedge_clinical_workspace.bundle.js",
 	):
-		assert asset in content
-	assert content.index("vetedge_edge_modal_presenter.bundle.js") < content.index(
-		"vetedge_billing_edgesuite.bundle.js"
-	)
-	assert content.index("vetedge_billing_edgesuite.bundle.js") < content.index(
+		assert contract in content
+	assert "vetedge_billing_edgesuite.bundle.js" not in content
+	assert content.index("window.vetedgeBillingModal?.open") < content.index(
 		"vetedge_clinical_workspace.bundle.js"
 	)
 	assert content.index("vetedge_clinical_workflow_modal.bundle.js") < content.index(
@@ -143,18 +142,21 @@ def test_clinical_related_service_actions_stay_in_edgesuite_modals():
 	assert 'frappe.set_route("List", doctype)' not in content
 
 
-def test_billing_replaces_native_dialog_with_edgesuite_presenter():
-	content = BILLING_EDGE.read_text(encoding="utf-8")
+def test_billing_uses_one_canonical_shared_renderer_and_compatibility_shim():
+	canonical = CANONICAL_BILLING.read_text(encoding="utf-8")
+	compatibility = BILLING_EDGE.read_text(encoding="utf-8")
 	for contract in (
-		"VetEdgeEdgeModalPresenter",
 		"get_billing_modal_state",
 		"create_or_update_modal_invoice",
 		"submit_modal_invoice",
 		"record_modal_invoice_payment",
 		"window.vetedgeBillingModal",
 	):
-		assert contract in content
-	assert "new frappe.ui.Dialog" not in content
+		assert contract in canonical
+	assert "new frappe.ui.Dialog" in canonical
+	assert "must never replace window.vetedgeBillingModal" in compatibility
+	assert "window.vetedgeBillingModal =" not in compatibility
+	assert "installVetEdgeBillingEdgeSuite" in compatibility
 
 
 def test_completed_consultation_uses_governed_resolution_workflow():
