@@ -5,11 +5,41 @@ import frappe
 from vetedge.services.portal_access import require_internal_user
 
 
+LAB_REDUNDANT_FIELDNAMES = {"status"}
+LAB_HIDE_WHEN_EMPTY_READ_ONLY = {"consultation", "doctor_reviewed_by", "doctor_reviewed_on", "linked_invoice"}
+
+
 def _lab_gate(lab_order: str) -> dict:
     from vetedge.services.lab_payment_workflow import get_lab_service_payment_gate_state
 
     doc = frappe.get_doc("Veterinary Lab Order", lab_order)
     return get_lab_service_payment_gate_state(doc)
+
+
+def _normalize_datetime_value(field: dict) -> None:
+    if field.get("fieldtype") != "Datetime" or not field.get("value"):
+        return
+    value = str(field.get("value"))
+    if " " in value and "T" not in value:
+        value = value.replace(" ", "T", 1)
+    field["value"] = value[:16]
+
+
+def _simplify_lab_fields(state: dict) -> None:
+    fields = []
+    for field in state.get("fields") or []:
+        _normalize_datetime_value(field)
+        fieldname = field.get("fieldname")
+        if fieldname in LAB_REDUNDANT_FIELDNAMES:
+            continue
+        if (
+            fieldname in LAB_HIDE_WHEN_EMPTY_READ_ONLY
+            and field.get("read_only")
+            and field.get("value") in (None, "")
+        ):
+            continue
+        fields.append(field)
+    state["fields"] = fields
 
 
 def _apply_gate_to_lab_sections(state: dict, gate: dict) -> None:
@@ -42,6 +72,7 @@ def get_clinical_record_editor(doctype: str, name: str) -> dict:
     state = original(doctype=doctype, name=name)
     if doctype != "Veterinary Lab Order":
         return state
+    _simplify_lab_fields(state)
     gate = _lab_gate(name)
     state["service_gate"] = gate
     _apply_gate_to_lab_sections(state, gate)
