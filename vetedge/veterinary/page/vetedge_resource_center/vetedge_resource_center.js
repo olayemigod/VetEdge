@@ -20,7 +20,7 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	if (wrapper.vue_app?.refresh) {
 		Promise.resolve(
 			wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS })
-		).catch((error) => {
+		).then(() => window.VetEdgeResourceClinicalBridge?.install?.()).catch((error) => {
 			console.error('Error refreshing Veterinary Resource Center:', error);
 		});
 		return;
@@ -66,7 +66,8 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 			'EdgeDropdown',
 			'EdgeInput',
 			'EdgeTextarea',
-			'EdgeCheckbox'
+			'EdgeCheckbox',
+			'EdgeDataTable'
 		];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
 		if (!runtime?.createEdgeApp || missing.length) {
@@ -90,22 +91,37 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 				return;
 			}
 
-			frappe.require('vetedge_resource_center.bundle.js', () => {
-				if (wrapper.current_visit_id !== visitId) return;
-				if (!window.mountVetEdgeResourceCenter) {
-					showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
-					return;
-				}
+			const mountResourceCenter = () => {
+				frappe.require('vetedge_resource_center.bundle.js', () => {
+					if (wrapper.current_visit_id !== visitId) return;
+					if (!window.mountVetEdgeResourceCenter) {
+						showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
+						return;
+					}
 
-				try {
-					$loading.remove();
-					const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
-						.appendTo(page.body);
-					wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0]);
-				} catch (error) {
-					console.error('Error mounting Veterinary Resource Center:', error);
-					showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
-				}
+					try {
+						$loading.remove();
+						const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
+							.appendTo(page.body);
+						wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0]);
+						frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
+							window.VetEdgeResourceClinicalBridge?.install?.();
+						});
+					} catch (error) {
+						console.error('Error mounting Veterinary Resource Center:', error);
+						showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
+					}
+				});
+			};
+
+			// Lab Orders and Vaccinations use the same EdgeSuite modal presenter and
+			// billing layer as consultations. Load them before the Resource Center so
+			// record rows never fall back to a native-only experience.
+			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+				frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
+					window.installVetEdgeBillingEdgeSuite?.();
+					frappe.require('vetedge_clinical_record_editor.bundle.js', mountResourceCenter);
+				});
 			});
 		};
 
