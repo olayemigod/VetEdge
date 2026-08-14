@@ -45,25 +45,38 @@ def align_patient_registration_state(doc, method: str | None = None) -> None:
     )
 
 
-def align_registration_state_from_invoice(doc, method: str | None = None) -> None:
-    """Re-align linked Patients after invoice lifecycle handlers run.
+def update_registration_status_from_invoice_aligned(doc, method: str | None = None) -> None:
+    """Run canonical registration invoice sync, then correct billable pending state."""
+    from vetedge.services.registration_billing import update_registration_status_from_invoice
 
-    Registration billing clears a cancelled invoice link. A billable registration
-    is still pending after that cancellation, so it must not fall back to the
-    misleading generic Registered state.
-    """
     patients = frappe.get_all(
         "Veterinary Patient",
         filters={"registration_invoice": doc.name},
         pluck="name",
     )
-    if not patients and int(doc.get("docstatus") or 0) == 2:
-        # The primary billing hook may already have cleared registration_invoice.
-        # Search recently modified billable Patients is unsafe and unnecessary;
-        # cancellation callers pass through before the link is cleared in normal
-        # event ordering. If it is already cleared, the row-level action still
-        # derives the pending fee from its branch rule on the next Resource Center load.
-        return
+    update_registration_status_from_invoice(doc, method)
     for patient in patients:
-        patient_doc = frappe.get_doc("Veterinary Patient", patient)
-        align_patient_registration_state(patient_doc, method)
+        if frappe.db.exists("Veterinary Patient", patient):
+            align_patient_registration_state(frappe.get_doc("Veterinary Patient", patient), method)
+
+
+def update_registration_status_from_payment_entry_aligned(doc, method: str | None = None) -> None:
+    """Run canonical Payment Entry sync and re-evaluate linked registrations."""
+    from vetedge.services.registration_billing import update_registration_status_from_payment_entry
+
+    invoice_names = [
+        reference.reference_name
+        for reference in doc.get("references") or []
+        if reference.reference_doctype == "Sales Invoice" and reference.reference_name
+    ]
+    patients = []
+    if invoice_names:
+        patients = frappe.get_all(
+            "Veterinary Patient",
+            filters={"registration_invoice": ["in", invoice_names]},
+            pluck="name",
+        )
+    update_registration_status_from_payment_entry(doc, method)
+    for patient in patients:
+        if frappe.db.exists("Veterinary Patient", patient):
+            align_patient_registration_state(frappe.get_doc("Veterinary Patient", patient), method)
