@@ -20,10 +20,10 @@ function money(value, currency) {
 }
 
 function invoiceStatus(invoice = {}) {
-	if (!invoice.name) return __("No Invoice");
+	if (!invoice.name && !invoice.invoice) return __("No Invoice");
 	if (Number(invoice.docstatus) === 0) return __("Draft");
 	if (Number(invoice.docstatus) === 2) return __("Cancelled");
-	return invoice.payment_status || invoice.status || __("Submitted");
+	return invoice.payment_status || invoice.payment_state || invoice.status || __("Submitted");
 }
 
 function tone(value) {
@@ -36,11 +36,30 @@ function tone(value) {
 
 const historyRows = (state = {}) => state.invoice_history || state.billing_group_invoice_history || state.billing_session?.invoices || [];
 
-function payableRows(state = {}) {
-	const rows = historyRows(state).filter((row) => (row.can_pay_outstanding || row.can_pay) && Number(row.outstanding_amount || 0) > 0);
+function payableRows(state = {}, preferredInvoice = null) {
+	const candidates = [
+		...historyRows(state),
+		...(state.patient_outstanding_context || []),
+	];
+	if (preferredInvoice) candidates.unshift(preferredInvoice);
+
 	const current = state.invoice;
 	const currentCanPay = Boolean(state.actions?.can_record_payment || current?.can_pay_outstanding || current?.can_pay);
-	if (current?.name && Number(current.docstatus) === 1 && Number(current.outstanding_amount || 0) > 0 && currentCanPay && !rows.some((row) => (row.name || row.invoice) === current.name)) rows.unshift(current);
+	if (current?.name && Number(current.docstatus) === 1 && Number(current.outstanding_amount || 0) > 0 && currentCanPay) {
+		candidates.unshift(current);
+	}
+
+	const rows = [];
+	const seen = new Set();
+	for (const row of candidates) {
+		const invoiceName = row?.name || row?.invoice;
+		if (!invoiceName || seen.has(invoiceName)) continue;
+		const preferred = preferredInvoice && invoiceName === (preferredInvoice.name || preferredInvoice.invoice);
+		const canPay = Boolean(row.can_pay_outstanding || row.can_pay || (invoiceName === current?.name && currentCanPay) || preferred);
+		if (!canPay || Number(row.outstanding_amount || 0) <= 0 || Number(row.docstatus ?? 1) !== 1) continue;
+		seen.add(invoiceName);
+		rows.push(row);
+	}
 	return rows;
 }
 
@@ -77,7 +96,7 @@ function invoiceActionGroups(state, rows, controller) {
 		const canSubmit = Boolean(row.can_submit_invoice || (current && state.actions?.can_submit_invoice));
 		const canPay = Number(row.outstanding_amount || 0) > 0 && Boolean(row.can_pay_outstanding || row.can_pay || (current && state.actions?.can_record_payment));
 		const actions = [
-			{ label: __("Open Invoice"), onClick: () => openInvoice(invoiceName) },
+			{ label: Number(row.docstatus) === 0 ? __("Open Draft") : __("Open Invoice"), onClick: () => openInvoice(invoiceName) },
 		];
 		if (canSubmit) actions.push({ label: __("Submit Invoice"), primary: true, onClick: () => controller.submit(invoiceName) });
 		if (canPay) actions.push({ label: __(row.action_label || "Pay Outstanding"), primary: true, onClick: () => controller.payment(row) });
@@ -108,10 +127,11 @@ function sections(state = {}, controller) {
 		rowKey: "name",
 		emptyTitle: __("No invoice items"),
 	});
+
 	const linkedRows = historyRows(state);
 	result.push({
 		title: __("Linked Invoice History"),
-		message: __("All invoices in this VetEdge billing cycle are shown here. Invoice actions are available immediately below the table."),
+		message: __("All invoices in this VetEdge billing cycle are shown here. Each invoice keeps its own applicable action in the same row."),
 		columns: [
 			{ fieldname: "name", label: __("Invoice") },
 			{ fieldname: "status", label: __("Status"), fieldtype: "Status" },
@@ -120,17 +140,18 @@ function sections(state = {}, controller) {
 			{ fieldname: "paid_amount", label: __("Paid") },
 			{ fieldname: "outstanding_amount", label: __("Outstanding") },
 		],
-		rows: linkedRows.map((row) => ({ name: row.name || row.invoice, status: row.payment_status || row.status || (Number(row.docstatus) === 0 ? __("Draft") : __("Submitted")), posting_date: row.posting_date || "", grand_total: money(row.grand_total || row.rounded_total, row.currency), paid_amount: money(row.paid_amount, row.currency), outstanding_amount: money(row.outstanding_amount, row.currency) })),
+		rows: linkedRows.map((row) => ({ name: row.name || row.invoice, status: invoiceStatus(row), posting_date: row.posting_date || "", grand_total: money(row.grand_total || row.rounded_total, row.currency), paid_amount: money(row.paid_amount, row.currency), outstanding_amount: money(row.outstanding_amount, row.currency) })),
 		rowKey: "name",
 		onRowClick: (row) => openInvoice(row?.name),
 		rowActions: invoiceActionGroups(state, linkedRows, controller),
 		emptyTitle: __("No linked invoices"),
 	});
+
 	const patientRows = state.patient_outstanding_context || [];
-	const otherOutstanding = patientRows.map((row) => ({ name: row.name || row.invoice, posting_date: row.posting_date || "", outstanding_amount: money(row.outstanding_amount, row.currency), status: row.payment_status || row.status || __("Outstanding") }));
+	const otherOutstanding = patientRows.map((row) => ({ name: row.name || row.invoice, posting_date: row.posting_date || "", outstanding_amount: money(row.outstanding_amount, row.currency), status: invoiceStatus(row) }));
 	if (otherOutstanding.length) result.push({
 		title: __("Patient Outstanding Context"),
-		message: __("Other patient invoices are shown for context and are not merged into the current billing cycle. Available invoice actions are shown below."),
+		message: __("Other patient invoices remain outside the current billing cycle. Their own Open or Pay Outstanding action is shown in the corresponding row."),
 		columns: [
 			{ fieldname: "name", label: __("Invoice") },
 			{ fieldname: "posting_date", label: __("Posting Date"), fieldtype: "Date" },
@@ -146,12 +167,13 @@ function sections(state = {}, controller) {
 }
 
 function paymentFields(state, invoice) {
-	const payable = payableRows(state);
+	const payable = payableRows(state, invoice);
+	const selectedInvoice = invoice.name || invoice.invoice;
 	return [
 		{
 			fieldname: "invoice", label: __("Invoice"), type: "select", required: true,
 			options: payable.map((row) => ({ value: row.name || row.invoice, label: `${row.name || row.invoice} · ${money(row.outstanding_amount, row.currency)}` })),
-			default: invoice.name || invoice.invoice,
+			default: selectedInvoice,
 			onChange(value, values, modalView) {
 				const selected = payable.find((row) => (row.name || row.invoice) === value);
 				if (selected) modalView.update({ values: { ...values, invoice: value, amount: selected.outstanding_amount || 0 } });
@@ -167,10 +189,17 @@ function paymentFields(state, invoice) {
 }
 
 function openPayment(frm, state, invoice, returnToBilling) {
+	const selectedInvoice = invoice.name || invoice.invoice;
+	const selectedAmount = Number(invoice.outstanding_amount || 0);
+	const outsideCurrentCycle = Boolean(invoice.informational_only || invoice.does_not_satisfy_current_gate);
 	const view = presenter().open({
-		title: __("Record Payment"), subtitle: __("Select a payable invoice in the current billing cycle."), size: "md",
+		title: __("Record Payment"),
+		subtitle: outsideCurrentCycle
+			? __("Record payment for the selected patient invoice. This invoice remains outside the current billing cycle.")
+			: __("Record payment for the selected invoice in the current billing cycle."),
+		size: "md",
 		fields: paymentFields(state, invoice),
-		values: { invoice: invoice.name || invoice.invoice, amount: invoice.outstanding_amount || 0, mode_of_payment: state.payment_modes?.[0] || "", posting_date: frappe.datetime?.get_today?.() || "" },
+		values: { invoice: selectedInvoice, amount: selectedAmount, mode_of_payment: state.payment_modes?.[0] || "", posting_date: frappe.datetime?.get_today?.() || "" },
 		actions: [{ label: __("Submit Payment"), primary: true, async onClick(values) {
 			view.update({ busy: true, error: "" });
 			try {
@@ -191,11 +220,6 @@ function buildSpec(frm, state, controller) {
 	const gate = state.payment_gate || {};
 	const buttons = [];
 	if (actions.can_create_or_update_invoice || actions.can_create_invoice) buttons.push({ label: actions.invoice_action_label || (invoice.name ? __("Update Draft Invoice") : __("Create Invoice")), primary: true, onClick: controller.invoice });
-	if (actions.can_submit_invoice && invoice.name) buttons.push({ label: __("Submit Invoice"), primary: true, onClick: () => controller.submit(invoice.name) });
-	const payable = payableRows(state)[0];
-	if (payable) buttons.push({ label: __("Pay Outstanding"), primary: true, onClick: () => controller.payment(payable) });
-	const openName = actions.open_invoice_name || state.open_invoice_name || invoice.name;
-	if (openName) buttons.push({ label: actions.open_invoice_label || __("Open Invoice"), onClick: () => openInvoice(openName) });
 	return {
 		title: __("Billing & Payment"), subtitle: `${state.source?.doctype || frm.doc.doctype} ${state.source?.name || frm.doc.name}`, size: "xl",
 		metrics: metrics(state),
