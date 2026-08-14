@@ -1,8 +1,10 @@
 (function () {
+	"use strict";
+
 	if (window.__vetedgeResourceClinicalBridgeInstalled) return;
 	window.__vetedgeResourceClinicalBridgeInstalled = true;
 
-	const RESOURCE_DOCTYPES = Object.freeze({
+	const CLINICAL_DOCTYPES = Object.freeze({
 		"lab-orders": "Veterinary Lab Order",
 		vaccinations: "Veterinary Vaccination Record",
 	});
@@ -31,14 +33,21 @@
 		apply?.click?.();
 	}
 
+	function billingFrame(doctype, name, reload) {
+		return {
+			doc: { doctype, name },
+			is_new: () => false,
+			is_dirty: () => false,
+			reload_doc: async () => reload?.(),
+		};
+	}
+
 	function decorateCreateAction(root, resource, doctype) {
 		const host = root.querySelector(".edge-page-header__actions");
 		if (!host) return;
 		const label = CREATE_LABELS[resource] || "New Record";
 		const existing = host.querySelector("[data-edge-clinical-create]");
 		if (existing) {
-			// Do not rewrite identical text: textContent replacement is itself a
-			// childList mutation and previously created an observer feedback loop.
 			if (String(existing.textContent || "").trim() !== label) existing.textContent = label;
 			return;
 		}
@@ -53,9 +62,51 @@
 		host.prepend(button);
 	}
 
+	function decorateClinicalRows(root, doctype) {
+		root.querySelectorAll(".vetedge-resource-table tbody tr").forEach((row) => {
+			const name = recordName(row);
+			const actions = row.querySelector(".vetedge-resource-row-actions");
+			if (!name || !actions || actions.querySelector("[data-edge-clinical-editor]")) return;
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "edge-button edge-button--compact edge-button--primary";
+			button.dataset.edgeClinicalEditor = "1";
+			button.textContent = "View / Edit";
+			button.addEventListener("click", (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				window.VetEdgeClinicalRecordEditor?.open?.({ doctype, name, onSaved: () => refreshResourceCenter(root) });
+			});
+			actions.prepend(button);
+		});
+	}
+
+	function decoratePatientBilling(root) {
+		root.querySelectorAll(".vetedge-resource-table tbody tr").forEach((row) => {
+			const name = recordName(row);
+			const actions = row.querySelector(".vetedge-resource-row-actions");
+			if (!name || !actions || actions.querySelector("[data-edge-registration-billing]")) return;
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "edge-button edge-button--compact edge-button--primary";
+			button.dataset.edgeRegistrationBilling = "1";
+			button.textContent = __("Registration Billing / Payment");
+			button.addEventListener("click", (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				if (!window.vetedgeBillingModal?.open) {
+					frappe.msgprint(__("The shared VetEdge Billing & Payment modal is unavailable. Refresh the page and try again."));
+					return;
+				}
+				window.vetedgeBillingModal.open(billingFrame("Veterinary Patient", name, () => refreshResourceCenter(root)));
+			});
+			actions.prepend(button);
+		});
+	}
+
 	async function hydratePatientCells(root) {
 		patientHydrationScheduled = false;
-		if (!root || !RESOURCE_DOCTYPES[currentResource()]) return;
+		if (!root || !CLINICAL_DOCTYPES[currentResource()]) return;
 		const headings = [...root.querySelectorAll(".vetedge-resource-table thead th")];
 		const patientIndex = headings.findIndex((heading) => String(heading.textContent || "").trim().toLowerCase() === "patient");
 		if (patientIndex < 0) return;
@@ -81,9 +132,7 @@
 		for (const cell of cells) {
 			const raw = cell.dataset.patientId;
 			const label = raw ? patientLabels.get(raw) : "";
-			if (label && String(cell.textContent || "").trim() !== String(label)) {
-				cell.textContent = label;
-			}
+			if (label && String(cell.textContent || "").trim() !== String(label)) cell.textContent = label;
 		}
 	}
 
@@ -94,45 +143,31 @@
 	}
 
 	function decorate(root) {
+		if (!root) return;
 		const resource = currentResource();
-		const doctype = RESOURCE_DOCTYPES[resource];
-		if (!doctype || !root) return;
-		decorateCreateAction(root, resource, doctype);
-		root.querySelectorAll(".vetedge-resource-table tbody tr").forEach((row) => {
-			const name = recordName(row);
-			const actions = row.querySelector(".vetedge-resource-row-actions");
-			if (!name || !actions || actions.querySelector("[data-edge-clinical-editor]")) return;
-			const button = document.createElement("button");
-			button.type = "button";
-			button.className = "edge-button edge-button--compact edge-button--primary";
-			button.dataset.edgeClinicalEditor = "1";
-			button.textContent = "View / Edit";
-			button.addEventListener("click", (event) => {
-				event.preventDefault();
-				event.stopPropagation();
-				window.VetEdgeClinicalRecordEditor?.open?.({ doctype, name, onSaved: () => refreshResourceCenter(root) });
-			});
-			actions.prepend(button);
-		});
-		schedulePatientHydration(root);
+		const doctype = CLINICAL_DOCTYPES[resource];
+		if (doctype) {
+			decorateCreateAction(root, resource, doctype);
+			decorateClinicalRows(root, doctype);
+			schedulePatientHydration(root);
+		}
+		if (resource === "patients") decoratePatientBilling(root);
 	}
 
 	function isBridgeOwnedNode(node) {
-		if (!node) return false;
-		const element = node.nodeType === 1 ? node : node.parentElement;
-		return Boolean(
-			element?.closest?.("[data-edge-clinical-create], [data-edge-clinical-editor], td[data-patient-id]")
-		);
+		const element = node?.nodeType === 1 ? node : node?.parentElement;
+		if (!element) return false;
+		return Boolean(element.closest?.(
+			"[data-edge-clinical-create], [data-edge-clinical-editor], [data-edge-registration-billing], td[data-patient-id]"
+		));
 	}
 
 	function mutationNeedsDecoration(record) {
 		if (record.type !== "childList") return false;
 		if (isBridgeOwnedNode(record.target)) return false;
-		const changedNodes = [...(record.addedNodes || []), ...(record.removedNodes || [])];
-		if (!changedNodes.length) return false;
-		// Ignore mutations composed entirely of controls/text inserted by this bridge.
-		if (changedNodes.every(isBridgeOwnedNode)) return false;
-		return true;
+		const changed = [...(record.addedNodes || []), ...(record.removedNodes || [])];
+		if (!changed.length) return false;
+		return changed.some((node) => !isBridgeOwnedNode(node));
 	}
 
 	function scheduleDecoration(root) {
@@ -140,7 +175,7 @@
 		decorationScheduled = true;
 		window.requestAnimationFrame(() => {
 			decorationScheduled = false;
-			if (root === observedRoot || root?.isConnected) decorate(root);
+			decorate(root);
 		});
 	}
 
