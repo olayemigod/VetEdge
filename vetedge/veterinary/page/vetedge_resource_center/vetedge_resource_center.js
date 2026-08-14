@@ -91,37 +91,39 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 				return;
 			}
 
-			const mountResourceCenter = () => {
-				frappe.require('vetedge_resource_center.bundle.js', () => {
-					if (wrapper.current_visit_id !== visitId) return;
-					if (!window.mountVetEdgeResourceCenter) {
-						showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
-						return;
-					}
-
-					try {
-						$loading.remove();
-						const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
-							.appendTo(page.body);
-						wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0]);
-						frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
-							window.VetEdgeResourceClinicalBridge?.install?.();
+			const loadClinicalEnhancements = (root) => {
+				// CRUD, result entry and billing are progressive enhancements. They must
+				// never block the permission-safe Resource Center list from mounting.
+				frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+					frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
+						window.installVetEdgeBillingEdgeSuite?.();
+						frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+							frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
+								if (wrapper.current_visit_id !== visitId) return;
+								window.VetEdgeResourceClinicalBridge?.install?.(root);
+							});
 						});
-					} catch (error) {
-						console.error('Error mounting Veterinary Resource Center:', error);
-						showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
-					}
+					});
 				});
 			};
 
-			// Lab Orders and Vaccinations use the same EdgeSuite modal presenter and
-			// billing layer as consultations. Load them before the Resource Center so
-			// record rows never fall back to a native-only experience.
-			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
-				frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
-					window.installVetEdgeBillingEdgeSuite?.();
-					frappe.require('vetedge_clinical_record_editor.bundle.js', mountResourceCenter);
-				});
+			frappe.require('vetedge_resource_center.bundle.js', () => {
+				if (wrapper.current_visit_id !== visitId) return;
+				if (!window.mountVetEdgeResourceCenter) {
+					showFailure(__('The Veterinary Resource Center product bundle is unavailable.'));
+					return;
+				}
+
+				try {
+					$loading.remove();
+					const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
+						.appendTo(page.body);
+					wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0]);
+					loadClinicalEnhancements(root[0]);
+				} catch (error) {
+					console.error('Error mounting Veterinary Resource Center:', error);
+					showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));
+				}
 			});
 		};
 
