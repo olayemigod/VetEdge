@@ -51,6 +51,9 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 			'EdgeFilterBar',
 			'EdgeLinkField',
 			'EdgeInput',
+			'EdgeDropdown',
+			'EdgeTextarea',
+			'EdgeModal',
 			'EdgeDataTable',
 			'EdgeLoadingState',
 			'EdgeErrorState',
@@ -75,16 +78,32 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 				showFailure(professional?.message || __('The VetEdge professional shell is unavailable.'));
 				return;
 			}
-			frappe.require('veterinary_medical_history.bundle.js', () => {
-				if (wrapper.current_visit_id !== visitId || !window.mountVeterinaryMedicalHistory) return;
-				try {
-					$loading.remove();
-					const root = $('<div class="veterinary-medical-history-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-					wrapper.vue_app = window.mountVeterinaryMedicalHistory(root[0]);
-				} catch (error) {
-					console.error('Error mounting Veterinary Medical History:', error);
-					showFailure(__('Error mounting Veterinary Medical History: {0}', [error.message || String(error)]));
-				}
+
+			const mountHistoryBundle = () => {
+				frappe.require('/assets/vetedge/css/vetedge_medical_history_qa.css', () => {
+					frappe.require('veterinary_medical_history.bundle.js', () => {
+						if (wrapper.current_visit_id !== visitId || !window.mountVeterinaryMedicalHistory) return;
+						frappe.require('/assets/vetedge/js/vetedge_medical_history_qa_patch.js', () => {
+							if (wrapper.current_visit_id !== visitId) return;
+							window.VetEdgeMedicalHistoryQaPatch?.install?.();
+							try {
+								$loading.remove();
+								const root = $('<div class="veterinary-medical-history-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+								wrapper.vue_app = window.mountVeterinaryMedicalHistory(root[0]);
+							} catch (error) {
+								console.error('Error mounting Veterinary Medical History:', error);
+								showFailure(__('Error mounting Veterinary Medical History: {0}', [error.message || String(error)]));
+							}
+						});
+					});
+				});
+			};
+
+			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+				frappe.require('vetedge_billing_edgesuite.bundle.js', () => {
+					window.installVetEdgeBillingEdgeSuite?.();
+					frappe.require('vetedge_clinical_record_editor.bundle.js', mountHistoryBundle);
+				});
 			});
 		};
 
