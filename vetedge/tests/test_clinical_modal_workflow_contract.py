@@ -34,6 +34,23 @@ def test_billing_overlay_is_edgesuite_native():
     assert "window.vetedgeBillingModal = { open: openBilling }" in billing
 
 
+def test_billing_invoice_actions_are_inline_and_payment_is_row_scoped():
+    billing = (ROOT / "vetedge/public/js/vetedge_billing_edgesuite.bundle.js").read_text(encoding="utf-8")
+    presenter = (ROOT / "vetedge/public/js/vetedge_edge_modal_presenter.bundle.js").read_text(encoding="utf-8")
+
+    assert "rowActions: invoiceActionGroups(state, linkedRows, controller)" in billing
+    assert "rowActions: invoiceActionGroups(state, patientRows, controller)" in billing
+    assert "renderInlineActionTable" in presenter
+    assert "vetedge-edge-inline-table__actions" in presenter
+    assert 'h("th", { class: "vetedge-edge-inline-table__action-heading" }, __("Action"))' in presenter
+
+    assert "...(state.patient_outstanding_context || [])" in billing
+    assert "payableRows(state, invoice)" in billing
+    assert "const selectedInvoice = invoice.name || invoice.invoice" in billing
+    assert "amount: selectedAmount" in billing
+    assert "modalView.update({ values: { ...values, invoice: value, amount: selected.outstanding_amount || 0 } })" in billing
+
+
 def test_completed_consultation_has_controlled_workflow_entry():
     workflow = (ROOT / "vetedge/public/js/vetedge_clinical_workflow_modal.bundle.js").read_text(encoding="utf-8")
     assert "Reverse / Resolve Consultation" in workflow
