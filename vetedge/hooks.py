@@ -88,6 +88,13 @@ has_permission = {
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
+	"vetedge.services.clinical_record_editor.create_clinical_record": "vetedge.services.mutation_security.create_clinical_record",
+	"vetedge.services.clinical_record_editor.save_clinical_record_editor": "vetedge.services.mutation_security.save_clinical_record_editor",
+	"vetedge.services.clinical_record_editor.delete_clinical_record": "vetedge.services.mutation_security.delete_clinical_record",
+	"vetedge.services.clinical_record_editor.save_lab_result_editor": "vetedge.services.mutation_security.save_lab_result_editor",
+	"vetedge.services.clinical_record_editor.save_lab_test_rate": "vetedge.services.mutation_security.save_lab_test_rate",
+	"vetedge.services.lab.transition_lab_order_status": "vetedge.services.mutation_security.transition_lab_order_status",
+	"vetedge.services.registration_billing.create_manual_registration_invoice": "vetedge.services.mutation_security.create_manual_registration_invoice",
 }
 
 doc_events = {
