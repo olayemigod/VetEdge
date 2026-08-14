@@ -42,6 +42,10 @@
 		};
 	}
 
+	function removeClinicalCreateAction(root) {
+		root.querySelector("[data-edge-clinical-create]")?.remove?.();
+	}
+
 	function decorateCreateAction(root, resource, doctype) {
 		const host = root.querySelector(".edge-page-header__actions");
 		if (!host) return;
@@ -57,7 +61,10 @@
 		button.dataset.edgeClinicalCreate = "1";
 		button.textContent = label;
 		button.addEventListener("click", () => {
-			window.VetEdgeClinicalRecordEditor?.create?.(doctype, () => refreshResourceCenter(root));
+			const activeResource = currentResource();
+			const activeDoctype = CLINICAL_DOCTYPES[activeResource];
+			if (!activeDoctype) return;
+			window.VetEdgeClinicalRecordEditor?.create?.(activeDoctype, () => refreshResourceCenter(root));
 		});
 		host.prepend(button);
 	}
@@ -150,6 +157,8 @@
 			decorateCreateAction(root, resource, doctype);
 			decorateClinicalRows(root, doctype);
 			schedulePatientHydration(root);
+		} else {
+			removeClinicalCreateAction(root);
 		}
 		if (resource === "patients") decoratePatientBilling(root);
 	}
