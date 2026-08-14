@@ -40,6 +40,8 @@ app_include_js = [
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/billing_modal.js",
+	"/assets/vetedge/js/vetedge_billing_modal_alignment.js?v=20260814-1",
+	"/assets/vetedge/js/vetedge_sidebar_qa_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
 	"/assets/vetedge/js/veterinary_unread_badge.js",
