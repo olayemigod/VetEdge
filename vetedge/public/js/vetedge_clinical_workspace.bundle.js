@@ -84,27 +84,81 @@ async function finishRelatedCreate(view, refreshParent, successMessage) {
 	frappe.show_alert({ message: tr(successMessage), indicator: 'green' });
 }
 
+function selectedLabSection(selected, remove) {
+	return {
+		title: tr('Selected Lab Tests'),
+		message: selected.length ? tr('Each selected test keeps its configured result format, review/upload rules and billing rate.') : tr('Select a Lab Test from the dropdown above. You can add more than one test to this order.'),
+		columns: [
+			{ fieldname: 'label', label: tr('Lab Test') },
+			{ fieldname: 'result_format', label: tr('Report Type') },
+			{ fieldname: 'rate', label: tr('Default Rate') },
+		],
+		rows: selected.map((row) => ({ name: row.value, label: row.label, result_format: row.result_format, rate: row.rate })),
+		rowKey: 'name',
+		rowActions: selected.map((row) => ({ key: row.value, row, actions: [{ label: tr('Remove'), danger: true, onClick: () => remove(row.value) }] })),
+		emptyTitle: tr('No Lab Tests Selected'),
+	};
+}
+
 function openLabOrderModal(view, refreshParent) {
 	const consultation = view.detail.name;
 	const modal = window.VetEdgeEdgeModalPresenter.open({ title: tr('Add Lab Order'), subtitle: consultation, size: 'lg', loading: true, loadingMessage: tr('Loading available laboratory tests...') });
-	call('vetedge.services.lab.get_active_lab_tests_for_picker').then((tests) => {
-		const options = (tests || []).map((row) => ({ value: row.name, label: row.test_name || row.name, description: [row.sample_type, row.linked_item].filter(Boolean).join(' · ') }));
+	let selected = [];
+	let options = [];
+	let values = { lab_test_picker: '', sample_notes: '' };
+
+	const paint = () => {
+		const remove = (value) => {
+			selected = selected.filter((row) => row.value !== value);
+			paint();
+		};
 		modal.update({
 			loading: false,
+			message: tr('Select tests one at a time from the dropdown, like Vaccination selection. Multiple tests can still belong to one Lab Order.'),
 			fields: [
-				{ fieldname: 'lab_tests', label: tr('Laboratory Tests'), type: 'multiselect', required: true, options, emptyMessage: tr('No active laboratory tests are available.') },
-				{ fieldname: 'sample_notes', label: tr('Sample / Clinical Notes'), type: 'textarea', rows: 3 },
+				{
+					fieldname: 'lab_test_picker', label: tr('Lab Test'), type: 'select', options,
+					placeholder: tr('Select a Lab Test'), description: tr('Selecting a test adds it to the order below.'),
+					onChange(value, nextValues) {
+						values = { ...nextValues, lab_test_picker: '' };
+						if (value) {
+							const option = options.find((row) => row.value === value);
+							if (option && !selected.some((row) => row.value === value)) selected.push(option);
+						}
+						paint();
+					},
+				},
+				{
+					fieldname: 'sample_notes', label: tr('Sample / Clinical Notes'), type: 'textarea', rows: 3,
+					onChange(value, nextValues) { values = { ...nextValues, sample_notes: value }; },
+				},
 			],
-			values: { lab_tests: [], sample_notes: '' },
-			actions: [{ label: tr('Create Lab Order'), primary: true, async onClick(values) {
-				if (!(values.lab_tests || []).length) { modal.update({ error: tr('Select at least one laboratory test.'), errorTitle: tr('Laboratory test required') }); return; }
+			values,
+			sections: [selectedLabSection(selected, remove)],
+			actions: [{ label: tr('Create Lab Order'), primary: true, async onClick(nextValues) {
+				if (!selected.length) { modal.update({ error: tr('Select at least one laboratory test.'), errorTitle: tr('Laboratory test required') }); return; }
 				modal.update({ busy: true, error: '' });
 				try {
-					await call('vetedge.services.lab.create_lab_order_from_consultation', { consultation, sample_notes: values.sample_notes || undefined, lab_tests: values.lab_tests.map((name) => ({ lab_test_template: name })) });
+					await call('vetedge.services.lab.create_lab_order_from_consultation', {
+						consultation,
+						sample_notes: nextValues.sample_notes || undefined,
+						lab_tests: selected.map((row) => ({ lab_test_template: row.value })),
+					});
 					await finishRelatedCreate(view, refreshParent, 'Lab order created.');
 				} catch (error) { modal.update({ busy: false, error: error?.message || tr('Lab order could not be created.'), errorTitle: tr('Lab order failed') }); }
 			} }],
 		});
+	};
+
+	call('vetedge.services.lab.get_active_lab_tests_for_picker').then((tests) => {
+		options = (tests || []).map((row) => ({
+			value: row.name,
+			label: row.test_name || row.name,
+			description: [row.result_format, row.sample_type].filter(Boolean).join(' · '),
+			result_format: row.result_format || 'Value Driven',
+			rate: row.default_rate ?? 0,
+		}));
+		paint();
 	}).catch((error) => modal.update({ loading: false, error: error?.message || tr('Laboratory tests could not be loaded.'), errorTitle: tr('Laboratory tests unavailable') }));
 }
 
