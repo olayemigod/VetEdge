@@ -4,7 +4,6 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint
 
 from vetedge.services.portal_access import require_internal_user
 
@@ -82,54 +81,53 @@ def _lab_review_is_required_and_pending(doc) -> bool:
     )
 
 
-def _lab_completion_gate(doc) -> tuple[bool, str]:
-    from vetedge.services.lab import lab_order_has_billable_items, use_billing_core_for_lab_order
+def _lab_payment_gate(doc) -> tuple[bool, str, dict]:
+    from vetedge.services.lab_payment_workflow import get_lab_service_payment_gate_state
 
+    state = get_lab_service_payment_gate_state(doc)
+    return bool(state.get("can_proceed")), str(state.get("message") or ""), state
+
+
+def _lab_completion_gate(doc) -> tuple[bool, str, dict]:
     if _lab_review_is_required_and_pending(doc):
-        return False, _("Review all required Lab Test results before completing this Lab Order.")
-    if not lab_order_has_billable_items(doc):
-        return True, ""
-
-    if use_billing_core_for_lab_order() and doc.get("name"):
-        try:
-            from vetedge.services.billing_core import get_source_payment_gate_status
-
-            gate = get_source_payment_gate_status(doc.doctype, doc.name)
-            if gate and not gate.get("can_proceed"):
-                return False, gate.get("message") or _(
-                    "Complete the required Billing & Payment step before closing this Lab Order."
-                )
-            return True, ""
-        except Exception as error:
-            return False, str(error) or _("Billing & Payment is not ready for completion.")
-
-    invoice_name = doc.get("linked_invoice")
-    if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
-        return False, _("Create a Sales Invoice before completing this Lab Order.")
-    docstatus = cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus"))
-    if docstatus != 1:
-        return False, _("Submit the linked Sales Invoice before completing this Lab Order.")
-    return True, ""
+        return False, _("Review all required Lab Test results before completing this Lab Order."), {}
+    return _lab_payment_gate(doc)
 
 
 def _lab_actions(name: str) -> dict[str, Any]:
     from vetedge.services.lab import LAB_ORDER_DOCTYPE, VALID_LAB_ORDER_STATUS_TRANSITIONS
+    from vetedge.services.lab_payment_workflow import SERVICE_PROGRESS_STATUSES
     from vetedge.services.permissions import can_access_lab_order
 
     can_access_lab_order(frappe.session.user, name, raise_exception=True)
     doc = frappe.get_doc(LAB_ORDER_DOCTYPE, name)
     if not frappe.has_permission(LAB_ORDER_DOCTYPE, "write", doc=doc):
-        return {"status": doc.status, "actions": [], "message": _("This Lab Order is read-only for your current permissions.")}
+        return {
+            "status": doc.status,
+            "actions": [],
+            "message": _("This Lab Order is read-only for your current permissions."),
+            "billing_required": False,
+        }
 
     actions = []
     blockers: list[str] = []
+    payment_state: dict = {}
+    billing_required = False
     valid_targets = VALID_LAB_ORDER_STATUS_TRANSITIONS.get(doc.status, set())
+
     for label, target, primary, danger in LAB_ACTIONS.get(doc.status, []):
         if target not in valid_targets or not _lab_target_permitted(doc, target):
             continue
-        if target == "Completed":
-            ready, reason = _lab_completion_gate(doc)
+
+        if target in SERVICE_PROGRESS_STATUSES:
+            if target == "Completed":
+                ready, reason, gate = _lab_completion_gate(doc)
+            else:
+                ready, reason, gate = _lab_payment_gate(doc)
+            if gate:
+                payment_state = gate
             if not ready:
+                billing_required = bool(gate and not gate.get("can_proceed"))
                 if reason and reason not in blockers:
                     blockers.append(reason)
                 continue
@@ -165,7 +163,7 @@ def _lab_actions(name: str) -> dict[str, Any]:
 
     message_parts = [
         _(
-            "Lab workflow is server-controlled. Result entry, review, billing and completion rules are revalidated when each action runs."
+            "Lab workflow is server-controlled. Ordering may be recorded before payment, but sample collection, processing, result entry, review and completion require the configured Billing & Payment gate."
         )
     ]
     message_parts.extend(blockers)
@@ -173,6 +171,8 @@ def _lab_actions(name: str) -> dict[str, Any]:
         "status": doc.status,
         "actions": actions,
         "message": " ".join(part for part in message_parts if part),
+        "billing_required": billing_required,
+        "payment_gate": payment_state,
     }
 
 
@@ -190,6 +190,7 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
     can_access_branch_data(frappe.session.user, doc.get("service_branch"), raise_exception=True)
 
     actions = []
+    billing_required = False
     message = _(
         "Vaccination administration is a controlled server action. Payment, role/branch and stock gates are rechecked when it runs."
     )
@@ -204,6 +205,7 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
             enforce_vaccination_payment_before_administration(doc, user=frappe.session.user)
         except Exception as error:
             payment_ready = False
+            billing_required = True
             payment_message = str(error) or _("Complete Billing & Payment before administering this vaccination.")
         if payment_ready:
             actions.append(
@@ -225,6 +227,7 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
         "status": doc.status,
         "actions": actions,
         "message": message,
+        "billing_required": billing_required,
     }
 
 
@@ -237,4 +240,4 @@ def get_clinical_workflow_actions(doctype: str, name: str) -> dict[str, Any]:
         return _lab_actions(name)
     if doctype == "Veterinary Vaccination Record":
         return _vaccination_actions(name)
-    return {"status": None, "actions": [], "message": ""}
+    return {"status": None, "actions": [], "message": "", "billing_required": False}
