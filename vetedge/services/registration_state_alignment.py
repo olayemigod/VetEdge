@@ -5,13 +5,7 @@ from frappe.utils import flt
 
 
 def align_patient_registration_state(doc, method: str | None = None) -> None:
-    """Keep Patient registration status aligned with billable registration state.
-
-    The existing registration billing service remains authoritative for invoice
-    creation and payment hooks. This alignment only corrects the semantic gap
-    where manual-invoice registrations or cancelled invoices could otherwise
-    look fully Registered while a configured registration fee is still due.
-    """
+    """Keep Patient registration status aligned with billable registration state."""
     from vetedge.services.registration_billing import (
         AWAITING_PAYMENT_STATUS,
         PAID_STATUS,
@@ -49,3 +43,27 @@ def align_patient_registration_state(doc, method: str | None = None) -> None:
         registration_status=AWAITING_PAYMENT_STATUS,
         registration_fee_amount=rule.registration_fee,
     )
+
+
+def align_registration_state_from_invoice(doc, method: str | None = None) -> None:
+    """Re-align linked Patients after invoice lifecycle handlers run.
+
+    Registration billing clears a cancelled invoice link. A billable registration
+    is still pending after that cancellation, so it must not fall back to the
+    misleading generic Registered state.
+    """
+    patients = frappe.get_all(
+        "Veterinary Patient",
+        filters={"registration_invoice": doc.name},
+        pluck="name",
+    )
+    if not patients and int(doc.get("docstatus") or 0) == 2:
+        # The primary billing hook may already have cleared registration_invoice.
+        # Search recently modified billable Patients is unsafe and unnecessary;
+        # cancellation callers pass through before the link is cleared in normal
+        # event ordering. If it is already cleared, the row-level action still
+        # derives the pending fee from its branch rule on the next Resource Center load.
+        return
+    for patient in patients:
+        patient_doc = frappe.get_doc("Veterinary Patient", patient)
+        align_patient_registration_state(patient_doc, method)
