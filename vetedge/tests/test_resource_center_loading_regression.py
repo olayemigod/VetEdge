@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "vetedge"
 
@@ -30,8 +29,9 @@ def test_resource_center_clinical_bridge_is_idempotent_and_ignores_its_own_mutat
     assert "function isBridgeOwnedNode" in bridge
     assert "data-edge-clinical-create" in bridge
     assert "data-edge-clinical-editor" in bridge
+    assert "data-edge-registration-billing" in bridge
     assert "td[data-patient-id]" in bridge
-    assert "changedNodes.every(isBridgeOwnedNode)" in bridge
+    assert "changed.some((node) => !isBridgeOwnedNode(node))" in bridge
     assert "records.some(mutationNeedsDecoration)" in bridge
     assert "scheduleDecoration(root)" in bridge
     assert 'String(cell.textContent || "").trim() !== String(label)' in bridge
