@@ -65,3 +65,12 @@ def test_resource_center_repeat_navigation_syncs_clinical_filters_and_deep_links
     assert "resourceView.openClinicalCreate?.()" in bundle
     assert "resourceView.openClinicalRecord?.({ name: state.name })" in bundle
     assert "CLINICAL_RESOURCES.has(state.resource)" in bundle
+
+
+def test_resource_center_hides_create_actions_without_create_permission():
+    bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
+
+    assert "if (!this.page?.can_create) return '';" in bundle
+    assert "if (this.resource === 'appointments') return 'New Appointment';" in bundle
+    assert "if (this.resource === 'lab-orders') return 'New Lab Order';" in bundle
+    assert "if (this.resource === 'vaccinations') return 'New Vaccination';" in bundle
