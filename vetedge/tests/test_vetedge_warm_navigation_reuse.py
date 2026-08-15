@@ -138,6 +138,16 @@ def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loadi
         assert "setInterval(" not in content
 
 
+def test_resource_center_patient_consultation_action_uses_shared_spa_navigation():
+    content = read("vetedge/public/js/vetedge_resource_center.bundle.js")
+    start = content.index("\t\t\topenNewConsultation(row) {")
+    end = content.index("\n\t\t\t},", start) + 6
+    block = content[start:end]
+
+    assert "this.openRoute(`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(row.name)}`);" in block
+    assert "window.location.assign" not in block
+
+
 def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation_fallback():
     content = read("vetedge/public/js/vetedge_ui_bridge.js")
     start = content.index("\tfunction openSameTab(route) {")
