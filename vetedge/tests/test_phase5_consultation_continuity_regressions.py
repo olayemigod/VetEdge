@@ -107,3 +107,16 @@ class TestPhase5ConsultationContinuity(TestCase):
         assert 'if source_doctype == "Veterinary Consultation":' in content
         assert "registration_session = find_registration_billing_session_for_consultation(identity)" in content
         assert 'source_doctype == "Veterinary Consultation" and charge_doctype == "Veterinary Patient"' in content
+
+    def test_clinical_patient_link_keeps_id_as_value_and_uses_readable_title(self):
+        content = read(
+            "vetedge/public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue"
+        )
+
+        assert ':model-value="form.patient"' in content
+        assert ':selected-label="form.patient_label"' in content
+        assert 'patient_label: ""' in content
+        assert 'patient_label: values.patient_label || payload?.patient_label || values.patient || ""' in content
+        assert 'this.form.patient_label = context?.patient?.label || context?.patient?.name || value;' in content
+        assert 'active-route="/desk/vetedge-clinical-workspace"' in content
+        assert "/app/vetedge-clinical-workspace" not in content
