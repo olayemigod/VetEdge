@@ -29,6 +29,8 @@ def test_resource_center_source_replaces_legacy_dom_bridges():
     component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     bridge = read(APP / "public/js/vetedge_resource_center_clinical_bridge.js")
     hardening = read(APP / "public/js/vetedge_resource_center_hardening.js")
+    action_alignment = read(APP / "public/js/vetedge_resource_center_action_alignment.js")
+    bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
 
     assert "New Consultation" in component
     assert "New Lab Order" in component
@@ -39,8 +41,27 @@ def test_resource_center_source_replaces_legacy_dom_bridges():
     assert "row?._display?.[column.fieldname]" in component
     assert "page.summary_label || 'Branch Scope'" in component
 
-    assert "Compatibility shim only" in bridge
-    assert "Compatibility shim only" in hardening
-    assert "MutationObserver" not in bridge
-    assert "MutationObserver" not in hardening
+    for compatibility in (bridge, hardening, action_alignment):
+        assert "Compatibility shim only" in compatibility
+        assert "MutationObserver" not in compatibility
     assert "frappe.call = wrapped" not in hardening
+    assert "MutationObserver" not in bundle
+
+
+def test_resource_center_repeat_navigation_syncs_clinical_filters_and_deep_links():
+    bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
+
+    for route_key in (
+        "'patient'",
+        "'service_branch'",
+        "'from_date'",
+        "'to_date'",
+        "'vaccine'",
+        "'lab_test'",
+    ):
+        assert route_key in bundle
+    assert "resourceView.clinicalFilters" in bundle
+    assert "resourceView.clinicalFilterLabels" in bundle
+    assert "resourceView.openClinicalCreate?.()" in bundle
+    assert "resourceView.openClinicalRecord?.({ name: state.name })" in bundle
+    assert "CLINICAL_RESOURCES.has(state.resource)" in bundle
