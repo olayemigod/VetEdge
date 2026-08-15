@@ -63,9 +63,11 @@ def test_deceased_patient_guard_is_server_side_for_service_doctypes():
     assert 'doc.status = "Active"' in patient
 
 
-def test_vaccination_state_is_workflow_and_billing_aware():
+def test_vaccination_state_is_workflow_billing_and_stock_aware():
     state = read("vetedge/services/clinical_record_state_v2.py")
     alignment = read("vetedge/services/vaccination_state_alignment.py")
+    vaccination = read("vetedge/services/vaccination.py")
+    expiry = read("vetedge/services/expiry_control.py")
     hooks = read("vetedge/hooks.py")
     clinical_bundle = read("vetedge/public/js/vetedge_clinical_workspace.bundle.js")
 
@@ -82,6 +84,12 @@ def test_vaccination_state_is_workflow_and_billing_aware():
         assert fieldname in state
     assert "has_submitted_invoice" in state
     assert 'field["value"] = ""' in state
+    assert 'state["batch_selection_policy"] = "FEFO"' in state
+    assert "Selected automatically from available non-expired vaccine stock" in state
+    assert "allocate_item_batches" in vaccination
+    assert "manual_batch_no=doc.batch_no" in vaccination
+    assert "get_available_valid_batches" in expiry
+    assert "allocate_fefo_batches" in expiry
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
     assert "Administration user/time, batch, stock entry and linked invoice" in clinical_bundle
@@ -106,9 +114,11 @@ def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     assert "VetEdgeLabOrderAddTests?.install?.()" in loader
 
 
-def test_resource_center_removes_generic_readonly_banner_and_adds_filters():
+def test_resource_center_native_source_owns_summary_filters_labels_and_patient_shortcut():
     service = read("vetedge/services/resource_center_v3.py")
-    frontend = read("vetedge/public/js/vetedge_resource_center_hardening.js")
+    component = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    hardening = read("vetedge/public/js/vetedge_resource_center_hardening.js")
+    bridge = read("vetedge/public/js/vetedge_resource_center_clinical_bridge.js")
     clinical_bundle = read("vetedge/public/js/vetedge_clinical_workspace.bundle.js")
 
     assert '"unsupported_required_fields": []' in service
@@ -117,9 +127,27 @@ def test_resource_center_removes_generic_readonly_banner_and_adds_filters():
     assert '"vaccinations"' in service
     for field in ("patient", "service_branch", "status", "from_date", "to_date", "vaccine", "lab_test"):
         assert field in service
-    assert 'querySelector(".vetedge-resource-notice")?.remove?.()' in frontend
-    assert 'setTextIfChanged(button, __("New Consultation"))' in frontend
-    assert "Apply Clinical Filters" in frontend
+        assert field in component
+
+    assert "New Consultation" in component
+    assert "openNewConsultation(row)" in component
+    assert "page.summary_label || 'Branch Scope'" in component
+    assert "row?._display?.[column.fieldname]" in component
+    assert "clinicalStatusOptions" in component
+    assert "New Lab Order" in component
+    assert "New Vaccination" in component
+    assert "View / Edit" in component
+    assert "Full ERPNext form required for create or edit" not in component
+    assert "Use the full ERPNext form for this record" not in component
+    assert "accessLabel" not in component
+    assert ">Access<" not in component
+
+    assert "frappe.call = wrapped" not in hardening
+    assert "MutationObserver" not in hardening
+    assert "MutationObserver" not in bridge
+    assert "Compatibility shim only" in hardening
+    assert "Compatibility shim only" in bridge
+
     assert "params.get('patient')" in clinical_bundle
     assert "this.selectPatient?.(patient)" in clinical_bundle
     assert "/desk/vetedge-clinical-workspace?new=1" in clinical_bundle
