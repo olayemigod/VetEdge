@@ -153,3 +153,14 @@ def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation
     assert "if (current === next) return true;" in block
     assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
     assert "window.location.assign(deskRoute(route));" not in block
+
+
+def test_veterinary_home_redirect_guard_is_transient_for_repeated_spa_visits():
+    content = read("vetedge/veterinary/page/vetedge/vetedge.js")
+
+    assert "if (wrapper.__vetedge_home_redirecting) return;" in content
+    assert "wrapper.__vetedge_home_redirecting = true;" in content
+    assert "const finishRedirect = () => {" in content
+    assert "wrapper.__vetedge_home_redirecting = false;" in content
+    assert 'Promise.resolve(frappe.set_route("vetedge-resource-center")).finally(finishRedirect);' in content
+    assert content.index("wrapper.__vetedge_home_redirecting = false;") > content.index("wrapper.__vetedge_home_redirecting = true;")
