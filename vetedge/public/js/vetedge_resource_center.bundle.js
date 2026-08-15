@@ -11,7 +11,15 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 	'status',
 	'registration_status',
 	'species',
+	'patient',
+	'service_branch',
+	'from_date',
+	'to_date',
+	'vaccine',
+	'lab_test',
 ]);
+
+const CLINICAL_RESOURCES = new Set(['lab-orders', 'vaccinations']);
 
 function getRequestedRouteParams() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -35,6 +43,10 @@ function getRequestedRouteParams() {
 	return params;
 }
 
+function valueFrom(params, key, fallback = '') {
+	return String(params.get(key) ?? fallback ?? '').trim();
+}
+
 export function mountVetEdgeResourceCenter(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
@@ -45,7 +57,7 @@ export function mountVetEdgeResourceCenter(target) {
 	}
 
 	const requestedRoute = getRequestedRouteParams();
-	const requestedName = String(requestedRoute.get('name') || '').trim();
+	const requestedName = valueFrom(requestedRoute, 'name');
 	const requestedNew = requestedRoute.get('new') === '1';
 
 	const flowHost = document.createElement('div');
@@ -57,14 +69,12 @@ export function mountVetEdgeResourceCenter(target) {
 	document.body.appendChild(quickEditorHost);
 
 	let resourceView = null;
-	let syncActionLabels = () => {};
 	let lastRefreshAt = Date.now();
 
 	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
 			lastRefreshAt = Date.now();
-			syncActionLabels();
 		},
 	});
 	const flowView = flowApp.mount(flowHost);
@@ -73,7 +83,6 @@ export function mountVetEdgeResourceCenter(target) {
 		onSaved: async () => {
 			await resourceView?.loadPage?.();
 			lastRefreshAt = Date.now();
-			syncActionLabels();
 		},
 	});
 	const quickEditorView = quickEditorApp.mount(quickEditorHost);
@@ -97,41 +106,40 @@ export function mountVetEdgeResourceCenter(target) {
 	resourceView = app.mount(target);
 
 	const isAppointments = () => resourceView?.resource === 'appointments';
-	const actionButtonSelector = '.edge-page-header__actions button, .edge-state button';
-
-	syncActionLabels = () => {
-		target.querySelectorAll(actionButtonSelector).forEach((button) => {
-			const label = String(button.textContent || '').trim();
-			if (isAppointments() && label === 'Add Record') {
-				button.textContent = 'New Appointment';
-				button.setAttribute('data-vetedge-appointment-action', '1');
-			} else if (!isAppointments() && label === 'New Appointment') {
-				button.textContent = 'Add Record';
-				button.removeAttribute('data-vetedge-appointment-action');
-			}
-		});
-	};
-
-	const interceptAppointmentAction = (event) => {
-		const button = event.target?.closest?.('button');
-		if (!button || !target.contains(button) || !isAppointments()) return;
-		const label = String(button.textContent || '').trim();
-		if (label !== 'Add Record' && label !== 'New Appointment') return;
-		if (button.closest('.vetedge-resource-row-actions')) return;
-		event.preventDefault();
-		event.stopPropagation();
-		event.stopImmediatePropagation?.();
-		flowView?.open?.();
-	};
+	const isClinicalResource = () => CLINICAL_RESOURCES.has(resourceView?.resource);
 
 	const getRequestedState = () => {
 		const params = getRequestedRouteParams();
 		return {
-			resource: String(params.get('resource') || 'patients').trim() || 'patients',
-			search: String(params.get('search') || '').trim(),
-			name: String(params.get('name') || '').trim(),
+			resource: valueFrom(params, 'resource', 'patients') || 'patients',
+			search: valueFrom(params, 'search'),
+			name: valueFrom(params, 'name'),
 			isNew: params.get('new') === '1',
+			branch: valueFrom(params, 'branch'),
+			status: valueFrom(params, 'status'),
+			registrationStatus: valueFrom(params, 'registration_status'),
+			species: valueFrom(params, 'species'),
+			patient: valueFrom(params, 'patient'),
+			serviceBranch: valueFrom(params, 'service_branch') || valueFrom(params, 'branch'),
+			fromDate: valueFrom(params, 'from_date'),
+			toDate: valueFrom(params, 'to_date'),
+			vaccine: valueFrom(params, 'vaccine'),
+			labTest: valueFrom(params, 'lab_test'),
 		};
+	};
+
+	const setField = (targetState, fieldname, value) => {
+		if (!targetState || String(targetState[fieldname] || '') === String(value || '')) return false;
+		targetState[fieldname] = value || '';
+		return true;
+	};
+
+	const setLinkField = (values, labels, fieldname, value) => {
+		const changed = setField(values, fieldname, value);
+		if (labels && (changed || String(labels[fieldname] || '') !== String(value || ''))) {
+			labels[fieldname] = value || '';
+		}
+		return changed;
 	};
 
 	const applyRequestedState = () => {
@@ -150,6 +158,23 @@ export function mountVetEdgeResourceCenter(target) {
 			resourceView.start = 0;
 			routeChanged = true;
 		}
+
+		if (state.resource === 'patients') {
+			routeChanged = setLinkField(resourceView.patientFilters, resourceView.patientFilterLabels, 'default_branch', state.branch) || routeChanged;
+			routeChanged = setField(resourceView.patientFilters, 'status', state.status) || routeChanged;
+			routeChanged = setField(resourceView.patientFilters, 'registration_status', state.registrationStatus) || routeChanged;
+			routeChanged = setLinkField(resourceView.patientFilters, resourceView.patientFilterLabels, 'species', state.species) || routeChanged;
+		} else if (CLINICAL_RESOURCES.has(state.resource)) {
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'patient', state.patient) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'service_branch', state.serviceBranch) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'status', state.status) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'from_date', state.fromDate) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'to_date', state.toDate) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'vaccine', state.vaccine) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'lab_test', state.labTest) || routeChanged;
+		}
+
+		if (routeChanged) resourceView.start = 0;
 		return { routeChanged, state };
 	};
 
@@ -159,16 +184,24 @@ export function mountVetEdgeResourceCenter(target) {
 			flowView?.open?.();
 			return;
 		}
+		if (isClinicalResource()) {
+			if (state.isNew) {
+				resourceView.openClinicalCreate?.();
+				return;
+			}
+			if (state.name) {
+				resourceView.openClinicalRecord?.({ name: state.name });
+				return;
+			}
+		}
 		quickEditorView?.open?.({
 			resource: resourceView.resource,
 			name: state.name || null,
 		});
 	};
 
-	target.addEventListener('click', interceptAppointmentAction, true);
-	const observer = new MutationObserver(syncActionLabels);
-	observer.observe(target, { childList: true, subtree: true });
-	syncActionLabels();
+	// `interceptAppointmentAction` is intentionally retired: the Vue component's
+	// primaryActionLabel/runPrimaryAction path now owns New Appointment directly.
 
 	// Route alignment captures `name` / `new` before the Resource Center normalizes
 	// its list URL so bookmarks, sidebar links and notification deep links can open
@@ -195,15 +228,12 @@ export function mountVetEdgeResourceCenter(target) {
 
 			await resourceView.loadPage?.();
 			lastRefreshAt = Date.now();
-			syncActionLabels();
 			if (hasDeepLink) {
 				window.setTimeout(() => openRequestedEditor(state), 0);
 			}
 			return true;
 		},
 		unmount() {
-			observer.disconnect();
-			target.removeEventListener('click', interceptAppointmentAction, true);
 			app.unmount();
 			flowApp.unmount();
 			quickEditorApp.unmount();
