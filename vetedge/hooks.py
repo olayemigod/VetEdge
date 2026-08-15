@@ -40,9 +40,12 @@ app_include_js = [
 	"/assets/vetedge/js/dashboard_shell.js",
 	"/assets/vetedge/js/invoice_summary_dialog.js",
 	"/assets/vetedge/js/billing_modal.js",
+	"/assets/vetedge/js/vetedge_shared_billing_edgesuite.js?v=20260815-1",
 	"/assets/vetedge/js/vetedge_billing_modal_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/vetedge_billing_modal_layering.js?v=20260814-1",
 	"/assets/vetedge/js/vetedge_resource_center_action_alignment.js?v=20260814-1",
+	"/assets/vetedge/js/vetedge_resource_center_hardening.js?v=20260815-1",
+	"/assets/vetedge/js/vetedge_lab_order_add_tests.js?v=20260815-1",
 	"/assets/vetedge/js/vetedge_sidebar_qa_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
@@ -90,13 +93,15 @@ has_permission = {
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
-	"vetedge.services.resource_center.get_resource_page": "vetedge.services.resource_center_v2.get_resource_page",
-	"vetedge.services.billing_modal.get_billing_modal_state": "vetedge.services.billing_state_security.get_billing_modal_state",
-	"vetedge.services.billing_modal.create_or_update_modal_invoice": "vetedge.services.billing_state_security.create_or_update_modal_invoice",
-	"vetedge.services.billing_modal.submit_modal_invoice": "vetedge.services.billing_state_security.submit_modal_invoice",
-	"vetedge.services.billing_modal.record_modal_invoice_payment": "vetedge.services.billing_state_security.record_modal_invoice_payment",
-	"vetedge.services.clinical_record_editor.get_clinical_record_editor": "vetedge.services.clinical_record_state.get_clinical_record_editor",
-	"vetedge.services.clinical_record_editor.get_lab_result_editor": "vetedge.services.clinical_record_state.get_lab_result_editor",
+	"vetedge.services.resource_center.get_resource_page": "vetedge.services.resource_center_v3.get_resource_page",
+	"vetedge.services.resource_center.get_resource_editor": "vetedge.services.resource_editor_state.get_resource_editor",
+	"vetedge.services.resource_center.save_resource_record": "vetedge.services.resource_editor_state.save_resource_record",
+	"vetedge.services.billing_modal.get_billing_modal_state": "vetedge.services.billing_context_alignment.get_billing_modal_state",
+	"vetedge.services.billing_modal.create_or_update_modal_invoice": "vetedge.services.billing_context_alignment.create_or_update_modal_invoice",
+	"vetedge.services.billing_modal.submit_modal_invoice": "vetedge.services.billing_context_alignment.submit_modal_invoice",
+	"vetedge.services.billing_modal.record_modal_invoice_payment": "vetedge.services.billing_context_alignment.record_modal_invoice_payment",
+	"vetedge.services.clinical_record_editor.get_clinical_record_editor": "vetedge.services.clinical_record_state_v2.get_clinical_record_editor",
+	"vetedge.services.clinical_record_editor.get_lab_result_editor": "vetedge.services.clinical_record_state_v2.get_lab_result_editor",
 	"vetedge.services.clinical_record_editor.create_clinical_record": "vetedge.services.mutation_security.create_clinical_record",
 	"vetedge.services.clinical_record_editor.save_clinical_record_editor": "vetedge.services.mutation_security.save_clinical_record_editor",
 	"vetedge.services.clinical_record_editor.delete_clinical_record": "vetedge.services.mutation_security.delete_clinical_record",
@@ -166,6 +171,7 @@ doc_events = {
 		"after_insert": "vetedge.services.registration_state_alignment.align_patient_registration_state",
 	},
 	"Veterinary Consultation": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
@@ -174,9 +180,11 @@ doc_events = {
 		],
 	},
 	"Veterinary Vital Signs": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": "vetedge.services.clinical_workspace_context.enforce_vitals_consultation_ownership",
 	},
 	"Veterinary Lab Order": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
@@ -184,24 +192,34 @@ doc_events = {
 		],
 	},
 	"Veterinary Vaccination Record": {
+		"before_validate": [
+			"vetedge.services.vaccination_state_alignment.align_vaccination_administration_metadata",
+			"vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		],
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
 		],
 	},
 	"Veterinary Appointment": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
 		],
 	},
+	"Veterinary Hospitalisation": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+	},
 	"Pet Grooming Appointment": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
 		],
 	},
 	"Pet Grooming Session": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
@@ -209,12 +227,15 @@ doc_events = {
 		],
 	},
 	"Pet Boarding Booking": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
 	},
 	"Pet Boarding Stay": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
 	},
 	"Pet Boarding Care Record": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
 		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
 	},
 	"Kennel": {
