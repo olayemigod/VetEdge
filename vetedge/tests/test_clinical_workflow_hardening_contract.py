@@ -35,7 +35,7 @@ def test_patient_quick_editor_normalizes_check_values_and_supports_inline_master
     assert ':creator="field.can_create ? (term) => createLinkedMaster(field, term) : null"' in editor
     assert 'field.fieldname === "species"' in editor
     assert 'this.values.breed = ""' in editor
-    assert 'if (!name and fieldname == "is_deceased")' in state
+    assert 'if not name and fieldname == "is_deceased"' in state
     assert 'payload["is_deceased"] = 0' in state
     for doctype in ("Customer", "Veterinary Species", "Veterinary Breed"):
         assert doctype in inline
@@ -110,7 +110,7 @@ def test_resource_center_removes_generic_readonly_banner_and_adds_filters():
     for field in ("patient", "service_branch", "status", "from_date", "to_date", "vaccine", "lab_test"):
         assert field in service
     assert 'querySelector(".vetedge-resource-notice")?.remove?.()' in frontend
-    assert 'button.textContent = __("New Consultation")' in frontend
+    assert 'setTextIfChanged(button, __("New Consultation"))' in frontend
     assert "Apply Clinical Filters" in frontend
 
 
