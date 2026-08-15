@@ -5,6 +5,57 @@
 	window.__vetedgeBillingModalLayeringInstalled = true;
 
 	const BILLING_TITLES = new Set(["Billing & Payment", "Record Payment"]);
+	const STYLE_ID = "vetedge-shared-billing-compact-style";
+
+	function installCompactBillingStyle() {
+		if (document.getElementById(STYLE_ID)) return;
+		const style = document.createElement("style");
+		style.id = STYLE_ID;
+		style.textContent = `
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table-wrap {
+				overflow-x: auto;
+				max-width: 100%;
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table {
+				width: 100%;
+				border-collapse: collapse;
+				font-size: .82rem;
+				line-height: 1.35;
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table th,
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table td {
+				padding: .48rem .55rem;
+				vertical-align: middle;
+				border-bottom: 1px solid var(--edge-color-border);
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table th {
+				font-size: .72rem;
+				letter-spacing: .02em;
+				color: var(--edge-color-ink-700);
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table td:first-child {
+				font-weight: 650;
+				min-width: 8.5rem;
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table__action-buttons {
+				display: flex;
+				flex-wrap: wrap;
+				gap: .3rem;
+				min-width: 8rem;
+			}
+			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table__action-buttons .edge-button {
+				min-height: 1.9rem;
+				padding: .28rem .5rem;
+				font-size: .76rem;
+			}
+			@media (max-width: 58rem) {
+				.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table {
+					font-size: .76rem;
+				}
+			}
+		`;
+		document.head.appendChild(style);
+	}
 
 	function isVisible(element) {
 		if (!element) return false;
@@ -78,8 +129,9 @@
 		return true;
 	}
 
+	installCompactBillingStyle();
 	wrapSharedModal();
 	window.setTimeout(wrapSharedModal, 0);
 	window.setTimeout(wrapSharedModal, 250);
-	window.VetEdgeBillingModalLayering = { elevateBillingDialogs, wrapSharedModal };
+	window.VetEdgeBillingModalLayering = { elevateBillingDialogs, wrapSharedModal, installCompactBillingStyle };
 })();
