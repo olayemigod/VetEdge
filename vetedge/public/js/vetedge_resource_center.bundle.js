@@ -90,6 +90,16 @@ export function mountVetEdgeResourceCenter(target) {
 	const ResourceCenterRoot = {
 		...VetEdgeResourceCenter,
 		components: { ...runtime.components, ...(VetEdgeResourceCenter.components || {}) },
+		computed: {
+			...(VetEdgeResourceCenter.computed || {}),
+			primaryActionLabel() {
+				if (!this.page?.can_create) return '';
+				if (this.resource === 'appointments') return 'New Appointment';
+				if (this.resource === 'lab-orders') return 'New Lab Order';
+				if (this.resource === 'vaccinations') return 'New Vaccination';
+				return 'Add Record';
+			},
+		},
 		methods: {
 			...(VetEdgeResourceCenter.methods || {}),
 			openEditor(name = null) {
