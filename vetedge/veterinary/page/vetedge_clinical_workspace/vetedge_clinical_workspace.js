@@ -1,3 +1,4 @@
+const VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS = 15000;
 const VETEDGE_CLINICAL_MODAL_STYLE_ID = 'vetedge-clinical-modal-edgesuite-style';
 
 function ensureVetEdgeClinicalModalStyles() {
@@ -7,6 +8,45 @@ function ensureVetEdgeClinicalModalStyles() {
 	link.rel = 'stylesheet';
 	link.href = '/assets/vetedge/css/vetedge_clinical_modal_edgesuite.css?v=20260814-1';
 	document.head.appendChild(link);
+}
+
+function clinicalRouteState() {
+	const params = new URLSearchParams(window.location.search || '');
+	const consultation = String(params.get('consultation') || '').trim();
+	const isNew = params.get('new') === '1';
+	return {
+		consultation,
+		isNew,
+		key: consultation ? `consultation:${consultation}` : isNew ? 'new' : 'list',
+	};
+}
+
+async function refreshMountedClinicalWorkspace(wrapper) {
+	const view = wrapper.vue_app?.view;
+	if (!view) return false;
+
+	const requested = clinicalRouteState();
+	const previousKey = wrapper.clinical_route_key || '';
+	const routeChanged = previousKey !== requested.key;
+	const stale = Date.now() - Number(wrapper.clinical_last_refresh_at || 0) >= VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS;
+
+	// Preserve unsaved clinical work. The existing component owns the discard
+	// confirmation contract when a route-changing action is explicitly taken.
+	if (view.dirty && routeChanged) return true;
+
+	if (routeChanged) {
+		if (requested.consultation) await view.loadDetail?.(requested.consultation);
+		else if (requested.isNew) await view.startNewConsultation?.();
+		else if (view.detail?.open) await view.backToList?.();
+		else await view.refreshList?.();
+	} else if (stale && !view.dirty) {
+		if (view.detail?.open && view.detail?.name) await view.loadDetail?.(view.detail.name);
+		else await view.refreshList?.();
+	}
+
+	wrapper.clinical_route_key = clinicalRouteState().key;
+	wrapper.clinical_last_refresh_at = Date.now();
+	return true;
 }
 
 frappe.pages['vetedge-clinical-workspace'].on_page_load = function(wrapper) {
@@ -19,6 +59,14 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+
+	if (wrapper.vue_app?.view) {
+		Promise.resolve(refreshMountedClinicalWorkspace(wrapper)).catch((error) => {
+			console.error('Error refreshing mounted Veterinary Clinical Workspace:', error);
+		});
+		return;
+	}
+
 	wrapper.clinical_workflow?.destroy?.();
 	wrapper.clinical_workflow = null;
 	wrapper.vue_app?.unmount?.();
@@ -64,6 +112,8 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 								const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
 								wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
 								wrapper.clinical_workflow = window.installVetEdgeClinicalWorkflowModal(root[0], wrapper.vue_app?.view);
+								wrapper.clinical_route_key = clinicalRouteState().key;
+								wrapper.clinical_last_refresh_at = Date.now();
 							} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
 						});
 					});
