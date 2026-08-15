@@ -10,6 +10,14 @@ COMPONENT = (
 	/ "vetedge_resource_center"
 	/ "VetEdgeAppointmentFlow.vue"
 )
+RESOURCE_COMPONENT = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_resource_center"
+	/ "VetEdgeResourceCenter.vue"
+)
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_resource_center.bundle.js"
 LOADER = (
 	ROOT
@@ -115,8 +123,9 @@ def test_appointment_submit_uses_patient_service_branch_and_practitioner():
 	assert "Owner, Patient, Branch, Practitioner" not in content
 
 
-def test_resource_center_exposes_new_appointment_action_and_blocks_generic_editor():
+def test_resource_center_exposes_new_appointment_action_without_dom_interception():
 	bundle = read(BUNDLE)
+	resource_component = read(RESOURCE_COMPONENT)
 	loader = read(LOADER)
 
 	for contract in (
@@ -126,13 +135,22 @@ def test_resource_center_exposes_new_appointment_action_and_blocks_generic_edito
 		"flowHost.remove()",
 		"this.resource === 'appointments'",
 		"flowView?.open?.()",
-		"New Appointment",
-		"interceptAppointmentAction",
+	):
+		assert contract in bundle
+
+	for contract in (
+		'if (this.resource === "appointments") return "New Appointment";',
+		'@action="runPrimaryAction"',
+		"runPrimaryAction()",
+	):
+		assert contract in resource_component
+
+	for retired in (
 		"stopImmediatePropagation",
 		"MutationObserver",
 		"target.addEventListener('click', interceptAppointmentAction, true)",
 	):
-		assert contract in bundle
+		assert retired not in bundle
 
 	assert "EdgeLinkField" in loader
 	assert "EdgeModal" in loader
