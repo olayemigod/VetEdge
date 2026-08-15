@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import frappe
-from frappe import _
 from frappe.utils import cint
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
@@ -41,8 +40,12 @@ def _normalize_patient_schema(state: dict, name: str | None) -> dict:
         if not name and fieldname == "is_deceased":
             continue
         if not name and fieldname == "status":
-            field["options"] = "Active\nInactive"
+            # A newly registered Patient always enters as living/Active. Status
+            # can be changed later by an authorized edit; creation must not
+            # accidentally imply a clinical life-state decision.
+            field["options"] = "Active"
             field["default"] = "Active"
+            field["read_only"] = 1
         if field.get("fieldtype") == "Check":
             value = state.setdefault("values", {}).get(fieldname, field.get("default", 0))
             state["values"][fieldname] = 1 if cint(value) else 0
