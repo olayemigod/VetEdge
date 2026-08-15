@@ -17,7 +17,10 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	if (wrapper.vue_app?.refresh) {
 		Promise.resolve(
 			wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS })
-		).then(() => window.VetEdgeResourceClinicalBridge?.install?.()).catch((error) => {
+		).then(() => {
+			window.VetEdgeResourceClinicalBridge?.install?.();
+			window.VetEdgeLabOrderAddTests?.install?.();
+		}).catch((error) => {
 			console.error('Error refreshing Veterinary Resource Center:', error);
 		});
 		return;
@@ -92,11 +95,13 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 				// that shared modal; it must not install a second billing renderer.
 				frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
 					frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+						window.VetEdgeLabOrderAddTests?.install?.();
 						frappe.require('/assets/vetedge/js/vetedge_lab_order_picker_patch.js', () => {
 							window.VetEdgeLabOrderPickerPatch?.install?.();
 							frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
 								if (wrapper.current_visit_id !== visitId) return;
 								window.VetEdgeResourceClinicalBridge?.install?.(root);
+								window.VetEdgeLabOrderAddTests?.install?.();
 							});
 						});
 					});
