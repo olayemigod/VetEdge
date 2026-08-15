@@ -25,17 +25,22 @@ def test_resource_center_mounts_before_optional_clinical_enhancements():
     assert "must not install a second billing renderer" in loader
 
 
-def test_resource_center_clinical_bridge_is_idempotent_and_ignores_its_own_mutations():
+def test_resource_center_source_replaces_legacy_dom_bridges():
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     bridge = read(APP / "public/js/vetedge_resource_center_clinical_bridge.js")
+    hardening = read(APP / "public/js/vetedge_resource_center_hardening.js")
 
-    assert 'String(existing.textContent || "").trim() !== label' in bridge
-    assert "function isBridgeOwnedNode" in bridge
-    assert "data-edge-clinical-create" in bridge
-    assert "data-edge-clinical-editor" in bridge
-    assert "data-edge-registration-billing" in bridge
-    assert "td[data-patient-id]" in bridge
-    assert "changed.some((node) => !isBridgeOwnedNode(node))" in bridge
-    assert "records.some(mutationNeedsDecoration)" in bridge
-    assert "scheduleDecoration(root)" in bridge
-    assert 'String(cell.textContent || "").trim() !== String(label)' in bridge
-    assert "get_patient_labels" in bridge
+    assert "New Consultation" in component
+    assert "New Lab Order" in component
+    assert "New Vaccination" in component
+    assert "View / Edit" in component
+    assert "clinicalFilters" in component
+    assert "clinicalStatusOptions" in component
+    assert "row?._display?.[column.fieldname]" in component
+    assert "page.summary_label || 'Branch Scope'" in component
+
+    assert "Compatibility shim only" in bridge
+    assert "Compatibility shim only" in hardening
+    assert "MutationObserver" not in bridge
+    assert "MutationObserver" not in hardening
+    assert "frappe.call = wrapped" not in hardening
