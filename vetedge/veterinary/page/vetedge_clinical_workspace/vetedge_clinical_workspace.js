@@ -30,9 +30,10 @@ async function refreshMountedClinicalWorkspace(wrapper) {
 	const routeChanged = previousKey !== requested.key;
 	const stale = Date.now() - Number(wrapper.clinical_last_refresh_at || 0) >= VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS;
 
-	// Preserve unsaved clinical work. The existing component owns the discard
-	// confirmation contract when a route-changing action is explicitly taken.
-	if (view.dirty && routeChanged) return true;
+	if (view.dirty && routeChanged) {
+		const confirmed = await view.confirmDiscard?.();
+		if (!confirmed) return true;
+	}
 
 	if (routeChanged) {
 		if (requested.consultation) await view.loadDetail?.(requested.consultation);
