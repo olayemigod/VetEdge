@@ -17,16 +17,18 @@ def _patient_map(invoice_names: set[str], customer: str | None) -> dict[str, str
     if not invoice_names or not frappe.db.exists("DocType", "Veterinary Billing Session"):
         return {}
 
-    session_fields = ["name", "animal", "current_draft_invoice", "latest_invoice"]
-    filters = {"customer": customer} if customer else {}
+    names = list(invoice_names)
+    session_filters = {"customer": customer} if customer else {}
     sessions = frappe.get_all(
         "Veterinary Billing Session",
-        filters=filters,
-        fields=session_fields,
-        order_by="modified desc",
-        limit_page_length=500,
+        filters=session_filters,
+        or_filters=[
+            ["Veterinary Billing Session", "current_draft_invoice", "in", names],
+            ["Veterinary Billing Session", "latest_invoice", "in", names],
+        ],
+        fields=["name", "animal", "current_draft_invoice", "latest_invoice"],
+        limit_page_length=max(len(names) * 2, 20),
     )
-    patient_by_session = {row.name: str(row.get("animal") or "") for row in sessions}
     mapped: dict[str, str] = {}
     for row in sessions:
         patient = str(row.get("animal") or "")
@@ -45,9 +47,24 @@ def _patient_map(invoice_names: set[str], customer: str | None) -> dict[str, str
             fields=["invoice", "parent", "source_doctype", "source_name"],
             limit_page_length=max(len(unresolved) * 10, 50),
         )
+        parents = list({str(row.get("parent") or "") for row in charges if row.get("parent")})
+        patient_by_session: dict[str, str] = {}
+        if parents:
+            parent_filters: dict = {"name": ["in", parents]}
+            if customer:
+                parent_filters["customer"] = customer
+            patient_by_session = {
+                row.name: str(row.get("animal") or "")
+                for row in frappe.get_all(
+                    "Veterinary Billing Session",
+                    filters=parent_filters,
+                    fields=["name", "animal"],
+                    limit_page_length=len(parents),
+                )
+            }
         for charge in charges:
             invoice = str(charge.get("invoice") or "")
-            patient = patient_by_session.get(charge.get("parent"), "")
+            patient = patient_by_session.get(str(charge.get("parent") or ""), "")
             if not patient and charge.get("source_doctype") == "Veterinary Patient":
                 patient = str(charge.get("source_name") or "")
             if invoice and patient:
