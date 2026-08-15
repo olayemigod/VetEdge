@@ -143,14 +143,15 @@ def test_resource_center_page_uses_edgesuite_shell_and_same_tab_full_forms():
 
 	loader = read(RESOURCE_LOADER)
 	component = read(RESOURCE_COMPONENT)
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
 	assert "edgeui.bundle.js" in loader
 	assert "vetedge_professional_ui.js" in loader
 	assert "vetedge_resource_center.bundle.js" in loader
 	assert loader.index("edgeui.bundle.js") < loader.index("vetedge_resource_center.bundle.js")
 	assert "EdgeAppShell" in component
 	assert "get_resource_page" in component
-	assert "get_resource_editor" in component
-	assert "save_resource_record" in component
+	assert "get_resource_editor" in quick_editor
+	assert "save_resource_record" in quick_editor
 	assert "delete_resource_record" in component
 	assert 'active-route="/desk/vetedge-resource-center"' in component
 	assert '"_blank", "noopener,noreferrer"' not in component
