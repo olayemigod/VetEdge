@@ -82,25 +82,29 @@ def test_clinical_record_editor_is_edgesuite_native_and_full_crud_visible():
     assert "frappe.ui.Dialog" not in bundle
 
 
-def test_resource_center_exposes_create_edit_and_readable_patients_for_lab_and_vaccination():
+def test_resource_center_exposes_native_create_edit_filters_and_readable_patients_for_lab_and_vaccination():
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     bridge = read(APP / "public/js/vetedge_resource_center_clinical_bridge.js")
     loader = read(APP / "veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
-    assert '"lab-orders": "Veterinary Lab Order"' in bridge
-    assert 'vaccinations: "Veterinary Vaccination Record"' in bridge
+
+    assert '"lab-orders": "Veterinary Lab Order"' in component
+    assert 'vaccinations: "Veterinary Vaccination Record"' in component
     for contract in (
         "New Lab Order",
         "New Vaccination",
         "View / Edit",
-        "VetEdgeClinicalRecordEditor",
-        "get_patient_labels",
-        "data-patient-id",
+        "ensureClinicalEditor",
+        "clinicalFilters",
+        "row?._display?.[column.fieldname]",
+        "New Consultation",
     ):
-        assert contract in bridge
+        assert contract in component
+    assert "Compatibility shim only" in bridge
+    assert "MutationObserver" not in bridge
+
     for asset in (
         "vetedge_edge_modal_presenter.bundle.js",
-        "vetedge_billing_edgesuite.bundle.js",
         "vetedge_clinical_record_editor.bundle.js",
-        "vetedge_resource_center_clinical_bridge.js",
     ):
         assert asset in loader
 
