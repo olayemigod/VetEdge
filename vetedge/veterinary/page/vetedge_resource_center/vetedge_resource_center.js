@@ -1,5 +1,15 @@
 const VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS = 15000;
 
+function clearStalePatientCreateRouteOption() {
+	const params = new URLSearchParams(window.location.search || '');
+	const resource = String(params.get('resource') || 'patients').trim() || 'patients';
+	if (resource !== 'patients' || params.get('new') === '1') return;
+	const routeOptions = window.frappe?.route_options;
+	if (routeOptions && String(routeOptions.new || '') === '1') {
+		delete routeOptions.new;
+	}
+}
+
 frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -10,6 +20,7 @@ frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 };
 
 frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
+	clearStalePatientCreateRouteOption();
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
