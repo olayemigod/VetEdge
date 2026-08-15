@@ -33,7 +33,6 @@ const RELATED_MODAL_CONFIG = Object.freeze({
 
 const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message || {});
 const tr = (value) => typeof __ === 'function' ? __(value) : value;
-const serverDatetime = (value) => value ? String(value).replace('T', ' ') : value;
 
 function canCreateRelated(view, doctype) {
 	if (!view?.detail?.can_write || !view?.detail?.name) return false;
@@ -183,8 +182,9 @@ function vaccinationFields(view, modal) {
 		},
 		{ fieldname: 'billing_item', label: tr('Billing Item'), type: 'text', readOnly: true },
 		{ fieldname: 'rate', label: tr('Rate'), type: 'number', min: 0, step: '0.01' },
-		{ fieldname: 'dose', label: tr('Dose'), type: 'text' }, { fieldname: 'route', label: tr('Route'), type: 'text' },
-		{ fieldname: 'administered_on', label: tr('Administration Date/Time'), type: 'datetime-local' }, { fieldname: 'next_due_date', label: tr('Next Due Date'), type: 'date' },
+		{ fieldname: 'dose', label: tr('Dose'), type: 'text' },
+		{ fieldname: 'route', label: tr('Route'), type: 'text' },
+		{ fieldname: 'next_due_date', label: tr('Next Due Date'), type: 'date' },
 		{ fieldname: 'notes', label: tr('Notes'), type: 'textarea', rows: 3 },
 		{ fieldname: 'create_invoice', label: tr('Create / update billing invoice'), type: 'checkbox', default: 1 },
 	];
@@ -192,14 +192,15 @@ function vaccinationFields(view, modal) {
 
 function openVaccinationModal(view, refreshParent) {
 	const consultation = view.detail.name;
-	const modal = window.VetEdgeEdgeModalPresenter.open({ title: tr('New Vaccination'), subtitle: consultation, size: 'lg', values: { vaccine: '', billing_item: '', rate: '', dose: '', route: '', administered_on: '', next_due_date: '', notes: '', create_invoice: 1 } });
+	const modal = window.VetEdgeEdgeModalPresenter.open({ title: tr('New Vaccination'), subtitle: consultation, size: 'lg', values: { vaccine: '', billing_item: '', rate: '', dose: '', route: '', next_due_date: '', notes: '', create_invoice: 1 } });
 	modal.update({
+		message: tr('Administration user/time, batch, stock entry and linked invoice are populated by the governed administration/billing workflows after this Draft record is created.'),
 		fields: vaccinationFields(view, modal),
 		actions: [{ label: tr('Create Vaccination'), primary: true, async onClick(values) {
 			if (!values.vaccine) { modal.update({ error: tr('Select a vaccine before creating the vaccination record.'), errorTitle: tr('Vaccine required') }); return; }
 			modal.update({ busy: true, error: '' });
 			try {
-				await call('vetedge.services.vaccination.create_vaccination_from_consultation', { consultation, values: { ...values, administered_on: serverDatetime(values.administered_on) || undefined, create_invoice: values.create_invoice ? 1 : 0 } });
+				await call('vetedge.services.vaccination.create_vaccination_from_consultation', { consultation, values: { ...values, create_invoice: values.create_invoice ? 1 : 0 } });
 				await finishRelatedCreate(view, refreshParent, 'Vaccination record created.');
 			} catch (error) { modal.update({ busy: false, error: error?.message || tr('Vaccination record could not be created.'), errorTitle: tr('Vaccination failed') }); }
 		} }],
@@ -230,11 +231,22 @@ export function mountVetEdgeClinicalWorkspace(target) {
 	VetEdgeMedicalHistoryModal.components = runtime.components;
 	const historyApp = runtime.createEdgeApp(VetEdgeMedicalHistoryModal);
 	const historyView = historyApp.mount(historyHost);
+	const originalStartNewConsultation = VetEdgeClinicalWorkspace.methods?.startNewConsultation;
 	const ClinicalWorkspaceRoot = {
 		...VetEdgeClinicalWorkspace,
 		components: { ...runtime.components, ...(VetEdgeClinicalWorkspace.components || {}) },
 		methods: {
 			...(VetEdgeClinicalWorkspace.methods || {}),
+			async startNewConsultation() {
+				const params = new URLSearchParams(window.location.search || '');
+				const patient = String(params.get('patient') || '').trim();
+				await originalStartNewConsultation?.call(this);
+				if (patient && this.detail?.open) {
+					await this.selectPatient?.(patient);
+				}
+				const suffix = patient ? `&patient=${encodeURIComponent(patient)}` : '';
+				window.history.replaceState({}, '', `/desk/vetedge-clinical-workspace?new=1${suffix}`);
+			},
 			openHistory() {
 				if (!this.detail?.capabilities?.view_history) return;
 				const patient = String(this.form?.patient || '').trim();
