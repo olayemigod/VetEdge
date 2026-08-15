@@ -1,0 +1,76 @@
+name: VetEdge Clinical Workflow Hardening
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: clinical-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    name: Clinical workflow contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile hardened Python services
+        run: |
+          python -m py_compile \
+            vetedge/services/inline_master.py \
+            vetedge/services/resource_editor_state.py \
+            vetedge/services/patient_service_guard.py \
+            vetedge/services/display_labels.py \
+            vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/vaccination_state_alignment.py \
+            vetedge/services/lab_order_extensions.py \
+            vetedge/services/billing_context_alignment.py \
+            vetedge/services/resource_center_v3.py \
+            vetedge/services/mutation_security.py
+
+      - name: Check hardened EdgeSuite JavaScript
+        run: |
+          node --check vetedge/public/js/vetedge_inline_master_creator.bundle.js
+          node --check vetedge/public/js/vetedge_shared_billing_edgesuite.js
+          node --check vetedge/public/js/vetedge_resource_center_hardening.js
+          node --check vetedge/public/js/vetedge_lab_order_add_tests.js
+          node --check vetedge/public/js/vetedge_billing_modal_layering.js
+
+      - name: Ruff hardened contracts
+        run: |
+          ruff check \
+            vetedge/services/inline_master.py \
+            vetedge/services/resource_editor_state.py \
+            vetedge/services/patient_service_guard.py \
+            vetedge/services/display_labels.py \
+            vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/vaccination_state_alignment.py \
+            vetedge/services/lab_order_extensions.py \
+            vetedge/services/billing_context_alignment.py \
+            vetedge/services/resource_center_v3.py \
+            vetedge/services/mutation_security.py \
+            vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py
+
+      - name: Run hardening contracts
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py
