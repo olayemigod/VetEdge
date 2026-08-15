@@ -155,14 +155,18 @@
 		mounted = { resource, app, host };
 	}
 
+	function setTextIfChanged(node, value) {
+		if (!node) return;
+		const next = String(value ?? "");
+		if (String(node.textContent || "").trim() !== next.trim()) node.textContent = next;
+	}
+
 	function alignSummary(root) {
 		root.querySelector(".vetedge-resource-notice")?.remove?.();
 		const cards = [...root.querySelectorAll(".vetedge-resource-summary > div")];
 		if (cards.length >= 3) {
-			const label = cards[2].querySelector("span");
-			const value = cards[2].querySelector("strong");
-			if (label) label.textContent = lastPage?.summary_label || __("Branch Scope");
-			if (value) value.textContent = lastPage?.summary_value || lastPage?.context_branch || __("All permitted branches");
+			setTextIfChanged(cards[2].querySelector("span"), lastPage?.summary_label || __("Branch Scope"));
+			setTextIfChanged(cards[2].querySelector("strong"), lastPage?.summary_value || lastPage?.context_branch || __("All permitted branches"));
 		}
 	}
 
@@ -178,18 +182,21 @@
 				const label = row._display[column.fieldname];
 				const cell = cells[index];
 				if (!label || !cell) return;
-				const span = cell.querySelector("span") || cell;
-				if (String(span.textContent || "").trim() !== String(label)) span.textContent = label;
+				setTextIfChanged(cell.querySelector("span") || cell, label);
 			});
 		});
 	}
 
 	function alignPatientShortcut(root, resource) {
 		if (resource !== "patients") return;
-		root.querySelectorAll(".vetedge-resource-row-actions button").forEach((button) => {
-			if (String(button.textContent || "").trim() !== "New Lab Order") return;
-			button.textContent = __("New Consultation");
+		root.querySelectorAll(".vetedge-resource-row-actions").forEach((actions) => {
+			const button = [...actions.querySelectorAll("button")].find((candidate) => String(candidate.textContent || "").trim() === "New Lab Order");
+			if (!button) return;
+			const row = actions.closest("tr");
+			const patient = String(row?.querySelector("td")?.textContent || "").trim();
+			setTextIfChanged(button, __("New Consultation"));
 			button.dataset.vetedgeNewConsultation = "1";
+			button.dataset.patient = patient;
 		});
 	}
 
@@ -216,7 +223,9 @@
 		event.preventDefault();
 		event.stopPropagation();
 		event.stopImmediatePropagation?.();
-		window.location.assign("/desk/vetedge-clinical-workspace?new=1");
+		const patient = String(button.dataset.patient || "").trim();
+		const suffix = patient ? `&patient=${encodeURIComponent(patient)}` : "";
+		window.location.assign(`/desk/vetedge-clinical-workspace?new=1${suffix}`);
 	}, true);
 
 	installCallBridge();
