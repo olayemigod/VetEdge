@@ -1,3 +1,46 @@
+const VETEDGE_SERVICE_OPERATIONS_REFRESH_MAX_AGE_MS = 15000;
+const VETEDGE_SERVICE_OPERATION_RESOURCES = new Set(['availability', 'boarding-stays', 'boarding-care-records', 'grooming-sessions']);
+
+function serviceOperationsRouteState() {
+	const params = new URLSearchParams(window.location.search || '');
+	const requested = params.get('resource') || 'availability';
+	const resource = VETEDGE_SERVICE_OPERATION_RESOURCES.has(requested) ? requested : 'availability';
+	const search = String(params.get('search') || '').trim();
+	const parent = String(params.get('parent') || '').trim();
+	const name = String(params.get('name') || '').trim();
+	return { resource, search, parent, name, key: `${resource}|${search}|${parent}|${name}` };
+}
+
+async function refreshMountedServiceOperations(wrapper) {
+	const view = wrapper.vue_app?.view;
+	if (!view) return false;
+
+	const requested = serviceOperationsRouteState();
+	const previousKey = wrapper.service_operations_route_key || '';
+	const routeChanged = previousKey !== requested.key;
+	const stale = Date.now() - Number(wrapper.service_operations_last_refresh_at || 0) >= VETEDGE_SERVICE_OPERATIONS_REFRESH_MAX_AGE_MS;
+
+	if (routeChanged) {
+		const resourceChanged = view.resource !== requested.resource;
+		view.resource = requested.resource;
+		view.search = requested.search;
+		view.parent = requested.parent;
+		view.requestedName = requested.name;
+		if (resourceChanged) {
+			view.start = 0;
+			view.error = '';
+		}
+	}
+
+	if (routeChanged || stale) await view.load?.();
+
+	if (!requested.name && view.detail?.open) view.closeDetail?.();
+
+	wrapper.service_operations_route_key = serviceOperationsRouteState().key;
+	wrapper.service_operations_last_refresh_at = Date.now();
+	return true;
+}
+
 frappe.pages['vetedge-service-operations'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Hospital & Services Operations'), single_column: true });
 	wrapper.page = page;
@@ -7,6 +50,14 @@ frappe.pages['vetedge-service-operations'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+
+	if (wrapper.vue_app?.view) {
+		Promise.resolve(refreshMountedServiceOperations(wrapper)).catch((error) => {
+			console.error('Error refreshing mounted Hospital & Services Operations:', error);
+		});
+		return;
+	}
+
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
 	$(page.body).empty();
@@ -44,9 +95,6 @@ frappe.pages['vetedge-service-operations'].on_page_show = function(wrapper) {
 			const professional = window.VetEdgeProfessionalUI?.install?.();
 			window.VetEdgeUIBridge?.install?.();
 			window.VetEdgeRouteAlignment?.installNavigationAdapter?.();
-			// VetEdgeUIBridge historically restored a generic /desk fallback that
-			// opened unknown destinations in a new tab. Re-assert the canonical
-			// Frappe v16 Desk router after all compatibility adapters have mounted.
 			window.VetEdgeNavigationRecovery?.install?.();
 			if (!professional?.installed) {
 				showFailure(professional?.message || __('The VetEdge professional shell is unavailable.'));
@@ -58,6 +106,8 @@ frappe.pages['vetedge-service-operations'].on_page_show = function(wrapper) {
 					$loading.remove();
 					const root = $('<div class="vetedge-service-operations-root" data-edge-product="vetedge"></div>').appendTo(page.body);
 					wrapper.vue_app = window.mountVetEdgeServiceOperations(root[0]);
+					wrapper.service_operations_route_key = serviceOperationsRouteState().key;
+					wrapper.service_operations_last_refresh_at = Date.now();
 				} catch (error) {
 					console.error('Error mounting Hospital & Services Operations:', error);
 					showFailure(__('Error mounting Hospital & Services Operations: {0}', [error.message || String(error)]));
