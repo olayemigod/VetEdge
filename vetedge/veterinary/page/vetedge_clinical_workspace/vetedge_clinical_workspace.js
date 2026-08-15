@@ -14,10 +14,12 @@ function clinicalRouteState() {
 	const params = new URLSearchParams(window.location.search || '');
 	const consultation = String(params.get('consultation') || '').trim();
 	const isNew = params.get('new') === '1';
+	const patient = String(params.get('patient') || '').trim();
 	return {
 		consultation,
 		isNew,
-		key: consultation ? `consultation:${consultation}` : isNew ? 'new' : 'list',
+		patient,
+		key: consultation ? `consultation:${consultation}` : isNew ? `new:${patient || '-'}` : 'list',
 	};
 }
 
