@@ -44,10 +44,7 @@
 		let values = { lab_test_picker: "" };
 		const modal = presenter().open({ title: __("Add Lab Tests"), subtitle: context.name, size: "lg" });
 		const paint = () => {
-			const remove = (value) => {
-				selected = selected.filter((row) => row.value !== value);
-				paint();
-			};
+			const remove = (value) => { selected = selected.filter((row) => row.value !== value); paint(); };
 			modal.update({
 				message: __("Add tests only while the Lab Order and linked billing remain editable. Submitted invoices and deceased-patient service rules are enforced on the server."),
 				fields: [{
@@ -66,10 +63,7 @@
 				values,
 				sections: [selectedSection(selected, remove)],
 				actions: [{
-					label: __("Add Selected Tests"),
-					primary: true,
-					disabled: !selected.length,
-					closeOnSuccess: false,
+					label: __("Add Selected Tests"), primary: true, disabled: !selected.length, closeOnSuccess: false,
 					async onClick() {
 						if (!selected.length) return;
 						modal.update({ busy: true, error: "" });
@@ -80,11 +74,7 @@
 							modal.close();
 							context.parent?.close?.();
 							await context.onSaved?.();
-							window.setTimeout(() => window.VetEdgeClinicalRecordEditor?.open?.({
-								doctype: "Veterinary Lab Order",
-								name: context.name,
-								onSaved: context.onSaved,
-							}), 0);
+							window.setTimeout(() => window.VetEdgeClinicalRecordEditor?.open?.({ doctype: "Veterinary Lab Order", name: context.name, onSaved: context.onSaved }), 0);
 						} catch (error) {
 							modal.update({ busy: false, error: error?.message || __("Lab Tests could not be added."), errorTitle: __("Add failed") });
 						}
@@ -130,4 +120,8 @@
 	install();
 	window.setTimeout(install, 0);
 	window.setTimeout(install, 250);
+	window.setTimeout(install, 1000);
+	["page-change", "desktop_screen"].forEach((eventName) => {
+		$(document).on(eventName, () => window.setTimeout(install, 0));
+	});
 })();
