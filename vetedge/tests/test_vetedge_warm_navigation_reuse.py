@@ -136,3 +136,20 @@ def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loadi
         assert content.index(marker) < content.index("frappe.require('edgeui.bundle.js'")
         assert content.index(marker) < content.index("$(page.body).empty()")
         assert "setInterval(" not in content
+
+
+def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation_fallback():
+    content = read("vetedge/public/js/vetedge_ui_bridge.js")
+    start = content.index("\tfunction openSameTab(route) {")
+    end = content.index("\n\tfunction openNewTab(route)", start)
+    block = content[start:end]
+
+    assert "const target = deskRoute(route);" in block
+    assert 'const isDeskRoute = url.pathname === "/desk" || url.pathname.startsWith("/desk/");' in block
+    assert "window.history.pushState(null, \"\", next);" in block
+    assert "Promise.resolve(frappeRouter.route())" in block
+    assert "const next = `${url.pathname}${url.search}${url.hash}`;" in block
+    assert "const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;" in block
+    assert "if (current === next) return true;" in block
+    assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
+    assert "window.location.assign(deskRoute(route));" not in block
