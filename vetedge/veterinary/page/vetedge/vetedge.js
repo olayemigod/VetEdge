@@ -11,9 +11,20 @@ frappe.pages["vetedge"].on_page_show = function (wrapper) {
 	wrapper.__vetedge_home_redirecting = true;
 
 	const target = "/desk/vetedge-resource-center";
+	const finishRedirect = () => {
+		wrapper.__vetedge_home_redirecting = false;
+	};
+
 	if (typeof frappe.set_route === "function") {
-		frappe.set_route("vetedge-resource-center");
+		try {
+			Promise.resolve(frappe.set_route("vetedge-resource-center")).finally(finishRedirect);
+		} catch (_error) {
+			finishRedirect();
+			window.location.assign(target);
+		}
 		return;
 	}
+
+	finishRedirect();
 	window.location.assign(target);
 };
