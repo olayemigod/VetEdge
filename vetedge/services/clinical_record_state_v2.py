@@ -7,6 +7,7 @@ from vetedge.services.portal_access import require_internal_user
 
 
 VACCINATION_SYSTEM_FIELDS = {
+    "linked_consultation",
     "administered_by",
     "administered_on",
     "next_vaccination_appointment",
@@ -40,6 +41,9 @@ def _align_vaccination_state(state: dict) -> dict:
     administered = status == "Administered"
     stock_posted = bool(fields.get("stock_entry_reference", {}).get("value"))
 
+    # Identity, system-generated administration metadata, inventory lineage and
+    # accounting references are never edited directly from the EdgeSuite modal.
+    # Their authoritative workflow actions populate them server-side.
     for fieldname in VACCINATION_SYSTEM_FIELDS:
         field = fields.get(fieldname)
         if field:
@@ -51,10 +55,9 @@ def _align_vaccination_state(state: dict) -> dict:
             field["value"] = ""
             field["selected_label"] = ""
 
-    consultation = fields.get("linked_consultation")
-    if consultation:
-        consultation["read_only"] = int(submitted or administered or stock_posted)
-
+    # Vaccine and rate are service-definition inputs while billing is Draft.
+    # Once a submitted invoice, administration, or stock posting exists they
+    # become immutable from this clinical editor.
     vaccine = fields.get("vaccine")
     if vaccine:
         vaccine["read_only"] = int(submitted or administered or stock_posted)
