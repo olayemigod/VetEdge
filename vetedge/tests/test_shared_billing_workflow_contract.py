@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from vetedge.tests.test_clinical_workflow_hardening_contract import *
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "vetedge"
@@ -250,8 +251,3 @@ def test_edgesuite_mutations_remain_permission_and_platform_gated():
         "transition_lab_order_status",
     ):
         assert f"mutation_security.{endpoint}" in hooks
-
-
-# Run the focused hardening contract whenever this established fast-gate file is
-# selected by CI, without duplicating its assertions here.
-from vetedge.tests.test_clinical_workflow_hardening_contract import *  # noqa: E402,F403
