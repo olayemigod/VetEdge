@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+from typing import Any
+
 import frappe
 
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
+
+
+VACCINATION_PROTECTED_EDITOR_FIELDS = {
+    "linked_consultation",
+    "administered_by",
+    "administered_on",
+    "next_vaccination_appointment",
+    "batch_no",
+    "expiry_date",
+    "billing_item",
+    "amount",
+    "linked_invoice",
+    "stock_entry_reference",
+}
 
 
 def _gate(action: str, doctype: str | None = None, name: str | None = None) -> None:
@@ -13,6 +29,15 @@ def _gate(action: str, doctype: str | None = None, name: str | None = None) -> N
         reference_doctype=doctype,
         reference_name=name,
     )
+
+
+def _parse_values(values: str | dict | None) -> dict[str, Any]:
+    if not values:
+        return {}
+    if isinstance(values, dict):
+        return dict(values)
+    parsed = frappe.parse_json(values)
+    return dict(parsed) if isinstance(parsed, dict) else {}
 
 
 @frappe.whitelist()
@@ -26,9 +51,16 @@ def create_clinical_record(doctype: str, values=None):
 @frappe.whitelist()
 def save_clinical_record_editor(doctype: str, name: str, values=None):
     _gate("save_clinical_record_editor", doctype, name)
+    payload = _parse_values(values)
+    if doctype == "Veterinary Vaccination Record":
+        # These fields are set by administration, inventory, scheduling and
+        # billing authorities. A crafted API request must not be able to mutate
+        # them merely because an older editor schema once exposed them.
+        for fieldname in VACCINATION_PROTECTED_EDITOR_FIELDS:
+            payload.pop(fieldname, None)
     from vetedge.services.clinical_record_editor import save_clinical_record_editor as original
 
-    return original(doctype=doctype, name=name, values=values)
+    return original(doctype=doctype, name=name, values=payload)
 
 
 @frappe.whitelist()
