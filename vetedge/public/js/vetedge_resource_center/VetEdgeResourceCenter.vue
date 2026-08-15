@@ -14,14 +14,20 @@
 					eyebrow="Veterinary Operations"
 					:title="page.title || 'Veterinary Resource Center'"
 					:subtitle="page.subtitle || 'Permission-safe records inside the Veterinary workspace.'"
-					:action-label="page.can_create ? 'Add Record' : ''"
-					@action="openEditor()"
+					:action-label="primaryActionLabel"
+					@action="runPrimaryAction"
 				/>
 			</template>
 
 			<template #filters>
 				<EdgeFilterBar title="Find records">
-					<div class="vetedge-resource-filters" :class="{ 'is-patient-filters': isPatients }">
+					<div
+						class="vetedge-resource-filters"
+						:class="{
+							'is-patient-filters': isPatients,
+							'is-clinical-filters': isClinicalResource,
+						}"
+					>
 						<label class="vetedge-resource-field">
 							<span>Resource</span>
 							<select v-model="resource" class="form-control" @change="changeResource">
@@ -37,7 +43,7 @@
 								v-model.trim="search"
 								type="search"
 								class="form-control"
-								placeholder="Patient, owner, ID, species or visible field"
+								placeholder="Name, patient, owner, status or visible field"
 								@keyup.enter="applySearch"
 							/>
 						</label>
@@ -49,8 +55,8 @@
 								label="Branch"
 								placeholder="All visible branches"
 								:searcher="searchBranchFilter"
-								@select="onBranchFilterSelect"
-								@clear="clearBranchFilter"
+								@select="onPatientFilterSelect('default_branch', $event)"
+								@clear="clearPatientFilter('default_branch')"
 							/>
 							<EdgeDropdown
 								v-model="patientFilters.status"
@@ -70,9 +76,58 @@
 								label="Species"
 								placeholder="All species"
 								:searcher="searchSpeciesFilter"
-								@select="onSpeciesFilterSelect"
-								@clear="clearSpeciesFilter"
+								@select="onPatientFilterSelect('species', $event)"
+								@clear="clearPatientFilter('species')"
 							/>
+						</template>
+
+						<template v-else-if="isClinicalResource">
+							<EdgeLinkField
+								v-model="clinicalFilters.patient"
+								:selected-label="clinicalFilterLabels.patient"
+								label="Patient"
+								placeholder="All Patients"
+								:searcher="(query) => searchLink('Veterinary Patient', query)"
+								@select="onClinicalFilterSelect('patient', $event)"
+								@clear="clearClinicalFilter('patient')"
+							/>
+							<EdgeLinkField
+								v-model="clinicalFilters.service_branch"
+								:selected-label="clinicalFilterLabels.service_branch"
+								label="Branch"
+								placeholder="All permitted branches"
+								:searcher="searchBranchFilter"
+								@select="onClinicalFilterSelect('service_branch', $event)"
+								@clear="clearClinicalFilter('service_branch')"
+							/>
+							<EdgeDropdown
+								v-model="clinicalFilters.status"
+								label="Status"
+								placeholder="All statuses"
+								:options="clinicalStatusOptions"
+							/>
+							<EdgeLinkField
+								v-if="isLabOrders"
+								v-model="clinicalFilters.lab_test"
+								:selected-label="clinicalFilterLabels.lab_test"
+								label="Lab Test"
+								placeholder="All Lab Tests"
+								:searcher="(query) => searchLink('Veterinary Lab Test', query)"
+								@select="onClinicalFilterSelect('lab_test', $event)"
+								@clear="clearClinicalFilter('lab_test')"
+							/>
+							<EdgeLinkField
+								v-else
+								v-model="clinicalFilters.vaccine"
+								:selected-label="clinicalFilterLabels.vaccine"
+								label="Vaccine"
+								placeholder="All Vaccines"
+								:searcher="(query) => searchLink('Veterinary Vaccine', query)"
+								@select="onClinicalFilterSelect('vaccine', $event)"
+								@clear="clearClinicalFilter('vaccine')"
+							/>
+							<EdgeInput v-model="clinicalFilters.from_date" type="date" label="From Date" />
+							<EdgeInput v-model="clinicalFilters.to_date" type="date" label="To Date" />
 						</template>
 					</div>
 
@@ -97,17 +152,6 @@
 			/>
 
 			<template v-else>
-				<section v-if="page.unsupported_required_fields?.length" class="vetedge-resource-notice">
-					<div>
-						<strong>Full ERPNext form required for create or edit</strong>
-						<p>
-							This record contains workflow fields that the quick editor must not simplify:
-							{{ page.unsupported_required_fields.join(', ') }}.
-						</p>
-					</div>
-					<button type="button" class="edge-button" @click="openFullList">Open full form</button>
-				</section>
-
 				<section class="vetedge-resource-summary" aria-label="Resource summary">
 					<div>
 						<span>Total visible records</span>
@@ -118,8 +162,8 @@
 						<strong>{{ currentPage }} of {{ totalPages }}</strong>
 					</div>
 					<div>
-						<span>Access</span>
-						<strong>{{ accessLabel }}</strong>
+						<span>{{ page.summary_label || 'Branch Scope' }}</span>
+						<strong>{{ page.summary_value || page.context_branch || 'All permitted branches' }}</strong>
 					</div>
 				</section>
 
@@ -127,8 +171,8 @@
 					v-if="!page.rows?.length"
 					title="No matching records"
 					description="Change the search or filters, or choose another Veterinary resource."
-					:action-label="page.can_create ? 'Add Record' : ''"
-					@action="openEditor()"
+					:action-label="primaryActionLabel"
+					@action="runPrimaryAction"
 				/>
 
 				<section v-else class="vetedge-resource-table-card">
@@ -144,7 +188,7 @@
 								<tr v-for="row in page.rows" :key="row.name">
 									<td v-for="column in page.columns" :key="column.fieldname" :data-label="column.label">
 										<span :class="cellClass(column, row[column.fieldname])">
-											{{ formatValue(column, row[column.fieldname]) }}
+											{{ formatValue(column, row[column.fieldname], row) }}
 										</span>
 									</td>
 									<td class="vetedge-resource-row-actions" data-label="Actions">
@@ -160,13 +204,21 @@
 										<button
 											v-if="isPatients"
 											type="button"
-											class="edge-button edge-button--compact"
-											@click="openNewLabOrder(row)"
+											class="edge-button edge-button--compact edge-button--primary"
+											@click="openNewConsultation(row)"
 										>
-											New Lab Order
+											New Consultation
 										</button>
 										<button
-											v-if="canEditRow(row)"
+											v-if="isClinicalResource"
+											type="button"
+											class="edge-button edge-button--compact edge-button--primary"
+											@click="openClinicalRecord(row)"
+										>
+											View / Edit
+										</button>
+										<button
+											v-if="!isClinicalResource && canEditRow(row)"
 											type="button"
 											class="edge-button edge-button--compact"
 											@click="openEditor(row.name)"
@@ -177,7 +229,7 @@
 											Open Full Form
 										</button>
 										<button
-											v-if="canDeleteRow(row)"
+											v-if="!isClinicalResource && canDeleteRow(row)"
 											type="button"
 											class="edge-button edge-button--compact edge-button--danger"
 											@click="deleteRecord(row)"
@@ -215,12 +267,25 @@ const RESOURCE_OPTIONS = Object.freeze([
 	{ value: "kennels", label: "Kennels and Care Locations" },
 ]);
 
+const CLINICAL_RESOURCES = Object.freeze({
+	"lab-orders": "Veterinary Lab Order",
+	vaccinations: "Veterinary Vaccination Record",
+});
+
 function emptyPatientFilters() {
 	return { default_branch: "", status: "", registration_status: "", species: "" };
 }
 
 function emptyPatientFilterLabels() {
 	return { default_branch: "", species: "" };
+}
+
+function emptyClinicalFilters() {
+	return { patient: "", service_branch: "", status: "", from_date: "", to_date: "", vaccine: "", lab_test: "" };
+}
+
+function emptyClinicalFilterLabels() {
+	return { patient: "", service_branch: "", vaccine: "", lab_test: "" };
 }
 
 export default {
@@ -245,6 +310,21 @@ export default {
 				default_branch: parameters.get("branch") || "",
 				species: parameters.get("species") || "",
 			},
+			clinicalFilters: {
+				patient: parameters.get("patient") || "",
+				service_branch: parameters.get("service_branch") || parameters.get("branch") || "",
+				status: parameters.get("status") || "",
+				from_date: parameters.get("from_date") || "",
+				to_date: parameters.get("to_date") || "",
+				vaccine: parameters.get("vaccine") || "",
+				lab_test: parameters.get("lab_test") || "",
+			},
+			clinicalFilterLabels: {
+				patient: parameters.get("patient") || "",
+				service_branch: parameters.get("service_branch") || parameters.get("branch") || "",
+				vaccine: parameters.get("vaccine") || "",
+				lab_test: parameters.get("lab_test") || "",
+			},
 			page: {
 				title: "Veterinary Resource Center",
 				subtitle: "Permission-safe Veterinary records.",
@@ -254,8 +334,9 @@ export default {
 				can_create: false,
 				can_quick_edit: false,
 				can_delete: false,
-				unsupported_required_fields: [],
 				full_form_route: "",
+				summary_label: "Branch Scope",
+				summary_value: "All permitted branches",
 			},
 			resourceOptions: RESOURCE_OPTIONS,
 		};
@@ -275,11 +356,35 @@ export default {
 		isPatients() {
 			return this.resource === "patients";
 		},
+		isLabOrders() {
+			return this.resource === "lab-orders";
+		},
+		isVaccinations() {
+			return this.resource === "vaccinations";
+		},
+		isClinicalResource() {
+			return Boolean(CLINICAL_RESOURCES[this.resource]);
+		},
+		clinicalDoctype() {
+			return CLINICAL_RESOURCES[this.resource] || "";
+		},
+		primaryActionLabel() {
+			if (this.resource === "appointments") return "New Appointment";
+			if (this.isLabOrders) return "New Lab Order";
+			if (this.isVaccinations) return "New Vaccination";
+			return this.page.can_create ? "Add Record" : "";
+		},
 		patientStatusOptions() {
 			return ["Active", "Inactive", "Deceased"].map((value) => ({ value, label: value }));
 		},
 		registrationStatusOptions() {
 			return ["Registered", "Awaiting Registration Payment", "Registration Paid"].map((value) => ({ value, label: value }));
+		},
+		clinicalStatusOptions() {
+			const values = this.isLabOrders
+				? ["Draft", "Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review", "Reviewed", "Completed", "Cancelled"]
+				: ["Draft", "Awaiting Payment", "Pending Administration", "Administered", "Cancelled"];
+			return values.map((value) => ({ value, label: value }));
 		},
 		currentPage() {
 			return Math.floor((this.page.start || 0) / (this.page.page_length || this.pageLength)) + 1;
@@ -298,11 +403,6 @@ export default {
 		},
 		lastVisible() {
 			return Math.min((this.page.start || 0) + (this.page.rows?.length || 0), this.page.total || 0);
-		},
-		accessLabel() {
-			if (this.page.can_create && this.page.can_quick_edit) return "Create and edit";
-			if (this.page.can_quick_edit) return "Edit permitted";
-			return "Read only";
 		},
 	},
 	mounted() {
@@ -337,23 +437,23 @@ export default {
 				label: selection.label || selection.description || selection.value || selection.name || "",
 			};
 		},
-		onBranchFilterSelect(selection) {
+		onPatientFilterSelect(fieldname, selection) {
 			const normalized = this.normalizeLinkSelection(selection);
-			this.patientFilters.default_branch = normalized.value;
-			this.patientFilterLabels.default_branch = normalized.label;
+			this.patientFilters[fieldname] = normalized.value;
+			this.patientFilterLabels[fieldname] = normalized.label;
 		},
-		clearBranchFilter() {
-			this.patientFilters.default_branch = "";
-			this.patientFilterLabels.default_branch = "";
+		clearPatientFilter(fieldname) {
+			this.patientFilters[fieldname] = "";
+			this.patientFilterLabels[fieldname] = "";
 		},
-		onSpeciesFilterSelect(selection) {
+		onClinicalFilterSelect(fieldname, selection) {
 			const normalized = this.normalizeLinkSelection(selection);
-			this.patientFilters.species = normalized.value;
-			this.patientFilterLabels.species = normalized.label;
+			this.clinicalFilters[fieldname] = normalized.value;
+			this.clinicalFilterLabels[fieldname] = normalized.label;
 		},
-		clearSpeciesFilter() {
-			this.patientFilters.species = "";
-			this.patientFilterLabels.species = "";
+		clearClinicalFilter(fieldname) {
+			this.clinicalFilters[fieldname] = "";
+			this.clinicalFilterLabels[fieldname] = "";
 		},
 		updateLocation() {
 			const parameters = new URLSearchParams();
@@ -364,6 +464,10 @@ export default {
 				if (this.patientFilters.status) parameters.set("status", this.patientFilters.status);
 				if (this.patientFilters.registration_status) parameters.set("registration_status", this.patientFilters.registration_status);
 				if (this.patientFilters.species) parameters.set("species", this.patientFilters.species);
+			} else if (this.isClinicalResource) {
+				for (const key of ["patient", "service_branch", "status", "from_date", "to_date", "vaccine", "lab_test"]) {
+					if (this.clinicalFilters[key]) parameters.set(key, this.clinicalFilters[key]);
+				}
 			}
 			window.history.replaceState({}, "", `${window.location.pathname}?${parameters.toString()}`);
 		},
@@ -377,14 +481,24 @@ export default {
 					start: this.start,
 					page_length: this.pageLength,
 					default_branch: this.isPatients ? this.patientFilters.default_branch : "",
-					status: this.isPatients ? this.patientFilters.status : "",
+					status: this.isPatients ? this.patientFilters.status : (this.isClinicalResource ? this.clinicalFilters.status : ""),
 					registration_status: this.isPatients ? this.patientFilters.registration_status : "",
 					species: this.isPatients ? this.patientFilters.species : "",
+					patient: this.isClinicalResource ? this.clinicalFilters.patient : "",
+					service_branch: this.isClinicalResource ? this.clinicalFilters.service_branch : "",
+					from_date: this.isClinicalResource ? this.clinicalFilters.from_date : "",
+					to_date: this.isClinicalResource ? this.clinicalFilters.to_date : "",
+					vaccine: this.isVaccinations ? this.clinicalFilters.vaccine : "",
+					lab_test: this.isLabOrders ? this.clinicalFilters.lab_test : "",
 				});
 				this.page = response.message || this.page;
 				if (this.isPatients && this.page.context_branch && !this.patientFilters.default_branch) {
 					this.patientFilters.default_branch = this.page.context_branch;
 					this.patientFilterLabels.default_branch = this.page.context_branch;
+				}
+				if (this.isClinicalResource && this.page.context_branch && !this.clinicalFilters.service_branch) {
+					this.clinicalFilters.service_branch = this.page.context_branch;
+					this.clinicalFilterLabels.service_branch = this.page.context_branch;
 				}
 				this.updateLocation();
 			} catch (error) {
@@ -398,6 +512,8 @@ export default {
 			this.search = "";
 			this.patientFilters = emptyPatientFilters();
 			this.patientFilterLabels = emptyPatientFilterLabels();
+			this.clinicalFilters = emptyClinicalFilters();
+			this.clinicalFilterLabels = emptyClinicalFilterLabels();
 			this.loadPage();
 		},
 		applySearch() {
@@ -408,6 +524,8 @@ export default {
 			this.search = "";
 			this.patientFilters = emptyPatientFilters();
 			this.patientFilterLabels = emptyPatientFilterLabels();
+			this.clinicalFilters = emptyClinicalFilters();
+			this.clinicalFilterLabels = emptyClinicalFilterLabels();
 			this.start = 0;
 			this.loadPage();
 		},
@@ -419,7 +537,9 @@ export default {
 			this.start = (this.page.start || 0) + (this.page.page_length || this.pageLength);
 			this.loadPage();
 		},
-		formatValue(column, value) {
+		formatValue(column, value, row = null) {
+			const display = row?._display?.[column.fieldname];
+			if (display) return String(display);
 			if (value === null || value === undefined || value === "") return "—";
 			if (column.fieldname === "docstatus") return { 0: "Draft", 1: "Submitted", 2: "Cancelled" }[Number(value)] || String(value);
 			if (column.fieldtype === "Check") return Number(value) ? "Yes" : "No";
@@ -441,8 +561,15 @@ export default {
 		canDeleteRow(row) {
 			return Boolean(this.page.can_delete && Number(row.docstatus || 0) === 0);
 		},
-		openFullList() {
-			if (this.page.full_form_route) this.openRoute(this.page.full_form_route);
+		runPrimaryAction() {
+			if (this.isClinicalResource) {
+				this.openClinicalCreate();
+				return;
+			}
+			this.openEditor();
+		},
+		openEditor() {
+			frappe.msgprint(__("The Veterinary quick editor is unavailable. Refresh the page and try again."));
 		},
 		openFullRecord(name) {
 			if (!this.page.full_form_route || !name) return;
@@ -463,64 +590,35 @@ export default {
 			}
 			window.vetedgeBillingModal.open(this.billingFrame("Veterinary Patient", row.name));
 		},
-		openNewLabOrder(row) {
+		openNewConsultation(row) {
 			if (!row?.name) return;
-			if (window.VetEdgeLabOrderPickerPatch?.open) {
-				window.VetEdgeLabOrderPickerPatch.open({
-					patient: row.name,
-					patientLabel: row.patient_name || row.name,
-					serviceBranch: row.default_branch || "",
-					onSaved: () => this.loadPage(),
+			window.location.assign(`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(row.name)}`);
+		},
+		async ensureClinicalEditor() {
+			if (window.VetEdgeClinicalRecordEditor?.ready?.()) return window.VetEdgeClinicalRecordEditor;
+			await new Promise((resolve) => {
+				frappe.require("vetedge_edge_modal_presenter.bundle.js", () => {
+					frappe.require("vetedge_clinical_record_editor.bundle.js", resolve);
 				});
-				return;
-			}
-			window.VetEdgeClinicalRecordEditor?.create?.("Veterinary Lab Order", () => this.loadPage());
+			});
+			if (!window.VetEdgeClinicalRecordEditor?.ready?.()) throw new Error(__("The EdgeSuite clinical editor is unavailable."));
+			return window.VetEdgeClinicalRecordEditor;
 		},
-		fieldDefinition(field) {
-			return {
-				fieldname: field.fieldname,
-				fieldtype: field.fieldtype,
-				label: field.label,
-				options: field.options || undefined,
-				reqd: Boolean(field.reqd),
-				description: field.description || undefined,
-				default: field.default,
-				depends_on: field.depends_on || undefined,
-				mandatory_depends_on: field.mandatory_depends_on || undefined,
-			};
-		},
-		async openEditor(name = null) {
+		async openClinicalCreate() {
 			try {
-				const response = await frappe.call("vetedge.services.resource_center.get_resource_editor", { resource: this.resource, name });
-				const schema = response.message || {};
-				if (!schema.can_save) {
-					this.openFullRecord(name);
-					return;
-				}
-				const dialog = new frappe.ui.Dialog({
-					title: schema.title || __("Veterinary Record"),
-					fields: (schema.fields || []).map(this.fieldDefinition),
-					primary_action_label: name ? __("Save Changes") : __("Create Record"),
-					primary_action: async (values) => {
-						dialog.disable_primary_action();
-						try {
-							await frappe.call("vetedge.services.resource_center.save_resource_record", { resource: this.resource, name, values });
-							dialog.hide();
-							frappe.show_alert({ message: name ? __("Record updated") : __("Record created"), indicator: "green" });
-							await this.loadPage();
-						} catch (error) {
-							frappe.msgprint({ title: __("Unable to save record"), message: error?.message || __("The record could not be saved."), indicator: "red" });
-						} finally {
-							dialog.enable_primary_action();
-						}
-					},
-				});
-				dialog.show();
-				dialog.set_values(schema.values || {});
+				const editor = await this.ensureClinicalEditor();
+				await editor.create(this.clinicalDoctype, () => this.loadPage());
 			} catch (error) {
-				frappe.msgprint({ title: __("Quick editor unavailable"), message: error?.message || __("Use the full ERPNext form for this record."), indicator: "orange" });
-				if (name) this.openFullRecord(name);
-				else this.openFullList();
+				frappe.msgprint(error?.message || __("The clinical record creator is unavailable."));
+			}
+		},
+		async openClinicalRecord(row) {
+			if (!row?.name || !this.clinicalDoctype) return;
+			try {
+				const editor = await this.ensureClinicalEditor();
+				await editor.open({ doctype: this.clinicalDoctype, name: row.name, onSaved: () => this.loadPage() });
+			} catch (error) {
+				frappe.msgprint(error?.message || __("The clinical record editor is unavailable."));
 			}
 		},
 		deleteRecord(row) {
@@ -549,7 +647,8 @@ export default {
 	width: 100%;
 }
 
-.vetedge-resource-filters.is-patient-filters {
+.vetedge-resource-filters.is-patient-filters,
+.vetedge-resource-filters.is-clinical-filters {
 	grid-template-columns: repeat(3, minmax(12rem, 1fr));
 }
 
@@ -565,27 +664,12 @@ export default {
 	font-weight: 700;
 }
 
-.vetedge-resource-notice,
 .vetedge-resource-summary,
 .vetedge-resource-table-card {
 	background: var(--edge-color-surface, #fff);
 	border: 1px solid var(--edge-color-border, #dce5ef);
 	border-radius: var(--edge-radius-lg, 1rem);
 	box-shadow: var(--edge-shadow-xs, 0 1px 2px rgb(18 32 51 / 5%));
-}
-
-.vetedge-resource-notice {
-	align-items: center;
-	display: flex;
-	gap: 1rem;
-	justify-content: space-between;
-	padding: .85rem 1rem;
-}
-
-.vetedge-resource-notice p {
-	color: var(--edge-color-ink-500, #6b7d90);
-	font-size: .78rem;
-	margin: .25rem 0 0;
 }
 
 .vetedge-resource-summary {
@@ -689,12 +773,17 @@ export default {
 .status-completed,
 .status-paid,
 .status-active,
-.status-registration-paid {
+.status-registration-paid,
+.status-administered,
+.status-reviewed {
 	background: #e8f8f0;
 	color: #137a50;
 }
 
 .status-awaiting-registration-payment,
+.status-awaiting-payment,
+.status-pending-administration,
+.status-result-pending,
 .status-draft,
 .status-partly-paid {
 	background: #fff8e6;
@@ -709,17 +798,20 @@ export default {
 }
 
 @media (max-width: 74rem) {
-	.vetedge-resource-filters.is-patient-filters { grid-template-columns: repeat(2, minmax(12rem, 1fr)); }
+	.vetedge-resource-filters.is-patient-filters,
+	.vetedge-resource-filters.is-clinical-filters {
+		grid-template-columns: repeat(2, minmax(12rem, 1fr));
+	}
 }
 
 @media (max-width: 47.99rem) {
 	.vetedge-resource-filters,
 	.vetedge-resource-filters.is-patient-filters,
+	.vetedge-resource-filters.is-clinical-filters,
 	.vetedge-resource-summary {
 		grid-template-columns: minmax(0, 1fr);
 	}
 
-	.vetedge-resource-notice,
 	.vetedge-resource-pagination {
 		align-items: flex-start;
 		flex-direction: column;
