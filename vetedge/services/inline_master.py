@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr
 
+from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -57,9 +58,14 @@ def _option(doc, config: dict[str, str]) -> dict[str, Any]:
     return {"value": doc.name, "label": label, "description": description}
 
 
+def _gate(action: str, doctype: str) -> None:
+    require_internal_user()
+    require_vetedge_platform_access(action=action, reference_doctype=doctype)
+
+
 @frappe.whitelist()
 def get_inline_master_capability(doctype: str) -> dict[str, Any]:
-    require_internal_user()
+    _gate("view_inline_master_capability", doctype)
     config = _config(doctype)
     return {
         "doctype": doctype,
@@ -75,7 +81,7 @@ def create_inline_master(
     context: str | dict | None = None,
     values: str | dict | None = None,
 ) -> dict[str, Any]:
-    require_internal_user()
+    _gate("create_inline_master", doctype)
     config = _config(doctype)
     if not frappe.has_permission(doctype, "create"):
         frappe.throw(_("You are not permitted to create {0}.").format(doctype), frappe.PermissionError)
