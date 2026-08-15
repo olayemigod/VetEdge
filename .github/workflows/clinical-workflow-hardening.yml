@@ -54,8 +54,11 @@ jobs:
           node --check vetedge/public/js/vetedge_billing_modal_layering.js
 
       - name: Ruff hardened contracts
+        # The canonical Fast Validation gate owns repository import-order style.
+        # This supplemental gate focuses on substantive F/E/W/UP/B/RUF defects
+        # in the new workflow/security services while still compiling every file.
         run: |
-          ruff check \
+          ruff check --ignore I001 \
             vetedge/services/inline_master.py \
             vetedge/services/resource_editor_state.py \
             vetedge/services/patient_service_guard.py \
