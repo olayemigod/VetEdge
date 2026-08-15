@@ -57,6 +57,7 @@ jobs:
           node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
           node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
           node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
+          node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
 
       - name: Ruff hardened contracts
         # The canonical Fast Validation gate owns repository import-order style.
