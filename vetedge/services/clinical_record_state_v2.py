@@ -33,6 +33,43 @@ def _align_link_labels(state: dict) -> dict:
     return state
 
 
+def _describe_vaccination_system_fields(fields: dict[str, dict], status: str, stock_posted: bool) -> None:
+    batch = fields.get("batch_no")
+    if batch:
+        if status in PRE_ADMIN_STATUSES and not batch.get("value"):
+            batch["description"] = (
+                "Selected automatically from available non-expired vaccine stock when the vaccination is administered. "
+                "VetEdge uses the configured FEFO expiry-control policy unless a validated manual batch is supplied by a controlled workflow/API."
+            )
+        else:
+            batch["description"] = (
+                "Batch used for this vaccination stock issue. It is locked after administration/stock allocation to preserve inventory traceability."
+            )
+
+    expiry = fields.get("expiry_date")
+    if expiry:
+        expiry["description"] = (
+            "Derived from the selected/allocated vaccine batch and kept read-only for stock and expiry traceability."
+        )
+
+    appointment = fields.get("next_vaccination_appointment")
+    if appointment:
+        appointment["description"] = (
+            "Created by the vaccination follow-up workflow from the Next Due Date when appointment automation is enabled."
+        )
+
+    stock_entry = fields.get("stock_entry_reference")
+    if stock_entry:
+        stock_entry["description"] = (
+            "ERPNext Stock Entry created for the administered vaccine. Submitted stock references are never edited from the clinical modal."
+        )
+
+    if stock_posted and batch and not batch.get("value"):
+        batch["description"] = (
+            "Stock has already been posted. The vaccination batch is controlled by the submitted stock transaction and cannot be changed here."
+        )
+
+
 def _align_vaccination_state(state: dict) -> dict:
     fields = _field_map(state)
     status = str(state.get("status") or "Draft")
@@ -41,7 +78,7 @@ def _align_vaccination_state(state: dict) -> dict:
     administered = status == "Administered"
     stock_posted = bool(fields.get("stock_entry_reference", {}).get("value"))
 
-    # Identity, system-generated administration metadata, inventory lineage and
+    # Identity, workflow-produced administration metadata, inventory lineage and
     # accounting references are never edited directly from the EdgeSuite modal.
     # Their authoritative workflow actions populate them server-side.
     for fieldname in VACCINATION_SYSTEM_FIELDS:
@@ -55,6 +92,8 @@ def _align_vaccination_state(state: dict) -> dict:
             field["value"] = ""
             field["selected_label"] = ""
 
+    _describe_vaccination_system_fields(fields, status, stock_posted)
+
     # Vaccine and rate are service-definition inputs while billing is Draft.
     # Once a submitted invoice, administration, or stock posting exists they
     # become immutable from this clinical editor.
@@ -65,6 +104,10 @@ def _align_vaccination_state(state: dict) -> dict:
     rate = fields.get("rate")
     if rate:
         rate["read_only"] = int(submitted or administered or stock_posted)
+        rate["description"] = (
+            "Editable only before invoice submission, vaccine administration or stock posting. "
+            "Permitted changes synchronize to draft billing."
+        )
 
     next_due = fields.get("next_due_date")
     if next_due:
@@ -73,6 +116,7 @@ def _align_vaccination_state(state: dict) -> dict:
     state["can_save"] = bool(
         state.get("can_save") and any(not field.get("read_only") for field in fields.values())
     )
+    state["batch_selection_policy"] = "FEFO"
     return state
 
 
