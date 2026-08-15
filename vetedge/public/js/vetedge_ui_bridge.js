@@ -179,7 +179,34 @@
 	}
 
 	function openSameTab(route) {
-		window.location.assign(deskRoute(route));
+		const target = deskRoute(route);
+		if (!target) return false;
+
+		try {
+			const url = new URL(target, window.location.origin);
+			const isSameOrigin = url.origin === window.location.origin;
+			const isDeskRoute = url.pathname === "/desk" || url.pathname.startsWith("/desk/");
+			const frappeRouter = window.frappe?.router;
+
+			if (isSameOrigin && isDeskRoute && typeof frappeRouter?.route === "function" && window.history?.pushState) {
+				const next = `${url.pathname}${url.search}${url.hash}`;
+				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+				if (current === next) return true;
+
+				window.history.pushState(null, "", next);
+				Promise.resolve(frappeRouter.route()).catch(() => window.location.assign(next));
+				return true;
+			}
+
+			if (isSameOrigin && isDeskRoute && typeof window.frappe?.set_route === "function" && !url.search && !url.hash) {
+				window.frappe.set_route(url.pathname);
+				return true;
+			}
+		} catch (_error) {
+			// Fall through to a full same-tab navigation only when Desk routing is unavailable.
+		}
+
+		window.location.assign(target);
 		return true;
 	}
 
