@@ -1,3 +1,5 @@
+const VETEDGE_SETTINGS_REFRESH_MAX_AGE_MS = 15000;
+
 frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -40,6 +42,7 @@ frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
 				if (wrapper.current_visit_id !== visitId || !window.mountVeterinarySettingsCenter) return;
 				wrapper.__veterinarySettingsApp?.unmount?.();
 				wrapper.__veterinarySettingsApp = window.mountVeterinarySettingsCenter(root);
+				wrapper.settings_last_refresh_at = Date.now();
 			});
 		});
 	});
@@ -47,7 +50,13 @@ frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
 
 frappe.pages["veterinary-settings-center"].on_page_show = function (wrapper) {
 	window.VetEdgeUIBridge?.install?.();
-	wrapper.__veterinarySettingsApp?.view?.reload?.();
+	const view = wrapper.__veterinarySettingsApp?.view;
+	if (!view || view.dirty) return;
+	const stale = Date.now() - Number(wrapper.settings_last_refresh_at || 0) >= VETEDGE_SETTINGS_REFRESH_MAX_AGE_MS;
+	if (!stale) return;
+	Promise.resolve(view.load?.())
+		.then(() => { wrapper.settings_last_refresh_at = Date.now(); })
+		.catch((error) => console.error("Error refreshing Veterinary Settings:", error));
 };
 
 frappe.pages["veterinary-settings-center"].on_page_unload = function (wrapper) {
