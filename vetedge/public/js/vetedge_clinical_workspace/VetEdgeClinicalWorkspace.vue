@@ -5,7 +5,7 @@
 		:tenant-name="identity.tenant_name || ''"
 		:branch-name="branchName"
 		:user-name="userName"
-		active-route="/app/vetedge-clinical-workspace"
+		active-route="/desk/vetedge-clinical-workspace"
 		@navigate="openRoute"
 	>
 		<EdgePageLayout>
@@ -83,7 +83,7 @@
 					<section v-if="activeTab === 'visit'" class="clinical-panel">
 						<h3>Patient and Visit</h3>
 						<div class="clinical-grid">
-							<EdgeLinkField :model-value="form.patient" label="Patient" placeholder="Select patient" :disabled="identityLocked" :searcher="(query) => linkSearch('patient', query)" @update:model-value="selectPatient" />
+							<EdgeLinkField :model-value="form.patient" :selected-label="form.patient_label" label="Patient" placeholder="Select patient" :disabled="identityLocked" :searcher="(query) => linkSearch('patient', query)" @update:model-value="selectPatient" />
 							<EdgeInput :model-value="form.primary_owner_label || form.primary_owner || ''" label="Pet Owner" readonly description="Derived from the selected Veterinary Patient." />
 							<EdgeLinkField :model-value="form.service_branch" label="Service Branch" placeholder="Select branch" :disabled="identityLocked" :searcher="(query) => linkSearch('branch', query)" @update:model-value="(value) => updateField('service_branch', value)" />
 							<EdgeLinkField :model-value="form.consulting_practitioner" label="Consulting Practitioner" placeholder="Select doctor" :searcher="(query) => contextSearch('practitioner', query)" @update:model-value="(value) => updateField('consulting_practitioner', value)" />
@@ -202,7 +202,7 @@ const STATUSES = ["Draft", "In Progress", "Awaiting Payment", "Pending Dispensar
 const DIAGNOSIS_TYPES = ["Primary", "Differential", "Rule Out", "Resolved"];
 const blankCapabilities = () => ({ create_vitals: false, view_history: false, open_billing: false });
 const blankDetail = (overrides = {}) => ({ open: false, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [], capabilities: blankCapabilities(), ...overrides });
-const blankForm = () => ({ patient: "", primary_owner: "", primary_owner_label: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
+const blankForm = () => ({ patient: "", patient_label: "", primary_owner: "", primary_owner_label: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
 const blankConfirmation = () => ({ open: false, title: "", subtitle: "", message: "", confirmLabel: "Continue", danger: false, resolve: null });
 const blankDispensary = () => ({ open: false, loading: false, context: {}, items: [] });
 function call(method, args = {}) { return frappe.call({ method, args }).then((response) => response.message); }
@@ -265,13 +265,13 @@ export default {
 		isNew() { return !this.detail.name; },
 		identityLocked() { return !this.isNew && this.detail.status !== "Draft"; },
 		detailTitle() { return this.form.consultation_title || this.detail.name || "New Veterinary Consultation"; },
-		detailSubtitle() { return [this.form.patient, this.form.consulting_practitioner_name, this.form.service_branch].filter(Boolean).join(" · ") || "Clinical consultation capture"; },
+		detailSubtitle() { return [this.form.patient_label || this.form.patient, this.form.consulting_practitioner_name, this.form.service_branch].filter(Boolean).join(" · ") || "Clinical consultation capture"; },
 		firstVisible() { return this.consultations.total ? this.consultations.start + 1 : 0; },
 		lastVisible() { return Math.min(this.consultations.start + (this.consultations.rows || []).length, this.consultations.total || 0); },
 		hasPrevious() { return this.consultations.start > 0; },
 		hasNext() { return this.consultations.start + this.consultations.page_length < this.consultations.total; },
 		dispensaryPending() { return (this.form.dispensary_status || "") === "Pending Dispensary"; },
-		dispensarySubtitle() { return [this.form.patient, this.dispensaryDialog.context.warehouse].filter(Boolean).join(" · ") || this.detail.name; },
+		dispensarySubtitle() { return [this.form.patient_label || this.form.patient, this.dispensaryDialog.context.warehouse].filter(Boolean).join(" · ") || this.detail.name; },
 		vitalEntries() {
 			const v = this.detail.latest_vitals || {};
 			return [
@@ -281,7 +281,7 @@ export default {
 				["Hydration", v.hydration_status], ["Pain Score", v.pain_score], ["Appetite", v.appetite_status],
 			].map(([label, value]) => ({ label, value }));
 		},
-		historySubtitle() { return this.historyDialog.data?.summary?.patient_name || this.form.patient || "Patient"; },
+		historySubtitle() { return this.historyDialog.data?.summary?.patient_name || this.form.patient_label || this.form.patient || "Patient"; },
 		historySections() {
 			const data = this.historyDialog.data || {};
 			return [
@@ -360,7 +360,7 @@ export default {
 			try {
 				this.applyDetail(await call(API.detail, { name }));
 				await this.applyTreatmentOrder();
-				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`);
+				window.history.replaceState({}, "", `/desk/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`);
 			} catch (error) { this.detail.loading = false; this.detail.error = message(error, "Unable to load consultation."); }
 		},
 		applyDetail(payload) {
@@ -368,6 +368,7 @@ export default {
 			this.detail = blankDetail({ open: true, name: payload?.name || "", modified: payload?.modified || "", status: payload?.status || "Draft", can_write: payload?.can_write !== false, scope_locked: Boolean(payload?.scope_locked), latest_vitals: payload?.latest_vitals || null, actions: payload?.actions || [], capabilities: { ...blankCapabilities(), ...(payload?.capabilities || {}) } });
 			this.form = {
 				...blankForm(), ...values,
+				patient_label: values.patient_label || payload?.patient_label || values.patient || "",
 				primary_owner_label: values.primary_owner_label || payload?.values?.primary_owner_label || payload?.owner_label || values.primary_owner || "",
 				consultation_datetime: localDatetime(values.consultation_datetime),
 				symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: rowKey(row) })),
@@ -396,22 +397,24 @@ export default {
 				const doctors = await this.contextSearch("practitioner", "");
 				if (doctors.length === 1) this.form.consulting_practitioner = doctors[0].value;
 			} catch (_error) {}
-			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace?new=1");
+			window.history.replaceState({}, "", "/desk/vetedge-clinical-workspace?new=1");
 		},
 		async backToList() {
 			if (!(await this.confirmDiscard())) return;
 			this.detail = blankDetail(); this.form = blankForm(); this.dirty = false;
-			window.history.replaceState({}, "", "/app/vetedge-clinical-workspace"); this.refreshList();
+			window.history.replaceState({}, "", "/desk/vetedge-clinical-workspace"); this.refreshList();
 		},
 		markDirty() { this.dirty = true; },
 		updateField(field, value) { this.form[field] = value ?? ""; this.markDirty(); },
 		async selectPatient(value) {
 			this.updateField("patient", value);
+			this.form.patient_label = "";
 			this.form.primary_owner = ""; this.form.primary_owner_label = "";
 			if (!value) return;
 			try {
 				const context = await call(API.patientContext, { patient: value });
 				if (this.form.patient !== value) return;
+				this.form.patient_label = context?.patient?.label || context?.patient?.name || value;
 				this.form.primary_owner = context?.owner?.name || "";
 				this.form.primary_owner_label = context?.owner?.label || context?.owner?.name || "";
 				if (!this.form.service_branch && context?.patient?.default_branch) this.form.service_branch = context.patient.default_branch;
@@ -455,7 +458,7 @@ export default {
 				const detail = await call(API.save, { payload });
 				this.applyDetail(detail); await this.applyTreatmentOrder();
 				frappe.show_alert({ message: "Consultation saved.", indicator: "green" });
-				window.history.replaceState({}, "", `/app/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`);
+				window.history.replaceState({}, "", `/desk/vetedge-clinical-workspace?consultation=${encodeURIComponent(detail.name)}`);
 				return detail;
 			} catch (error) { this.error = message(error, "Consultation could not be saved."); return null; }
 			finally { this.busy = false; }
@@ -514,7 +517,12 @@ export default {
 		},
 		openRelated(doctype) { frappe.route_options = { consultation: this.detail.name, patient: this.form.patient }; frappe.set_route("List", doctype); },
 		openDocument(doctype, name) { if (name) frappe.set_route("Form", doctype, name); },
-		openRoute(route) { if (route) window.location.assign(route); },
+		openRoute(route) {
+			if (!route) return;
+			const adapter = (window.EdgeSuiteUI || window.EdgeUI)?.getAdapter?.("navigation:vetedge");
+			if (adapter?.open?.(route) === true) return;
+			window.location.assign(route);
+		},
 		async linkSearch(kind, search) { return (await call(API.links, { kind, search, branch: this.form.service_branch || this.filters.branch || undefined, limit: 20 })) || []; },
 		async contextSearch(kind, search) { return (await call(API.contextLinks, { kind, search, limit: 50 })) || []; },
 		formatMoney(value) { return typeof format_currency === "function" ? format_currency(value || 0) : Number(value || 0).toFixed(2); },
