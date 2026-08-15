@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import flt, getdate, nowdate
+from frappe.utils import cint, flt, getdate, nowdate
 
 from vetedge.services.age import calculate_age_label
 from vetedge.services.registration_billing import validate_patient_registration
@@ -50,7 +50,40 @@ def validate_breed_species(doc) -> None:
 
 
 def sync_deceased_status(doc) -> None:
-	if doc.is_deceased:
+	"""Keep Status and Is Deceased synchronized without trapping corrections.
+
+	New Patients always enter the system as living/Active. A historical Patient can
+	later be marked deceased, and an authorized correction can clear the deceased
+	flag again. The service guard separately prevents new clinical services for a
+	Patient while the deceased state is active.
+	"""
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	is_new_method = getattr(doc, "is_new", None)
+	is_new = bool(is_new_method()) if callable(is_new_method) else previous is None
+
+	if is_new and previous is None:
+		doc.is_deceased = 0
+		if doc.status == "Deceased" or not doc.status:
+			doc.status = "Active"
+		return
+
+	current_flag = cint(doc.get("is_deceased"))
+	previous_flag = cint(previous.get("is_deceased")) if previous else 0
+	current_status = str(doc.get("status") or "Active")
+	previous_status = str(previous.get("status") or "") if previous else ""
+
+	if current_flag != previous_flag:
+		if current_flag:
+			doc.status = "Deceased"
+		elif current_status == "Deceased":
+			doc.status = "Active"
+		return
+
+	if current_status != previous_status:
+		doc.is_deceased = 1 if current_status == "Deceased" else 0
+		return
+
+	if current_flag:
 		doc.status = "Deceased"
-	elif doc.status == "Deceased":
-		doc.is_deceased = 1
+	elif current_status == "Deceased":
+		doc.status = "Active"
