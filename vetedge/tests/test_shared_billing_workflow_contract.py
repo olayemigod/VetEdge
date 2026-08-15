@@ -103,10 +103,11 @@ def test_registration_has_standalone_shared_billing_and_payment_path():
     assert "update_registration_status_from_payment_entry_aligned" in hooks
 
 
-def test_resource_center_v3_preserves_patient_filters_and_adds_clinical_filters():
+def test_resource_center_v3_preserves_patient_filters_and_adds_native_clinical_filters():
     hooks = read(APP / "hooks.py")
     v2 = read(APP / "services/resource_center_v2.py")
     v3 = read(APP / "services/resource_center_v3.py")
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     hardening = read(APP / "public/js/vetedge_resource_center_hardening.js")
 
     assert "resource_center_v3.get_resource_page" in hooks
@@ -123,10 +124,18 @@ def test_resource_center_v3_preserves_patient_filters_and_adds_clinical_filters(
         "lab_test",
     ):
         assert fieldname in v3
+        assert fieldname in component
     assert '"unsupported_required_fields": []' in v3
     assert '"summary_label": "Branch Scope"' in v3
-    assert "Apply Clinical Filters" in hardening
-    assert 'querySelector(".vetedge-resource-notice")?.remove?.()' in hardening
+    assert "clinicalFilters" in component
+    assert "clinicalStatusOptions" in component
+    assert "New Lab Order" in component
+    assert "New Vaccination" in component
+    assert "page.summary_label || 'Branch Scope'" in component
+    assert "Full ERPNext form required for create or edit" not in component
+    assert "accessLabel" not in component
+    assert "frappe.call = wrapped" not in hardening
+    assert "MutationObserver" not in hardening
 
 
 def test_patient_inline_masters_species_breed_cascade_and_deceased_flag_are_safe():
@@ -192,10 +201,12 @@ def test_lab_multi_test_picker_extension_preserves_workflow_and_draft_invoice_sy
         assert result_format in lab
 
 
-def test_vaccination_fields_follow_workflow_payment_and_reference_display():
+def test_vaccination_fields_follow_workflow_payment_stock_and_reference_display():
     state = read(APP / "services/clinical_record_state_v2.py")
     alignment = read(APP / "services/vaccination_state_alignment.py")
     display = read(APP / "services/display_labels.py")
+    vaccination = read(APP / "services/vaccination.py")
+    expiry = read(APP / "services/expiry_control.py")
     hooks = read(APP / "hooks.py")
 
     for fieldname in (
@@ -211,6 +222,12 @@ def test_vaccination_fields_follow_workflow_payment_and_reference_display():
         assert fieldname in state
     assert "has_submitted_invoice" in state
     assert 'field["value"] = ""' in state
+    assert 'state["batch_selection_policy"] = "FEFO"' in state
+    assert "Selected automatically from available non-expired vaccine stock" in state
+    assert "allocate_item_batches" in vaccination
+    assert "manual_batch_no=doc.batch_no" in vaccination
+    assert "get_available_valid_batches" in expiry
+    assert "allocate_fefo_batches" in expiry
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
     assert '"Sales Invoice"' in display
