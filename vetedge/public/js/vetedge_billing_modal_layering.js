@@ -18,8 +18,7 @@
 	}
 
 	function visibleLayerElements() {
-		return [...document.querySelectorAll(".modal, [role='dialog'], .edge-modal, .edge-modal-backdrop")]
-			.filter(isVisible);
+		return [...document.querySelectorAll(".modal, [role='dialog'], .edge-modal, .edge-modal-backdrop")].filter(isVisible);
 	}
 
 	function highestLayer(exclude) {
@@ -32,12 +31,15 @@
 		return highest;
 	}
 
-	function elevate(wrapper) {
-		if (!wrapper || !BILLING_TITLES.has(dialogTitle(wrapper))) return false;
+	function edgeBillingVisible() {
+		return [...document.querySelectorAll(".vetedge-edge-modal-presenter-host [role='dialog'], .vetedge-edge-modal-presenter-host .edge-modal")].some(isVisible);
+	}
+
+	function elevate(wrapper, force = false) {
+		if (!wrapper || (!force && !BILLING_TITLES.has(dialogTitle(wrapper)))) return false;
 		const zIndex = highestLayer(wrapper) + 20;
 		wrapper.style.zIndex = String(zIndex);
 		wrapper.dataset.vetedgeBillingLayer = "1";
-
 		const backdrops = [...document.querySelectorAll(".modal-backdrop")].filter(isVisible);
 		const backdrop = backdrops.at(-1);
 		if (backdrop) {
@@ -49,12 +51,17 @@
 
 	function elevateBillingDialogs() {
 		const dialogs = [...document.querySelectorAll(".modal")].filter(isVisible);
-		for (const dialog of dialogs) elevate(dialog);
+		const hasEdgeBilling = edgeBillingVisible();
+		for (const dialog of dialogs) {
+			// When the shared EdgeSuite billing presenter is visible, any subsequently
+			// opened native Frappe Message/validation dialog is a child interaction and
+			// must sit above it. Legacy Billing/Record Payment dialogs retain the same
+			// behavior for compatibility fallback.
+			elevate(dialog, hasEdgeBilling || BILLING_TITLES.has(dialogTitle(dialog)));
+		}
 	}
 
-	const observer = new MutationObserver(() => {
-		window.requestAnimationFrame(elevateBillingDialogs);
-	});
+	const observer = new MutationObserver(() => window.requestAnimationFrame(elevateBillingDialogs));
 	observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
 
 	function wrapSharedModal() {
