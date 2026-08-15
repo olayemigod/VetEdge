@@ -67,6 +67,7 @@ def test_vaccination_state_is_workflow_and_billing_aware():
     state = read("vetedge/services/clinical_record_state_v2.py")
     alignment = read("vetedge/services/vaccination_state_alignment.py")
     hooks = read("vetedge/hooks.py")
+    clinical_bundle = read("vetedge/public/js/vetedge_clinical_workspace.bundle.js")
 
     for fieldname in (
         "administered_by",
@@ -83,11 +84,16 @@ def test_vaccination_state_is_workflow_and_billing_aware():
     assert 'field["value"] = ""' in state
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
+    assert "Administration user/time, batch, stock entry and linked invoice" in clinical_bundle
+    vaccination_creation = clinical_bundle.split("function vaccinationFields", 1)[1].split("function openHospitalisationModal", 1)[0]
+    assert "fieldname: 'administered_on'" not in vaccination_creation
+    assert "serverDatetime(values.administered_on)" not in vaccination_creation
 
 
 def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     service = read("vetedge/services/lab_order_extensions.py")
     frontend = read("vetedge/public/js/vetedge_lab_order_add_tests.js")
+    loader = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
 
     assert "get_addable_lab_tests" in service
     assert "add_lab_tests" in service
@@ -97,11 +103,13 @@ def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     assert "Add Lab Tests" in frontend
     assert "Add Selected Tests" in frontend
     assert 'type: "select"' in frontend
+    assert "VetEdgeLabOrderAddTests?.install?.()" in loader
 
 
 def test_resource_center_removes_generic_readonly_banner_and_adds_filters():
     service = read("vetedge/services/resource_center_v3.py")
     frontend = read("vetedge/public/js/vetedge_resource_center_hardening.js")
+    clinical_bundle = read("vetedge/public/js/vetedge_clinical_workspace.bundle.js")
 
     assert '"unsupported_required_fields": []' in service
     assert '"summary_label": "Branch Scope"' in service
@@ -112,6 +120,9 @@ def test_resource_center_removes_generic_readonly_banner_and_adds_filters():
     assert 'querySelector(".vetedge-resource-notice")?.remove?.()' in frontend
     assert 'setTextIfChanged(button, __("New Consultation"))' in frontend
     assert "Apply Clinical Filters" in frontend
+    assert "params.get('patient')" in clinical_bundle
+    assert "this.selectPatient?.(patient)" in clinical_bundle
+    assert "/desk/vetedge-clinical-workspace?new=1" in clinical_bundle
 
 
 def test_reference_documents_keep_reference_numbers_and_masters_use_titles():
