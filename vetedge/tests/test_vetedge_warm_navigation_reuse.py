@@ -2,7 +2,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-APP = ROOT / "vetedge"
 
 
 def read(relative_path: str) -> str:
@@ -67,6 +66,7 @@ def test_clinical_warm_navigation_is_route_aware_and_preserves_dirty_work():
         "clinicalRouteState()",
         "routeChanged",
         "view.dirty && routeChanged",
+        "await view.confirmDiscard?.()",
         "view.loadDetail?.(requested.consultation)",
         "view.startNewConsultation?.()",
         "view.refreshList?.()",
@@ -115,6 +115,16 @@ def test_master_and_pricing_reuse_keeps_dirty_form_confirmation():
         assert "view.confirmDiscard(finishRefresh)" in content
         assert "await view.loadCurrentRoute?.()" in content
         assert f"{prefix}_last_refresh_at" in content
+
+
+def test_settings_refresh_is_stale_aware_and_never_overwrites_dirty_values():
+    content = read("vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js")
+
+    assert "VETEDGE_SETTINGS_REFRESH_MAX_AGE_MS = 15000" in content
+    assert "if (!view || view.dirty) return;" in content
+    assert "if (!stale) return;" in content
+    assert "Promise.resolve(view.load?.())" in content
+    assert "setInterval(" not in content
 
 
 def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loading():
