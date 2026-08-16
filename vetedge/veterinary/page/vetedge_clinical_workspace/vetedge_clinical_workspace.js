@@ -23,6 +23,18 @@ function clinicalRouteState() {
 	};
 }
 
+function mountedClinicalStateMatchesRoute(view, requested) {
+	if (requested.consultation) {
+		return Boolean(view.detail?.open && String(view.detail?.name || '') === requested.consultation);
+	}
+	if (requested.isNew) {
+		if (!view.detail?.open || view.detail?.name) return false;
+		if (!requested.patient) return true;
+		return String(view.form?.patient || '') === requested.patient;
+	}
+	return !view.detail?.open;
+}
+
 async function refreshMountedClinicalWorkspace(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return false;
@@ -30,14 +42,16 @@ async function refreshMountedClinicalWorkspace(wrapper) {
 	const requested = clinicalRouteState();
 	const previousKey = wrapper.clinical_route_key || '';
 	const routeChanged = previousKey !== requested.key;
+	const stateMismatch = !mountedClinicalStateMatchesRoute(view, requested);
+	const needsRouteSync = routeChanged || stateMismatch;
 	const stale = Date.now() - Number(wrapper.clinical_last_refresh_at || 0) >= VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS;
 
-	if (view.dirty && routeChanged) {
+	if (view.dirty && needsRouteSync) {
 		const confirmed = await view.confirmDiscard?.();
 		if (!confirmed) return true;
 	}
 
-	if (routeChanged) {
+	if (needsRouteSync) {
 		if (requested.consultation) await view.loadDetail?.(requested.consultation);
 		else if (requested.isNew) await view.startNewConsultation?.();
 		else if (view.detail?.open) await view.backToList?.();
