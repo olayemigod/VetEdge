@@ -70,7 +70,9 @@ def test_clinical_warm_navigation_is_route_aware_and_preserves_dirty_work():
         "view.dirty && needsRouteSync",
         "await view.confirmDiscard?.()",
         "view.loadDetail?.(requested.consultation)",
-        "view.startNewConsultation?.()",
+        "openRequestedNewConsultation(view, requested)",
+        "await view.selectPatient?.(requested.patient)",
+        "patient=${encodeURIComponent(requested.patient)}",
         "view.refreshList?.()",
         "clinical_last_refresh_at",
     ):
