@@ -12,6 +12,7 @@ LOCKED_FIELDS = {"enable_vetedge"}
 SERVICE_ITEM_FIELDS = {
 	"consultation_item",
 	"default_registration_item",
+	"registration_item",
 	"default_laboratory_service_item",
 	"hospitalisation_admission_fee_item",
 	"default_boarding_billing_item",
@@ -138,6 +139,17 @@ def _modified(doc) -> str:
 	return cstr(getattr(doc, "modified", "") or "")
 
 
+def _write_roles() -> list[str]:
+	meta = frappe.get_meta(SETTINGS_DOCTYPE)
+	return sorted(
+		{
+			cstr(permission.role)
+			for permission in meta.permissions
+			if cint(permission.write) and cint(permission.permlevel) == 0 and permission.role
+		}
+	)
+
+
 @frappe.whitelist()
 def get_veterinary_settings_page() -> dict:
 	_require_permission("read")
@@ -147,6 +159,7 @@ def get_veterinary_settings_page() -> dict:
 		"schema": _schema(),
 		"values": _values(doc),
 		"can_write": frappe.has_permission(SETTINGS_DOCTYPE, ptype="write"),
+		"write_roles": _write_roles(),
 		"modified": _modified(doc),
 	}
 
@@ -220,12 +233,29 @@ def _link_filters(fieldname: str, target_doctype: str) -> dict:
 	return {}
 
 
-@frappe.whitelist()
-def search_veterinary_settings_link(fieldname: str, txt: str = "") -> list[dict]:
-	_require_permission("read")
+def _resolve_settings_link_field(fieldname: str, child_fieldname: str | None = None):
 	field = frappe.get_meta(SETTINGS_DOCTYPE).get_field(fieldname)
+	if child_fieldname:
+		if not field or field.fieldtype != "Table" or not field.options:
+			frappe.throw(_("Invalid Veterinary Settings table field."), frappe.ValidationError)
+		child_field = frappe.get_meta(field.options).get_field(child_fieldname)
+		if not child_field or child_field.fieldtype != "Link" or not child_field.options:
+			frappe.throw(_("Invalid Veterinary Settings child Link field."), frappe.ValidationError)
+		return child_field
 	if not field or field.fieldtype != "Link" or not field.options:
-		frappe.throw(_("Invalid Veterinary Settings Link field."))
+		frappe.throw(_("Invalid Veterinary Settings Link field."), frappe.ValidationError)
+	return field
+
+
+@frappe.whitelist()
+def search_veterinary_settings_link(
+	fieldname: str,
+	txt: str = "",
+	child_fieldname: str | None = None,
+) -> list[dict]:
+	_require_permission("read")
+	field = _resolve_settings_link_field(fieldname, child_fieldname)
+	filter_fieldname = child_fieldname or fieldname
 
 	target_meta = frappe.get_meta(field.options)
 	fields = ["name"]
@@ -237,7 +267,7 @@ def search_veterinary_settings_link(fieldname: str, txt: str = "") -> list[dict]
 		or_filters.append([target_meta.title_field, "like", search_text])
 	rows = frappe.get_list(
 		field.options,
-		filters=_link_filters(fieldname, field.options),
+		filters=_link_filters(filter_fieldname, field.options),
 		or_filters=or_filters,
 		fields=fields,
 		limit_page_length=20,
