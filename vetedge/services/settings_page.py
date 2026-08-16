@@ -150,6 +150,19 @@ def _write_roles() -> list[str]:
 	)
 
 
+def _write_access_payload() -> dict:
+	return {
+		"can_write": bool(frappe.has_permission(SETTINGS_DOCTYPE, ptype="write")),
+		"write_roles": _write_roles(),
+	}
+
+
+@frappe.whitelist()
+def get_veterinary_settings_access() -> dict:
+	_require_permission("read")
+	return _write_access_payload()
+
+
 @frappe.whitelist()
 def get_veterinary_settings_page() -> dict:
 	_require_permission("read")
@@ -158,8 +171,7 @@ def get_veterinary_settings_page() -> dict:
 		"doctype": SETTINGS_DOCTYPE,
 		"schema": _schema(),
 		"values": _values(doc),
-		"can_write": frappe.has_permission(SETTINGS_DOCTYPE, ptype="write"),
-		"write_roles": _write_roles(),
+		**_write_access_payload(),
 		"modified": _modified(doc),
 	}
 
