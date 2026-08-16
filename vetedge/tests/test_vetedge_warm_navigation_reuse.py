@@ -125,10 +125,36 @@ def test_settings_refresh_is_stale_aware_and_never_overwrites_dirty_values():
     content = read("vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js")
 
     assert "VETEDGE_SETTINGS_REFRESH_MAX_AGE_MS = 15000" in content
-    assert "if (!view || view.dirty) return;" in content
+    assert "if (view.dirty) return;" in content
     assert "if (!stale) return;" in content
     assert "Promise.resolve(view.load?.())" in content
     assert "setInterval(" not in content
+
+
+def test_settings_write_access_is_reconciled_from_authoritative_server_permission():
+    loader = read("vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js")
+    service = read("vetedge/services/settings_page.py")
+
+    for contract in (
+        "syncVeterinarySettingsWriteAccess(wrapper)",
+        "reconcileVeterinarySettingsWriteAccess(wrapper)",
+        "get_veterinary_settings_access",
+        "view.canWrite = payload.can_write === true || Number(payload.can_write || 0) === 1;",
+        "runtime?.Vue?.watch",
+        "wrapper.settings_access_checked",
+    ):
+        assert contract in loader
+
+    for contract in (
+        "def _write_access_payload() -> dict:",
+        '"can_write": bool(frappe.has_permission(SETTINGS_DOCTYPE, ptype="write")),',
+        "def get_veterinary_settings_access() -> dict:",
+        "return _write_access_payload()",
+        "**_write_access_payload(),",
+    ):
+        assert contract in service
+
+    assert "ignore_permissions" not in service
 
 
 def test_settings_child_tables_use_smart_links_and_respect_write_permission():
@@ -147,7 +173,6 @@ def test_settings_child_tables_use_smart_links_and_respect_write_permission():
 
     for contract in (
         '"registration_item",',
-        '"write_roles": _write_roles(),',
         "def _resolve_settings_link_field(fieldname: str, child_fieldname: str | None = None):",
         "child_fieldname: str | None = None,",
         "filter_fieldname = child_fieldname or fieldname",
@@ -155,6 +180,22 @@ def test_settings_child_tables_use_smart_links_and_respect_write_permission():
         assert contract in service
 
     assert "ignore_permissions" not in service
+
+
+def test_resource_center_redispatches_same_patient_consultation_route_instead_of_noop():
+    content = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
+
+    for contract in (
+        "function installResourceCenterRepeatRouteDispatch()",
+        "adapter.__vetedgeRepeatRouteDispatchInstalled",
+        "url.pathname === '/desk/vetedge-clinical-workspace'",
+        "next === current",
+        "Promise.resolve(frappeRouter.route())",
+        "installResourceCenterRepeatRouteDispatch();",
+    ):
+        assert contract in content
+
+    assert "window.location.reload" not in content
 
 
 def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loading():
@@ -190,7 +231,6 @@ def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation
     assert "Promise.resolve(frappeRouter.route())" in block
     assert "const next = `${url.pathname}${url.search}${url.hash}`;" in block
     assert "const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;" in block
-    assert "if (current === next) return true;" in block
     assert block.index("window.history.pushState") < block.index("window.location.assign(target)")
     assert "window.location.assign(deskRoute(route));" not in block
 
