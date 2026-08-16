@@ -65,7 +65,9 @@ def test_clinical_warm_navigation_is_route_aware_and_preserves_dirty_work():
     for contract in (
         "clinicalRouteState()",
         "routeChanged",
-        "view.dirty && routeChanged",
+        "stateMismatch",
+        "needsRouteSync",
+        "view.dirty && needsRouteSync",
         "await view.confirmDiscard?.()",
         "view.loadDetail?.(requested.consultation)",
         "view.startNewConsultation?.()",
