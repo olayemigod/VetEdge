@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 
-from vetedge.services import registration_billing
+from vetedge.services import clinical_workspace, dispensary, registration_billing
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -90,6 +90,18 @@ class TestPhase5ConsultationContinuity(TestCase):
         assert "patient," in content
         assert "`new:${patient || '-'}`" in content
 
+    def test_mounted_clinical_route_reopens_new_patient_when_view_state_was_discarded(self):
+        content = read(
+            "vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js"
+        )
+
+        assert "function mountedClinicalStateMatchesRoute(view, requested)" in content
+        assert "if (!view.detail?.open || view.detail?.name) return false;" in content
+        assert "return String(view.form?.patient || '') === requested.patient;" in content
+        assert "const stateMismatch = !mountedClinicalStateMatchesRoute(view, requested);" in content
+        assert "const needsRouteSync = routeChanged || stateMismatch;" in content
+        assert "else if (requested.isNew) await view.startNewConsultation?.();" in content
+
     def test_resource_center_drops_stale_new_patient_route_option_on_list_return(self):
         content = read(
             "vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js"
@@ -120,3 +132,44 @@ class TestPhase5ConsultationContinuity(TestCase):
         assert 'this.form.patient_label = context?.patient?.label || context?.patient?.name || value;' in content
         assert 'active-route="/desk/vetedge-clinical-workspace"' in content
         assert "/app/vetedge-clinical-workspace" not in content
+
+    def test_non_stock_treatment_does_not_require_dispensary_without_explicit_override(self):
+        doc = frappe._dict(planned_treatments=[frappe._dict(item="SERVICE-001", treatment_type=None)])
+
+        with (
+            patch.object(dispensary, "get_dispensary_settings", return_value=SimpleNamespace(enabled=True)),
+            patch.object(dispensary, "get_treatment_type_requires_dispensary", return_value=False),
+            patch.object(dispensary, "get_treatment_item_defaults", return_value=None),
+            patch.object(
+                dispensary,
+                "get_item_stock_profile",
+                return_value=SimpleNamespace(is_stock_item=False),
+            ),
+        ):
+            self.assertFalse(dispensary.consultation_requires_dispensary(doc))
+
+    def test_disabled_dispensary_never_requires_dispensary(self):
+        doc = frappe._dict(planned_treatments=[frappe._dict(item="MED-001")])
+
+        with patch.object(
+            dispensary,
+            "get_dispensary_settings",
+            return_value=SimpleNamespace(enabled=False),
+        ):
+            self.assertFalse(dispensary.consultation_requires_dispensary(doc))
+
+    def test_pending_dispensary_action_is_hidden_when_not_required(self):
+        doc = SimpleNamespace(status="In Progress", has_permission=lambda permission: True)
+
+        with patch.object(clinical_workspace, "consultation_requires_dispensary", return_value=False):
+            actions = clinical_workspace._status_actions(doc)
+
+        self.assertNotIn("status:Pending Dispensary", [row["key"] for row in actions])
+
+    def test_pending_dispensary_action_is_available_when_required(self):
+        doc = SimpleNamespace(status="In Progress", has_permission=lambda permission: True)
+
+        with patch.object(clinical_workspace, "consultation_requires_dispensary", return_value=True):
+            actions = clinical_workspace._status_actions(doc)
+
+        self.assertIn("status:Pending Dispensary", [row["key"] for row in actions])
