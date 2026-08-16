@@ -35,6 +35,18 @@ function mountedClinicalStateMatchesRoute(view, requested) {
 	return !view.detail?.open;
 }
 
+async function openRequestedNewConsultation(view, requested) {
+	await view.startNewConsultation?.();
+	if (!requested.patient) return;
+
+	await view.selectPatient?.(requested.patient);
+	window.history.replaceState(
+		{},
+		'',
+		`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(requested.patient)}`,
+	);
+}
+
 async function refreshMountedClinicalWorkspace(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return false;
@@ -53,7 +65,7 @@ async function refreshMountedClinicalWorkspace(wrapper) {
 
 	if (needsRouteSync) {
 		if (requested.consultation) await view.loadDetail?.(requested.consultation);
-		else if (requested.isNew) await view.startNewConsultation?.();
+		else if (requested.isNew) await openRequestedNewConsultation(view, requested);
 		else if (view.detail?.open) await view.backToList?.();
 		else await view.refreshList?.();
 	} else if (stale && !view.dirty) {
