@@ -10,6 +10,42 @@ function clearStalePatientCreateRouteOption() {
 	}
 }
 
+function installResourceCenterRepeatRouteDispatch() {
+	const runtime = window.EdgeSuiteUI || window.EdgeUI;
+	for (const adapterName of ['navigation:vetedge', 'navigation:veterinary']) {
+		const adapter = runtime?.getAdapter?.(adapterName);
+		if (!adapter?.open || adapter.__vetedgeRepeatRouteDispatchInstalled) continue;
+		const originalOpen = adapter.open.bind(adapter);
+		adapter.open = function(route) {
+			const raw = String(route || '').trim();
+			try {
+				const url = new URL(raw, window.location.origin);
+				if (url.origin === window.location.origin && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) {
+					url.pathname = `/desk${url.pathname.slice(4)}`;
+				}
+				const next = `${url.pathname}${url.search}${url.hash}`;
+				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+				const frappeRouter = window.frappe?.router;
+				if (
+					url.origin === window.location.origin &&
+					url.pathname === '/desk/vetedge-clinical-workspace' &&
+					next === current &&
+					typeof frappeRouter?.route === 'function'
+				) {
+					Promise.resolve(frappeRouter.route()).catch((error) => {
+						console.error('Error redispatching repeated Veterinary Clinical route:', error);
+					});
+					return true;
+				}
+			} catch (_error) {
+				// Fall through to the canonical VetEdge navigation adapter.
+			}
+			return originalOpen(route);
+		};
+		adapter.__vetedgeRepeatRouteDispatchInstalled = true;
+	}
+}
+
 frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -21,6 +57,8 @@ frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 
 frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 	clearStalePatientCreateRouteOption();
+	window.VetEdgeUIBridge?.install?.();
+	installResourceCenterRepeatRouteDispatch();
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
@@ -92,6 +130,7 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 			if (wrapper.current_visit_id !== visitId) return;
 			const professional = window.VetEdgeProfessionalUI?.install?.();
 			window.VetEdgeUIBridge?.install?.();
+			installResourceCenterRepeatRouteDispatch();
 			if (!professional?.installed) {
 				showFailure(
 					professional?.message ||
