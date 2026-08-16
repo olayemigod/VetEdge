@@ -131,6 +131,32 @@ def test_settings_refresh_is_stale_aware_and_never_overwrites_dirty_values():
     assert "setInterval(" not in content
 
 
+def test_settings_child_tables_use_smart_links_and_respect_write_permission():
+    component = read("vetedge/public/js/veterinary_settings_center/VeterinarySettingsCenter.vue")
+    service = read("vetedge/services/settings_page.py")
+
+    for contract in (
+        "v-else-if=\"child.fieldtype === 'Link'\"",
+        ":searcher=\"(term) => searchChildLink(field, child, term)\"",
+        ":disabled=\"isChildReadOnly(field, child, row)\"",
+        ":disabled=\"isReadOnly(field)\" @click=\"addRow(field)\"",
+        "Veterinary Settings is read-only for this account.",
+        "this.writeRoles = payload.write_roles || [];",
+    ):
+        assert contract in component
+
+    for contract in (
+        '"registration_item",',
+        '"write_roles": _write_roles(),',
+        "def _resolve_settings_link_field(fieldname: str, child_fieldname: str | None = None):",
+        "child_fieldname: str | None = None,",
+        "filter_fieldname = child_fieldname or fieldname",
+    ):
+        assert contract in service
+
+    assert "ignore_permissions" not in service
+
+
 def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loading():
     for path, marker in (
         ("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js", "if (wrapper.vue_app?.refresh)"),
