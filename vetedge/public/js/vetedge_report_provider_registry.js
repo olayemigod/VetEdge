@@ -143,11 +143,19 @@
 		);
 	}
 
+	function registerMasterReports() {
+		registerServerPaginatedReport(
+			"Owner Register",
+			"vetedge.services.owner_report.get_owner_register_view",
+		);
+	}
+
 	function register() {
 		if (!adapter()?.runtimeReports?.()) return false;
 		registerStockExpiry();
 		registerPlannedTreatment();
 		registerClinicalReports();
+		registerMasterReports();
 		return true;
 	}
 
