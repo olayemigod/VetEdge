@@ -47,6 +47,20 @@ function reportCenterRoute(route) {
 	if (!target) return false;
 	if (window.VetEdgeNavigationRecovery?.navigate?.(target) === true) return true;
 	if (window.VetEdgeProfessionalUI?.openRoute?.(target) === true) return true;
+	try {
+		const url = new URL(target, window.location.origin);
+		if (url.origin === window.location.origin && /^\/desk(?:\/|$)/.test(url.pathname) && typeof frappe.set_route === "function") {
+			frappe.route_options = {};
+			for (const [key, value] of url.searchParams) frappe.route_options[key] = value;
+			const parts = url.pathname.replace(/^\/desk(?:\/|$)/, "").split("/").filter(Boolean).map(decodeURIComponent);
+			if (parts.length) {
+				frappe.set_route(...parts);
+				return true;
+			}
+		}
+	} catch (_error) {
+		// Fall back to normal browser navigation.
+	}
 	window.location.assign(target);
 	return true;
 }
@@ -61,6 +75,7 @@ function reportCenterParams() {
 		branch: get("branch"),
 		from_date: get("from_date"),
 		to_date: get("to_date"),
+		date_preset: get("date_preset"),
 		customer: get("customer"),
 		practitioner: get("practitioner"),
 		service_category: get("service_category"),
@@ -98,7 +113,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 	frappe.require("edgeui.bundle.js", () => loadProviderAssets(() => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
-		const required = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader", "EdgeFilterBar", "EdgeLinkField", "EdgeDropdown", "EdgeInput", "EdgeDataTable", "EdgeDashboardLayout", "EdgeStatCard", "EdgeLoadingState", "EdgeErrorState", "EdgeEmptyState"];
+		const required = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader", "EdgeFilterBar", "EdgeLinkField", "EdgeDropdown", "EdgeInput", "EdgeDataTable", "EdgeDashboardLayout", "EdgeStatCard", "EdgeLoadingState", "EdgeErrorState", "EdgeEmptyState", "EdgeReportExportDialog"];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
 		if (!runtime?.createEdgeApp || !runtime?.Vue?.h || missing.length) {
 			fail(__("Quick Reports require the current EdgeSuite UI runtime. Missing: {0}", [missing.join(", ")]));
@@ -110,7 +125,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 		window.VetEdgeNavigationRecovery?.install?.();
 		const h = runtime.Vue.h;
 		const nextTick = runtime.Vue.nextTick;
-		const { EdgeAppShell, EdgePageLayout, EdgePageHeader, EdgeFilterBar, EdgeLinkField, EdgeDropdown, EdgeInput, EdgeDataTable, EdgeDashboardLayout, EdgeStatCard, EdgeLoadingState, EdgeErrorState, EdgeEmptyState } = runtime.components;
+		const { EdgeAppShell, EdgePageLayout, EdgePageHeader, EdgeFilterBar, EdgeLinkField, EdgeDropdown, EdgeInput, EdgeDataTable, EdgeDashboardLayout, EdgeStatCard, EdgeLoadingState, EdgeErrorState, EdgeEmptyState, EdgeReportExportDialog } = runtime.components;
 		const initial = reportCenterParams();
 		const profile = reportCenterProfile();
 		const serviceCategories = ["", "Consultation Service", "Treatment", "Registration", "Vaccination", "Lab", "Grooming", "Boarding", "Hospitalisation", "Dispensary / Pharmacy", "General / Other"].map((value) => ({ value, label: value || __("All Service Categories") }));
@@ -121,7 +136,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				return {
 					reportName: initial.report,
 					sourceRoute: initial.source,
-					filters: { branch: initial.branch || "", from_date: initial.from_date || "", to_date: initial.to_date || "", customer: initial.customer || "", practitioner: initial.practitioner || "", service_category: initial.service_category || "", item: initial.item || "" },
+					filters: { branch: initial.branch || "", from_date: initial.from_date || "", to_date: initial.to_date || "", date_preset: initial.date_preset || "", customer: initial.customer || "", practitioner: initial.practitioner || "", service_category: initial.service_category || "", item: initial.item || "" },
 					loading: false,
 					error: "",
 					provider: null,
@@ -129,6 +144,8 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					pageLength: VETEDGE_REPORT_PAGE_LENGTH,
 					result: { columns: [], rows: [], summary: [], chart: null, total: 0, start: 0, page_length: 0, has_previous: false, has_next: false, metadata: {} },
 					chartInstance: null,
+					exportOpen: false,
+					exportBusy: false,
 				};
 			},
 			mounted() { this.refresh(); },
@@ -209,6 +226,18 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					catch (error) { console.warn("VetEdge report chart failed to render", error); }
 				},
 				back() { reportCenterRoute(this.sourceRoute || "/desk/vetedge-executive-dashboard"); },
+				async runExport(options) {
+					this.exportBusy = true;
+					try {
+						await window.VetEdgeReportProviders.downloadReportExport({ reportName: this.reportName, filters: this.reportFilters(), options, start: this.pageStart, pageLength: this.pageLength });
+						this.exportOpen = false;
+						frappe.show_alert?.({ message: __("Report download prepared successfully."), indicator: "green" });
+					} catch (error) {
+						frappe.msgprint({ title: __("Report Download Failed"), message: error?.message || __("The report could not be downloaded."), indicator: "red" });
+					} finally {
+						this.exportBusy = false;
+					}
+				},
 				renderFilters() {
 					const common = [
 						h(EdgeLinkField, { modelValue: this.filters.branch, selectedLabel: this.filters.branch || __("All Branches"), label: __("Branch"), placeholder: __("All Branches"), searcher: (term) => this.searchLink("Branch", term), allowClear: true, "onUpdate:modelValue": (value) => { this.filters.branch = value || ""; } }),
@@ -230,25 +259,25 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 			},
 			render() {
 				const rows = this.displayRows();
-				return h(EdgeAppShell, { product: "vetedge", title: "Veterinary", tenantName: profile.tenantName, branchName: this.filters.branch || profile.branchName, userName: profile.userName, activeRoute: this.sourceRoute || "/desk/vetedge-executive-dashboard" }, {
-					default: () => h(EdgePageLayout, {}, {
-						header: () => h(EdgePageHeader, { eyebrow: __("Quick Report"), title: this.reportName || __("Veterinary Report"), subtitle: __("EdgeSuite report view using the dashboard scope that opened this report.") }, { actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("span", { class: "vetedge-report-provider-badge" }, this.providerLabel), h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: this.back }, __("Back to Dashboard"))]) }),
-						filters: () => h(EdgeFilterBar, { title: __("Report Filters") }, { default: () => this.renderFilters(), actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh"))]) }),
-						default: () => this.error
-							? h("div", { class: "vetedge-report-center-content" }, [h(EdgeErrorState, { title: __("Report Failed"), message: this.error, onRetry: () => this.refresh() })])
-							: this.loading
-								? h("div", { class: "vetedge-report-center-content" }, [h(EdgeLoadingState, { message: __("Generating report…"), skeleton: true })])
-								: h("div", { class: "vetedge-report-center-content" }, [
-									this.renderSummary(),
-									this.result.chart?.data ? h("section", { class: "vetedge-report-center-section" }, [h("div", { class: "vetedge-report-center-heading" }, [h("div", [h("span", __("Chart")), h("h2", this.result.chart.title || this.reportName)])]), h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" })]) : null,
-									h("section", { class: "vetedge-report-center-section" }, [
-										h("div", { class: "vetedge-report-center-heading" }, [h("div", [h("span", __("Detail")), h("h2", this.reportName || __("Report Results")), h("p", __("Filters are retained in the URL and optimized providers load only the requested page."))])]),
-										rows.length ? h(EdgeDataTable, { columns: this.result.columns || [], rows, rowKey: "__row_key" }) : h(EdgeEmptyState, { title: __("No report rows"), description: __("No records match the selected report filters.") }),
-										(this.result.has_previous || this.result.has_next) ? h("div", { class: "vetedge-report-center-pagination" }, [h("span", {}, __("Showing {0}–{1} of {2}", [this.result.total ? this.result.start + 1 : 0, Math.min(this.result.start + rows.length, this.result.total), this.result.total])), h("div", { class: "vetedge-report-center-actions" }, [h("button", { class: "edge-button edge-button--compact", disabled: !this.result.has_previous || this.loading, onClick: this.previousPage }, __("Previous")), h("button", { class: "edge-button edge-button--compact", disabled: !this.result.has_next || this.loading, onClick: this.nextPage }, __("Next"))])]) : null,
-									]),
-								].filter(Boolean)),
-					}),
+				const layout = h(EdgePageLayout, {}, {
+					header: () => h(EdgePageHeader, { eyebrow: __("Quick Report"), title: this.reportName || __("Veterinary Report"), subtitle: __("EdgeSuite report view using the dashboard scope that opened this report.") }, { actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("span", { class: "vetedge-report-provider-badge" }, this.providerLabel), h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.loading, onClick: () => { this.exportOpen = true; } }, __("Download / Export")), h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: this.back }, __("Back to Dashboard"))]) }),
+					filters: () => h(EdgeFilterBar, { title: __("Report Filters") }, { default: () => this.renderFilters(), actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh"))]) }),
+					default: () => this.error
+						? h("div", { class: "vetedge-report-center-content" }, [h(EdgeErrorState, { title: __("Report Failed"), message: this.error, onRetry: () => this.refresh() })])
+						: this.loading
+							? h("div", { class: "vetedge-report-center-content" }, [h(EdgeLoadingState, { message: __("Generating report…"), skeleton: true })])
+							: h("div", { class: "vetedge-report-center-content" }, [
+								this.renderSummary(),
+								this.result.chart?.data ? h("section", { class: "vetedge-report-center-section" }, [h("div", { class: "vetedge-report-center-heading" }, [h("div", [h("span", __("Chart")), h("h2", this.result.chart.title || this.reportName)])]), h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" })]) : null,
+								h("section", { class: "vetedge-report-center-section" }, [
+									h("div", { class: "vetedge-report-center-heading" }, [h("div", [h("span", __("Detail")), h("h2", this.reportName || __("Report Results")), h("p", __("Filters are retained in the URL and optimized providers load only the requested page."))])]),
+									rows.length ? h(EdgeDataTable, { columns: this.result.columns || [], rows, rowKey: "__row_key" }) : h(EdgeEmptyState, { title: __("No report rows"), description: __("No records match the selected report filters.") }),
+									(this.result.has_previous || this.result.has_next) ? h("div", { class: "vetedge-report-center-pagination" }, [h("span", {}, __("Showing {0}–{1} of {2}", [this.result.total ? this.result.start + 1 : 0, Math.min(this.result.start + rows.length, this.result.total), this.result.total])), h("div", { class: "vetedge-report-center-actions" }, [h("button", { class: "edge-button edge-button--compact", disabled: !this.result.has_previous || this.loading, onClick: this.previousPage }, __("Previous")), h("button", { class: "edge-button edge-button--compact", disabled: !this.result.has_next || this.loading, onClick: this.nextPage }, __("Next"))])]) : null,
+								]),
+							].filter(Boolean)),
 				});
+				const exportDialog = h(EdgeReportExportDialog, { open: this.exportOpen, busy: this.exportBusy, reportTitle: this.reportName || __("Veterinary Report"), columns: this.result.columns || [], initialOptions: { format: "xlsx", scope: "all_filtered" }, onClose: () => { if (!this.exportBusy) this.exportOpen = false; }, onExport: this.runExport });
+				return h(EdgeAppShell, { product: "vetedge", title: "Veterinary", tenantName: profile.tenantName, branchName: this.filters.branch || profile.branchName, userName: profile.userName, activeRoute: this.sourceRoute || "/desk/vetedge-executive-dashboard" }, { default: () => [layout, exportDialog] });
 			},
 		};
 
