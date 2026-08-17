@@ -109,10 +109,6 @@ export function mountVetEdgeResourceCenter(target) {
 				}
 				quickEditorView?.open?.({ resource: this.resource, name });
 			},
-			openNewConsultation(row) {
-				if (!row?.name) return;
-				this.openRoute(`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(row.name)}`);
-			},
 		},
 	};
 
