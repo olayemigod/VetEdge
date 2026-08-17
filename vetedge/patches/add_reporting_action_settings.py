@@ -7,7 +7,8 @@ FIELDS = (
 		"label": "Enable Report & Dashboard Printing",
 		"fieldtype": "Check",
 		"default": "1",
-		"description": "Master switch for Print actions on VetEdge reports and dashboards. User report/dashboard access is still required.",
+		"depends_on": "eval:doc.enable_vetedge",
+		"description": "Master switch for Print actions on VetEdge reports and dashboards. User report/dashboard access and action permission are still required.",
 		"insert_after": "enable_advanced_reports",
 	},
 	{
@@ -15,7 +16,8 @@ FIELDS = (
 		"label": "Enable Report & Dashboard Export",
 		"fieldtype": "Check",
 		"default": "1",
-		"description": "Master switch for downloadable report/dashboard exports. User report/dashboard access is still required and server-side export checks remain authoritative.",
+		"depends_on": "eval:doc.enable_vetedge",
+		"description": "Master switch for downloadable report/dashboard exports. User report/dashboard access and action permission are still required; server-side checks remain authoritative.",
 		"insert_after": "enable_reporting_print",
 	},
 )
