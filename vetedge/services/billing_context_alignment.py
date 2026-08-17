@@ -120,13 +120,39 @@ def _normalize_payload(payload: dict | None) -> dict:
     return result
 
 
-def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -> None:
-    """Align the active draft before Billing Core re-dates it during an update.
+def _safe_due_date_for_posting(invoice, posting_date: str) -> str:
+    due_date = invoice.get("due_date")
+    if due_date and getdate(due_date) >= getdate(posting_date):
+        return str(due_date)
 
-    Billing Core intentionally uses the current date when an active draft invoice is
-    updated. ERPNext validates due_date while preparing invoice defaults, so an older
-    draft must have its posting/due date pair aligned before that preparation runs.
-    Submitted/cancelled invoices are never changed here.
+    resolved_due_date = None
+    try:
+        from erpnext.accounts.party import get_due_date
+
+        resolved_due_date = get_due_date(
+            posting_date,
+            "Customer",
+            invoice.get("customer"),
+            invoice.get("company"),
+            template_name=invoice.get("payment_terms_template"),
+        )
+    except Exception:
+        resolved_due_date = None
+
+    if not resolved_due_date or getdate(resolved_due_date) < getdate(posting_date):
+        resolved_due_date = posting_date
+    return str(resolved_due_date)
+
+
+def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -> None:
+    """Repair an invalid active draft before Billing Core performs its normal save.
+
+    Existing Billing Core drafts are re-dated to the current posting date during a
+    billing update. An older stored due date can therefore already be invalid before
+    ERPNext's document validation gets a chance to save the corrected pair. Repair
+    only the stored Draft due date first, after the same billing authorization and
+    Sales Invoice write permission checks. Submitted/cancelled invoices are never
+    changed here; the ordinary Billing Core save remains authoritative afterwards.
     """
     from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session
     from vetedge.services.billing_modal import assert_can_act_on_source, get_billing_source_config
@@ -159,22 +185,21 @@ def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -
     invoice = frappe.get_doc("Sales Invoice", invoice_name)
     if cint(invoice.get("docstatus")) != 0:
         return
+    invoice.check_permission("write")
 
     target_posting_date = nowdate()
-    due_date = invoice.get("due_date") or target_posting_date
-    needs_alignment = (
-        not invoice.get("posting_date")
-        or getdate(invoice.get("posting_date")) != getdate(target_posting_date)
-        or getdate(due_date) < getdate(target_posting_date)
-    )
-    if not needs_alignment:
+    target_due_date = _safe_due_date_for_posting(invoice, target_posting_date)
+    stored_due_date = invoice.get("due_date")
+    if stored_due_date and getdate(stored_due_date) >= getdate(target_posting_date):
         return
 
-    invoice.posting_date = target_posting_date
-    if getdate(due_date) < getdate(target_posting_date):
-        due_date = target_posting_date
-    invoice.due_date = due_date
-    invoice.save()
+    frappe.db.set_value(
+        "Sales Invoice",
+        invoice.name,
+        "due_date",
+        target_due_date,
+        update_modified=False,
+    )
 
 
 @frappe.whitelist()
