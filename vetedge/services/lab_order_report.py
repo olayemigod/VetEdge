@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
-
 import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt
@@ -28,6 +26,11 @@ def _filters(value: str | dict | None) -> dict:
         frappe.throw(_("Expected report filters as a JSON object."), frappe.ValidationError)
     cleaned = {key: item for key, item in parsed.items() if item not in (None, "")}
     return dict(normalize_report_filters("Lab Order Report", cleaned) or {})
+
+
+def _require_read_permission() -> None:
+    if not frappe.has_permission(DOCTYPE, "read"):
+        frappe.throw(_("You do not have permission to view laboratory orders."), frappe.PermissionError)
 
 
 def _query_filters(report_filters: dict) -> dict:
@@ -154,6 +157,7 @@ def get_lab_order_report_view(
     page_length: int = 50,
 ) -> dict:
     require_internal_user()
+    _require_read_permission()
     report_filters = _filters(filters)
     query_filters = _query_filters(report_filters)
     start = max(cint(start), 0)
