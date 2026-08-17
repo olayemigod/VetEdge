@@ -147,12 +147,35 @@ def test_vaccination_provider_pushes_due_filter_and_pagination_to_database():
     assert "vetedge.services.vaccination_report.get_vaccination_report_view" in registry
 
 
-def test_new_clinical_report_providers_are_read_only_and_do_not_mutate_workflows():
+def test_owner_register_provider_preserves_branch_visibility_and_all_pet_count_semantics():
+    service = read("services/owner_report.py")
+    registry = read("public/js/vetedge_report_provider_registry.js")
+
+    for expected in (
+        'normalize_report_filters("Owner Register", cleaned)',
+        'frappe.has_permission(DOCTYPE, "read")',
+        "LIMIT %(limit)s OFFSET %(offset)s",
+        "EXISTS (SELECT 1 FROM `tabVeterinary Patient` p",
+        '"branch_visibility_semantics": "owners-with-patient-in-branch"',
+        '"pet_count_semantics": "all-pets-for-visible-owner"',
+        '"enrichment_mode": "page-only"',
+        '"summary_mode": "database-aggregate"',
+        '"Owners Owing"',
+        '"Outstanding Amount"',
+    ):
+        assert expected in service
+
+    assert "filters={owner_field: (\"in\", owner_names)}" in service
+    assert "vetedge.services.owner_report.get_owner_register_view" in registry
+
+
+def test_new_report_providers_are_read_only_and_do_not_mutate_workflows():
     consultation = read("services/consultation_report.py")
     lab = read("services/lab_order_report.py")
     vaccination = read("services/vaccination_report.py")
+    owner = read("services/owner_report.py")
 
-    for service in (consultation, lab, vaccination):
+    for service in (consultation, lab, vaccination, owner):
         assert "@frappe.read_only()" in service
         for forbidden in ("ignore_permissions", ".submit()", ".cancel()", "frappe.db.set_value", ".save("):
             assert forbidden not in service
