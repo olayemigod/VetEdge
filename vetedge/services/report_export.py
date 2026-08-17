@@ -104,8 +104,8 @@ def _run_report(report_name: str, filters: dict) -> dict:
 def _select_columns(columns: list[dict], selected: list[str]) -> list[dict]:
 	if not selected:
 		return [column for column in columns if not column.get("hidden")]
-	wanted = set(selected)
-	return [column for column in columns if column.get("fieldname") in wanted]
+	by_fieldname = {column.get("fieldname"): column for column in columns if column.get("fieldname")}
+	return [by_fieldname[fieldname] for fieldname in selected if fieldname in by_fieldname]
 
 
 def _slice_rows(rows: list[dict], options: dict, start: int, page_length: int) -> list[dict]:
@@ -255,11 +255,11 @@ def download_report_export(
 	filters_dict = _json_dict(filters)
 	export_options = _normalize_options(options)
 	payload = _run_report(report_name, filters_dict)
-	columns = [_column_dict(column, index) for index, column in enumerate(payload.get("columns") or [])]
-	columns = _select_columns(columns, export_options["columns"])
+	all_columns = [_column_dict(column, index) for index, column in enumerate(payload.get("columns") or [])]
+	rows = _normalize_rows(payload.get("result") or [], all_columns)
+	columns = _select_columns(all_columns, export_options["columns"])
 	if not columns:
 		frappe.throw(_("No report columns are available for export."))
-	rows = _normalize_rows(payload.get("result") or [], columns)
 	rows = _slice_rows(rows, export_options, start, page_length)
 	summary = payload.get("report_summary") or []
 	filename = report_name.replace("/", "-").strip() or "report"
