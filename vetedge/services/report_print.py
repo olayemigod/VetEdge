@@ -50,4 +50,5 @@ def get_report_print_html(
 		rows,
 		payload.get("report_summary") or [],
 		print_options,
+		chart=payload.get("chart") or None,
 	)
