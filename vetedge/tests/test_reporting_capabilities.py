@@ -13,14 +13,15 @@ def test_reporting_settings_patch_is_registered_and_idempotent():
 	assert 'frappe.db.exists("Custom Field", name)' in patch
 
 
-def test_capability_policy_combines_settings_with_existing_scope_access():
+def test_capability_policy_combines_settings_scope_and_action_permission():
 	source = (ROOT / "services/reporting_capabilities.py").read_text()
 	for expected in (
 		"validate_report_access",
 		"validate_dashboard_access",
 		"enable_reporting_print",
 		"enable_reporting_export",
-		'"authorization_model": "settings_and_scope_access"',
+		"frappe.has_permission(ref_doctype, ptype=action, user=user)",
+		'"authorization_model": "settings_scope_and_action_permission"',
 		"can_print",
 		"can_export",
 	):
