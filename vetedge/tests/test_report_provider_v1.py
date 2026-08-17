@@ -71,6 +71,33 @@ def test_planned_treatment_uses_query_level_detail_pagination_with_scoped_parent
     assert '"query-level-detail"' in center
 
 
+def test_consultation_register_uses_parameterized_query_pagination_and_page_only_enrichment():
+    service = read("services/consultation_report.py")
+    registry = read("public/js/vetedge_report_provider_registry.js")
+
+    for expected in (
+        'normalize_report_filters("Consultation Register", cleaned)',
+        'frappe.has_permission(DOCTYPE, "read")',
+        "LIMIT %(limit)s OFFSET %(offset)s",
+        "SELECT COUNT(*) AS `row_count`",
+        "GROUP BY c.`status`",
+        "EXISTS (SELECT 1 FROM `tabVeterinary Vaccination Record`",
+        '"has_vaccination_filter_mode": "exists-subquery"',
+        '"enrichment_mode": "page-only"',
+        '"summary_mode": "database-aggregate"',
+        "_get_consultation_invoice_map(names)",
+        "_get_consultation_planned_totals(names)",
+        "_get_consultation_vaccination_counts(names)",
+        '"Average Planned Value"',
+        '"Follow-up Required"',
+    ):
+        assert expected in service
+
+    assert "_vaccination_consultation_names" not in service
+    assert '"Consultation Register"' in registry
+    assert "vetedge.services.consultation_report.get_consultation_register_view" in registry
+
+
 def test_lab_order_provider_is_permission_scoped_query_paginated_and_aggregate_backed():
     service = read("services/lab_order_report.py")
     registry = read("public/js/vetedge_report_provider_registry.js")
@@ -121,10 +148,11 @@ def test_vaccination_provider_pushes_due_filter_and_pagination_to_database():
 
 
 def test_new_clinical_report_providers_are_read_only_and_do_not_mutate_workflows():
+    consultation = read("services/consultation_report.py")
     lab = read("services/lab_order_report.py")
     vaccination = read("services/vaccination_report.py")
 
-    for service in (lab, vaccination):
+    for service in (consultation, lab, vaccination):
         assert "@frappe.read_only()" in service
         for forbidden in ("ignore_permissions", ".submit()", ".cancel()", "frappe.db.set_value", ".save("):
             assert forbidden not in service
