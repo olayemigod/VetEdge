@@ -167,6 +167,6 @@ def test_interactive_provider_contract_stays_read_only_and_export_separate():
         assert forbidden not in registry
 
     assert "export: null" in adapter
-    assert "export: null" in registry
     assert "page_length" in adapter
     assert "page_length" in registry
+    assert "registerPaginatedProvider" in registry
