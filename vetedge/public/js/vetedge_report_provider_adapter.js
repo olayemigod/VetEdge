@@ -12,6 +12,10 @@
 		return global.EdgeSuiteReportExport || global.EdgeSuiteUI?.reportExport || global.EdgeUI?.reportExport || null;
 	}
 
+	function printRuntime() {
+		return global.EdgeSuiteReportPrint || global.EdgeSuiteUI?.reportPrint || global.EdgeUI?.reportPrint || null;
+	}
+
 	function normalizeColumns(columns = []) {
 		return (Array.isArray(columns) ? columns : []).map((column, index) => {
 			if (typeof column === "string") {
@@ -29,7 +33,7 @@
 				fieldname: column?.fieldname || column?.key || `column_${index + 1}`,
 				fieldtype: column?.fieldtype || column?.type || "Data",
 			};
-		});
+	}		);
 	}
 
 	function normalizePayload(payload = {}, request = {}) {
@@ -176,10 +180,60 @@
 		});
 	}
 
+	function printReport({ reportName, filters = {}, options = {}, start = 0, pageLength = 50 } = {}) {
+		return new Promise((resolve, reject) => {
+			const prints = printRuntime();
+			const exports = exportRuntime();
+			if (!prints?.open || !exports?.normalizeOptions) {
+				reject(new Error("The shared EdgeSuite print runtime is unavailable."));
+				return;
+			}
+			const printWindow = global.open?.("", "_blank");
+			if (!printWindow) {
+				reject(new Error("The print window could not be opened. Please allow pop-ups for this site and try again."));
+				return;
+			}
+			const normalized = exports.normalizeOptions({
+				format: "pdf",
+				scope: "all_filtered",
+				include_title: true,
+				include_filters: true,
+				include_summary: true,
+				include_generated_metadata: true,
+				repeat_table_headings: true,
+				...options,
+			});
+			frappe.call({
+				method: "vetedge.services.report_print.get_report_print_html",
+				args: {
+					report_name: reportName || "",
+					filters: JSON.stringify(filters || {}),
+					options: JSON.stringify(normalized),
+					start: Number(start || 0),
+					page_length: Number(pageLength || 50),
+				},
+				callback: (response) => {
+					try {
+						prints.open({ html: response.message || "", title: reportName || "Report", printWindow });
+						resolve(true);
+					} catch (error) {
+						printWindow.close?.();
+						reject(error);
+					}
+				},
+				error: (error) => {
+					printWindow.close?.();
+					reject(error instanceof Error ? error : new Error("Report print generation failed."));
+				},
+			});
+		});
+	}
+
 	global.VetEdgeReportProviders = Object.freeze({
 		product: PRODUCT,
 		runtimeReports,
 		exportRuntime,
+		printRuntime,
 		normalizePayload,
 		queryReportRunner,
 		ensureQueryProvider,
@@ -187,5 +241,6 @@
 		registerPaginatedProvider,
 		getProvider,
 		downloadReportExport,
+		printReport,
 	});
 })(window);
