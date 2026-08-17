@@ -145,14 +145,14 @@ def _safe_due_date_for_posting(invoice, posting_date: str) -> str:
 
 
 def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -> None:
-    """Repair an invalid active draft before Billing Core performs its normal save.
+    """Repair an active Billing Core draft before ERPNext validates its next save.
 
-    Existing Billing Core drafts are re-dated to the current posting date during a
-    billing update. An older stored due date can therefore already be invalid before
-    ERPNext's document validation gets a chance to save the corrected pair. Repair
-    only the stored Draft due date first, after the same billing authorization and
-    Sales Invoice write permission checks. Submitted/cancelled invoices are never
-    changed here; the ordinary Billing Core save remains authoritative afterwards.
+    Billing Core intentionally re-dates an active Draft Sales Invoice when new charges
+    are synchronized. ERPNext's Sales Invoice posting-date behavior is controlled by
+    ``set_posting_time`` (Edit Posting Date and Time). Keep that flag, posting date,
+    and due date consistent before the normal Billing Core save starts. This repair
+    is Draft-only and runs after source/platform and Sales Invoice write checks.
+    Submitted or cancelled invoices are never changed here.
     """
     from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session
     from vetedge.services.billing_modal import assert_can_act_on_source, get_billing_source_config
@@ -189,15 +189,29 @@ def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -
 
     target_posting_date = nowdate()
     target_due_date = _safe_due_date_for_posting(invoice, target_posting_date)
-    stored_due_date = invoice.get("due_date")
-    if stored_due_date and getdate(stored_due_date) >= getdate(target_posting_date):
+    values: dict[str, object] = {
+        "posting_date": target_posting_date,
+        "due_date": target_due_date,
+    }
+    if invoice.meta.has_field("set_posting_time"):
+        values["set_posting_time"] = 1
+
+    current_posting_date = invoice.get("posting_date")
+    current_due_date = invoice.get("due_date")
+    posting_time_enabled = not invoice.meta.has_field("set_posting_time") or cint(invoice.get("set_posting_time")) == 1
+    if (
+        current_posting_date
+        and getdate(current_posting_date) == getdate(target_posting_date)
+        and current_due_date
+        and getdate(current_due_date) == getdate(target_due_date)
+        and posting_time_enabled
+    ):
         return
 
     frappe.db.set_value(
         "Sales Invoice",
         invoice.name,
-        "due_date",
-        target_due_date,
+        values,
         update_modified=False,
     )
 
