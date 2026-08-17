@@ -71,6 +71,59 @@ def test_planned_treatment_uses_query_level_detail_pagination_with_scoped_parent
     assert '"query-level-detail"' in center
 
 
+def test_lab_order_provider_is_permission_scoped_query_paginated_and_aggregate_backed():
+    service = read("services/lab_order_report.py")
+    registry = read("public/js/vetedge_report_provider_registry.js")
+
+    for expected in (
+        'normalize_report_filters("Lab Order Report", cleaned)',
+        "require_internal_user()",
+        "limit_start=start",
+        "limit_page_length=page_length",
+        "frappe.db.count(DOCTYPE, filters=query_filters)",
+        "def _status_counts(query_filters: dict)",
+        'filters["linked_invoice"] = ("is", "not set")',
+        '"detail_rows_materialized": False',
+        '"summary_mode": "aggregate"',
+        'filters={"parent": ("in", names), "entered_on": ("is", "set")}',
+    ):
+        assert expected in service
+
+    assert '"Lab Order Report"' in registry
+    assert "vetedge.services.lab_order_report.get_lab_order_report_view" in registry
+
+
+def test_vaccination_provider_pushes_due_filter_and_pagination_to_database():
+    service = read("services/vaccination_report.py")
+    registry = read("public/js/vetedge_report_provider_registry.js")
+
+    for expected in (
+        'normalize_report_filters("Vaccination Report", cleaned)',
+        "require_internal_user()",
+        "limit_start=start",
+        "limit_page_length=page_length",
+        'filters["next_due_date"] = ("between", [today, add_days(today, 30)])',
+        'filters["next_due_date"] = ("<", today)',
+        '"due_filter_mode": "database"',
+        '"detail_rows_materialized": False',
+        '"summary_mode": "aggregate"',
+    ):
+        assert expected in service
+
+    assert '"Vaccination Report"' in registry
+    assert "vetedge.services.vaccination_report.get_vaccination_report_view" in registry
+
+
+def test_new_clinical_report_providers_are_read_only_and_do_not_mutate_workflows():
+    lab = read("services/lab_order_report.py")
+    vaccination = read("services/vaccination_report.py")
+
+    for service in (lab, vaccination):
+        assert "@frappe.read_only()" in service
+        for forbidden in ("ignore_permissions", ".submit()", ".cancel()", "frappe.db.set_value", ".save("):
+            assert forbidden not in service
+
+
 def test_interactive_provider_contract_stays_read_only_and_export_separate():
     adapter = read("public/js/vetedge_report_provider_adapter.js")
     registry = read("public/js/vetedge_report_provider_registry.js")
