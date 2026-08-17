@@ -36,21 +36,43 @@ def _validate_scope(scope_name: str, scope_type: str, user: str | None = None) -
 		frappe.throw(_("Unsupported reporting scope type."))
 
 
-def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user: str | None = None) -> dict:
-	"""Return shell-action capabilities after the normal scope access gate passes.
+def _report_ref_doctype(report_name: str) -> str:
+	if not frappe.db.exists("Report", report_name):
+		return ""
+	return cstr(frappe.get_cached_value("Report", report_name, "ref_doctype") or "").strip()
 
-	The EdgeSuite shell only renders actions. VetEdge remains authoritative for
-	settings, role access, branch/practitioner restrictions and server-side export
-	or print authorization.
+
+def _has_action_permission(scope_name: str, scope_type: str, action: str, user: str | None = None) -> bool:
+	"""Apply product/Frappe action permission after the normal scope view gate.
+
+	Dashboards have no single ref_doctype, so their action authorization is the
+	dashboard access gate itself in V1. Reports additionally honor the Report
+	ref_doctype's Frappe print/export permission when one is declared.
 	"""
+	if scope_type == "dashboard":
+		return True
+	ref_doctype = _report_ref_doctype(scope_name)
+	if not ref_doctype:
+		return True
+	return bool(frappe.has_permission(ref_doctype, ptype=action, user=user))
+
+
+def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user: str | None = None) -> dict:
+	"""Return shell capabilities from settings + view scope + action permission."""
+	scope_name = cstr(scope_name or "").strip()
+	scope_type = cstr(scope_type or "report").strip().lower()
 	_validate_scope(scope_name, scope_type, user=user)
+	print_setting = _setting_enabled(PRINT_SETTING, default=True)
+	export_setting = _setting_enabled(EXPORT_SETTING, default=True)
+	can_print = print_setting and _has_action_permission(scope_name, scope_type, "print", user=user)
+	can_export = export_setting and _has_action_permission(scope_name, scope_type, "export", user=user)
 	return {
-		"scope_name": cstr(scope_name or "").strip(),
-		"scope_type": cstr(scope_type or "report").strip().lower(),
+		"scope_name": scope_name,
+		"scope_type": scope_type,
 		"can_view": True,
-		"can_print": _setting_enabled(PRINT_SETTING, default=True),
-		"can_export": _setting_enabled(EXPORT_SETTING, default=True),
-		"authorization_model": "settings_and_scope_access",
+		"can_print": can_print,
+		"can_export": can_export,
+		"authorization_model": "settings_scope_and_action_permission",
 	}
 
 
@@ -71,7 +93,7 @@ def require_reporting_action(
 	if action not in {"print", "export"}:
 		frappe.throw(_("Unsupported reporting action."))
 	frappe.throw(
-		_("{0} is disabled by Veterinary Settings for reports and dashboards.").format(action.title()),
+		_("You are not permitted to {0} this report or dashboard, or the capability is disabled in Veterinary Settings.").format(action),
 		frappe.PermissionError,
 	)
 
