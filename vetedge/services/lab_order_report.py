@@ -44,8 +44,9 @@ def _query_filters(report_filters: dict) -> dict:
         filters["requested_by"] = requested_by
     if report_filters.get("patient"):
         filters["patient"] = report_filters.get("patient")
-    if report_filters.get("owner"):
-        filters["primary_owner"] = report_filters.get("owner")
+    owner = report_filters.get("owner") or report_filters.get("customer")
+    if owner:
+        filters["primary_owner"] = owner
     return filters
 
 
