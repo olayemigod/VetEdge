@@ -8,6 +8,10 @@
 		return global.EdgeSuiteReports || global.EdgeSuiteUI?.reports || global.EdgeUI?.reports || null;
 	}
 
+	function exportRuntime() {
+		return global.EdgeSuiteReportExport || global.EdgeSuiteUI?.reportExport || global.EdgeUI?.reportExport || null;
+	}
+
 	function normalizeColumns(columns = []) {
 		return (Array.isArray(columns) ? columns : []).map((column, index) => {
 			if (typeof column === "string") {
@@ -113,14 +117,75 @@
 		return runtimeReports()?.getProvider?.(PRODUCT, reportKey) || null;
 	}
 
+	function responseFilename(xhr, reportName, format) {
+		const disposition = xhr.getResponseHeader("Content-Disposition") || "";
+		const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+		if (match?.[1]) {
+			try { return decodeURIComponent(match[1].replace(/^\"|\"$/g, "")); }
+			catch (_error) { return match[1].replace(/^\"|\"$/g, ""); }
+		}
+		return `${reportName || "report"}.${format || "xlsx"}`;
+	}
+
+	function serverErrorMessage(xhr) {
+		try {
+			const text = new TextDecoder("utf-8").decode(new Uint8Array(xhr.response || []));
+			const parsed = JSON.parse(text);
+			return parsed?.message || parsed?.exc || parsed?._server_messages || "";
+		} catch (_error) {
+			return "";
+		}
+	}
+
+	function downloadReportExport({ reportName, filters = {}, options = {}, start = 0, pageLength = 50 } = {}) {
+		return new Promise((resolve, reject) => {
+			const exports = exportRuntime();
+			if (!exports?.normalizeOptions || !exports?.downloadVerified) {
+				reject(new Error("The shared EdgeSuite export runtime is unavailable."));
+				return;
+			}
+			const normalized = exports.normalizeOptions(options || {});
+			const formData = new FormData();
+			formData.append("report_name", reportName || "");
+			formData.append("filters", JSON.stringify(filters || {}));
+			formData.append("options", JSON.stringify(normalized));
+			formData.append("start", String(start || 0));
+			formData.append("page_length", String(pageLength || 50));
+
+			const xhr = new XMLHttpRequest();
+			xhr.open("POST", "/api/method/vetedge.services.report_export.download_report_export");
+			xhr.responseType = "arraybuffer";
+			xhr.setRequestHeader("X-Frappe-CSRF-Token", frappe.csrf_token);
+			xhr.onload = () => {
+				if (xhr.status < 200 || xhr.status >= 300) {
+					reject(new Error(serverErrorMessage(xhr) || `Report export failed with HTTP ${xhr.status}.`));
+					return;
+				}
+				try {
+					const bytes = new Uint8Array(xhr.response || []);
+					const mime = xhr.getResponseHeader("Content-Type") || exports.expectedMime(normalized.format);
+					const filename = responseFilename(xhr, reportName, normalized.format);
+					exports.downloadVerified({ bytes, format: normalized.format, mime, filename });
+					resolve({ filename, format: normalized.format, raw_table_only: normalized.raw_table_only });
+				} catch (error) {
+					reject(error);
+				}
+			};
+			xhr.onerror = () => reject(new Error("Report export request failed. Please check the connection and try again."));
+			xhr.send(formData);
+		});
+	}
+
 	global.VetEdgeReportProviders = Object.freeze({
 		product: PRODUCT,
 		runtimeReports,
+		exportRuntime,
 		normalizePayload,
 		queryReportRunner,
 		ensureQueryProvider,
 		registerProvider,
 		registerPaginatedProvider,
 		getProvider,
+		downloadReportExport,
 	});
 })(window);
