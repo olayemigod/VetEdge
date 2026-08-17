@@ -1,4 +1,5 @@
 const VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS = 15000;
+const VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT = 'vetedge:clinical-route-request';
 
 function clearStalePatientCreateRouteOption() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -8,6 +9,22 @@ function clearStalePatientCreateRouteOption() {
 	if (routeOptions && String(routeOptions.new || '') === '1') {
 		delete routeOptions.new;
 	}
+}
+
+function dispatchClinicalRouteRequest(url) {
+	if (
+		url.origin !== window.location.origin ||
+		url.pathname !== '/desk/vetedge-clinical-workspace' ||
+		url.searchParams.get('new') !== '1'
+	) return false;
+
+	window.dispatchEvent(new CustomEvent(VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT, {
+		detail: {
+			type: 'new',
+			patient: String(url.searchParams.get('patient') || '').trim(),
+		},
+	}));
+	return true;
 }
 
 function installResourceCenterRepeatRouteDispatch() {
@@ -23,6 +40,7 @@ function installResourceCenterRepeatRouteDispatch() {
 				if (url.origin === window.location.origin && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) {
 					url.pathname = `/desk${url.pathname.slice(4)}`;
 				}
+				dispatchClinicalRouteRequest(url);
 				const next = `${url.pathname}${url.search}${url.hash}`;
 				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 				const frappeRouter = window.frappe?.router;
