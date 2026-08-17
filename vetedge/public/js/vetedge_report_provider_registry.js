@@ -77,45 +77,33 @@
 				};
 			},
 		});
-		if (provider) {
-			reports.registerProvider("Stock Expiry Monitor", provider);
-		}
+		if (provider) reports.registerProvider("Stock Expiry Monitor", provider);
 	}
 
 	function registerPlannedTreatment() {
 		const reports = adapter();
-		if (!reports?.registerProvider || reports.getProvider("Planned Treatment")) return;
-		const provider = Object.freeze({
-			kind: "paged-response",
-			supports_server_pagination: false,
-			pagination_mode: "materialize-then-slice",
-			default_page_length: 50,
-			max_page_length: 100,
-			async load({ filters = {}, start = 0, page_length = 50 } = {}) {
-				const safeStart = Math.max(0, Number(start || 0));
-				const safeLength = Math.min(100, Math.max(1, Number(page_length || 50)));
+		if (!reports?.registerPaginatedProvider || reports.getProvider("Planned Treatment")) return;
+		const provider = reports.registerPaginatedProvider("Planned Treatment", {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
 				const payload = await call("vetedge.services.treatment_plan_report.get_planned_treatment_view", {
 					filters,
-					start: safeStart,
-					page_length: safeLength,
+					start,
+					page_length,
 				});
-				return reports.normalizePayload(
-					{
-						...payload,
-						metadata: {
-							...(payload.metadata || {}),
-							pagination_mode: "materialize-then-slice",
-							optimization_pending: true,
-							source: "planned-treatment",
-						},
+				return {
+					...payload,
+					total_count: Number(payload.total || 0),
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: payload.metadata?.pagination_mode || "query-level-detail",
+						source: "planned-treatment",
 					},
-					{ start: safeStart, page_length: safeLength },
-				);
+				};
 			},
-			export: null,
 		});
-		reports.registerProvider("Planned Treatment", provider);
-		reports.registerProvider("Planned Treatment Report", provider);
+		if (provider) reports.registerProvider("Planned Treatment Report", provider);
 	}
 
 	function register() {
@@ -126,7 +114,5 @@
 	}
 
 	global.VetEdgeReportProviderRegistry = Object.freeze({ register });
-	if (!register()) {
-		global.addEventListener?.("edgesuite:report-runtime-ready", register, { once: true });
-	}
+	if (!register()) global.addEventListener?.("edgesuite:report-runtime-ready", register, { once: true });
 })(window);
