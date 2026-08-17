@@ -61,3 +61,9 @@ Next reports must be audited individually. Small/bounded reports may stay on the
 - No permission bypass.
 - No hard CoreEdge frontend dependency.
 - Do not suppress browser security warnings; generate valid files and reject invalid responses.
+
+## Current checkpoint
+
+- Phase 5 code is implementation-complete but QA-pending.
+- Phase 6 has three optimized providers structurally implemented.
+- PR #47 must remain Draft until its own automated/browser/network/file acceptance gates pass and PR #36 merges first.
