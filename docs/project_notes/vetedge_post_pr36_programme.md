@@ -14,6 +14,7 @@ PR #36 continues to own QA/fixes for Vital Signs, Veterinary Lab Order operation
 - Planned Treatment now performs query-level detail pagination while preserving the existing scoped-consultation access resolver.
 - Lab Order Report now uses a dedicated query-level paginated, read-only provider with report-role, branch and DocType read checks. Summary/status cards use aggregate queries; result-entry timestamps are resolved only for the current page's child rows.
 - Vaccination Report now uses a dedicated query-level paginated, read-only provider. Due Soon/Overdue filtering is pushed into the database query and summary cards are aggregate-backed.
+- Lab/Vaccination optimized providers accept the Report Center's `customer` filter alias as owner context while retaining `owner` for native report compatibility.
 
 ## Phase 5 — Export / Print / PDF Foundation — Implementation complete; QA pending
 
@@ -36,6 +37,8 @@ Optimized providers completed structurally:
 1. Planned Treatment.
 2. Laboratory / Lab Order Report.
 3. Vaccination Report.
+
+Lab/Vaccination provider acceptance still needs browser/network QA to confirm filter parity, pagination, display names, cards, chart and row navigation against real data.
 
 Next reports must be audited individually. Small/bounded reports may stay on the generic Report Center Query Report provider. Large/high-use reports should receive server-paginated providers only where actual data volume/network/server measurements justify it.
 
