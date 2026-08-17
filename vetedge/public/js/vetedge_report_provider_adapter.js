@@ -93,6 +93,14 @@
 		return provider;
 	}
 
+	function registerProvider(reportKey, provider) {
+		if (!reportKey || !provider || typeof provider.load !== "function") return null;
+		const shared = runtimeReports();
+		if (!shared?.registerProvider) return null;
+		shared.registerProvider(PRODUCT, reportKey, provider);
+		return provider;
+	}
+
 	function registerPaginatedProvider(reportKey, options = {}) {
 		const shared = runtimeReports();
 		if (!shared?.createPaginatedReportProvider || !shared?.registerProvider) return null;
@@ -111,6 +119,7 @@
 		normalizePayload,
 		queryReportRunner,
 		ensureQueryProvider,
+		registerProvider,
 		registerPaginatedProvider,
 		getProvider,
 	});
