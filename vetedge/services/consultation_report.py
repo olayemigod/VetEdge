@@ -211,7 +211,12 @@ def _planned_total(where_sql: str, params: dict) -> float:
     return flt(rows[0].get("planned_total")) if rows else 0.0
 
 
-def _follow_up_count(query_filters: dict, report_filters: dict) -> int:
+def _follow_up_count(query_filters: dict, report_filters: dict, total: int) -> int:
+    selected = report_filters.get("has_follow_up")
+    if selected in (1, "1", "Yes"):
+        return total
+    if selected in (0, "0", "No"):
+        return 0
     summary_filters = dict(report_filters)
     summary_filters["has_follow_up"] = "Yes"
     where_sql, params = _where_clause(query_filters, summary_filters)
@@ -233,7 +238,7 @@ def _summary(query_filters: dict, report_filters: dict, where_sql: str, params: 
         {"label": _("Cancelled"), "value": cancelled, "indicator": "Red", "datatype": "Int"},
         {"label": _("Completion Rate"), "value": flt((completed / total) * 100, 1) if total else 0, "indicator": "Green", "datatype": "Percent"},
         {"label": _("Average Planned Value"), "value": flt(planned_total / total, 2) if total else 0, "indicator": "Blue", "datatype": "Currency"},
-        {"label": _("Follow-up Required"), "value": _follow_up_count(query_filters, report_filters), "indicator": "Purple", "datatype": "Int"},
+        {"label": _("Follow-up Required"), "value": _follow_up_count(query_filters, report_filters, total), "indicator": "Purple", "datatype": "Int"},
     ]
 
 
