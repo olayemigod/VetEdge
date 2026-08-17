@@ -146,6 +146,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					chartInstance: null,
 					exportOpen: false,
 					exportBusy: false,
+					printBusy: false,
 				};
 			},
 			mounted() { this.refresh(); },
@@ -154,7 +155,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				isServiceRevenue() { return this.reportName === "Service Revenue Breakdown"; },
 				providerLabel() {
 					if (!this.provider) return __("Query Report");
-					if (this.result.metadata?.pagination_mode === "query-level") return __("Optimized paginated provider");
+					if (["query-level", "query-level-detail"].includes(this.result.metadata?.pagination_mode)) return __("Optimized paginated provider");
 					if (this.result.metadata?.pagination_mode === "materialize-then-slice") return __("Paged response · optimization pending");
 					return this.provider.kind === "paginated" ? __("Paginated provider") : __("Query Report provider");
 				},
@@ -238,6 +239,23 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						this.exportBusy = false;
 					}
 				},
+				async runPrint() {
+					if (this.printBusy || this.loading) return;
+					this.printBusy = true;
+					try {
+						await window.VetEdgeReportProviders.printReport({
+							reportName: this.reportName,
+							filters: this.reportFilters(),
+							options: { scope: "all_filtered" },
+							start: this.pageStart,
+							pageLength: this.pageLength,
+						});
+					} catch (error) {
+						frappe.msgprint({ title: __("Report Print Failed"), message: error?.message || __("The report could not be prepared for printing."), indicator: "red" });
+					} finally {
+						this.printBusy = false;
+					}
+				},
 				renderFilters() {
 					const common = [
 						h(EdgeLinkField, { modelValue: this.filters.branch, selectedLabel: this.filters.branch || __("All Branches"), label: __("Branch"), placeholder: __("All Branches"), searcher: (term) => this.searchLink("Branch", term), allowClear: true, "onUpdate:modelValue": (value) => { this.filters.branch = value || ""; } }),
@@ -260,7 +278,12 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 			render() {
 				const rows = this.displayRows();
 				const layout = h(EdgePageLayout, {}, {
-					header: () => h(EdgePageHeader, { eyebrow: __("Quick Report"), title: this.reportName || __("Veterinary Report"), subtitle: __("EdgeSuite report view using the dashboard scope that opened this report.") }, { actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("span", { class: "vetedge-report-provider-badge" }, this.providerLabel), h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.loading, onClick: () => { this.exportOpen = true; } }, __("Download / Export")), h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: this.back }, __("Back to Dashboard"))]) }),
+					header: () => h(EdgePageHeader, { eyebrow: __("Quick Report"), title: this.reportName || __("Veterinary Report"), subtitle: __("EdgeSuite report view using the dashboard scope that opened this report.") }, { actions: () => h("div", { class: "vetedge-report-center-actions" }, [
+						h("span", { class: "vetedge-report-provider-badge" }, this.providerLabel),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.loading || this.printBusy, onClick: this.runPrint }, this.printBusy ? __("Preparing Print…") : __("Print")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.loading, onClick: () => { this.exportOpen = true; } }, __("Download / Export")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: this.back }, __("Back to Dashboard")),
+					]) }),
 					filters: () => h(EdgeFilterBar, { title: __("Report Filters") }, { default: () => this.renderFilters(), actions: () => h("div", { class: "vetedge-report-center-actions" }, [h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh"))]) }),
 					default: () => this.error
 						? h("div", { class: "vetedge-report-center-content" }, [h(EdgeErrorState, { title: __("Report Failed"), message: this.error, onRetry: () => this.refresh() })])
