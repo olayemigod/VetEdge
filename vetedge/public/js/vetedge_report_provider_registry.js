@@ -45,6 +45,16 @@
 		};
 	}
 
+	function stockSummaryCards(summary = {}) {
+		return [
+			{ label: "Expired Batches", value: Number(summary.expired_items || 0), datatype: "Int" },
+			{ label: "Expiring Soon", value: Number(summary.expiring_soon || 0), datatype: "Int" },
+			{ label: "Affected Total Qty", value: Number(summary.affected_qty || 0), datatype: "Float" },
+			{ label: "Affected Warehouses", value: Number(summary.affected_warehouses || 0), datatype: "Int" },
+			{ label: "Highest Risk Items", value: Number(summary.highest_risk_items || 0), datatype: "Int" },
+		].filter((card) => Number.isFinite(card.value));
+	}
+
 	function registerStockExpiry() {
 		const reports = adapter();
 		if (!reports?.registerPaginatedProvider || reports.getProvider("Stock Expiry Report")) return;
@@ -59,7 +69,7 @@
 				return {
 					columns: STOCK_EXPIRY_COLUMNS,
 					rows: payload.rows || [],
-					summary: payload.summary || [],
+					summary: stockSummaryCards(payload.summary || {}),
 					total_count: Number(payload.total_count || 0),
 					start,
 					page_length,
