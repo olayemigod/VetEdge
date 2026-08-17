@@ -129,8 +129,11 @@ def test_resource_center_native_source_owns_summary_filters_labels_and_patient_s
         assert field in service
         assert field in component
 
-    assert "New Consultation" in component
-    assert "openNewConsultation(row)" in component
+    assert "Medical History" in component
+    assert "openMedicalHistory(row)" in component
+    assert "/desk/veterinary-medical-history?patient=${encodeURIComponent(row.name)}" in component
+    assert "New Consultation" not in component
+    assert "openNewConsultation(row)" not in component
     assert "page.summary_label || 'Branch Scope'" in component
     assert "row?._display?.[column.fieldname]" in component
     assert "clinicalStatusOptions" in component
