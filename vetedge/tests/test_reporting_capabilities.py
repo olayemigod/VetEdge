@@ -35,3 +35,12 @@ def test_shell_action_endpoints_reauthorize_server_side():
 	assert "download_report_export" in source
 	assert "get_report_print_html" in source
 	assert "ignore_permissions" not in source
+
+
+def test_client_capability_bridge_reads_server_authoritative_context():
+	source = (ROOT / "public/js/vetedge_reporting_capabilities.js").read_text()
+	assert "vetedge.services.reporting_capabilities.get_shell_capabilities" in source
+	assert "can_print" in source
+	assert "can_export" in source
+	assert "frappe.db" not in source
+	assert "ignore_permissions" not in source
