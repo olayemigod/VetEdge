@@ -106,10 +106,44 @@
 		if (provider) reports.registerProvider("Planned Treatment Report", provider);
 	}
 
+	function registerServerPaginatedReport(reportKey, method, aliases = []) {
+		const reports = adapter();
+		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
+		const provider = reports.registerPaginatedProvider(reportKey, {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
+				const payload = await call(method, { filters, start, page_length });
+				return {
+					...payload,
+					total_count: Number(payload.total || payload.total_count || 0),
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: payload.metadata?.pagination_mode || "query-level",
+					},
+				};
+			},
+		});
+		if (provider) aliases.forEach((alias) => reports.registerProvider(alias, provider));
+	}
+
+	function registerClinicalReports() {
+		registerServerPaginatedReport(
+			"Lab Order Report",
+			"vetedge.services.lab_order_report.get_lab_order_report_view",
+			["Laboratory Report"],
+		);
+		registerServerPaginatedReport(
+			"Vaccination Report",
+			"vetedge.services.vaccination_report.get_vaccination_report_view",
+		);
+	}
+
 	function register() {
 		if (!adapter()?.runtimeReports?.()) return false;
 		registerStockExpiry();
 		registerPlannedTreatment();
+		registerClinicalReports();
 		return true;
 	}
 
