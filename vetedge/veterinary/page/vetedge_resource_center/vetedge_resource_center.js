@@ -1,5 +1,5 @@
 const VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS = 15000;
-const VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT = 'vetedge:clinical-route-request';
+let vetedgeClinicalIntentSequence = 0;
 
 function clearStalePatientCreateRouteOption() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -11,20 +11,30 @@ function clearStalePatientCreateRouteOption() {
 	}
 }
 
-function dispatchClinicalRouteRequest(url) {
-	if (
-		url.origin !== window.location.origin ||
-		url.pathname !== '/desk/vetedge-clinical-workspace' ||
-		url.searchParams.get('new') !== '1'
-	) return false;
-
-	window.dispatchEvent(new CustomEvent(VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT, {
-		detail: {
-			type: 'new',
-			patient: String(url.searchParams.get('patient') || '').trim(),
-		},
-	}));
-	return true;
+function withClinicalNavigationIntent(route) {
+	const raw = String(route || '').trim();
+	if (!raw) return raw;
+	try {
+		const url = new URL(raw, window.location.origin);
+		if (url.origin === window.location.origin && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) {
+			url.pathname = `/desk${url.pathname.slice(4)}`;
+		}
+		if (
+			url.origin === window.location.origin &&
+			url.pathname === '/desk/vetedge-clinical-workspace' &&
+			url.searchParams.get('new') === '1'
+		) {
+			vetedgeClinicalIntentSequence += 1;
+			url.searchParams.set(
+				'_vetedge_intent',
+				`${Date.now().toString(36)}-${vetedgeClinicalIntentSequence}`,
+			);
+			return `${url.pathname}${url.search}${url.hash}`;
+		}
+	} catch (_error) {
+		// Fall through to the canonical route unchanged.
+	}
+	return route;
 }
 
 function installResourceCenterRepeatRouteDispatch() {
@@ -34,31 +44,7 @@ function installResourceCenterRepeatRouteDispatch() {
 		if (!adapter?.open || adapter.__vetedgeRepeatRouteDispatchInstalled) continue;
 		const originalOpen = adapter.open.bind(adapter);
 		adapter.open = function(route) {
-			const raw = String(route || '').trim();
-			try {
-				const url = new URL(raw, window.location.origin);
-				if (url.origin === window.location.origin && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) {
-					url.pathname = `/desk${url.pathname.slice(4)}`;
-				}
-				dispatchClinicalRouteRequest(url);
-				const next = `${url.pathname}${url.search}${url.hash}`;
-				const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-				const frappeRouter = window.frappe?.router;
-				if (
-					url.origin === window.location.origin &&
-					url.pathname === '/desk/vetedge-clinical-workspace' &&
-					next === current &&
-					typeof frappeRouter?.route === 'function'
-				) {
-					Promise.resolve(frappeRouter.route()).catch((error) => {
-						console.error('Error redispatching repeated Veterinary Clinical route:', error);
-					});
-					return true;
-				}
-			} catch (_error) {
-				// Fall through to the canonical VetEdge navigation adapter.
-			}
-			return originalOpen(route);
+			return originalOpen(withClinicalNavigationIntent(route));
 		};
 		adapter.__vetedgeRepeatRouteDispatchInstalled = true;
 	}
