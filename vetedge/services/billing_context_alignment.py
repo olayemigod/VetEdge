@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe.utils import cint, getdate, nowdate
 
 from vetedge.services.portal_access import require_internal_user
 
@@ -119,6 +120,52 @@ def _normalize_payload(payload: dict | None) -> dict:
     return result
 
 
+def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -> None:
+    """Align the active draft before Billing Core re-dates it during an update.
+
+    Billing Core intentionally uses the current date when an active draft invoice is
+    updated. ERPNext validates due_date while preparing invoice defaults, so an older
+    draft must have its posting/due date pair aligned before that preparation runs.
+    Submitted/cancelled invoices are never changed here.
+    """
+    from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session
+
+    if not is_billing_sessions_enabled():
+        return
+    session = resolve_billing_session(source_doctype, source_name)
+    if not session:
+        return
+
+    invoice_name = session.get("current_draft_invoice")
+    if not invoice_name:
+        latest_invoice = session.get("latest_invoice")
+        if latest_invoice and frappe.db.exists("Sales Invoice", latest_invoice):
+            if cint(frappe.db.get_value("Sales Invoice", latest_invoice, "docstatus")) == 0:
+                invoice_name = latest_invoice
+    if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+        return
+
+    invoice = frappe.get_doc("Sales Invoice", invoice_name)
+    if cint(invoice.get("docstatus")) != 0:
+        return
+
+    target_posting_date = nowdate()
+    due_date = invoice.get("due_date") or target_posting_date
+    needs_alignment = (
+        not invoice.get("posting_date")
+        or getdate(invoice.get("posting_date")) != getdate(target_posting_date)
+        or getdate(due_date) < getdate(target_posting_date)
+    )
+    if not needs_alignment:
+        return
+
+    invoice.posting_date = target_posting_date
+    if getdate(due_date) < getdate(target_posting_date):
+        due_date = target_posting_date
+    invoice.due_date = due_date
+    invoice.save()
+
+
 @frappe.whitelist()
 def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
     require_internal_user()
@@ -132,6 +179,7 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
     require_internal_user()
     from vetedge.services.billing_state_security import create_or_update_modal_invoice as original
 
+    _prepare_active_billing_draft_dates(source_doctype, source_name)
     return _normalize_payload(original(source_doctype=source_doctype, source_name=source_name))
 
 
