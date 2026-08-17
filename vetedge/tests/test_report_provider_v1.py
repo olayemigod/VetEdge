@@ -21,13 +21,16 @@ def test_report_center_prefers_provider_runtime_and_keeps_query_report_fallback(
     assert "ignore_user_permissions: 0" in center
 
 
-def test_report_center_uses_shared_export_builder_and_same_desk_navigation():
+def test_report_center_uses_shared_export_builder_print_and_same_desk_navigation():
     center = read("veterinary/page/vetedge_report_center/vetedge_report_center.js")
 
     for expected in (
         '"EdgeReportExportDialog"',
         "downloadReportExport",
         '__("Download / Export")',
+        '__("Print")',
+        "printReport",
+        "printBusy",
         "exportOpen",
         "exportBusy",
         "onExport: this.runExport",
@@ -50,40 +53,20 @@ def test_stock_expiry_is_registered_as_query_level_paginated_reference():
     assert "maxPageLength: 100" in registry
 
 
-def test_planned_treatment_detail_rows_are_query_paginated_without_rebuilding_full_report():
+def test_planned_treatment_uses_query_level_detail_pagination_with_scoped_parents():
     registry = read("public/js/vetedge_report_provider_registry.js")
     service = read("services/treatment_plan_report.py")
+    center = read("veterinary/page/vetedge_report_center/vetedge_report_center.js")
 
     assert 'registerPaginatedProvider("Planned Treatment"' in registry
-    assert 'pagination_mode: payload.metadata?.pagination_mode || "query-level-detail"' in registry
-    assert "supports_server_pagination: false" not in registry
-    assert "materialize-then-slice" not in registry
-
+    assert 'pagination_mode: "query-level-detail"' in service
+    assert 'parent_scope_mode": "scoped-consultations"' in service
     assert "limit_start=start" in service
     assert "limit_page_length=page_length" in service
-    assert "_aggregate_treatments(" in service
-    assert '"pagination_mode": "query-level-detail"' in service
-    assert '"detail_rows_materialized": False' in service
-    assert "execute_structured_report" not in service
-    assert "rows[start : start + page_length]" not in service
-
-
-def test_planned_treatment_preserves_existing_scope_and_totals_semantics():
-    service = read("services/treatment_plan_report.py")
-
-    for expected in (
-        "normalize_report_filters(\"Planned Treatment\", cleaned)",
-        "_get_consultation_rows(frappe._dict(report_filters))",
-        "_get_patient_title_map",
-        "_get_user_full_name_map",
-        "_patient_owner_map",
-        'treatment.get("notes") or treatment.get("treatment_type") or treatment.get("service_type")',
-        'flt(treatment.get("amount")) or flt(qty * rate)',
-        '"consultation_total"',
-        '"patient_total"',
-        '"Grand Total"',
-    ):
-        assert expected in service
+    assert "frappe.db.count(\"Planned Treatment Item\", filters=treatment_filters)" in service
+    assert "group_by=\"parent\"" in service
+    assert "patient_totals" in service
+    assert '"query-level-detail"' in center
 
 
 def test_interactive_provider_contract_stays_read_only_and_export_separate():
@@ -95,5 +78,6 @@ def test_interactive_provider_contract_stays_read_only_and_export_separate():
         assert forbidden not in registry
 
     assert "export: null" in adapter
+    assert "export: null" in registry
     assert "page_length" in adapter
     assert "page_length" in registry
