@@ -39,9 +39,9 @@ Optimized providers completed structurally:
 2. Laboratory / Lab Order Report.
 3. Vaccination Report.
 
-Lab/Vaccination provider acceptance still needs browser/network QA to confirm filter parity, pagination, display names, cards, chart and row navigation against real data.
+Lab/Vaccination provider acceptance still needs browser/network QA to confirm filter parity, pagination, display names, cards, chart and row navigation against real data. Structural implementation is complete; do not rework their clinical DocType workflows from this reporting branch.
 
-Next reports must be audited individually. Small/bounded reports may stay on the generic Report Center Query Report provider. Large/high-use reports should receive server-paginated providers only where actual data volume/network/server measurements justify it.
+Next reports must be audited individually. Small/bounded reports may stay on the generic Report Center Query Report provider. Large/high-use reports should receive server-paginated providers only where actual data volume/network/server measurements justify it. Consultation Register is the next candidate for detailed audit because it is high-use but has richer invoice/treatment/vaccination enrichment that must remain semantically correct if paginated.
 
 ## Performance contract
 
