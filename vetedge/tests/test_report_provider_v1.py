@@ -78,6 +78,7 @@ def test_lab_order_provider_is_permission_scoped_query_paginated_and_aggregate_b
     for expected in (
         'normalize_report_filters("Lab Order Report", cleaned)',
         "require_internal_user()",
+        'frappe.has_permission(DOCTYPE, "read")',
         "limit_start=start",
         "limit_page_length=page_length",
         "frappe.db.count(DOCTYPE, filters=query_filters)",
@@ -100,6 +101,7 @@ def test_vaccination_provider_pushes_due_filter_and_pagination_to_database():
     for expected in (
         'normalize_report_filters("Vaccination Report", cleaned)',
         "require_internal_user()",
+        'frappe.has_permission(DOCTYPE, "read")',
         "limit_start=start",
         "limit_page_length=page_length",
         'filters["next_due_date"] = ("between", [today, add_days(today, 30)])',
