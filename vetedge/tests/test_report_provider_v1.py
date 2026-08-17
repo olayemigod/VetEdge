@@ -82,7 +82,7 @@ def test_lab_order_provider_is_permission_scoped_query_paginated_and_aggregate_b
         "limit_page_length=page_length",
         "frappe.db.count(DOCTYPE, filters=query_filters)",
         "def _status_counts(query_filters: dict)",
-        'filters["linked_invoice"] = ("is", "not set")',
+        'unbilled_filters["linked_invoice"] = ("is", "not set")',
         '"detail_rows_materialized": False',
         '"summary_mode": "aggregate"',
         'filters={"parent": ("in", names), "entered_on": ("is", "set")}',
