@@ -54,14 +54,21 @@ def test_export_client_validates_bytes_before_download():
         assert expected in adapter
 
 
-def test_pdf_export_uses_same_server_rendering_path_for_report_exports():
+def test_pdf_and_browser_print_share_the_same_report_html_model():
     service = read("services/report_export.py")
+    print_service = read("services/report_print.py")
+    adapter = read("public/js/vetedge_report_provider_adapter.js")
 
     assert "_pdf_html(" in service
     assert "_pdf_bytes(" in service
     assert 'pdf_generator="chrome"' in service
     assert "return get_pdf(content, options=options)" in service
     assert 'thead{display:table-header-group}' in service
+    assert "from vetedge.services.report_export import (" in print_service
+    assert "_pdf_html," in print_service
+    assert "return _pdf_html(" in print_service
+    assert 'method: "vetedge.services.report_print.get_report_print_html"' in adapter
+    assert "prints.open({ html: response.message" in adapter
 
 
 def test_legacy_pdf_patch_rejects_non_pdf_success_responses():
