@@ -59,12 +59,14 @@ def test_planned_treatment_uses_query_level_detail_pagination_with_scoped_parent
     center = read("veterinary/page/vetedge_report_center/vetedge_report_center.js")
 
     assert 'registerPaginatedProvider("Planned Treatment"' in registry
-    assert 'pagination_mode: "query-level-detail"' in service
+    assert 'pagination_mode": "query-level-detail"' in service
     assert 'parent_scope_mode": "scoped-consultations"' in service
     assert "limit_start=start" in service
     assert "limit_page_length=page_length" in service
-    assert "frappe.db.count(\"Planned Treatment Item\", filters=treatment_filters)" in service
-    assert "group_by=\"parent\"" in service
+    assert "def _aggregate_treatments(" in service
+    assert "COUNT(*) AS `total`" in service
+    assert "SUM(" in service
+    assert 'group = " GROUP BY `parent`" if group_by_parent else ""' in service
     assert "patient_totals" in service
     assert '"query-level-detail"' in center
 
