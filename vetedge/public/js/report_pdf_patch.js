@@ -13,35 +13,60 @@ frappe.render_pdf = function (html, opts = {}) {
 	const showError = (message) => {
 		frappe.msgprint(message || __("Report PDF download failed."));
 	};
-
-	xhr.onload = function (event) {
-		if (this.status === 200) {
-			const blob = new Blob([event.currentTarget.response], { type: "application/pdf" });
-			const objectUrl = URL.createObjectURL(blob);
-			const hiddenATag = document.createElement("a");
-			document.body.appendChild(hiddenATag);
-			hiddenATag.style = "display: none";
-			hiddenATag.href = objectUrl;
-			hiddenATag.download = `${opts.report_name || "report"}.pdf`;
-			hiddenATag.click();
-			window.URL.revokeObjectURL(objectUrl);
-			hiddenATag.remove();
+	const parseError = (response) => {
+		try {
+			const decoded = new TextDecoder("utf-8").decode(response || new ArrayBuffer(0));
+			const parsed = JSON.parse(decoded);
+			return parsed?._server_messages || parsed?.message || parsed?.exc || "";
+		} catch (_error) {
+			return "";
+		}
+	};
+	const fallbackValidatePdf = (bytes, mime) => {
+		if (!bytes.length) throw new Error(__("The generated PDF is empty."));
+		const header = Array.from(bytes.slice(0, 5));
+		if (header.join(",") !== "37,80,68,70,45") {
+			const preview = new TextDecoder("utf-8").decode(bytes.slice(0, Math.min(bytes.length, 256))).trim().toLowerCase();
+			if (preview.startsWith("<html") || preview.startsWith("<!doctype html") || preview.includes("<body")) {
+				throw new Error(__("The server returned an error page instead of a PDF file."));
+			}
+			throw new Error(__("The generated PDF is invalid or incomplete."));
+		}
+		if (mime && !String(mime).toLowerCase().includes("application/pdf")) {
+			throw new Error(__("The server returned an unexpected file type instead of PDF."));
+		}
+	};
+	const saveVerifiedPdf = (response) => {
+		const bytes = new Uint8Array(response || new ArrayBuffer(0));
+		const mime = xhr.getResponseHeader("Content-Type") || "application/pdf";
+		const shared = window.EdgeSuiteReportExport || window.EdgeSuiteUI?.reportExport || window.EdgeUI?.reportExport;
+		if (shared?.downloadVerified) {
+			shared.downloadVerified({ bytes, format: "pdf", mime, filename: `${opts.report_name || "report"}.pdf` });
 			return;
 		}
+		fallbackValidatePdf(bytes, mime);
+		const blob = new Blob([bytes], { type: "application/pdf" });
+		const objectUrl = URL.createObjectURL(blob);
+		const hiddenATag = document.createElement("a");
+		document.body.appendChild(hiddenATag);
+		hiddenATag.style = "display: none";
+		hiddenATag.href = objectUrl;
+		hiddenATag.download = `${opts.report_name || "report"}.pdf`;
+		hiddenATag.click();
+		hiddenATag.remove();
+		window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+	};
 
-		let errorMessage = __("Report PDF download failed.");
-		try {
-			const decoded = new TextDecoder("utf-8").decode(this.response);
-			const parsed = JSON.parse(decoded);
-			errorMessage =
-				parsed?._server_messages ||
-				parsed?.message ||
-				parsed?.exc ||
-				errorMessage;
-		} catch (e) {
-			// Keep the generic message when the error body is not JSON.
+	xhr.onload = function (event) {
+		if (this.status >= 200 && this.status < 300) {
+			try {
+				saveVerifiedPdf(event.currentTarget.response);
+			} catch (error) {
+				showError(error?.message || __("Report PDF download failed validation."));
+			}
+			return;
 		}
-		showError(errorMessage);
+		showError(parseError(this.response) || __("Report PDF download failed."));
 	};
 
 	xhr.onerror = function () {
