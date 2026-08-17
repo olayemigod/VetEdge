@@ -38,8 +38,9 @@ def _base_query_filters(report_filters: dict) -> dict:
         filters["administered_by"] = report_filters.get("practitioner")
     if report_filters.get("patient"):
         filters["patient"] = report_filters.get("patient")
-    if report_filters.get("owner"):
-        filters["primary_owner"] = report_filters.get("owner")
+    owner = report_filters.get("owner") or report_filters.get("customer")
+    if owner:
+        filters["primary_owner"] = owner
     if report_filters.get("vaccine"):
         filters["vaccine"] = report_filters.get("vaccine")
     return filters
