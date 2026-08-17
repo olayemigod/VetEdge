@@ -62,3 +62,18 @@ def test_pdf_export_uses_same_server_rendering_path_for_report_exports():
     assert 'pdf_generator="chrome"' in service
     assert "return get_pdf(content, options=options)" in service
     assert 'thead{display:table-header-group}' in service
+
+
+def test_legacy_pdf_patch_rejects_non_pdf_success_responses():
+    patch = read("public/js/report_pdf_patch.js")
+
+    for expected in (
+        "EdgeSuiteReportExport",
+        "shared.downloadVerified",
+        'header.join(",") !== "37,80,68,70,45"',
+        'preview.startsWith("<html")',
+        'preview.startsWith("<!doctype html")',
+        'mime && !String(mime).toLowerCase().includes("application/pdf")',
+        'showError(error?.message || __("Report PDF download failed validation."))',
+    ):
+        assert expected in patch
