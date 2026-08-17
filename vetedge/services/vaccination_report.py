@@ -23,6 +23,11 @@ def _filters(value: str | dict | None) -> dict:
     return dict(normalize_report_filters("Vaccination Report", cleaned) or {})
 
 
+def _require_read_permission() -> None:
+    if not frappe.has_permission(DOCTYPE, "read"):
+        frappe.throw(_("You do not have permission to view vaccination records."), frappe.PermissionError)
+
+
 def _base_query_filters(report_filters: dict) -> dict:
     filters = _date_filter_dict("administered_on", frappe._dict(report_filters), 30)
     if report_filters.get("branch"):
@@ -160,6 +165,7 @@ def get_vaccination_report_view(
     page_length: int = 50,
 ) -> dict:
     require_internal_user()
+    _require_read_permission()
     report_filters = _filters(filters)
     base_filters = _base_query_filters(report_filters)
     due_status = cstr(report_filters.get("due_status") or "").strip()
