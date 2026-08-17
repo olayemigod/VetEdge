@@ -8,7 +8,7 @@ def read(relative_path: str) -> str:
     return ROOT.joinpath(relative_path).read_text(encoding="utf-8")
 
 
-def test_modal_update_repairs_invalid_stored_draft_due_date_before_billing_sync():
+def test_modal_update_repairs_invalid_stored_draft_dates_before_billing_sync():
     content = read("vetedge/services/billing_context_alignment.py")
 
     assert "def _safe_due_date_for_posting(invoice, posting_date: str) -> str:" in content
@@ -17,9 +17,11 @@ def test_modal_update_repairs_invalid_stored_draft_due_date_before_billing_sync(
     assert 'invoice.check_permission("write")' in content
     assert "target_posting_date = nowdate()" in content
     assert "target_due_date = _safe_due_date_for_posting(invoice, target_posting_date)" in content
+    assert '"posting_date": target_posting_date' in content
+    assert '"due_date": target_due_date' in content
+    assert 'invoice.meta.has_field("set_posting_time")' in content
+    assert 'values["set_posting_time"] = 1' in content
     assert '"Sales Invoice",' in content
-    assert '"due_date",' in content
-    assert "target_due_date," in content
     assert "update_modified=False" in content
 
     method = content.split("def create_or_update_modal_invoice", 1)[1].split("def submit_modal_invoice", 1)[0]
@@ -44,3 +46,12 @@ def test_due_date_repair_uses_erpnext_terms_and_keeps_authorization_guards():
     assert "db_set" not in repair_block
     assert 'cint(invoice.get("docstatus")) != 0' in repair_block
     assert "frappe.db.set_value(" in repair_block
+
+
+def test_billing_core_submit_path_also_enables_posting_time_before_redating():
+    content = read("vetedge/services/billing_core.py")
+    block = content.split("def prepare_vetedge_invoice_for_submit", 1)[1].split("def invoice_has_field", 1)[0]
+
+    assert 'invoice_has_field(invoice, "set_posting_time")' in block
+    assert "invoice.set_posting_time = 1" in block
+    assert "invoice.posting_date = nowdate()" in block
