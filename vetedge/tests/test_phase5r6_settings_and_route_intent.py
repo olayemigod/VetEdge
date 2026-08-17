@@ -20,6 +20,14 @@ def test_settings_boolean_helpers_are_normalized_before_mount():
     )
 
 
+def test_patient_rows_do_not_offer_new_consultation_action():
+    content = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+
+    assert ">New Consultation<" not in content.replace("\n", "")
+    assert '@click="openNewConsultation(row)"' not in content
+    assert "openNewConsultation(row)" not in content
+
+
 def test_resource_center_gives_each_new_consultation_click_a_unique_spa_intent():
     content = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
 
