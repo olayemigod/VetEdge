@@ -73,8 +73,10 @@ def test_stock_expiry_shell_actions_are_read_only_and_reauthorize():
         'check_expiry_permissions()',
         'require_reporting_action(SCOPE_NAME, scope_type="report", action="export")',
         'require_reporting_action(SCOPE_NAME, scope_type="report", action="print")',
-        'get_stock_expiry_rows(filters)',
-        'get_summary(all_rows)',
+        'get_stock_expiry_rows(filters_dict)',
+        '_validate_reference_filter(value, "warehouse")',
+        '_validate_reference_filter(value, "item_group")',
+        'get_summary(source_rows)',
         'get_status_chart(summary)',
         'MAX_CURRENT_PAGE_LENGTH',
     ):
