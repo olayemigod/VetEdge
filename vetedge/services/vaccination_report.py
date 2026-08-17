@@ -55,8 +55,6 @@ def _with_due_filter(query_filters: dict, due_status: str | None) -> dict:
         filters["next_due_date"] = ("between", [today, add_days(today, 30)])
     elif due_status == "Overdue":
         filters["next_due_date"] = ("<", today)
-    elif due_status == "Administered":
-        pass
     return filters
 
 
@@ -86,12 +84,22 @@ def _count_for(base_filters: dict, extra: dict) -> int:
     return cint(frappe.db.count(DOCTYPE, filters=filters))
 
 
-def _summary(base_filters: dict, visible_filters: dict, total: int) -> tuple[list[dict], int, int]:
-    administered = _count_for(visible_filters, {"status": "Administered"})
+def _summary(base_filters: dict, due_status: str, total: int) -> tuple[list[dict], int, int]:
+    due_status = cstr(due_status or "").strip()
     today = getdate(nowdate())
-    due_soon = _count_for(visible_filters, {"status": "Administered", "next_due_date": ("between", [today, add_days(today, 30)])})
-    overdue = _count_for(visible_filters, {"status": "Administered", "next_due_date": ("<", today)})
-    cancelled = _count_for(visible_filters, {"status": "Cancelled"})
+    if due_status:
+        administered = total if due_status in {"Administered", "Due Soon", "Overdue"} else 0
+        due_soon = total if due_status == "Due Soon" else 0
+        overdue = total if due_status == "Overdue" else 0
+        cancelled = 0
+    else:
+        administered = _count_for(base_filters, {"status": "Administered"})
+        due_soon = _count_for(
+            base_filters,
+            {"status": "Administered", "next_due_date": ("between", [today, add_days(today, 30)])},
+        )
+        overdue = _count_for(base_filters, {"status": "Administered", "next_due_date": ("<", today)})
+        cancelled = _count_for(base_filters, {"status": "Cancelled"})
     cards = [
         {"label": _("Vaccination Records"), "value": total, "indicator": "Blue", "datatype": "Int"},
         {"label": _("Administered"), "value": administered, "indicator": "Green", "datatype": "Int"},
@@ -154,7 +162,8 @@ def get_vaccination_report_view(
     require_internal_user()
     report_filters = _filters(filters)
     base_filters = _base_query_filters(report_filters)
-    query_filters = _with_due_filter(base_filters, report_filters.get("due_status"))
+    due_status = cstr(report_filters.get("due_status") or "").strip()
+    query_filters = _with_due_filter(base_filters, due_status)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -191,7 +200,7 @@ def get_vaccination_report_view(
         limit_start=start,
         limit_page_length=page_length,
     )
-    summary, due_soon, overdue = _summary(base_filters, query_filters, total)
+    summary, due_soon, overdue = _summary(base_filters, due_status, total)
     return {
         "title": _("Vaccination Report"),
         "columns": _columns(),
