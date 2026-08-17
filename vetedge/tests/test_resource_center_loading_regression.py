@@ -32,7 +32,8 @@ def test_resource_center_source_replaces_legacy_dom_bridges():
     action_alignment = read(APP / "public/js/vetedge_resource_center_action_alignment.js")
     bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
 
-    assert "New Consultation" in component
+    assert "Medical History" in component
+    assert "New Consultation" not in component
     assert "New Lab Order" in component
     assert "New Vaccination" in component
     assert "View / Edit" in component
