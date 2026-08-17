@@ -15,6 +15,7 @@ PR #36 continues to own QA/fixes for Vital Signs, Veterinary Lab Order operation
 - Lab Order Report now uses a dedicated query-level paginated, read-only provider with report-role, branch and DocType read checks. Summary/status cards use aggregate queries; result-entry timestamps are resolved only for the current page's child rows.
 - Vaccination Report now uses a dedicated query-level paginated, read-only provider. Due Soon/Overdue filtering is pushed into the database query and summary cards are aggregate-backed.
 - Lab/Vaccination optimized providers accept the Report Center's `customer` filter alias as owner context while retaining `owner` for native report compatibility.
+- Lab summary cards include total, pending, in progress, completed/reviewed, cancelled, unbilled and completion rate. Vaccination cards include records, administered, due soon, overdue, cancelled and compliance rate without loading full detail rows.
 
 ## Phase 5 — Export / Print / PDF Foundation — Implementation complete; QA pending
 
