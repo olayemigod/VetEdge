@@ -20,9 +20,17 @@ def test_settings_boolean_helpers_are_normalized_before_mount():
     )
 
 
-def test_patient_rows_do_not_offer_new_consultation_action():
+def test_patient_rows_offer_medical_history_instead_of_new_consultation():
     vue = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
     bundle = read("vetedge/public/js/vetedge_resource_center.bundle.js")
+
+    assert '@click="openMedicalHistory(row)"' in vue
+    assert "Medical History" in vue
+    assert "openMedicalHistory(row)" in vue
+    assert (
+        "`/desk/veterinary-medical-history?patient=${encodeURIComponent(row.name)}`"
+        in vue
+    )
 
     assert '@click="openNewConsultation(row)"' not in vue
     assert "openNewConsultation(row)" not in vue
