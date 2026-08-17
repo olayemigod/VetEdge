@@ -24,7 +24,10 @@ from vetedge.services.stock_expiry_monitor import (
 	get_stock_expiry_rows,
 	get_summary,
 )
-from vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor import check_expiry_permissions
+from vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor import (
+	_validate_reference_filter,
+	check_expiry_permissions,
+)
 
 SCOPE_NAME = "Stock Expiry Status"
 REPORT_TITLE = "Stock Expiry Monitor"
@@ -32,14 +35,17 @@ REPORT_TITLE = "Stock Expiry Monitor"
 
 def _normalized_filters(filters: str | dict | None) -> dict:
 	value = _json_dict(filters)
+	value.pop("limit", None)
+	value.pop("offset", None)
 	threshold = value.get("days_threshold")
 	if threshold:
 		value["expiry_buckets"] = str(threshold)
+	_validate_reference_filter(value, "warehouse")
+	_validate_reference_filter(value, "item_group")
 	return value
 
 
-def _filtered_rows(filters: dict) -> list[dict]:
-	rows = get_stock_expiry_rows(filters)
+def _apply_window(rows: list[dict], filters: dict) -> list[dict]:
 	window = str(filters.get("expiry_window") or "all").strip().lower()
 	if window == "expired":
 		return [row for row in rows if row.get("expiry_status") == "Expired"]
@@ -51,19 +57,21 @@ def _filtered_rows(filters: dict) -> list[dict]:
 def _document_model(filters: str | dict | None, options: str | dict | None, start: int, page_length: int):
 	filters_dict = _normalized_filters(filters)
 	export_options = _normalize_options(options)
-	all_rows = _filtered_rows(filters_dict)
+	source_rows = get_stock_expiry_rows(filters_dict)
+	rows = _apply_window(source_rows, filters_dict)
 	all_columns = [_column_dict(column, index) for index, column in enumerate(get_report_columns())]
 	columns = _select_columns(all_columns, export_options["columns"])
 	if not columns:
 		frappe.throw(_("No Stock Expiry columns are available for this action."))
 
-	rows = all_rows
 	if export_options["scope"] == "current_page":
 		start = max(0, cint(start))
 		page_length = min(MAX_CURRENT_PAGE_LENGTH, max(1, cint(page_length) or 50))
 		rows = rows[start : start + page_length]
 
-	summary = get_summary(all_rows)
+	# The monitor summary intentionally reflects the complete filtered inventory
+	# population even when the interactive table is narrowed to one risk window.
+	summary = get_summary(source_rows)
 	chart = get_status_chart(summary)
 	return filters_dict, export_options, columns, rows, summary, chart
 
