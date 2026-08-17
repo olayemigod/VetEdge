@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from typing import Any
 
 import frappe
 from frappe import _
@@ -25,6 +25,17 @@ PAGE_LENGTH_MAX = 100
 ACTIVE_STATUSES = {"Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment"}
 COMPLETED_STATUSES = {"Completed"}
 CANCELLED_STATUSES = {"Cancelled"}
+FILTER_FIELDS = {
+    "consultation_datetime",
+    "service_branch",
+    "consulting_practitioner",
+    "status",
+    "patient",
+    "primary_owner",
+    "consultation_type",
+    "payment_status",
+    "owner",
+}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -63,47 +74,6 @@ def _query_filters(report_filters: dict) -> dict:
     return filters
 
 
-def _follow_up_or_filters(report_filters: dict) -> list[dict] | None:
-    value = report_filters.get("has_follow_up")
-    if value in (1, "1", "Yes"):
-        return [{"follow_up_date": ("is", "set")}, {"follow_up_appointment": ("is", "set")}]
-    return None
-
-
-def _needs_no_follow_up(report_filters: dict) -> bool:
-    return report_filters.get("has_follow_up") in (0, "0", "No")
-
-
-def _vaccination_consultation_names(wants_vaccination: bool) -> list[str] | None:
-    if not frappe.db.exists("DocType", "Veterinary Vaccination Record"):
-        return [] if wants_vaccination else None
-    names = {
-        cstr(value).strip()
-        for value in frappe.get_all(
-            "Veterinary Vaccination Record",
-            filters={"linked_consultation": ("is", "set")},
-            pluck="linked_consultation",
-        )
-        if cstr(value).strip()
-    }
-    return sorted(names)
-
-
-def _apply_special_filters(query_filters: dict, report_filters: dict) -> dict:
-    filters = dict(query_filters)
-    if _needs_no_follow_up(report_filters):
-        filters["follow_up_date"] = ("is", "not set")
-        filters["follow_up_appointment"] = ("is", "not set")
-    if report_filters.get("has_vaccination") in (1, "1", "Yes", 0, "0", "No"):
-        wants = report_filters.get("has_vaccination") in (1, "1", "Yes")
-        linked_names = _vaccination_consultation_names(wants)
-        if wants:
-            filters["name"] = ("in", linked_names or ["__vetedge_no_matching_consultation__"])
-        elif linked_names:
-            filters["name"] = ("not in", linked_names)
-    return filters
-
-
 def _columns() -> list[dict]:
     return [
         {"fieldname": "consultation", "label": _("Consultation"), "fieldtype": "Link", "options": DOCTYPE},
@@ -128,80 +98,133 @@ def _columns() -> list[dict]:
     ]
 
 
-def _page_rows(filters: dict, or_filters: list[dict] | None, start: int, page_length: int):
-    kwargs = {
-        "doctype": DOCTYPE,
-        "filters": filters,
-        "fields": [
-            "name",
-            "consultation_datetime",
-            "service_branch",
-            "patient",
-            "primary_owner",
-            "consulting_practitioner",
-            "consulting_practitioner_name",
-            "consultation_type",
-            "linked_appointment",
-            "status",
-            "linked_invoice",
-            "payment_status",
-            "follow_up_date",
-            "follow_up_appointment",
-            "assessment_notes",
-            "owner",
-        ],
-        "order_by": "consultation_datetime desc, name desc",
-        "limit_start": start,
-        "limit_page_length": page_length,
-    }
-    if or_filters:
-        kwargs["or_filters"] = or_filters
-    return frappe.get_all(**kwargs)
+def _sql_condition(field: str, value: Any, params: dict, index: int) -> str:
+    if field not in FILTER_FIELDS:
+        return ""
+    column = f"c.`{field}`"
+    key = f"p_{index}"
+    if isinstance(value, (list, tuple)) and value:
+        operator = cstr(value[0]).strip().lower()
+        operand = value[1] if len(value) > 1 else None
+        if operator == "between" and isinstance(operand, (list, tuple)) and len(operand) >= 2:
+            params[f"{key}_from"] = operand[0]
+            params[f"{key}_to"] = operand[1]
+            return f"{column} BETWEEN %({key}_from)s AND %({key}_to)s"
+        if operator in {">=", "<=", ">", "<", "!=", "="}:
+            params[key] = operand
+            return f"{column} {operator} %({key})s"
+        if operator in {"in", "not in"} and isinstance(operand, (list, tuple, set)):
+            values = list(operand)
+            if not values:
+                return "1=0" if operator == "in" else "1=1"
+            placeholders = []
+            for value_index, item in enumerate(values):
+                item_key = f"{key}_{value_index}"
+                params[item_key] = item
+                placeholders.append(f"%({item_key})s")
+            return f"{column} {'IN' if operator == 'in' else 'NOT IN'} ({', '.join(placeholders)})"
+        if operator == "is":
+            token = cstr(operand).strip().lower()
+            if token in {"set", "not null"}:
+                return f"{column} IS NOT NULL AND {column} != ''"
+            if token in {"not set", "null"}:
+                return f"({column} IS NULL OR {column} = '')"
+    params[key] = value
+    return f"{column} = %({key})s"
 
 
-def _matching_names(filters: dict, or_filters: list[dict] | None) -> list[str]:
-    kwargs = {"doctype": DOCTYPE, "filters": filters, "pluck": "name"}
-    if or_filters:
-        kwargs["or_filters"] = or_filters
-    return frappe.get_all(**kwargs)
+def _where_clause(query_filters: dict, report_filters: dict) -> tuple[str, dict]:
+    params: dict = {}
+    conditions = []
+    for index, (field, value) in enumerate(query_filters.items()):
+        condition = _sql_condition(field, value, params, index)
+        if condition:
+            conditions.append(condition)
+
+    follow_up = report_filters.get("has_follow_up")
+    if follow_up in (1, "1", "Yes"):
+        conditions.append("((c.`follow_up_date` IS NOT NULL AND c.`follow_up_date` != '') OR (c.`follow_up_appointment` IS NOT NULL AND c.`follow_up_appointment` != ''))")
+    elif follow_up in (0, "0", "No"):
+        conditions.append("((c.`follow_up_date` IS NULL OR c.`follow_up_date` = '') AND (c.`follow_up_appointment` IS NULL OR c.`follow_up_appointment` = ''))")
+
+    has_vaccination = report_filters.get("has_vaccination")
+    if has_vaccination in (1, "1", "Yes", 0, "0", "No"):
+        wants = has_vaccination in (1, "1", "Yes")
+        exists_sql = "EXISTS (SELECT 1 FROM `tabVeterinary Vaccination Record` v WHERE v.`linked_consultation` = c.`name` LIMIT 1)"
+        conditions.append(exists_sql if wants else f"NOT {exists_sql}")
+
+    return (" AND ".join(conditions) if conditions else "1=1"), params
 
 
-def _status_counts(filters: dict, or_filters: list[dict] | None) -> dict[str, int]:
-    kwargs = {
-        "doctype": DOCTYPE,
-        "filters": filters,
-        "fields": ["status", {"COUNT": "name", "as": "row_count"}],
-        "group_by": "status",
-    }
-    if or_filters:
-        kwargs["or_filters"] = or_filters
-    rows = frappe.get_all(**kwargs)
+def _page_rows(where_sql: str, params: dict, start: int, page_length: int):
+    page_params = dict(params)
+    page_params["limit"] = page_length
+    page_params["offset"] = start
+    return frappe.db.sql(
+        f"""
+        SELECT
+            c.`name`, c.`consultation_datetime`, c.`service_branch`, c.`patient`, c.`primary_owner`,
+            c.`consulting_practitioner`, c.`consulting_practitioner_name`, c.`consultation_type`,
+            c.`linked_appointment`, c.`status`, c.`linked_invoice`, c.`payment_status`,
+            c.`follow_up_date`, c.`follow_up_appointment`, c.`assessment_notes`, c.`owner`
+        FROM `tabVeterinary Consultation` c
+        WHERE {where_sql}
+        ORDER BY c.`consultation_datetime` DESC, c.`name` DESC
+        LIMIT %(limit)s OFFSET %(offset)s
+        """,
+        page_params,
+        as_dict=True,
+    )
+
+
+def _count_rows(where_sql: str, params: dict) -> int:
+    rows = frappe.db.sql(
+        f"SELECT COUNT(*) AS `row_count` FROM `tabVeterinary Consultation` c WHERE {where_sql}",
+        params,
+        as_dict=True,
+    )
+    return cint(rows[0].get("row_count")) if rows else 0
+
+
+def _status_counts(where_sql: str, params: dict) -> dict[str, int]:
+    rows = frappe.db.sql(
+        f"SELECT c.`status`, COUNT(*) AS `row_count` FROM `tabVeterinary Consultation` c WHERE {where_sql} GROUP BY c.`status`",
+        params,
+        as_dict=True,
+    )
     return {cstr(row.get("status")): cint(row.get("row_count")) for row in rows}
 
 
-def _aggregate_planned_total(consultation_names: list[str]) -> float:
-    names = [name for name in consultation_names if name]
-    if not names or not frappe.db.exists("DocType", "Planned Treatment Item"):
+def _planned_total(where_sql: str, params: dict) -> float:
+    if not frappe.db.exists("DocType", "Planned Treatment Item"):
         return 0.0
-    rows = frappe.get_all(
-        "Planned Treatment Item",
-        filters={"parent": ("in", names), "parenttype": DOCTYPE},
-        fields=[{"SUM": "amount", "as": "planned_total"}],
+    rows = frappe.db.sql(
+        f"""
+        SELECT SUM(CASE WHEN IFNULL(pt.`amount`, 0) != 0 THEN pt.`amount` ELSE IFNULL(pt.`qty`, 0) * IFNULL(pt.`rate`, 0) END) AS `planned_total`
+        FROM `tabPlanned Treatment Item` pt
+        INNER JOIN `tabVeterinary Consultation` c ON c.`name` = pt.`parent`
+        WHERE pt.`parenttype` = 'Veterinary Consultation' AND {where_sql}
+        """,
+        params,
+        as_dict=True,
     )
     return flt(rows[0].get("planned_total")) if rows else 0.0
 
 
-def _summary(filters: dict, or_filters: list[dict] | None, total: int) -> list[dict]:
-    counts = _status_counts(filters, or_filters)
+def _follow_up_count(query_filters: dict, report_filters: dict) -> int:
+    summary_filters = dict(report_filters)
+    summary_filters["has_follow_up"] = "Yes"
+    where_sql, params = _where_clause(query_filters, summary_filters)
+    return _count_rows(where_sql, params)
+
+
+def _summary(query_filters: dict, report_filters: dict, where_sql: str, params: dict, total: int) -> list[dict]:
+    counts = _status_counts(where_sql, params)
     completed = sum(counts.get(status, 0) for status in COMPLETED_STATUSES)
     active = sum(counts.get(status, 0) for status in ACTIVE_STATUSES)
     cancelled = sum(counts.get(status, 0) for status in CANCELLED_STATUSES)
     awaiting_payment = counts.get("Awaiting Payment", 0)
-    names = _matching_names(filters, or_filters)
-    planned_total = _aggregate_planned_total(names)
-    follow_up_filters = dict(filters)
-    follow_up_or = [{"follow_up_date": ("is", "set")}, {"follow_up_appointment": ("is", "set")}]
-    follow_up_count = len(_matching_names(follow_up_filters, follow_up_or))
+    planned_total = _planned_total(where_sql, params)
     return [
         {"label": _("Total Consultations"), "value": total, "indicator": "Blue", "datatype": "Int"},
         {"label": _("Completed"), "value": completed, "indicator": "Green", "datatype": "Int"},
@@ -210,12 +233,12 @@ def _summary(filters: dict, or_filters: list[dict] | None, total: int) -> list[d
         {"label": _("Cancelled"), "value": cancelled, "indicator": "Red", "datatype": "Int"},
         {"label": _("Completion Rate"), "value": flt((completed / total) * 100, 1) if total else 0, "indicator": "Green", "datatype": "Percent"},
         {"label": _("Average Planned Value"), "value": flt(planned_total / total, 2) if total else 0, "indicator": "Blue", "datatype": "Currency"},
-        {"label": _("Follow-up Required"), "value": follow_up_count, "indicator": "Purple", "datatype": "Int"},
+        {"label": _("Follow-up Required"), "value": _follow_up_count(query_filters, report_filters), "indicator": "Purple", "datatype": "Int"},
     ]
 
 
-def _chart(filters: dict, or_filters: list[dict] | None) -> dict | None:
-    counts = _status_counts(filters, or_filters)
+def _chart(where_sql: str, params: dict) -> dict | None:
+    counts = _status_counts(where_sql, params)
     labels = [status for status, value in sorted(counts.items()) if value]
     if not labels:
         return None
@@ -282,8 +305,8 @@ def get_consultation_register_view(
     require_internal_user()
     _require_read_permission()
     report_filters = _filters(filters)
-    query_filters = _apply_special_filters(_query_filters(report_filters), report_filters)
-    or_filters = _follow_up_or_filters(report_filters)
+    query_filters = _query_filters(report_filters)
+    where_sql, params = _where_clause(query_filters, report_filters)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -300,14 +323,14 @@ def get_consultation_register_view(
             "metadata": {"pagination_mode": "query-level", "detail_rows_materialized": False},
         }
 
-    total = len(_matching_names(query_filters, or_filters))
-    page_rows = _page_rows(query_filters, or_filters, start, page_length)
+    total = _count_rows(where_sql, params)
+    page_rows = _page_rows(where_sql, params, start, page_length)
     return {
         "title": _("Consultation Register"),
         "columns": _columns(),
         "rows": _render_rows(page_rows),
-        "summary": _summary(query_filters, or_filters, total),
-        "chart": _chart(query_filters, or_filters),
+        "summary": _summary(query_filters, report_filters, where_sql, params, total),
+        "chart": _chart(where_sql, params),
         "message": "",
         "total": total,
         "start": start,
@@ -316,7 +339,8 @@ def get_consultation_register_view(
             "pagination_mode": "query-level",
             "detail_rows_materialized": False,
             "enrichment_mode": "page-only",
-            "summary_mode": "aggregate-plus-identifiers",
+            "summary_mode": "database-aggregate",
+            "has_vaccination_filter_mode": "exists-subquery",
             "source": "consultation-register",
         },
     }
