@@ -66,4 +66,5 @@ Next reports must be audited individually. Small/bounded reports may stay on the
 
 - Phase 5 code is implementation-complete but QA-pending.
 - Phase 6 has three optimized providers structurally implemented.
+- Source-contract tests cover provider registration, pagination, report-role/branch normalization, DocType read permission, owner/customer filter compatibility, aggregate cards and read-only/no-mutation rules.
 - PR #47 must remain Draft until its own automated/browser/network/file acceptance gates pass and PR #36 merges first.
