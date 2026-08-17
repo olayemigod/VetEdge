@@ -129,6 +129,17 @@ def _prepare_active_billing_draft_dates(source_doctype: str, source_name: str) -
     Submitted/cancelled invoices are never changed here.
     """
     from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session
+    from vetedge.services.billing_modal import assert_can_act_on_source, get_billing_source_config
+    from vetedge.services.platform_access import require_vetedge_platform_access
+
+    config = get_billing_source_config(source_doctype)
+    source_doc = frappe.get_doc(source_doctype, source_name)
+    assert_can_act_on_source(source_doc, config)
+    require_vetedge_platform_access(
+        action="create_or_update_modal_invoice",
+        reference_doctype=source_doctype,
+        reference_name=source_name,
+    )
 
     if not is_billing_sessions_enabled():
         return
