@@ -10,7 +10,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.desk.query_report import run as run_query_report
-from frappe.utils import cint
+from frappe.utils import cint, flt
 from frappe.utils.pdf import get_chrome_pdf, get_pdf
 from frappe.utils.xlsxutils import make_xlsx
 
@@ -30,6 +30,7 @@ PRESENTATION_KEYS = (
 	"include_totals",
 )
 MAX_CURRENT_PAGE_LENGTH = 200
+MAX_PRESENTATION_CHART_POINTS = 40
 
 
 def _json_dict(value: str | dict | None) -> dict:
@@ -137,6 +138,34 @@ def _filter_rows(filters: dict) -> list[list[Any]]:
 	return [[str(key).replace("_", " ").title(), _safe_value(value)] for key, value in filters.items() if value not in (None, "", [])]
 
 
+def _chart_payload(chart: dict | None) -> tuple[str, list, list[dict]]:
+	if not isinstance(chart, dict):
+		return "", [], []
+	data = chart.get("data") or {}
+	labels = list(data.get("labels") or [])[:MAX_PRESENTATION_CHART_POINTS]
+	datasets = []
+	for index, dataset in enumerate(data.get("datasets") or []):
+		if not isinstance(dataset, dict):
+			continue
+		datasets.append(
+			{
+				"name": dataset.get("name") or dataset.get("label") or _("Series {0}").format(index + 1),
+				"values": list(dataset.get("values") or [])[: len(labels)],
+			}
+		)
+	return str(chart.get("title") or _("Chart")), labels, datasets
+
+
+def _chart_matrix(chart: dict | None) -> list[list[Any]]:
+	title, labels, datasets = _chart_payload(chart)
+	if not labels or not datasets:
+		return []
+	rows: list[list[Any]] = [[title], [_('Chart Label'), *[dataset["name"] for dataset in datasets]]]
+	for index, label in enumerate(labels):
+		rows.append([label, *[_safe_value(dataset["values"][index] if index < len(dataset["values"]) else "") for dataset in datasets]])
+	return rows
+
+
 def _default_letterhead_html() -> str:
 	company = frappe.defaults.get_user_default("Company") or frappe.defaults.get_global_default("company")
 	letterhead_name = frappe.get_cached_value("Company", company, "default_letter_head") if company else None
@@ -151,7 +180,15 @@ def _default_letterhead_html() -> str:
 	return letterhead.content or ""
 
 
-def _table_matrix(report_name: str, filters: dict, columns: list[dict], rows: list[dict], summary: list, options: dict) -> tuple[list[list[Any]], int]:
+def _table_matrix(
+	report_name: str,
+	filters: dict,
+	columns: list[dict],
+	rows: list[dict],
+	summary: list,
+	options: dict,
+	chart: dict | None = None,
+) -> tuple[list[list[Any]], int]:
 	matrix: list[list[Any]] = []
 	if options["include_title"]:
 		matrix.append([report_name])
@@ -162,6 +199,12 @@ def _table_matrix(report_name: str, filters: dict, columns: list[dict], rows: li
 		matrix.extend(_filter_rows(filters))
 	if options["include_summary"]:
 		matrix.extend(_summary_rows(summary))
+	if options["include_charts"]:
+		chart_rows = _chart_matrix(chart)
+		if chart_rows:
+			if matrix:
+				matrix.append([])
+			matrix.extend(chart_rows)
 	if matrix:
 		matrix.append([])
 	header_index = len(matrix)
@@ -184,9 +227,40 @@ def _xlsx_bytes(matrix: list[list[Any]], report_name: str, header_index: int, in
 	return stream.getvalue()
 
 
-def _pdf_html(report_name: str, filters: dict, columns: list[dict], rows: list[dict], summary: list, options: dict) -> str:
+def _chart_html(chart: dict | None) -> str:
+	title, labels, datasets = _chart_payload(chart)
+	if not labels or not datasets:
+		return ""
+	max_value = max((abs(flt(value)) for dataset in datasets for value in dataset["values"]), default=0) or 1
+	parts = [f"<section class='chart'><h2>{html.escape(title)}</h2>"]
+	for index, label in enumerate(labels):
+		parts.append(f"<div class='chart-group'><div class='chart-label'>{html.escape(str(label))}</div>")
+		for dataset in datasets:
+			value = flt(dataset["values"][index]) if index < len(dataset["values"]) else 0
+			width = min(100, max(0, abs(value) / max_value * 100))
+			parts.append(
+				"<div class='chart-row'>"
+				f"<span class='chart-series'>{html.escape(str(dataset['name']))}</span>"
+				f"<span class='chart-bar-wrap'><span class='chart-bar' style='width:{width:.2f}%'></span></span>"
+				f"<strong>{html.escape(str(_safe_value(value)))}</strong>"
+				"</div>"
+			)
+		parts.append("</div>")
+	parts.append("</section>")
+	return "".join(parts)
+
+
+def _pdf_html(
+	report_name: str,
+	filters: dict,
+	columns: list[dict],
+	rows: list[dict],
+	summary: list,
+	options: dict,
+	chart: dict | None = None,
+) -> str:
 	parts = ["<!doctype html><html><head><meta charset='utf-8'><style>"]
-	parts.append("@page{margin:12mm}body{font-family:Arial,sans-serif;color:#172033;font-size:9pt}h1{font-size:16pt;margin:0 0 8px}.meta,.filters,.summary{margin:0 0 10px}.summary{display:flex;gap:8px;flex-wrap:wrap}.card{border:1px solid #dfe5ef;border-radius:6px;padding:6px 9px}.card b{display:block;font-size:11pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe5ef;padding:5px;vertical-align:top}th{background:#f3f5f8;text-align:left}")
+	parts.append("@page{margin:12mm}body{font-family:Arial,sans-serif;color:#172033;font-size:9pt}h1{font-size:16pt;margin:0 0 8px}h2{font-size:11pt;margin:0 0 7px}.meta,.filters,.summary{margin:0 0 10px}.summary{display:flex;gap:8px;flex-wrap:wrap}.card{border:1px solid #dfe5ef;border-radius:6px;padding:6px 9px}.card b{display:block;font-size:11pt}.chart{margin:0 0 12px;padding:9px;border:1px solid #dfe5ef;border-radius:7px}.chart-group{margin:0 0 7px}.chart-label{font-weight:600;margin-bottom:3px}.chart-row{display:flex;gap:6px;align-items:center;margin:2px 0}.chart-series{width:90px;color:#667085;font-size:8pt}.chart-bar-wrap{display:block;flex:1;height:7px;background:#edf1f6;border-radius:4px;overflow:hidden}.chart-bar{display:block;height:100%;background:#667085}.chart-row strong{width:64px;text-align:right;font-size:8pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe5ef;padding:5px;vertical-align:top}th{background:#f3f5f8;text-align:left}")
 	if options["repeat_table_headings"]:
 		parts.append("thead{display:table-header-group}")
 	parts.append("</style></head><body>")
@@ -206,6 +280,8 @@ def _pdf_html(report_name: str, filters: dict, columns: list[dict], rows: list[d
 			if isinstance(item, dict):
 				parts.append(f"<div class='card'>{html.escape(str(item.get('label') or _('Metric')))}<b>{html.escape(str(item.get('value') or 0))}</b></div>")
 		parts.append("</div>")
+	if options["include_charts"]:
+		parts.append(_chart_html(chart))
 	parts.append("<table><thead><tr>")
 	for column in columns:
 		parts.append(f"<th>{html.escape(str(column.get('label') or column['fieldname']))}</th>")
@@ -262,16 +338,20 @@ def download_report_export(
 		frappe.throw(_("No report columns are available for export."))
 	rows = _slice_rows(rows, export_options, start, page_length)
 	summary = payload.get("report_summary") or []
+	chart = payload.get("chart") or None
 	filename = report_name.replace("/", "-").strip() or "report"
 	file_format = export_options["format"]
 
 	if file_format == "pdf":
-		content = _pdf_bytes(_pdf_html(report_name, filters_dict, columns, rows, summary, export_options), export_options["orientation"])
+		content = _pdf_bytes(
+			_pdf_html(report_name, filters_dict, columns, rows, summary, export_options, chart=chart),
+			export_options["orientation"],
+		)
 	elif file_format == "csv":
-		matrix, _ = _table_matrix(report_name, filters_dict, columns, rows, summary, export_options)
+		matrix, _ = _table_matrix(report_name, filters_dict, columns, rows, summary, export_options, chart=chart)
 		content = _csv_bytes(matrix)
 	else:
-		matrix, header_index = _table_matrix(report_name, filters_dict, columns, rows, summary, export_options)
+		matrix, header_index = _table_matrix(report_name, filters_dict, columns, rows, summary, export_options, chart=chart)
 		content = _xlsx_bytes(matrix, report_name, header_index, export_options["include_filters"])
 
 	_set_download_response(content, filename, file_format)
