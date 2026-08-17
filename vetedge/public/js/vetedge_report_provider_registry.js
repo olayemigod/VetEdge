@@ -129,6 +129,10 @@
 
 	function registerClinicalReports() {
 		registerServerPaginatedReport(
+			"Consultation Register",
+			"vetedge.services.consultation_report.get_consultation_register_view",
+		);
+		registerServerPaginatedReport(
 			"Lab Order Report",
 			"vetedge.services.lab_order_report.get_lab_order_report_view",
 			["Laboratory Report"],
