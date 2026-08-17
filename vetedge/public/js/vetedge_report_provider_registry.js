@@ -1,0 +1,122 @@
+(function installVetEdgeReferenceReportProviders(global) {
+	"use strict";
+
+	const STOCK_EXPIRY_COLUMNS = [
+		{ fieldname: "item_code", label: "Item Code", fieldtype: "Link", options: "Item" },
+		{ fieldname: "item_name", label: "Item Name", fieldtype: "Data" },
+		{ fieldname: "batch_no", label: "Batch No", fieldtype: "Link", options: "Batch" },
+		{ fieldname: "warehouse", label: "Warehouse", fieldtype: "Link", options: "Warehouse" },
+		{ fieldname: "qty", label: "Quantity", fieldtype: "Float" },
+		{ fieldname: "stock_uom", label: "UOM", fieldtype: "Data" },
+		{ fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date" },
+		{ fieldname: "days_to_expiry", label: "Days Left", fieldtype: "Int" },
+		{ fieldname: "expiry_status", label: "Risk Status", fieldtype: "Data" },
+		{ fieldname: "branch", label: "Branch", fieldtype: "Link", options: "Branch" },
+	];
+
+	function call(method, args = {}) {
+		return new Promise((resolve, reject) => {
+			if (!global.frappe?.call) {
+				reject(new Error("Frappe Desk is not ready."));
+				return;
+			}
+			global.frappe.call({
+				method,
+				args,
+				callback: (response) => resolve(response.message || {}),
+				error: reject,
+			});
+		});
+	}
+
+	function adapter() {
+		return global.VetEdgeReportProviders || null;
+	}
+
+	function stockFilters(filters = {}, start = 0, pageLength = 50) {
+		return {
+			warehouse: filters.warehouse || "",
+			item_group: filters.item_group || "",
+			expiry_window: filters.expiry_window || "all",
+			days_threshold: Number(filters.days_threshold || 60),
+			item: filters.item || "",
+			limit: pageLength,
+			offset: start,
+		};
+	}
+
+	function registerStockExpiry() {
+		const reports = adapter();
+		if (!reports?.registerPaginatedProvider || reports.getProvider("Stock Expiry Report")) return;
+		const provider = reports.registerPaginatedProvider("Stock Expiry Report", {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
+				const payload = await call(
+					"vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor.get_stock_expiry_data",
+					{ filters: stockFilters(filters, start, page_length) },
+				);
+				return {
+					columns: STOCK_EXPIRY_COLUMNS,
+					rows: payload.rows || [],
+					summary: payload.summary || [],
+					total_count: Number(payload.total_count || 0),
+					start,
+					page_length,
+					metadata: { pagination_mode: "query-level", source: "stock-expiry-monitor" },
+				};
+			},
+		});
+		if (provider) {
+			reports.registerProvider("Stock Expiry Monitor", provider);
+		}
+	}
+
+	function registerPlannedTreatment() {
+		const reports = adapter();
+		if (!reports?.registerProvider || reports.getProvider("Planned Treatment")) return;
+		const provider = Object.freeze({
+			kind: "paged-response",
+			supports_server_pagination: false,
+			pagination_mode: "materialize-then-slice",
+			default_page_length: 50,
+			max_page_length: 100,
+			async load({ filters = {}, start = 0, page_length = 50 } = {}) {
+				const safeStart = Math.max(0, Number(start || 0));
+				const safeLength = Math.min(100, Math.max(1, Number(page_length || 50)));
+				const payload = await call("vetedge.services.treatment_plan_report.get_planned_treatment_view", {
+					filters,
+					start: safeStart,
+					page_length: safeLength,
+				});
+				return reports.normalizePayload(
+					{
+						...payload,
+						metadata: {
+							...(payload.metadata || {}),
+							pagination_mode: "materialize-then-slice",
+							optimization_pending: true,
+							source: "planned-treatment",
+						},
+					},
+					{ start: safeStart, page_length: safeLength },
+				);
+			},
+			export: null,
+		});
+		reports.registerProvider("Planned Treatment", provider);
+		reports.registerProvider("Planned Treatment Report", provider);
+	}
+
+	function register() {
+		if (!adapter()?.runtimeReports?.()) return false;
+		registerStockExpiry();
+		registerPlannedTreatment();
+		return true;
+	}
+
+	global.VetEdgeReportProviderRegistry = Object.freeze({ register });
+	if (!register()) {
+		global.addEventListener?.("edgesuite:report-runtime-ready", register, { once: true });
+	}
+})(window);
