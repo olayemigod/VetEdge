@@ -202,6 +202,14 @@
 											{{ row._registration_action.label }}
 										</button>
 										<button
+											v-if="isPatients"
+											type="button"
+											class="edge-button edge-button--compact edge-button--primary"
+											@click="openMedicalHistory(row)"
+										>
+											Medical History
+										</button>
+										<button
 											v-if="isClinicalResource"
 											type="button"
 											class="edge-button edge-button--compact edge-button--primary"
@@ -581,6 +589,10 @@ export default {
 				return;
 			}
 			window.vetedgeBillingModal.open(this.billingFrame("Veterinary Patient", row.name));
+		},
+		openMedicalHistory(row) {
+			if (!row?.name) return;
+			this.openRoute(`/desk/veterinary-medical-history?patient=${encodeURIComponent(row.name)}`);
 		},
 		async ensureClinicalEditor() {
 			if (window.VetEdgeClinicalRecordEditor?.ready?.()) return window.VetEdgeClinicalRecordEditor;
