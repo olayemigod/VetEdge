@@ -21,39 +21,19 @@ def test_settings_boolean_helpers_are_normalized_before_mount():
 
 
 def test_patient_rows_do_not_offer_new_consultation_action():
-    content = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    vue = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    bundle = read("vetedge/public/js/vetedge_resource_center.bundle.js")
 
-    assert ">New Consultation<" not in content.replace("\n", "")
-    assert '@click="openNewConsultation(row)"' not in content
-    assert "openNewConsultation(row)" not in content
+    assert '@click="openNewConsultation(row)"' not in vue
+    assert "openNewConsultation(row)" not in vue
+    assert "New Consultation" not in vue
+    assert "openNewConsultation(row)" not in bundle
 
 
-def test_resource_center_gives_each_new_consultation_click_a_unique_spa_intent():
+def test_resource_center_no_longer_installs_patient_consultation_repeat_route_workaround():
     content = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
 
-    for contract in (
-        "let vetedgeClinicalIntentSequence = 0;",
-        "function withClinicalNavigationIntent(route)",
-        "url.pathname === '/desk/vetedge-clinical-workspace'",
-        "url.searchParams.get('new') === '1'",
-        "vetedgeClinicalIntentSequence += 1;",
-        "url.searchParams.set(",
-        "'_vetedge_intent'",
-        "return originalOpen(withClinicalNavigationIntent(route));",
-    ):
-        assert contract in content
-
-    assert "window.location.assign" not in content
-    assert "window.dispatchEvent(new CustomEvent" not in content
-
-
-def test_clinical_workspace_normalizes_transient_intent_back_to_clean_patient_route():
-    content = read(
-        "vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js"
-    )
-
-    assert "const patient = String(params.get('patient') || '').trim();" in content
-    assert "const patientQuery = requested.patient ? `&patient=${encodeURIComponent(requested.patient)}` : '';" in content
-    assert "`/desk/vetedge-clinical-workspace?new=1${patientQuery}`" in content
+    assert "vetedgeClinicalIntentSequence" not in content
+    assert "withClinicalNavigationIntent" not in content
+    assert "installResourceCenterRepeatRouteDispatch" not in content
     assert "_vetedge_intent" not in content
-    assert "window.location.assign" not in content
