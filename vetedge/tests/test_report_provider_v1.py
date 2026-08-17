@@ -21,6 +21,24 @@ def test_report_center_prefers_provider_runtime_and_keeps_query_report_fallback(
     assert "ignore_user_permissions: 0" in center
 
 
+def test_report_center_uses_shared_export_builder_and_same_desk_navigation():
+    center = read("veterinary/page/vetedge_report_center/vetedge_report_center.js")
+
+    for expected in (
+        '"EdgeReportExportDialog"',
+        "downloadReportExport",
+        '__("Download / Export")',
+        "exportOpen",
+        "exportBusy",
+        "onExport: this.runExport",
+        'scope: "all_filtered"',
+        'typeof frappe.set_route === "function"',
+        "frappe.set_route(...parts)",
+        'date_preset: get("date_preset")',
+    ):
+        assert expected in center
+
+
 def test_stock_expiry_is_registered_as_query_level_paginated_reference():
     registry = read("public/js/vetedge_report_provider_registry.js")
 
