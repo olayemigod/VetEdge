@@ -1,4 +1,40 @@
 const VETEDGE_PRICING_WORKSPACE_REFRESH_MAX_AGE_MS = 15000;
+const VETEDGE_PRICING_WORKSPACE_ROUTE = '/desk/vetedge-pricing-master-workspace';
+const VETEDGE_PRICING_ROUTE_OPTION_KEYS = ['resource', 'name', 'new', 'search'];
+
+function hydratePricingWorkspaceRouteFromFrappeOptions() {
+	const options = window.frappe?.route_options;
+	if (!options || typeof options !== 'object') return false;
+
+	const url = new URL(window.location.href);
+	let consumed = false;
+	let changed = false;
+	for (const key of VETEDGE_PRICING_ROUTE_OPTION_KEYS) {
+		const value = options[key];
+		if (value === undefined || value === null || String(value) === '') continue;
+		consumed = true;
+		const text = String(value);
+		if (url.searchParams.get(key) !== text) {
+			url.searchParams.set(key, text);
+			changed = true;
+		}
+	}
+	if (!consumed) return false;
+
+	if (url.pathname !== VETEDGE_PRICING_WORKSPACE_ROUTE) {
+		url.pathname = VETEDGE_PRICING_WORKSPACE_ROUTE;
+		changed = true;
+	}
+
+	const remaining = { ...options };
+	for (const key of VETEDGE_PRICING_ROUTE_OPTION_KEYS) delete remaining[key];
+	window.frappe.route_options = Object.keys(remaining).length ? remaining : null;
+
+	if (changed && window.history?.replaceState) {
+		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+	}
+	return changed;
+}
 
 function pricingWorkspaceRouteKey() {
 	return window.location.search || '';
@@ -34,6 +70,7 @@ frappe.pages['vetedge-pricing-master-workspace'].on_page_load = function(wrapper
 };
 
 frappe.pages['vetedge-pricing-master-workspace'].on_page_show = function(wrapper) {
+	hydratePricingWorkspaceRouteFromFrappeOptions();
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;

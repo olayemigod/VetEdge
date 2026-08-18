@@ -187,7 +187,7 @@
 							<tbody>
 								<tr v-for="row in page.rows" :key="row.name">
 									<td v-for="column in page.columns" :key="column.fieldname" :data-label="column.label">
-										<span :class="cellClass(column, row[column.fieldname])">
+										<span :class="cellClass(column, row[column.fieldname], row)">
 											{{ formatValue(column, row[column.fieldname], row) }}
 										</span>
 									</td>
@@ -205,9 +205,9 @@
 											v-if="isPatients"
 											type="button"
 											class="edge-button edge-button--compact edge-button--primary"
-											@click="openNewConsultation(row)"
+											@click="openMedicalHistory(row)"
 										>
-											New Consultation
+											Medical History
 										</button>
 										<button
 											v-if="isClinicalResource"
@@ -590,9 +590,9 @@ export default {
 			}
 			window.vetedgeBillingModal.open(this.billingFrame("Veterinary Patient", row.name));
 		},
-		openNewConsultation(row) {
+		openMedicalHistory(row) {
 			if (!row?.name) return;
-			window.location.assign(`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(row.name)}`);
+			this.openRoute(`/desk/veterinary-medical-history?patient=${encodeURIComponent(row.name)}`);
 		},
 		async ensureClinicalEditor() {
 			if (window.VetEdgeClinicalRecordEditor?.ready?.()) return window.VetEdgeClinicalRecordEditor;

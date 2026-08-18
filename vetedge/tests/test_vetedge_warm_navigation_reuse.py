@@ -182,18 +182,16 @@ def test_settings_child_tables_use_smart_links_and_respect_write_permission():
     assert "ignore_permissions" not in service
 
 
-def test_resource_center_redispatches_same_patient_consultation_route_instead_of_noop():
+def test_resource_center_no_longer_installs_patient_consultation_repeat_route_workaround():
     content = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
 
-    for contract in (
-        "function installResourceCenterRepeatRouteDispatch()",
-        "adapter.__vetedgeRepeatRouteDispatchInstalled",
-        "url.pathname === '/desk/vetedge-clinical-workspace'",
-        "next === current",
-        "Promise.resolve(frappeRouter.route())",
-        "installResourceCenterRepeatRouteDispatch();",
+    for retired_contract in (
+        "vetedgeClinicalIntentSequence",
+        "withClinicalNavigationIntent",
+        "installResourceCenterRepeatRouteDispatch",
+        "_vetedge_intent",
     ):
-        assert contract in content
+        assert retired_contract not in content
 
     assert "window.location.reload" not in content
 
@@ -209,14 +207,15 @@ def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loadi
         assert "setInterval(" not in content
 
 
-def test_resource_center_patient_consultation_action_uses_shared_spa_navigation():
-    content = read("vetedge/public/js/vetedge_resource_center.bundle.js")
-    start = content.index("\t\t\topenNewConsultation(row) {")
-    end = content.index("\n\t\t\t},", start) + 6
+def test_resource_center_patient_medical_history_action_uses_shared_spa_navigation():
+    content = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+    start = content.index("\t\topenMedicalHistory(row) {")
+    end = content.index("\n\t\t},", start) + 5
     block = content[start:end]
 
-    assert "this.openRoute(`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(row.name)}`);" in block
+    assert "this.openRoute(`/desk/veterinary-medical-history?patient=${encodeURIComponent(row.name)}`);" in block
     assert "window.location.assign" not in block
+    assert "openNewConsultation(row)" not in content
 
 
 def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation_fallback():

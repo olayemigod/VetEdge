@@ -132,9 +132,10 @@ async function populate_next_due_date(frm) {
 		return;
 	}
 
-	const administeredDate = String(frm.doc.administered_on).split(" ")[0];
+	const [administeredDate, administeredTime = "00:00:00"] = String(frm.doc.administered_on).split(" ");
+	const dueDate = frappe.datetime.add_days(administeredDate, days);
 	frm.__setting_vaccination_due_date = true;
-	await frm.set_value("next_due_date", frappe.datetime.add_days(administeredDate, days));
+	await frm.set_value("next_due_date", `${dueDate} ${administeredTime.slice(0, 8)}`);
 	frm.__setting_vaccination_due_date = false;
 	frm.__next_due_date_manually_set = false;
 }

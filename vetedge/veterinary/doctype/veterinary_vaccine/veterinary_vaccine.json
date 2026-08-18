@@ -65,11 +65,13 @@
    "label": "Billing and Stock"
   },
   {
+   "description": "Required ERPNext Item used as accounting, billing and stock truth for this Vaccine.",
    "fieldname": "default_item",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Default Item",
-   "options": "Item"
+   "options": "Item",
+   "reqd": 1
   },
   {
    "fieldname": "price_list",

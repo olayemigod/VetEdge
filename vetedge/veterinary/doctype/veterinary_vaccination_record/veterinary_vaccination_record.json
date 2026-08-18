@@ -159,11 +159,12 @@
    "options": "\nOral\nSubcutaneous\nIntramuscular\nIntranasal\nTopical\nOther"
   },
   {
+   "description": "Date and time for the automatically generated next vaccination appointment.",
    "fieldname": "next_due_date",
-   "fieldtype": "Date",
+   "fieldtype": "Datetime",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Next Due Date"
+   "label": "Next Due Date/Time"
   },
   {
    "fieldname": "next_vaccination_appointment",

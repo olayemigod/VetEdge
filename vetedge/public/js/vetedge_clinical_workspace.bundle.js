@@ -4,20 +4,18 @@ import VetEdgeMedicalHistoryModal from './vetedge_clinical_workspace/VetEdgeMedi
 const RELATED_MODAL_CONFIG = Object.freeze({
 	'Veterinary Lab Order': {
 		title: 'Laboratory Orders', relation: 'consultation', createLabel: 'Add Lab Order',
-		fields: ['name', 'status', 'requested_on', 'requested_by', 'linked_invoice'],
 		columns: [
-			{ fieldname: 'name', label: 'Lab Order' }, { fieldname: 'status', label: 'Status', fieldtype: 'Status' },
+			{ fieldname: 'display_name', label: 'Lab Tests' }, { fieldname: 'status', label: 'Status', fieldtype: 'Status' },
 			{ fieldname: 'requested_on', label: 'Requested On', fieldtype: 'Datetime' }, { fieldname: 'requested_by', label: 'Requested By' },
 			{ fieldname: 'linked_invoice', label: 'Invoice' },
 		],
 	},
 	'Veterinary Vaccination Record': {
 		title: 'Vaccinations', relation: 'linked_consultation', createLabel: 'New Vaccination',
-		fields: ['name', 'status', 'vaccine', 'administered_on', 'next_due_date', 'linked_invoice'],
 		columns: [
-			{ fieldname: 'name', label: 'Vaccination' }, { fieldname: 'status', label: 'Status', fieldtype: 'Status' },
-			{ fieldname: 'vaccine', label: 'Vaccine' }, { fieldname: 'administered_on', label: 'Administered On', fieldtype: 'Datetime' },
-			{ fieldname: 'next_due_date', label: 'Next Due', fieldtype: 'Date' }, { fieldname: 'linked_invoice', label: 'Invoice' },
+			{ fieldname: 'display_name', label: 'Vaccination' }, { fieldname: 'status', label: 'Status', fieldtype: 'Status' },
+			{ fieldname: 'administered_on', label: 'Administered On', fieldtype: 'Datetime' },
+			{ fieldname: 'next_due_date', label: 'Next Due', fieldtype: 'Datetime' }, { fieldname: 'linked_invoice', label: 'Invoice' },
 		],
 	},
 	'Veterinary Hospitalisation': {
@@ -41,10 +39,79 @@ function canCreateRelated(view, doctype) {
 }
 
 async function fetchRelatedRows(doctype, config, consultation) {
+	if (doctype === 'Veterinary Lab Order' || doctype === 'Veterinary Vaccination Record') {
+		return await call('vetedge.services.consultation_related_records.get_consultation_related_records', { consultation, doctype });
+	}
 	return await call('frappe.client.get_list', {
 		doctype, filters: { [config.relation]: consultation }, fields: config.fields,
 		order_by: 'modified desc', limit_page_length: 50,
 	});
+}
+
+function confirmRelatedDelete(row, doctype) {
+	const label = row?.display_name || row?.name || doctype;
+	const prompt = typeof __ === 'function'
+		? __('Delete {0}? Draft treatment/billing rows will be removed too. Submitted or paid accounting records will never be changed.', [label])
+		: `Delete ${label}? Draft treatment/billing rows will be removed too.`;
+	const presenter = window.VetEdgeEdgeModalPresenter;
+	if (!presenter?.open) return Promise.resolve(window.confirm(prompt));
+
+	return new Promise((resolve) => {
+		let settled = false;
+		let confirmation = null;
+		const settle = (value) => {
+			if (settled) return;
+			settled = true;
+			resolve(value);
+		};
+		confirmation = presenter.open({
+			title: tr('Delete related clinical record?'),
+			subtitle: label,
+			size: 'sm',
+			message: prompt,
+			onClose: () => settle(false),
+			actions: [
+				{
+					label: tr('Cancel'),
+					closeOnSuccess: false,
+					onClick() {
+						settle(false);
+						confirmation?.close?.();
+					},
+				},
+				{
+					label: tr('Delete'),
+					primary: true,
+					danger: true,
+					closeOnSuccess: false,
+					onClick() {
+						settle(true);
+						confirmation?.close?.();
+					},
+				},
+			],
+		});
+	});
+}
+
+function relatedRowActions(view, doctype, consultation, rows, refresh) {
+	if (!['Veterinary Lab Order', 'Veterinary Vaccination Record'].includes(doctype)) return [];
+	return (rows || []).map((row) => ({
+		key: row.name,
+		row,
+		actions: row.can_delete ? [{
+			label: tr('Delete'), danger: true,
+			async onClick() {
+				if (!(await confirmRelatedDelete(row, doctype))) return;
+				await call('vetedge.services.consultation_related_records.delete_consultation_related_record', {
+					consultation, doctype, name: row.name,
+				});
+				await view.loadDetail?.(consultation);
+				await refresh?.();
+				frappe.show_alert({ message: tr('Related clinical record deleted and draft billing reconciled.'), indicator: 'green' });
+			},
+		}] : [],
+	}));
 }
 
 function showRelatedRecords(view, doctype) {
@@ -60,8 +127,14 @@ function showRelatedRecords(view, doctype) {
 			modal.update({
 				loading: false, error: '',
 				title: tr(config.title), subtitle: typeof __ === 'function' ? __('Records linked to consultation {0}', [consultation]) : consultation,
-				columns: config.columns.map((column) => ({ ...column, label: tr(column.label) })), rows: rows || [], rowKey: 'name',
-				emptyTitle: tr('No related records'), emptyDescription: typeof __ === 'function' ? __('No {0} are linked to this consultation.', [config.title.toLowerCase()]) : '',
+				sections: [{
+					title: '',
+					columns: config.columns.map((column) => ({ ...column, label: tr(column.label) })),
+					rows: rows || [], rowKey: 'name',
+					rowActions: relatedRowActions(view, doctype, consultation, rows, refresh),
+					emptyTitle: tr('No related records'),
+					emptyDescription: typeof __ === 'function' ? __('No {0} are linked to this consultation.', [config.title.toLowerCase()]) : '',
+				}],
 				actions,
 			});
 		} catch (error) {
@@ -86,13 +159,14 @@ async function finishRelatedCreate(view, refreshParent, successMessage) {
 function selectedLabSection(selected, remove) {
 	return {
 		title: tr('Selected Lab Tests'),
-		message: selected.length ? tr('Each selected test keeps its configured result format, review/upload rules and billing rate.') : tr('Select a Lab Test from the dropdown above. You can add more than one test to this order.'),
+		message: selected.length ? tr('Every Lab Test keeps its ERPNext billing Item. Price may be adjusted for this order before billing is submitted.') : tr('Select a Lab Test from the dropdown above. You can add more than one test to this order.'),
 		columns: [
 			{ fieldname: 'label', label: tr('Lab Test') },
+			{ fieldname: 'billing_item', label: tr('ERPNext Item') },
 			{ fieldname: 'result_format', label: tr('Report Type') },
-			{ fieldname: 'rate', label: tr('Default Rate') },
+			{ fieldname: 'rate', label: tr('Rate') },
 		],
-		rows: selected.map((row) => ({ name: row.value, label: row.label, result_format: row.result_format, rate: row.rate })),
+		rows: selected.map((row) => ({ name: row.value, label: row.label, billing_item: row.billing_item, result_format: row.result_format, rate: row.rate })),
 		rowKey: 'name',
 		rowActions: selected.map((row) => ({ key: row.value, row, actions: [{ label: tr('Remove'), danger: true, onClick: () => remove(row.value) }] })),
 		emptyTitle: tr('No Lab Tests Selected'),
@@ -105,15 +179,27 @@ function openLabOrderModal(view, refreshParent) {
 	let selected = [];
 	let options = [];
 	let values = { lab_test_picker: '', sample_notes: '' };
+	let rateSequence = 0;
 
 	const paint = () => {
 		const remove = (value) => {
 			selected = selected.filter((row) => row.value !== value);
 			paint();
 		};
+		const rateFields = selected.map((row) => ({
+			fieldname: row.rateField,
+			label: `${row.label} ${tr('Rate')}`,
+			type: 'number', min: 0, step: '0.01',
+			description: row.billing_item ? `${tr('ERPNext Item')}: ${row.billing_item}` : tr('ERPNext billing Item is required on the Lab Test master.'),
+			onChange(value, nextValues) {
+				values = { ...nextValues };
+				row.rate = Number(value || 0);
+			},
+		}));
+		for (const row of selected) values[row.rateField] = row.rate ?? 0;
 		modal.update({
 			loading: false,
-			message: tr('Select tests one at a time from the dropdown, like Vaccination selection. Multiple tests can still belong to one Lab Order.'),
+			message: tr('Select tests one at a time. Every selected Lab Test must already have an ERPNext Item; price may be adjusted for this order.'),
 			fields: [
 				{
 					fieldname: 'lab_test_picker', label: tr('Lab Test'), type: 'select', options,
@@ -122,11 +208,15 @@ function openLabOrderModal(view, refreshParent) {
 						values = { ...nextValues, lab_test_picker: '' };
 						if (value) {
 							const option = options.find((row) => row.value === value);
-							if (option && !selected.some((row) => row.value === value)) selected.push(option);
+							if (option && !selected.some((row) => row.value === value)) {
+								rateSequence += 1;
+								selected.push({ ...option, rateField: `lab_test_rate_${rateSequence}` });
+							}
 						}
 						paint();
 					},
 				},
+				...rateFields,
 				{
 					fieldname: 'sample_notes', label: tr('Sample / Clinical Notes'), type: 'textarea', rows: 3,
 					onChange(value, nextValues) { values = { ...nextValues, sample_notes: value }; },
@@ -136,12 +226,14 @@ function openLabOrderModal(view, refreshParent) {
 			sections: [selectedLabSection(selected, remove)],
 			actions: [{ label: tr('Create Lab Order'), primary: true, async onClick(nextValues) {
 				if (!selected.length) { modal.update({ error: tr('Select at least one laboratory test.'), errorTitle: tr('Laboratory test required') }); return; }
+				const missingItem = selected.find((row) => !row.billing_item);
+				if (missingItem) { modal.update({ error: `${missingItem.label}: ${tr('configure Linked Billing Item on the Lab Test master before use.')}`, errorTitle: tr('ERPNext Item required') }); return; }
 				modal.update({ busy: true, error: '' });
 				try {
-					await call('vetedge.services.lab.create_lab_order_from_consultation', {
+					await call('vetedge.services.consultation_related_records.create_consultation_lab_order', {
 						consultation,
 						sample_notes: nextValues.sample_notes || undefined,
-						lab_tests: selected.map((row) => ({ lab_test_template: row.value })),
+						lab_tests: selected.map((row) => ({ lab_test_template: row.value, rate: Number(nextValues[row.rateField] ?? row.rate ?? 0) })),
 					});
 					await finishRelatedCreate(view, refreshParent, 'Lab order created.');
 				} catch (error) { modal.update({ busy: false, error: error?.message || tr('Lab order could not be created.'), errorTitle: tr('Lab order failed') }); }
@@ -153,8 +245,9 @@ function openLabOrderModal(view, refreshParent) {
 		options = (tests || []).map((row) => ({
 			value: row.name,
 			label: row.test_name || row.name,
-			description: [row.result_format, row.sample_type].filter(Boolean).join(' · '),
+			description: [row.result_format, row.sample_type, row.linked_item ? `${tr('Item')}: ${row.linked_item}` : tr('Missing ERPNext Item')].filter(Boolean).join(' · '),
 			result_format: row.result_format || 'Value Driven',
+			billing_item: row.linked_item || '',
 			rate: row.default_rate ?? 0,
 		}));
 		paint();
@@ -176,15 +269,15 @@ function vaccinationFields(view, modal) {
 				if (!value) return;
 				try {
 					const defaults = await call('vetedge.services.vaccination.get_vaccination_billing_defaults', { vaccine: value, company: view.form?.company || undefined, customer: view.form?.primary_owner || undefined, branch: view.form?.service_branch || undefined });
-					modal.update({ values: { ...values, vaccine: value, billing_item: defaults.billing_item || '', rate: defaults.rate ?? 0 }, error: '' });
+					modal.update({ values: { ...values, vaccine: value, billing_item: defaults.billing_item || '', rate: defaults.rate ?? 0 }, error: defaults.billing_item ? '' : tr('This Vaccine has no ERPNext Default Item. Configure the Vaccine master before use.') });
 				} catch (error) { modal.update({ error: error?.message || tr('Vaccination billing defaults could not be loaded.'), errorTitle: tr('Vaccination defaults unavailable') }); }
 			},
 		},
-		{ fieldname: 'billing_item', label: tr('Billing Item'), type: 'text', readOnly: true },
+		{ fieldname: 'billing_item', label: tr('ERPNext Billing Item'), type: 'text', readOnly: true },
 		{ fieldname: 'rate', label: tr('Rate'), type: 'number', min: 0, step: '0.01' },
 		{ fieldname: 'dose', label: tr('Dose'), type: 'text' },
 		{ fieldname: 'route', label: tr('Route'), type: 'text' },
-		{ fieldname: 'next_due_date', label: tr('Next Due Date'), type: 'date' },
+		{ fieldname: 'next_due_date', label: tr('Next Due Date/Time'), type: 'datetime-local' },
 		{ fieldname: 'notes', label: tr('Notes'), type: 'textarea', rows: 3 },
 		{ fieldname: 'create_invoice', label: tr('Create / update billing invoice'), type: 'checkbox', default: 1 },
 	];
@@ -198,6 +291,7 @@ function openVaccinationModal(view, refreshParent) {
 		fields: vaccinationFields(view, modal),
 		actions: [{ label: tr('Create Vaccination'), primary: true, async onClick(values) {
 			if (!values.vaccine) { modal.update({ error: tr('Select a vaccine before creating the vaccination record.'), errorTitle: tr('Vaccine required') }); return; }
+			if (!values.billing_item) { modal.update({ error: tr('The selected Vaccine must have an ERPNext Default Item before it can be used.'), errorTitle: tr('ERPNext Item required') }); return; }
 			modal.update({ busy: true, error: '' });
 			try {
 				await call('vetedge.services.vaccination.create_vaccination_from_consultation', { consultation, values: { ...values, create_invoice: values.create_invoice ? 1 : 0 } });

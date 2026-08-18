@@ -30,7 +30,25 @@ CLINICAL_LOADER = (
 	/ "vetedge_clinical_workspace"
 	/ "vetedge_clinical_workspace.js"
 )
+MASTER_LOADER = (
+	REPOSITORY_ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_master_workspace"
+	/ "vetedge_master_workspace.js"
+)
+PRICING_LOADER = (
+	REPOSITORY_ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_pricing_master_workspace"
+	/ "vetedge_pricing_master_workspace.js"
+)
 CLINICAL_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
+MASTER_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_master_workspace.bundle.js"
+PRICING_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_pricing_master_workspace.bundle.js"
 MODAL_PRESENTER = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_edge_modal_presenter.bundle.js"
 BILLING_EDGE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_billing_edgesuite.bundle.js"
 CANONICAL_BILLING = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "billing_modal.js"
@@ -131,15 +149,86 @@ def test_clinical_related_service_actions_stay_in_edgesuite_modals():
 	content = CLINICAL_BUNDLE.read_text(encoding="utf-8")
 	for contract in (
 		"VetEdgeEdgeModalPresenter.open",
-		"vetedge.services.lab.create_lab_order_from_consultation",
+		"vetedge.services.consultation_related_records.create_consultation_lab_order",
+		"vetedge.services.consultation_related_records.get_consultation_related_records",
+		"vetedge.services.consultation_related_records.delete_consultation_related_record",
 		"vetedge.services.vaccination.create_vaccination_from_consultation",
 		"vetedge.services.hospitalisation.create_hospitalisation_from_consultation",
 		"get_active_lab_tests_for_picker",
 		"get_vaccination_billing_defaults",
 		"frappe.desk.search.search_link",
+		"Delete related clinical record?",
+		"onClose: () => settle(false)",
 	):
 		assert contract in content
 	assert 'frappe.set_route("List", doctype)' not in content
+	assert "frappe.confirm(" not in content
+
+
+def test_master_and_pricing_sidebar_routes_keep_resource_query_on_first_visit():
+	master_loader = MASTER_LOADER.read_text(encoding="utf-8")
+	pricing_loader = PRICING_LOADER.read_text(encoding="utf-8")
+	master_bundle = MASTER_BUNDLE.read_text(encoding="utf-8")
+	pricing_bundle = PRICING_BUNDLE.read_text(encoding="utf-8")
+
+	assert "hydrateMasterWorkspaceRouteFromFrappeOptions" in master_loader
+	assert "hydratePricingWorkspaceRouteFromFrappeOptions" in pricing_loader
+	for loader in (master_loader, pricing_loader):
+		assert "window.frappe?.route_options" in loader
+		assert "window.history.replaceState" in loader
+	for bundle, route in (
+		(master_bundle, "/desk/vetedge-master-workspace"),
+		(pricing_bundle, "/desk/vetedge-pricing-master-workspace"),
+	):
+		assert "installCanonicalDeskLocation" in bundle
+		assert route in bundle
+
+
+def test_clinical_related_billing_keeps_erpnext_item_as_source_truth():
+	planned_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/planned_treatment_item/planned_treatment_item.json"
+		).read_text(encoding="utf-8")
+	)
+	lab_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/veterinary_lab_test/veterinary_lab_test.json"
+		).read_text(encoding="utf-8")
+	)
+	vaccine_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/veterinary_vaccine/veterinary_vaccine.json"
+		).read_text(encoding="utf-8")
+	)
+	planned_fields = {row["fieldname"]: row for row in planned_meta["fields"]}
+	lab_fields = {row["fieldname"]: row for row in lab_meta["fields"]}
+	vaccine_fields = {row["fieldname"]: row for row in vaccine_meta["fields"]}
+
+	assert planned_fields["item"]["options"] == "Item"
+	assert planned_fields["item"]["reqd"] == 1
+	assert lab_fields["linked_item"]["options"] == "Item"
+	assert lab_fields["linked_item"]["reqd"] == 1
+	assert vaccine_fields["default_item"]["options"] == "Item"
+	assert vaccine_fields["default_item"]["reqd"] == 1
+
+	consultation_controller = (
+		REPOSITORY_ROOT
+		/ "vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.py"
+	).read_text(encoding="utf-8")
+	stage3 = (REPOSITORY_ROOT / "vetedge/services/clinical_workspace_stage3.py").read_text(encoding="utf-8")
+	workspace = (
+		REPOSITORY_ROOT
+		/ "vetedge/public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue"
+	).read_text(encoding="utf-8")
+
+	assert "validate_treatment_rows_have_erpnext_item(self)" in consultation_controller
+	assert 'SOURCE_BILLING_EDITABLE_FIELDS = {"rate"}' in stage3
+	assert "The ERPNext Item remains fixed by the clinical master" in stage3
+	assert "ERPNext Item for Lab/Vaccination rows is fixed by its clinical master" in workspace
+	assert "return field !== 'rate' || !this.sourceTreatmentRateEditable(row);" in workspace
 
 
 def test_billing_uses_one_canonical_shared_renderer_and_compatibility_shim():

@@ -628,12 +628,12 @@ def sync_generated_appointment(
 			for fieldname, value in values.items():
 				if getattr(appointment, fieldname, None) != value:
 					setattr(appointment, fieldname, value)
-			appointment.save()
+			appointment.save(ignore_permissions=True)
 		_update_source_backlink(source_doc, backlink_field, appointment.name)
 		return appointment.name
 
 	appointment = frappe.get_doc({"doctype": "Veterinary Appointment", **values})
-	appointment.insert()
+	appointment.insert(ignore_permissions=True)
 	_update_source_backlink(source_doc, backlink_field, appointment.name)
 	return appointment.name
 
@@ -730,7 +730,7 @@ def _cancel_generated_appointment_if_safe(appointment_name: str | None, source_d
 	appointment = frappe.get_doc("Veterinary Appointment", appointment_name)
 	if appointment.status in GENERATED_APPOINTMENT_MUTABLE_STATUSES:
 		appointment.status = "Cancelled"
-		appointment.save()
+		appointment.save(ignore_permissions=True)
 		_update_source_backlink(source_doc, backlink_field, None)
 
 

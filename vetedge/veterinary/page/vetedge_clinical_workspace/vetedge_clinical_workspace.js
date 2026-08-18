@@ -1,5 +1,6 @@
 const VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS = 15000;
 const VETEDGE_CLINICAL_MODAL_STYLE_ID = 'vetedge-clinical-modal-edgesuite-style';
+const VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT = 'vetedge:clinical-route-request';
 
 function ensureVetEdgeClinicalModalStyles() {
 	if (document.getElementById(VETEDGE_CLINICAL_MODAL_STYLE_ID)) return;
@@ -35,16 +36,86 @@ function mountedClinicalStateMatchesRoute(view, requested) {
 	return !view.detail?.open;
 }
 
-async function openRequestedNewConsultation(view, requested) {
+async function openRequestedNewConsultation(view, requested, syncUrl = true) {
 	await view.startNewConsultation?.();
-	if (!requested.patient) return;
+	if (requested.patient) await view.selectPatient?.(requested.patient);
+	if (!syncUrl) return;
 
-	await view.selectPatient?.(requested.patient);
+	const patientQuery = requested.patient ? `&patient=${encodeURIComponent(requested.patient)}` : '';
 	window.history.replaceState(
 		{},
 		'',
-		`/desk/vetedge-clinical-workspace?new=1&patient=${encodeURIComponent(requested.patient)}`,
+		`/desk/vetedge-clinical-workspace?new=1${patientQuery}`,
 	);
+}
+
+function installNewestTreatmentFirst(component) {
+	const methods = component?.methods || {};
+	const original = methods.addTreatment;
+	if (typeof original !== 'function' || original.__vetedgeNewestTreatmentFirst) return;
+
+	const newestFirst = function (...args) {
+		const before = Array.isArray(this.form?.planned_treatments) ? this.form.planned_treatments.length : 0;
+		const result = original.apply(this, args);
+		const moveNewestFirst = () => {
+			const rows = this.form?.planned_treatments;
+			if (!Array.isArray(rows) || rows.length <= before) return;
+			const newest = rows.pop();
+			if (newest) rows.unshift(newest);
+		};
+		if (result && typeof result.then === 'function') {
+			return Promise.resolve(result).then((value) => {
+				moveNewestFirst();
+				return value;
+			});
+		}
+		moveNewestFirst();
+		return result;
+	};
+	newestFirst.__vetedgeNewestTreatmentFirst = true;
+	methods.addTreatment = newestFirst;
+	component.methods = methods;
+}
+
+function installClinicalRouteRequestListener(wrapper) {
+	if (wrapper.__vetedge_clinical_route_request_handler) return;
+	const handler = (event) => {
+		const detail = event?.detail || {};
+		if (detail.type !== 'new') return;
+		const patient = String(detail.patient || '').trim();
+		const requested = {
+			consultation: '',
+			isNew: true,
+			patient,
+			key: `new:${patient || '-'}`,
+		};
+		wrapper.pending_clinical_route_request = requested;
+		const view = wrapper.vue_app?.view;
+		if (!view || view.dirty) return;
+		Promise.resolve(openRequestedNewConsultation(view, requested, false))
+			.then(() => {
+				wrapper.clinical_route_key = requested.key;
+				wrapper.clinical_last_refresh_at = Date.now();
+				wrapper.pending_clinical_route_request = null;
+			})
+			.catch((error) => console.error('Error applying Veterinary Clinical route request:', error));
+	};
+	wrapper.__vetedge_clinical_route_request_handler = handler;
+	window.addEventListener(VETEDGE_CLINICAL_ROUTE_REQUEST_EVENT, handler);
+}
+
+function consumePendingClinicalRouteRequest(wrapper) {
+	const requested = wrapper.pending_clinical_route_request;
+	const view = wrapper.vue_app?.view;
+	if (!requested || !view || view.dirty) return false;
+	wrapper.pending_clinical_route_request = null;
+	Promise.resolve(openRequestedNewConsultation(view, requested, false))
+		.then(() => {
+			wrapper.clinical_route_key = requested.key;
+			wrapper.clinical_last_refresh_at = Date.now();
+		})
+		.catch((error) => console.error('Error consuming Veterinary Clinical route request:', error));
+	return true;
 }
 
 async function refreshMountedClinicalWorkspace(wrapper) {
@@ -81,18 +152,22 @@ async function refreshMountedClinicalWorkspace(wrapper) {
 frappe.pages['vetedge-clinical-workspace'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Veterinary Clinical Workspace'), single_column: true });
 	wrapper.page = page;
+	installClinicalRouteRequestListener(wrapper);
 };
 
 frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	ensureVetEdgeClinicalModalStyles();
+	installClinicalRouteRequestListener(wrapper);
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
 	if (wrapper.vue_app?.view) {
-		Promise.resolve(refreshMountedClinicalWorkspace(wrapper)).catch((error) => {
-			console.error('Error refreshing mounted Veterinary Clinical Workspace:', error);
-		});
+		if (!consumePendingClinicalRouteRequest(wrapper)) {
+			Promise.resolve(refreshMountedClinicalWorkspace(wrapper)).catch((error) => {
+				console.error('Error refreshing mounted Veterinary Clinical Workspace:', error);
+			});
+		}
 		return;
 	}
 
@@ -139,10 +214,12 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 							try {
 								$loading.remove();
 								const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+								installNewestTreatmentFirst(window.VetEdgeClinicalWorkspace);
 								wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
 								wrapper.clinical_workflow = window.installVetEdgeClinicalWorkflowModal(root[0], wrapper.vue_app?.view);
 								wrapper.clinical_route_key = clinicalRouteState().key;
 								wrapper.clinical_last_refresh_at = Date.now();
+								consumePendingClinicalRouteRequest(wrapper);
 							} catch (error) { console.error('Error mounting Veterinary Clinical Workspace:', error); showFailure(__('Error mounting Veterinary Clinical Workspace: {0}', [error.message || String(error)])); }
 						});
 					});

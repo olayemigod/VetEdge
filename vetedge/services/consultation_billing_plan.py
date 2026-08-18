@@ -103,7 +103,10 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 	for row in doc.get("lab_tests") or []:
 		item = row.get("billing_item")
 		if not item:
-			continue
+			frappe.throw(
+				f"Lab Test {row.get('lab_test_name') or row.get('lab_test_template')} has no ERPNext billing Item. Configure the Veterinary Lab Test master before adding it to a Consultation.",
+				frappe.ValidationError,
+			)
 		source_detail = row.get("name") or row.get("lab_test_template")
 		existing_row = _get_source_row(consultation, "Lab Order", doc.name, source_detail)
 		rate = _get_lab_order_row_rate(row)
@@ -128,6 +131,7 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 
 	if changed:
 		_save_consultation(consultation)
+		_sync_active_consultation_billing_session(consultation)
 
 
 def sync_vaccination_to_consultation_plan(doc) -> None:
@@ -143,7 +147,10 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 	) or {}
 	item = doc.get("billing_item") or vaccine.get("default_item")
 	if not item:
-		return
+		frappe.throw(
+			f"Vaccine {vaccine.get('vaccine_name') or doc.get('vaccine')} has no ERPNext billing Item. Configure Default Item on the Veterinary Vaccine master before adding it to a Consultation.",
+			frappe.ValidationError,
+		)
 
 	consultation = frappe.get_doc(CONSULTATION_DOCTYPE, consultation_name)
 	source_detail = doc.get("vaccine") or doc.name
@@ -152,6 +159,7 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 	if existing_row:
 		if _update_plan_row_from_vaccination(existing_row, doc, item, vaccine.get("vaccine_name"), rate):
 			_save_consultation(consultation)
+			_sync_active_consultation_billing_session(consultation)
 		return
 
 	_add_plan_row(
@@ -167,6 +175,7 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 		notes=doc.get("notes"),
 	)
 	_save_consultation(consultation)
+	_sync_active_consultation_billing_session(consultation)
 
 
 def _has_source_row(consultation, source_type: str, source_document: str, source_detail_name: str | None) -> bool:
@@ -268,6 +277,8 @@ def _add_plan_row(
 	rate: float | None,
 	notes: str | None = None,
 ) -> None:
+	if not item:
+		frappe.throw("ERPNext Item is required for every Consultation Treatment Plan row.", frappe.ValidationError)
 	qty = flt(qty) or 1
 	rate = flt(rate)
 	row = {
@@ -308,3 +319,28 @@ def _save_consultation(consultation) -> None:
 			flags.vetedge_billing_core_syncing = previous_core
 			flags.vetedge_billing_modal_syncing = previous_modal
 			flags.ignore_consultation_treatment_lock_for_billing_sync = previous_lock_bypass
+
+
+def _sync_active_consultation_billing_session(consultation) -> None:
+	"""Push source-linked charges into an already-open Consultation billing cycle.
+
+	Creating a Lab Order or Vaccination should not create a billing session on its own.
+	If billing has already started for the Consultation, source plan changes must be
+	reconciled immediately. Billing Core remains authoritative for draft updates,
+	new-draft creation after submission, and submitted-invoice immutability.
+	"""
+	flags = getattr(frappe, "flags", None)
+	if getattr(flags, "vetedge_billing_core_syncing", False):
+		return
+	from vetedge.services.billing_core import (
+		is_billing_sessions_enabled,
+		resolve_billing_session,
+		sync_source_to_billing_session,
+	)
+
+	if not is_billing_sessions_enabled():
+		return
+	session = resolve_billing_session(CONSULTATION_DOCTYPE, consultation.name)
+	if not session:
+		return
+	sync_source_to_billing_session(CONSULTATION_DOCTYPE, consultation.name)

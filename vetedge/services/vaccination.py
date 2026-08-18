@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import frappe
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime
 
-from vetedge.services.appointment_flow import emit_appointment_event
 from vetedge.services.billing import (
 	PAID_STATUS,
 	build_invoice_item,
@@ -421,7 +420,7 @@ def calculate_next_due_date(doc) -> None:
 	defaults = get_vaccine_defaults(doc.vaccine)
 	default_days = defaults.default_next_due_days or defaults.default_validity_days
 	if default_days:
-		doc.next_due_date = add_days(getdate(doc.administered_on), default_days)
+		doc.next_due_date = add_days(get_datetime(doc.administered_on), default_days)
 
 
 def get_vaccine_defaults(vaccine: str) -> VaccineDefaults:
@@ -787,40 +786,9 @@ def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str, r
 def create_next_due_vaccination_appointment(doc) -> str | None:
 	if not doc.next_due_date or not is_appointment_creation_enabled():
 		return None
+	from vetedge.services.appointment_flow import sync_next_vaccination_appointment_from_record
 
-	appointment_datetime = f"{getdate(doc.next_due_date)} 09:00:00"
-	existing = frappe.get_all(
-		"Veterinary Appointment",
-		filters={
-			"patient": doc.patient,
-			"branch": doc.service_branch,
-			"appointment_type": "Vaccination",
-			"appointment_datetime": appointment_datetime,
-			"status": ["not in", ["Cancelled", "No Show"]],
-		},
-		pluck="name",
-		limit=1,
-	)
-	if existing:
-		return existing[0]
-
-	appointment = frappe.get_doc(
-		{
-			"doctype": "Veterinary Appointment",
-			"patient": doc.patient,
-			"primary_owner": doc.primary_owner,
-			"branch": doc.service_branch,
-			"practitioner": doc.administered_by,
-			"appointment_datetime": appointment_datetime,
-			"status": "Scheduled",
-			"appointment_type": "Vaccination",
-			"created_from": "Consultation" if doc.linked_consultation else "Manual",
-			"notes": f"Vaccination due follow-up for {doc.vaccine} from {doc.name}",
-		}
-	)
-	appointment.insert(ignore_permissions=True)
-	emit_appointment_event(appointment, "appointment_created", previous_status=None)
-	return appointment.name
+	return sync_next_vaccination_appointment_from_record(doc)
 
 
 
@@ -916,7 +884,6 @@ def update_vaccination_status_from_invoice(doc, method: str | None = None) -> No
 		fields=["name"],
 	):
 		sync_vaccination_workflow_status(row.name)
-
 
 
 def update_vaccination_status_from_payment_entry(doc, method: str | None = None) -> None:
