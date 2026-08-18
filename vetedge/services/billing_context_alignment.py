@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe.utils import cint
 
 from vetedge.services.portal_access import require_internal_user
 
@@ -72,6 +73,62 @@ def _patient_map(invoice_names: set[str], customer: str | None) -> dict[str, str
     return mapped
 
 
+def _normalize_invoice_row_lifecycle(row: dict | None) -> dict | None:
+    if not isinstance(row, dict):
+        return row
+
+    docstatus = cint(row.get("docstatus"))
+    status = str(row.get("status") or "").strip()
+    if docstatus == 2 or row.get("is_cancelled"):
+        row["is_cancelled"] = True
+        row["is_submitted"] = False
+        row["is_draft"] = False
+        if not status or status.lower() == "draft":
+            row["status"] = "Cancelled"
+        return row
+
+    if docstatus == 1 or row.get("is_submitted"):
+        row["is_cancelled"] = False
+        row["is_submitted"] = True
+        row["is_draft"] = False
+        if not status or status.lower() == "draft":
+            row["status"] = row.get("payment_status") or row.get("payment_state") or "Submitted"
+        return row
+
+    if docstatus == 0 or row.get("is_draft"):
+        row["is_cancelled"] = False
+        row["is_submitted"] = False
+        row["is_draft"] = True
+        if not status:
+            row["status"] = "Draft"
+    return row
+
+
+def _normalize_invoice_lifecycle_state(state: dict) -> dict:
+    invoice = _normalize_invoice_row_lifecycle(state.get("invoice"))
+    if isinstance(invoice, dict):
+        state["invoice"] = invoice
+
+    history_by_name: dict[str, dict] = {}
+    for fieldname in ("invoice_history", "billing_group_invoice_history"):
+        rows = state.get(fieldname) or []
+        for row in rows:
+            _normalize_invoice_row_lifecycle(row)
+            name = str(row.get("name") or row.get("invoice") or "").strip()
+            if name:
+                history_by_name[name] = row
+
+    current_name = str(state.get("current_invoice_name") or "").strip()
+    current = history_by_name.get(current_name)
+    if not current and isinstance(invoice, dict) and str(invoice.get("name") or "").strip() == current_name:
+        current = invoice
+    if current:
+        lifecycle_status = current.get("payment_status") or current.get("payment_state") or current.get("status")
+        if lifecycle_status:
+            state["current_invoice_status"] = lifecycle_status
+    return state
+
+
 def _enrich_owner_outstanding(state: dict) -> dict:
     rows = state.get("patient_outstanding_context") or []
     if not rows:
@@ -112,10 +169,14 @@ def _enrich_owner_outstanding(state: dict) -> dict:
     return state
 
 
+def _normalize_state(state: dict) -> dict:
+    return _enrich_owner_outstanding(_normalize_invoice_lifecycle_state(state))
+
+
 def _normalize_payload(payload: dict | None) -> dict:
     result = dict(payload or {})
     if isinstance(result.get("state"), dict):
-        result["state"] = _enrich_owner_outstanding(result["state"])
+        result["state"] = _normalize_state(result["state"])
     return result
 
 
@@ -124,7 +185,7 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
     require_internal_user()
     from vetedge.services.billing_state_security import get_billing_modal_state as original
 
-    return _enrich_owner_outstanding(original(source_doctype=source_doctype, source_name=source_name))
+    return _normalize_state(original(source_doctype=source_doctype, source_name=source_name))
 
 
 @frappe.whitelist()
