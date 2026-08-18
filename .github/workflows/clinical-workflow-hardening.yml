@@ -38,9 +38,12 @@ jobs:
             vetedge/services/resource_editor_state.py \
             vetedge/services/patient_service_guard.py \
             vetedge/services/display_labels.py \
+            vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
+            vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_payment_workflow.py \
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py
@@ -70,14 +73,18 @@ jobs:
             vetedge/services/resource_editor_state.py \
             vetedge/services/patient_service_guard.py \
             vetedge/services/display_labels.py \
+            vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
+            vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_payment_workflow.py \
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
             vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
@@ -87,6 +94,7 @@ jobs:
           python -m pytest -q \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
             vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
