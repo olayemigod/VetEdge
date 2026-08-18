@@ -5,6 +5,8 @@ from frappe import _
 from frappe.utils import cint, cstr
 
 from vetedge.services.permissions import (
+    ROLE_SYSTEM_MANAGER,
+    ROLE_VETEDGE_ADMINISTRATOR,
     get_vaccination_staff_users,
     get_veterinary_doctor_users,
 )
@@ -84,7 +86,10 @@ def _search_patient(txt: str, start: int, page_length: int, normalized: dict) ->
     or_filters = []
     if txt:
         pattern = f"%{txt}%"
-        or_filters = [["Veterinary Patient", "name", "like", pattern], ["Veterinary Patient", "patient_name", "like", pattern]]
+        or_filters = [
+            ["Veterinary Patient", "name", "like", pattern],
+            ["Veterinary Patient", "patient_name", "like", pattern],
+        ]
     rows = frappe.get_list(
         "Veterinary Patient",
         fields=["name", "patient_name"],
@@ -102,15 +107,16 @@ def _search_customer(txt: str, start: int, page_length: int, normalized: dict) -
         return []
     branch = cstr(normalized.get("branch") or "").strip()
     if not branch:
-        filters = {}
         or_filters = []
         if txt:
             pattern = f"%{txt}%"
-            or_filters = [["Customer", "name", "like", pattern], ["Customer", "customer_name", "like", pattern]]
+            or_filters = [
+                ["Customer", "name", "like", pattern],
+                ["Customer", "customer_name", "like", pattern],
+            ]
         rows = frappe.get_list(
             "Customer",
             fields=["name", "customer_name"],
-            filters=filters,
             or_filters=or_filters,
             order_by="customer_name asc, name asc",
             start=start,
@@ -141,14 +147,26 @@ def _branch_allowed_users(users: list[list | tuple], branch: str) -> list[list |
     candidate_names = [cstr(row[0]).strip() for row in users if row and cstr(row[0]).strip()]
     if not candidate_names:
         return []
-    assigned = set(
+
+    assignment_filters = {"user": ["in", candidate_names], "branch": branch}
+    assignment_meta = frappe.get_meta("Branch User Assignment")
+    if assignment_meta.has_field("disabled"):
+        assignment_filters["disabled"] = ["!=", 1]
+    assigned = set(frappe.get_all("Branch User Assignment", filters=assignment_filters, pluck="user"))
+
+    global_staff = set(
         frappe.get_all(
-            "Branch User Assignment",
-            filters={"user": ["in", candidate_names], "branch": branch, "disabled": ["!=", 1]},
-            pluck="user",
+            "Has Role",
+            filters={
+                "parent": ["in", candidate_names],
+                "parenttype": "User",
+                "role": ["in", [ROLE_SYSTEM_MANAGER, ROLE_VETEDGE_ADMINISTRATOR]],
+            },
+            pluck="parent",
         )
     )
-    return [row for row in users if cstr(row[0]).strip() in assigned]
+    allowed = assigned | global_staff
+    return [row for row in users if cstr(row[0]).strip() in allowed]
 
 
 def _search_practitioner(report_name: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
@@ -163,10 +181,13 @@ def _search_practitioner(report_name: str, txt: str, start: int, page_length: in
 
 
 def _search_master(field: str, txt: str, start: int, page_length: int) -> list[dict]:
-    doctype, base_filters = MASTER_FIELDS[field]
+    doctype, requested_filters = MASTER_FIELDS[field]
     if not frappe.has_permission(doctype, "read"):
         return []
-    filters = dict(base_filters)
+    meta = frappe.get_meta(doctype)
+    filters = {
+        key: value for key, value in requested_filters.items() if meta.has_field(key)
+    }
     if txt:
         filters["name"] = ["like", f"%{txt}%"]
     rows = frappe.get_list(
