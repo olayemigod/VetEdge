@@ -9,6 +9,7 @@ from frappe.utils import cint
 
 from vetedge.services.report_visibility import normalize_report_filters
 from vetedge.services.reporting_catalog import require_reporting_entitlement
+from vetedge.services.stock import get_branch_dispensary_warehouse
 
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
@@ -19,7 +20,7 @@ FILTER_SEARCH_CONFIG = {
 
 @frappe.whitelist()
 def search_stock_expiry_filter_options(field: str, txt: str = "", start: int = 0, page_length: int = 20):
-	"""Return a small permission-aware search window for Stock Expiry filters."""
+	"""Return a small permission- and branch-aware search window for Stock Expiry filters."""
 	check_expiry_permissions()
 	require_reporting_entitlement("Stock Expiry Status", scope_type="report")
 	config = FILTER_SEARCH_CONFIG.get(str(field or "").strip())
@@ -31,9 +32,22 @@ def search_stock_expiry_filter_options(field: str, txt: str = "", start: int = 0
 		return []
 
 	filters = dict(config["filters"])
+	if field == "warehouse":
+		scope = _normalize_stock_expiry_filters({})
+		branch = str(scope.get("branch") or "").strip()
+		if branch:
+			warehouse = get_branch_dispensary_warehouse(branch, scope.get("company"), required=False)
+			if not warehouse:
+				return []
+			filters["name"] = warehouse
+
 	query = str(txt or "").strip()
 	if query:
-		filters["name"] = ["like", f"%{query}%"]
+		if field == "warehouse" and filters.get("name"):
+			if query.lower() not in str(filters["name"]).lower():
+				return []
+		else:
+			filters["name"] = ["like", f"%{query}%"]
 
 	start = max(cint(start), 0)
 	page_length = min(max(cint(page_length) or FILTER_SEARCH_MAX_PAGE_LENGTH, 1), FILTER_SEARCH_MAX_PAGE_LENGTH)
@@ -62,6 +76,16 @@ def _validate_reference_filter(filters: dict, field: str) -> None:
 		return
 
 	config = FILTER_SEARCH_CONFIG[field]
+	if field == "warehouse":
+		branch = str(filters.get("branch") or "").strip()
+		if branch:
+			branch_warehouse = get_branch_dispensary_warehouse(branch, filters.get("company"), required=False)
+			if not branch_warehouse or value != branch_warehouse:
+				frappe.throw(
+					"The selected warehouse is not valid for the active branch context.",
+					frappe.PermissionError,
+				)
+
 	exact_filters = dict(config["filters"])
 	exact_filters["name"] = value
 	rows = frappe.get_list(
