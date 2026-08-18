@@ -119,5 +119,150 @@ override_whitelisted_methods = {
 	"vetedge.services.service_operations.transition_grooming_session": "vetedge.services.service_operations_state.transition_grooming_session",
 }
 
-# Existing document event, scheduler and request hooks continue below unchanged.
-# This compact continuation marker is intentionally not executable configuration.
+doc_events = {
+	"Sales Invoice": {
+		"before_validate": "vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
+		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_invoice_branch",
+		"on_update": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_invoice_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
+			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+		],
+		"on_update_after_submit": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_invoice_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
+			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+		],
+		"on_submit": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_invoice_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
+			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+		],
+		"on_cancel": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_invoice_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_invoice",
+			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
+			"vetedge.services.grooming.update_grooming_status_from_invoice",
+			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+		],
+	},
+	"Payment Entry": {
+		"on_submit": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_payment_entry_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
+			"vetedge.services.grooming.update_grooming_status_from_payment_entry",
+			"vetedge.services.billing_core.update_billing_sessions_from_payment_entry",
+		],
+		"on_cancel": [
+			"vetedge.services.registration_state_alignment.update_registration_status_from_payment_entry_aligned",
+			"vetedge.services.billing.update_consultation_payment_status_from_payment_entry",
+			"vetedge.services.vaccination.update_vaccination_status_from_payment_entry",
+			"vetedge.services.grooming.update_grooming_status_from_payment_entry",
+			"vetedge.services.billing_core.update_billing_sessions_from_payment_entry",
+		],
+	},
+	"Stock Entry": {
+		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_stock_entry_branch",
+		"on_cancel": "vetedge.services.dispensary.sync_consultation_from_stock_entry",
+	},
+	"Veterinary Patient": {
+		"after_insert": "vetedge.services.registration_state_alignment.align_patient_registration_state",
+	},
+	"Veterinary Consultation": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.clinical_workspace_context.enforce_consultation_practitioner_ownership",
+			"vetedge.services.clinical_workspace_phase5.enforce_pending_dispensary_completion_invariant",
+		],
+	},
+	"Veterinary Vital Signs": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": "vetedge.services.clinical_workspace_context.enforce_vitals_consultation_ownership",
+	},
+	"Veterinary Lab Order": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.lab_payment_workflow.enforce_lab_service_payment_gate",
+		],
+	},
+	"Veterinary Vaccination Record": {
+		"before_validate": [
+			"vetedge.services.vaccination_state_alignment.align_vaccination_administration_metadata",
+			"vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		],
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Veterinary Appointment": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Veterinary Hospitalisation": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+	},
+	"Pet Grooming Appointment": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+		],
+	},
+	"Pet Grooming Session": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": [
+			"vetedge.services.branch_integrity.enforce_branch_integrity",
+			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
+			"vetedge.services.grooming_payment_workflow.enforce_grooming_service_payment_gate",
+		],
+	},
+	"Pet Boarding Booking": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Pet Boarding Stay": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Pet Boarding Care Record": {
+		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+	"Kennel": {
+		"before_save": "vetedge.services.branch_integrity.enforce_branch_integrity",
+	},
+}
+
+scheduler_events = {
+	"cron": {
+		"*/5 * * * *": [
+			"vetedge.services.appointment_notifications.run_appointment_notification_checks",
+		],
+	},
+	"hourly": [
+		"vetedge.services.notifications.send_due_appointment_reminders",
+		"vetedge.services.appointment_flow.sync_missed_appointments",
+	],
+	"daily": [
+		"vetedge.services.notifications.send_due_vaccination_notifications",
+		"vetedge.services.notifications.send_payment_pending_reminders",
+	],
+}
+
+before_tests = "vetedge.install.before_tests"
+before_request = ["vetedge.services.portal_access.block_owner_portal_desk_access"]
