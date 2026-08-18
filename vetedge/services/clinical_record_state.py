@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import frappe
+from frappe.utils import cint, flt
 
 from vetedge.services.portal_access import require_internal_user
 
 
 LAB_REDUNDANT_FIELDNAMES = {"status"}
 LAB_HIDE_WHEN_EMPTY_READ_ONLY = {"consultation", "doctor_reviewed_by", "doctor_reviewed_on", "linked_invoice"}
+LAB_SAFE_AFTER_SUBMITTED_INVOICE = {"sample_notes"}
 
 
 def _lab_gate(lab_order: str) -> dict:
@@ -42,6 +44,45 @@ def _simplify_lab_fields(state: dict) -> None:
     state["fields"] = fields
 
 
+def _apply_lab_billing_evidence(state: dict, gate: dict) -> None:
+    row_billing = gate.get("row_billing") or {}
+    evidence_rows = list(row_billing.values())
+    active_evidence = [row for row in evidence_rows if cint(row.get("docstatus")) in {0, 1}]
+    has_submitted = any(cint(row.get("docstatus")) == 1 for row in active_evidence)
+    has_draft = any(cint(row.get("docstatus")) == 0 for row in active_evidence)
+    submitted_rows = [row for row in active_evidence if cint(row.get("docstatus")) == 1]
+    is_paid = bool(submitted_rows) and all(flt(row.get("outstanding_amount")) <= 0 for row in submitted_rows)
+
+    billing_state = state.setdefault("billing_state", {})
+    if active_evidence:
+        billing_state["has_invoice"] = True
+        billing_state["has_draft_invoice"] = has_draft
+        billing_state["has_submitted_invoice"] = has_submitted
+        billing_state["is_paid"] = is_paid and not has_draft
+        billing_state["locked"] = has_submitted
+
+    if has_submitted:
+        for field in state.get("fields") or []:
+            if field.get("fieldname") not in LAB_SAFE_AFTER_SUBMITTED_INVOICE:
+                field["read_only"] = 1
+        state["can_save"] = bool(
+            state.get("can_save")
+            and any(not field.get("read_only") for field in state.get("fields") or [])
+        )
+
+    for section in state.get("sections") or []:
+        if section.get("kind") != "lab_results":
+            continue
+        for row in section.get("rows") or []:
+            evidence = row_billing.get(str(row.get("name") or ""))
+            if not evidence:
+                continue
+            row["billing_status"] = evidence.get("billing_status") or row.get("billing_status") or "Not Billed"
+            row["billing_invoice"] = evidence.get("invoice")
+            if cint(evidence.get("docstatus")) == 1:
+                row["can_edit_rate"] = False
+
+
 def _apply_gate_to_lab_sections(state: dict, gate: dict) -> None:
     if gate.get("can_proceed"):
         return
@@ -75,6 +116,7 @@ def get_clinical_record_editor(doctype: str, name: str) -> dict:
     _simplify_lab_fields(state)
     gate = _lab_gate(name)
     state["service_gate"] = gate
+    _apply_lab_billing_evidence(state, gate)
     _apply_gate_to_lab_sections(state, gate)
     _merge_gate_message(state, gate)
     return state
