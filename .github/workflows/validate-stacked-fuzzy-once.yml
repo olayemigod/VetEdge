@@ -21,10 +21,12 @@ jobs:
           python-version: "3.14"
       - name: Install validation dependencies
         run: python -m pip install --upgrade pytest ruff
-      - name: Compile VetEdge Python
-        run: python -m compileall -q vetedge
-      - name: Ruff fuzzy adapters and contracts
+      - name: Validate and record result
+        shell: bash
         run: |
+          set +e
+          STATUS=0
+          python -m compileall -q vetedge || STATUS=1
           ruff check \
             vetedge/services/appointment_link_search.py \
             vetedge/services/front_desk_link_search.py \
@@ -35,20 +37,18 @@ jobs:
             vetedge/tests/test_front_desk_fuzzy_link_search_contract.py \
             vetedge/tests/test_master_fuzzy_link_search_contract.py \
             vetedge/tests/test_remaining_fuzzy_search.py \
-            vetedge/tests/test_report_center_smart_filters_contract.py
-      - name: Run fuzzy-search contracts
-        run: |
+            vetedge/tests/test_report_center_smart_filters_contract.py || STATUS=1
           python -m pytest -q \
             vetedge/tests/test_appointment_link_search_contract.py \
             vetedge/tests/test_front_desk_fuzzy_link_search_contract.py \
             vetedge/tests/test_master_fuzzy_link_search_contract.py \
             vetedge/tests/test_remaining_fuzzy_search.py \
-            vetedge/tests/test_report_center_smart_filters_contract.py
-      - name: Record successful one-off validation
-        run: |
-          printf '%s\n' "$GITHUB_SHA" > .vetedge-stacked-fuzzy-validation-ok
+            vetedge/tests/test_report_center_smart_filters_contract.py || STATUS=1
+          if [ "$STATUS" -eq 0 ]; then RESULT=PASS; else RESULT=FAIL; fi
+          printf '%s %s\n' "$RESULT" "$GITHUB_SHA" > .vetedge-stacked-fuzzy-validation-result
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .vetedge-stacked-fuzzy-validation-ok
-          git commit -m "test(vetedge): record stacked fuzzy validation"
+          git add .vetedge-stacked-fuzzy-validation-result
+          git commit -m "test(vetedge): record stacked fuzzy validation result"
           git push origin HEAD:agent/vetedge-post-pr36-reporting-and-operations
+          exit "$STATUS"
