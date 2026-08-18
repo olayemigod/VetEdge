@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt
 
-from vetedge.services.hospitalisation import ACTIVE_HOSPITALISATION_STATUSES, assert_hospitalisation_enabled
+from vetedge.services.hospitalisation import assert_hospitalisation_enabled
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.report_visibility import normalize_report_filters
 
@@ -15,6 +15,7 @@ DOCTYPE = "Veterinary Hospitalisation"
 ACTIVITY_DOCTYPE = "Veterinary Hospitalisation Activity"
 CHARGE_DOCTYPE = "Veterinary Hospitalisation Charge Item"
 PAGE_LENGTH_MAX = 100
+OPERATIONAL_ACTIVE_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -51,7 +52,7 @@ def _query_filters(filters: dict) -> dict:
             output[target] = filters.get(source)
 
     if not filters.get("status") and cint(filters.get("active_only", 1)):
-        output["status"] = ["in", sorted(ACTIVE_HOSPITALISATION_STATUSES)]
+        output["status"] = ["in", sorted(OPERATIONAL_ACTIVE_STATUSES)]
 
     from_date = filters.get("from_date") or filters.get("admission_date_from")
     to_date = filters.get("to_date") or filters.get("admission_date_to")
@@ -191,7 +192,7 @@ def _charge_aggregates(parent_names: list[str]) -> dict[str, dict]:
 
 def _summary(query_filters: dict, total: int) -> list[dict]:
     counts = _status_counts(query_filters)
-    active = sum(counts.get(status, 0) for status in ACTIVE_HOSPITALISATION_STATUSES)
+    active = sum(counts.get(status, 0) for status in OPERATIONAL_ACTIVE_STATUSES)
     return [
         {"key": "active", "label": _("Active Hospitalisations"), "value": active, "datatype": "Int"},
         {"key": "ready", "label": _("Ready for Discharge"), "value": counts.get("Ready for Discharge", 0), "datatype": "Int"},
@@ -293,7 +294,7 @@ def get_hospitalisation_operations(
         "has_next": start + len(rows) < total,
         "metadata": {
             "pagination_mode": "query-level-parent-page-child-enrichment",
-            "detail_rows_materialized": False,
+            "all_matching_rows_materialized": False,
             "child_scope": "requested_parent_page_only",
             "max_page_length": PAGE_LENGTH_MAX,
         },
