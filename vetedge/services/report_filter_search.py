@@ -7,8 +7,10 @@ from frappe.utils import cint, cstr
 from vetedge.services.permissions import (
     ROLE_SYSTEM_MANAGER,
     ROLE_VETEDGE_ADMINISTRATOR,
+    get_assigned_branches,
     get_vaccination_staff_users,
     get_veterinary_doctor_users,
+    user_has_global_branch_access,
 )
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.report_visibility import normalize_report_filters, validate_report_access
@@ -53,18 +55,22 @@ def _bounded(value: int | str | None, default: int = MAX_PAGE_LENGTH) -> int:
     return min(max(cint(value) or default, 1), MAX_PAGE_LENGTH)
 
 
-def _search_branch(txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
-    branch = cstr(normalized.get("branch") or "").strip()
-    filters = {}
-    if branch:
-        filters["name"] = branch
-        if txt and txt.lower() not in branch.lower():
-            return []
-    elif txt:
-        filters["name"] = ["like", f"%{txt}%"]
-
+def _search_branch(txt: str, start: int, page_length: int) -> list[dict]:
     if not frappe.has_permission("Branch", "read"):
         return []
+
+    user = frappe.session.user
+    filters = []
+    if not user_has_global_branch_access(user):
+        assigned = sorted({cstr(branch).strip() for branch in get_assigned_branches(user) if cstr(branch).strip()})
+        # normalize_report_filters() has already failed closed for branch-scoped
+        # users with zero assignments. This guard also makes direct helper use safe.
+        if not assigned:
+            return []
+        filters.append(["Branch", "name", "in", assigned])
+    if txt:
+        filters.append(["Branch", "name", "like", f"%{txt}%"])
+
     rows = frappe.get_list(
         "Branch",
         fields=["name"],
@@ -185,9 +191,7 @@ def _search_master(field: str, txt: str, start: int, page_length: int) -> list[d
     if not frappe.has_permission(doctype, "read"):
         return []
     meta = frappe.get_meta(doctype)
-    filters = {
-        key: value for key, value in requested_filters.items() if meta.has_field(key)
-    }
+    filters = {key: value for key, value in requested_filters.items() if meta.has_field(key)}
     if txt:
         filters["name"] = ["like", f"%{txt}%"]
     rows = frappe.get_list(
@@ -225,7 +229,7 @@ def search_report_filter_options(
     page_length = _bounded(page_length)
 
     if field == "branch":
-        return _search_branch(txt, start, page_length, normalized)
+        return _search_branch(txt, start, page_length)
     if field == "patient":
         return _search_patient(txt, start, page_length, normalized)
     if field == "customer":
