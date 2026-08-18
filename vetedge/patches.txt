@@ -18,4 +18,5 @@ vetedge.patches.remove_coreedge_settings_fields
 vetedge.patches.remove_hospitalisation_dashboard
 vetedge.patches.backfill_hospitalisation_patient_name
 vetedge.patches.normalize_website_settings_branding
+vetedge.patches.add_vaccination_consultation_billing_edit_setting
 vetedge.patches.add_reporting_action_settings
