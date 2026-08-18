@@ -52,6 +52,7 @@ jobs:
           node --check vetedge/public/js/vetedge_resource_center_hardening.js
           node --check vetedge/public/js/vetedge_lab_order_add_tests.js
           node --check vetedge/public/js/vetedge_billing_modal_layering.js
+          node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
           node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
           node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
           node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
@@ -76,6 +77,7 @@ jobs:
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_consultation_related_record_editor_reachability.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
@@ -84,6 +86,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_consultation_related_record_editor_reachability.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
