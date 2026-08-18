@@ -69,6 +69,19 @@ def apply_consultation_source_billing_edits(edits: list[dict[str, Any]] | None) 
             _apply_vaccination_billing_edit(edit)
 
 
+def _assert_same_source_item(expected: str | None, supplied: str | None, label: str) -> None:
+    if not expected:
+        frappe.throw(
+            _("{0} has no ERPNext Item. Configure its clinical master before editing the rate.").format(label),
+            frappe.ValidationError,
+        )
+    if supplied and supplied != expected:
+        frappe.throw(
+            _("The ERPNext Item for {0} is controlled by its clinical master and cannot be changed from the Consultation.").format(label),
+            frappe.ValidationError,
+        )
+
+
 def _apply_lab_billing_edit(edit: dict[str, Any]) -> None:
     name = edit.get("source_document")
     detail = edit.get("source_detail_name")
@@ -83,20 +96,28 @@ def _apply_lab_billing_edit(edit: dict[str, Any]) -> None:
             break
     if not target:
         frappe.throw(_("The source Lab Test row could not be found."), frappe.DoesNotExistError)
-    target.billing_item = edit.get("item") or None
+    _assert_same_source_item(
+        target.get("billing_item"),
+        edit.get("item"),
+        target.get("lab_test_name") or target.get("lab_test_template") or _("Lab Test"),
+    )
     target.rate = flt(edit.get("rate"))
     doc.save()
 
 
 def _apply_vaccination_billing_edit(edit: dict[str, Any]) -> None:
     if not vaccination_billing_edit_is_enabled():
-        frappe.throw(_("Vaccination billing edits from Consultation are disabled in Veterinary Settings."), frappe.PermissionError)
+        frappe.throw(_("Vaccination rate edits from Consultation are disabled in Veterinary Settings."), frappe.PermissionError)
     name = edit.get("source_document")
     if not name or not frappe.db.exists(VACCINATION_DOCTYPE, name):
         frappe.throw(_("The source Vaccination Record no longer exists."), frappe.DoesNotExistError)
     doc = frappe.get_doc(VACCINATION_DOCTYPE, name)
     doc.check_permission("write")
-    doc.billing_item = edit.get("item") or None
+    _assert_same_source_item(
+        doc.get("billing_item"),
+        edit.get("item"),
+        doc.get("vaccine") or _("Vaccination"),
+    )
     doc.rate = flt(edit.get("rate"))
     doc.rate_manually_edited = 1
     doc.save()
@@ -385,33 +406,29 @@ def _detach_nonfinal_direct_session_charges(doctype: str, name: str) -> None:
             if charge.get("billing_status") in FINAL_BILLING_STATUSES:
                 frappe.throw(_("A finalized billing charge still references this service."), frappe.ValidationError)
             charge.billing_status = "Cancelled"
-            charge.source_name = None
             changed = True
         if changed:
             session.save()
 
 
 def _resync_consultation_after_related_delete(consultation: str) -> dict:
-    try:
-        from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session, sync_source_to_billing_session
+    from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session, sync_source_to_billing_session
 
-        if not is_billing_sessions_enabled():
-            return {"updated": False, "reason": "billing_sessions_disabled"}
-        if not resolve_billing_session(CONSULTATION_DOCTYPE, consultation):
-            return {"updated": False, "reason": "no_active_billing_session"}
-        result = sync_source_to_billing_session(
-            CONSULTATION_DOCTYPE,
-            consultation,
-            confirm=True,
-            confirmation_type="remove_empty_draft_invoice",
-        )
-        if result.get("blocked"):
-            frappe.throw(result.get("message") or _("Billing prevents this deletion."), frappe.ValidationError)
-        if result.get("requires_confirmation"):
-            frappe.throw(result.get("message") or _("Billing requires a separate accounting action before deletion."), frappe.ValidationError)
-        return result
-    except frappe.ValidationError:
-        raise
+    if not is_billing_sessions_enabled():
+        return {"updated": False, "reason": "billing_sessions_disabled"}
+    if not resolve_billing_session(CONSULTATION_DOCTYPE, consultation):
+        return {"updated": False, "reason": "no_active_billing_session"}
+    result = sync_source_to_billing_session(
+        CONSULTATION_DOCTYPE,
+        consultation,
+        confirm=True,
+        confirmation_type="remove_empty_draft_invoice",
+    )
+    if result.get("blocked"):
+        frappe.throw(result.get("message") or _("Billing prevents this deletion."), frappe.ValidationError)
+    if result.get("requires_confirmation"):
+        frappe.throw(result.get("message") or _("Billing requires a separate accounting action before deletion."), frappe.ValidationError)
+    return result
 
 
 def _detach_generated_vaccination_appointment(doc) -> None:
