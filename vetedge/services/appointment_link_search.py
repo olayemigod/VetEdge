@@ -7,6 +7,7 @@ from frappe.utils import cint
 from vetedge.services import appointment_edgeui
 
 CANDIDATE_POOL_MAX = 100
+MAX_ANCHORS = 4
 
 
 def _shared_ranker():
@@ -15,6 +16,25 @@ def _shared_ranker():
 	except (ImportError, ModuleNotFoundError):
 		return None
 	return rank_search_records
+
+
+def _query_anchors(query: str) -> tuple[str, ...]:
+	term = " ".join(str(query or "").strip().casefold().split())
+	if not term:
+		return ()
+	anchors = [term]
+	for token in term.split():
+		if len(token) >= 3:
+			anchors.append(token[:3])
+		if len(token) >= 2:
+			anchors.append(token[-2:])
+	unique: list[str] = []
+	for anchor in anchors:
+		if anchor and anchor not in unique:
+			unique.append(anchor)
+		if len(unique) >= MAX_ANCHORS:
+			break
+	return tuple(unique)
 
 
 def _search_values(option: dict[str, Any]) -> dict[str, Any]:
@@ -60,6 +80,35 @@ def _rank(options: list[dict[str, Any]], query: str, limit: int) -> list[dict[st
 	]
 
 
+def _collect_candidates(
+	field: str,
+	query: str,
+	context: str | dict | None,
+	candidate_limit: int,
+) -> list[dict]:
+	candidates: list[dict] = []
+	seen: set[str] = set()
+	for anchor in _query_anchors(query):
+		remaining = candidate_limit - len(candidates)
+		if remaining <= 0:
+			break
+		for option in appointment_edgeui.search_appointment_link(
+			field=field,
+			txt=anchor,
+			context=context,
+			start=0,
+			page_length=remaining,
+		):
+			key = str(option.get("value") or "")
+			if not key or key in seen:
+				continue
+			seen.add(key)
+			candidates.append(option)
+			if len(candidates) >= candidate_limit:
+				break
+	return candidates
+
+
 def search_appointment_link(
 	field: str,
 	txt: str = "",
@@ -81,11 +130,5 @@ def search_appointment_link(
 		)
 
 	candidate_limit = min(CANDIDATE_POOL_MAX, max(limit * 5, limit))
-	candidates = appointment_edgeui.search_appointment_link(
-		field=field,
-		txt="",
-		context=context,
-		start=0,
-		page_length=candidate_limit,
-	)
+	candidates = _collect_candidates(field, query, context, candidate_limit)
 	return _rank(candidates, query, limit)
