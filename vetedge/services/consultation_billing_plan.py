@@ -101,7 +101,12 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 	consultation = frappe.get_doc(CONSULTATION_DOCTYPE, consultation_name)
 	changed = False
 	for row in doc.get("lab_tests") or []:
-		item = row.get("billing_item") or None
+		item = row.get("billing_item")
+		if not item:
+			frappe.throw(
+				f"Lab Test {row.get('lab_test_name') or row.get('lab_test_template')} has no ERPNext billing Item. Configure the Veterinary Lab Test master before adding it to a Consultation.",
+				frappe.ValidationError,
+			)
 		source_detail = row.get("name") or row.get("lab_test_template")
 		existing_row = _get_source_row(consultation, "Lab Order", doc.name, source_detail)
 		rate = _get_lab_order_row_rate(row)
@@ -140,7 +145,12 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 		["vaccine_name", "default_item", "default_price"],
 		as_dict=True,
 	) or {}
-	item = doc.get("billing_item") or vaccine.get("default_item") or None
+	item = doc.get("billing_item") or vaccine.get("default_item")
+	if not item:
+		frappe.throw(
+			f"Vaccine {vaccine.get('vaccine_name') or doc.get('vaccine')} has no ERPNext billing Item. Configure Default Item on the Veterinary Vaccine master before adding it to a Consultation.",
+			frappe.ValidationError,
+		)
 
 	consultation = frappe.get_doc(CONSULTATION_DOCTYPE, consultation_name)
 	source_detail = doc.get("vaccine") or doc.name
@@ -195,7 +205,7 @@ def _get_lab_order_row_rate(row) -> float | None:
 	return lab_test.get("default_rate")
 
 
-def _update_plan_row_from_lab_order(plan_row, lab_row, item: str | None, rate: float | None) -> bool:
+def _update_plan_row_from_lab_order(plan_row, lab_row, item: str, rate: float | None) -> bool:
 	if not _can_update_plan_row_from_source(plan_row):
 		return False
 	qty = flt(plan_row.get("qty")) or 1
@@ -215,7 +225,7 @@ def _update_plan_row_from_lab_order(plan_row, lab_row, item: str | None, rate: f
 	return changed
 
 
-def _update_plan_row_from_vaccination(plan_row, doc, item: str | None, vaccine_name: str | None, rate: float | None) -> bool:
+def _update_plan_row_from_vaccination(plan_row, doc, item: str, vaccine_name: str | None, rate: float | None) -> bool:
 	if not _can_update_plan_row_from_source(plan_row):
 		return False
 	qty = flt(plan_row.get("qty")) or 1
@@ -261,12 +271,14 @@ def _add_plan_row(
 	source_doctype: str,
 	source_document: str,
 	source_detail_name: str | None,
-	item: str | None,
+	item: str,
 	description: str | None,
 	qty: float,
 	rate: float | None,
 	notes: str | None = None,
 ) -> None:
+	if not item:
+		frappe.throw("ERPNext Item is required for every Consultation Treatment Plan row.", frappe.ValidationError)
 	qty = flt(qty) or 1
 	rate = flt(rate)
 	row = {
