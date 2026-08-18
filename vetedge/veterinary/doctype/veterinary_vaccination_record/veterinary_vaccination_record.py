@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import frappe
 from frappe.model.document import Document
 
 from vetedge.services.vaccination import validate_vaccination_record
@@ -13,6 +14,11 @@ def sync_next_vaccination_appointment_from_record(*args, **kwargs):
 class VeterinaryVaccinationRecord(Document):
 	def validate(self) -> None:
 		validate_vaccination_record(self)
+		if not self.get("billing_item"):
+			frappe.throw(
+				"The selected Vaccine has no ERPNext billing Item. Configure Default Item on the Veterinary Vaccine master before using it.",
+				frappe.ValidationError,
+			)
 		from vetedge.services.consultation_related_records import validate_consultation_vaccination_duplicate
 
 		validate_consultation_vaccination_duplicate(self)
