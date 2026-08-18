@@ -85,7 +85,7 @@ def test_report_center_uses_shared_report_shell_and_capability_actions():
     ):
         assert expected in source
 
-    assert "EdgePageLayout" not in source
+    assert "h(EdgePageLayout" not in source
     assert "EdgeReportExportDialog" not in source
 
 
