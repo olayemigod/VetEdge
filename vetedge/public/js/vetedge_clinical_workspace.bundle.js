@@ -17,7 +17,7 @@ const RELATED_MODAL_CONFIG = Object.freeze({
 		columns: [
 			{ fieldname: 'name', label: 'Vaccination' }, { fieldname: 'status', label: 'Status', fieldtype: 'Status' },
 			{ fieldname: 'vaccine', label: 'Vaccine' }, { fieldname: 'administered_on', label: 'Administered On', fieldtype: 'Datetime' },
-			{ fieldname: 'next_due_date', label: 'Next Due', fieldtype: 'Date' }, { fieldname: 'linked_invoice', label: 'Invoice' },
+			{ fieldname: 'next_due_date', label: 'Next Due', fieldtype: 'Datetime' }, { fieldname: 'linked_invoice', label: 'Invoice' },
 		],
 	},
 	'Veterinary Hospitalisation': {
@@ -184,7 +184,7 @@ function vaccinationFields(view, modal) {
 		{ fieldname: 'rate', label: tr('Rate'), type: 'number', min: 0, step: '0.01' },
 		{ fieldname: 'dose', label: tr('Dose'), type: 'text' },
 		{ fieldname: 'route', label: tr('Route'), type: 'text' },
-		{ fieldname: 'next_due_date', label: tr('Next Due Date'), type: 'date' },
+		{ fieldname: 'next_due_date', label: tr('Next Due Date/Time'), type: 'datetime-local' },
 		{ fieldname: 'notes', label: tr('Notes'), type: 'textarea', rows: 3 },
 		{ fieldname: 'create_invoice', label: tr('Create / update billing invoice'), type: 'checkbox', default: 1 },
 	];
