@@ -10,6 +10,10 @@ from frappe.utils import cint
 from vetedge.services.report_visibility import normalize_report_filters
 from vetedge.services.reporting_catalog import require_reporting_entitlement
 from vetedge.services.stock import get_branch_dispensary_warehouse
+from vetedge.services.stock_expiry_scope import (
+	UNMAPPED_BRANCH_WAREHOUSE,
+	normalize_stock_expiry_branch_scope,
+)
 
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
@@ -67,12 +71,15 @@ def _normalize_stock_expiry_filters(filters=None) -> dict:
 	if not isinstance(parsed, dict):
 		frappe.throw("Expected Stock Expiry filters as a JSON object.", frappe.ValidationError)
 	cleaned = {key: value for key, value in parsed.items() if value not in (None, "")}
-	return dict(normalize_report_filters("Stock Expiry Status", cleaned) or {})
+	normalized = dict(normalize_report_filters("Stock Expiry Status", cleaned) or {})
+	return normalize_stock_expiry_branch_scope(normalized)
 
 
 def _validate_reference_filter(filters: dict, field: str) -> None:
 	value = str(filters.get(field) or "").strip()
 	if not value:
+		return
+	if field == "warehouse" and value == UNMAPPED_BRANCH_WAREHOUSE:
 		return
 
 	config = FILTER_SEARCH_CONFIG[field]
