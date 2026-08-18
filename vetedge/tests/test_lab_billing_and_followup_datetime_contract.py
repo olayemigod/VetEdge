@@ -89,3 +89,20 @@ def test_legacy_date_only_generated_appointments_keep_backward_compatibility():
     assert 'DEFAULT_GENERATED_APPOINTMENT_TIME = "09:00:00"' in appointment_flow
     assert "if len(text) <= 10:" in appointment_flow
     assert "return get_datetime(value)" in appointment_flow
+
+
+def test_generated_appointment_writes_are_internal_but_keep_document_validation():
+    appointment_flow = read("vetedge/services/appointment_flow.py")
+    sync_block = appointment_flow.split("def sync_generated_appointment", 1)[1].split(
+        "def normalize_generated_appointment_datetime", 1
+    )[0]
+    cancel_block = appointment_flow.split("def _cancel_generated_appointment_if_safe", 1)[1].split(
+        "def _update_source_backlink", 1
+    )[0]
+
+    assert "appointment.save(ignore_permissions=True)" in sync_block
+    assert "appointment.insert(ignore_permissions=True)" in sync_block
+    assert "appointment.save(ignore_permissions=True)" in cancel_block
+    assert "validate_appointment(doc)" in appointment_flow
+    assert "validate_branch_access(doc)" in appointment_flow
+    assert "validate_practitioner_branch_access(doc.practitioner, doc.branch)" in appointment_flow
