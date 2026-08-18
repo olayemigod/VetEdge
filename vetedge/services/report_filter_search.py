@@ -17,6 +17,7 @@ from vetedge.services.report_visibility import normalize_report_filters, validat
 from vetedge.services.reporting_catalog import require_reporting_entitlement
 
 MAX_PAGE_LENGTH = 20
+CANDIDATE_WINDOW = 60
 
 REPORT_FIELDS = {
     "Consultation Register": {"branch", "patient", "customer", "practitioner", "consultation_type"},
@@ -109,57 +110,79 @@ def _search_patient(txt: str, start: int, page_length: int, normalized: dict) ->
     return [_option(row.name, row.patient_name or row.name) for row in rows]
 
 
+def _customer_candidates(txt: str, limit: int) -> list[dict]:
+    or_filters = []
+    if txt:
+        pattern = f"%{txt}%"
+        or_filters = [
+            ["Customer", "name", "like", pattern],
+            ["Customer", "customer_name", "like", pattern],
+        ]
+    return frappe.get_list(
+        "Customer",
+        fields=["name", "customer_name"],
+        or_filters=or_filters,
+        order_by="customer_name asc, name asc",
+        page_length=limit,
+    )
+
+
 def _search_customer(txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
     if not frappe.has_permission("Customer", "read"):
         return []
 
     patient = cstr(normalized.get("patient") or "").strip()
     if patient:
-        owner = cstr(frappe.db.get_value("Veterinary Patient", patient, "primary_owner") or "").strip()
+        patient_rows = frappe.get_list(
+            "Veterinary Patient",
+            fields=["primary_owner"],
+            filters={"name": patient},
+            page_length=1,
+        )
+        owner = cstr(patient_rows[0].get("primary_owner") if patient_rows else "").strip()
         if not owner:
             return []
-        row = frappe.db.get_value("Customer", owner, ["name", "customer_name"], as_dict=True)
-        if not row:
+        rows = frappe.get_list(
+            "Customer",
+            fields=["name", "customer_name"],
+            filters={"name": owner},
+            page_length=1,
+        )
+        if not rows:
             return []
+        row = rows[0]
         label = row.get("customer_name") or row.get("name")
         if txt and txt.lower() not in f"{row.get('name')} {label}".lower():
             return []
         return [_option(row.get("name"), label)]
 
     branch = cstr(normalized.get("branch") or "").strip()
+    candidate_limit = min(max(page_length * 3, page_length), CANDIDATE_WINDOW)
+    candidates = _customer_candidates(txt, candidate_limit)
     if not branch:
-        or_filters = []
-        if txt:
-            pattern = f"%{txt}%"
-            or_filters = [
-                ["Customer", "name", "like", pattern],
-                ["Customer", "customer_name", "like", pattern],
-            ]
-        rows = frappe.get_list(
-            "Customer",
-            fields=["name", "customer_name"],
-            or_filters=or_filters,
-            order_by="customer_name asc, name asc",
-            start=start,
-            page_length=page_length,
-        )
-        return [_option(row.name, row.customer_name or row.name) for row in rows]
+        return [
+            _option(row.get("name"), row.get("customer_name") or row.get("name"))
+            for row in candidates[start : start + page_length]
+        ]
 
-    search = f"%{txt}%"
-    rows = frappe.db.sql(
-        """
-        SELECT DISTINCT c.name, c.customer_name
-        FROM `tabCustomer` c
-        INNER JOIN `tabVeterinary Patient` p ON p.primary_owner = c.name
-        WHERE p.default_branch = %(branch)s
-          AND (%(txt)s = '' OR c.name LIKE %(search)s OR c.customer_name LIKE %(search)s)
-        ORDER BY COALESCE(NULLIF(c.customer_name, ''), c.name) ASC, c.name ASC
-        LIMIT %(start)s, %(page_length)s
-        """,
-        {"branch": branch, "txt": txt, "search": search, "start": start, "page_length": page_length},
-        as_dict=True,
+    names = [row.get("name") for row in candidates if row.get("name")]
+    if not names:
+        return []
+    visible_owners = set(
+        frappe.get_list(
+            "Veterinary Patient",
+            fields=["primary_owner"],
+            filters={"default_branch": branch, "primary_owner": ["in", names]},
+            group_by="primary_owner",
+            page_length=candidate_limit,
+            pluck="primary_owner",
+        )
     )
-    return [_option(row.name, row.customer_name or row.name) for row in rows]
+    filtered = [row for row in candidates if row.get("name") in visible_owners]
+    return [
+        _option(row.get("name"), row.get("customer_name") or row.get("name"))
+        for row in filtered[start : start + page_length]
+    ]
 
 
 def _branch_allowed_users(users: list[list | tuple], branch: str) -> list[list | tuple]:
@@ -192,7 +215,7 @@ def _branch_allowed_users(users: list[list | tuple], branch: str) -> list[list |
 
 def _search_practitioner(report_name: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
     searcher = get_vaccination_staff_users if report_name == "Vaccination Report" else get_veterinary_doctor_users
-    candidate_limit = min(MAX_PAGE_LENGTH * 3, 60)
+    candidate_limit = min(MAX_PAGE_LENGTH * 3, CANDIDATE_WINDOW)
     rows = searcher("User", txt, "name", 0, candidate_limit, {}) or []
     rows = _branch_allowed_users(rows, cstr(normalized.get("branch") or "").strip())
     rows = rows[start : start + page_length]
