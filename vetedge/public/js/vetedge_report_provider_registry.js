@@ -148,6 +148,10 @@
 			"Owner Register",
 			"vetedge.services.owner_report.get_owner_register_view",
 		);
+		registerServerPaginatedReport(
+			"Patient Register",
+			"vetedge.services.patient_report.get_patient_register_view",
+		);
 	}
 
 	function register() {
