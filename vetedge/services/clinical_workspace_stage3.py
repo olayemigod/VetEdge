@@ -37,7 +37,7 @@ from vetedge.services.platform_access import require_vetedge_platform_access
 PROTECTED_TREATMENT_SOURCE_TYPES = {"Consultation", "Lab Order", "Vaccination"}
 LOCKED_TREATMENT_PAYMENT_STATUSES = {"Paid", "Partly Paid", "Cancelled"}
 SOURCE_BILLING_EDITABLE_STATUSES = {"", "Pending", "Draft Invoiced"}
-SOURCE_BILLING_EDITABLE_FIELDS = {"item", "rate"}
+SOURCE_BILLING_EDITABLE_FIELDS = {"rate"}
 
 
 def _source_treatment_row(row) -> bool:
@@ -115,11 +115,7 @@ def _source_billing_edit_is_allowed(existing, incoming: dict, policy: dict[str, 
 	if (existing.get("payment_status") or "Not Billed") in LOCKED_TREATMENT_PAYMENT_STATUSES:
 		return False
 	changed = _changed_treatment_fields(existing, incoming)
-	if not changed.issubset(SOURCE_BILLING_EDITABLE_FIELDS):
-		return False
-	if existing.get("item") and not incoming.get("item"):
-		return False
-	return True
+	return bool(changed and changed.issubset(SOURCE_BILLING_EDITABLE_FIELDS))
 
 
 def _source_billing_edit_payload(existing, incoming: dict) -> dict | None:
@@ -130,7 +126,7 @@ def _source_billing_edit_payload(existing, incoming: dict) -> dict | None:
 		"source_type": existing.get("source_type"),
 		"source_document": existing.get("source_document"),
 		"source_detail_name": existing.get("source_detail_name"),
-		"item": incoming.get("item") or existing.get("item"),
+		"item": existing.get("item"),
 		"rate": flt(incoming.get("rate")),
 	}
 
@@ -161,7 +157,7 @@ def _replace_planned_treatments(doc, rows: list[dict]) -> list[dict]:
 			if existing.get("source_type") in {"Lab Order", "Vaccination"}:
 				if not _source_billing_edit_is_allowed(existing, raw, policy):
 					frappe.throw(
-						_("Only the Billing Item and Rate of source-generated Lab/Vaccination rows can be edited while draft billing is still open and policy permits it: {0}.").format(_treatment_label(existing)),
+						_("Only the Rate of source-generated Lab/Vaccination rows can be edited while draft billing is open and policy permits it. The ERPNext Item remains fixed by the clinical master: {0}.").format(_treatment_label(existing)),
 						frappe.ValidationError,
 					)
 				payload = _source_billing_edit_payload(existing, raw)
