@@ -131,7 +131,9 @@ def test_clinical_related_service_actions_stay_in_edgesuite_modals():
 	content = CLINICAL_BUNDLE.read_text(encoding="utf-8")
 	for contract in (
 		"VetEdgeEdgeModalPresenter.open",
-		"vetedge.services.lab.create_lab_order_from_consultation",
+		"vetedge.services.consultation_related_records.create_consultation_lab_order",
+		"vetedge.services.consultation_related_records.get_consultation_related_records",
+		"vetedge.services.consultation_related_records.delete_consultation_related_record",
 		"vetedge.services.vaccination.create_vaccination_from_consultation",
 		"vetedge.services.hospitalisation.create_hospitalisation_from_consultation",
 		"get_active_lab_tests_for_picker",
