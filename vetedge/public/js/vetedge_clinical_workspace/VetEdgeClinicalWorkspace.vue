@@ -121,12 +121,12 @@
 						<header class="clinical-subhead"><div><h3>Treatment Plan</h3><p v-if="detail.scope_locked">Treatment scope is locked because this consultation is {{ detail.status }}.</p><p v-else>Add treatment rows before the consultation reaches Ready for Treatment.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="detail.scope_locked || !detail.can_write" @click="addTreatment">Add Treatment</button></header>
 						<EdgeTextarea :model-value="form.treatment_plan_summary" label="Treatment Plan Summary" :rows="4" @update:model-value="(value) => updateField('treatment_plan_summary', value)" />
 						<div v-for="(row, index) in form.planned_treatments" :key="row._key || row.name || index" class="clinical-treatment-row">
-							<EdgeLinkField :model-value="row.item" label="Treatment Item" placeholder="Select treatment item" :disabled="treatmentRowLocked(row)" :searcher="(query) => linkSearch('treatment_item', query)" @update:model-value="(value) => updateTreatmentItem(index, value)" />
-							<EdgeInput :model-value="row.description" label="Description" :disabled="treatmentRowLocked(row)" @update:model-value="(value) => updateChild('planned_treatments', index, 'description', value)" />
-							<EdgeInput :model-value="row.qty" type="number" label="Qty" min="0.001" step="0.001" :disabled="treatmentRowLocked(row)" @update:model-value="(value) => updateChild('planned_treatments', index, 'qty', value)" />
-							<EdgeInput :model-value="row.rate" type="number" label="Rate" min="0" step="0.01" :disabled="treatmentRowLocked(row)" @update:model-value="(value) => updateChild('planned_treatments', index, 'rate', value)" />
+							<EdgeLinkField :model-value="row.item" label="Treatment Item" placeholder="Select treatment item" :disabled="treatmentFieldLocked(row, 'item')" :searcher="(query) => linkSearch('treatment_item', query)" @update:model-value="(value) => updateTreatmentItem(index, value)" />
+							<EdgeInput :model-value="row.description" label="Description" :disabled="treatmentFieldLocked(row, 'description')" @update:model-value="(value) => updateChild('planned_treatments', index, 'description', value)" />
+							<EdgeInput :model-value="row.qty" type="number" label="Qty" min="0.001" step="0.001" :disabled="treatmentFieldLocked(row, 'qty')" @update:model-value="(value) => updateChild('planned_treatments', index, 'qty', value)" />
+							<EdgeInput :model-value="row.rate" type="number" label="Rate" min="0" step="0.01" :disabled="treatmentFieldLocked(row, 'rate')" @update:model-value="(value) => updateChild('planned_treatments', index, 'rate', value)" />
 							<div class="clinical-treatment-meta"><EdgeStatusBadge :label="row.billing_status || 'Pending'" :status="row.billing_status || 'Pending'" /><span>{{ row.payment_status || 'Not Billed' }}</span><strong>{{ formatMoney((Number(row.qty) || 0) * (Number(row.rate) || 0)) }}</strong></div>
-							<button type="button" class="edge-button edge-button--danger edge-button--compact" :disabled="treatmentRowLocked(row)" @click="removeChild('planned_treatments', index)">Remove</button>
+							<button type="button" class="edge-button edge-button--danger edge-button--compact" :disabled="treatmentRemovalLocked(row)" @click="removeChild('planned_treatments', index)">Remove</button>
 						</div>
 						<EdgeInput :model-value="form.follow_up_date" type="datetime-local" label="Follow-up Date/Time" @update:model-value="(value) => updateField('follow_up_date', value)" />
 					</section>
@@ -233,7 +233,12 @@ export default {
 			dirty: false,
 			detail: blankDetail(),
 			form: blankForm(),
-			feePolicy: { allow_editing_default_consultation_fee: false, default_consultation_source_detail: "Default Consultation Fee" },
+			feePolicy: {
+				allow_editing_default_consultation_fee: false,
+				allow_editing_lab_billing: false,
+				allow_editing_vaccination_billing: false,
+				default_consultation_source_detail: "Default Consultation Fee",
+			},
 			vitalsDialog: { open: false, values: {} },
 			historyDialog: { open: false, loading: false, data: {} },
 			dispensaryDialog: blankDispensary(),
@@ -421,13 +426,31 @@ export default {
 				if (!this.form.service_branch && context?.patient?.default_branch) this.form.service_branch = context.patient.default_branch;
 			} catch (error) { this.error = message(error, __("Patient ownership context could not be loaded.")); }
 		},
-		updateChild(table, index, field, value) { this.form[table][index][field] = value ?? ""; this.markDirty(); },
+		updateChild(table, index, field, value) {
+			const row = this.form?.[table]?.[index];
+			if (table === 'planned_treatments' && ['Lab Order', 'Vaccination'].includes(row?.source_type) && field !== 'rate') return;
+			if (table === 'planned_treatments' && ['Lab Order', 'Vaccination'].includes(row?.source_type) && !this.sourceTreatmentRateEditable(row)) return;
+			this.form[table][index][field] = value ?? "";
+			this.markDirty();
+		},
 		addSymptom() { this.form.symptoms.push({ _key: rowKey(), symptom: "", notes: "" }); this.markDirty(); },
 		addDiagnosis() { this.form.diagnoses.push({ _key: rowKey(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); },
 		addTreatment() { this.form.planned_treatments.push({ _key: rowKey(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); },
-		removeChild(table, index) { this.form[table].splice(index, 1); this.markDirty(); },
+		removeChild(table, index) {
+			const row = this.form?.[table]?.[index];
+			if (table === 'planned_treatments' && ['Lab Order', 'Vaccination'].includes(row?.source_type)) {
+				frappe.show_alert({ message: __("Delete the source Lab Order or Vaccination from its related-record popup so the Treatment Plan and draft billing remain aligned."), indicator: 'orange' });
+				return;
+			}
+			this.form[table].splice(index, 1); this.markDirty();
+		},
 		async updateTreatmentItem(index, item) {
-			const row = this.form.planned_treatments[index]; row.item = item || ""; this.markDirty(); if (!item) return;
+			const row = this.form.planned_treatments[index];
+			if (['Lab Order', 'Vaccination'].includes(row?.source_type)) {
+				frappe.show_alert({ message: __("The ERPNext Item for Lab/Vaccination rows is fixed by its clinical master. Edit only the Rate here."), indicator: 'orange' });
+				return;
+			}
+			row.item = item || ""; this.markDirty(); if (!item) return;
 			try {
 				const defaults = await call(API.defaults, { item, company: this.form.company, customer: this.form.primary_owner, branch: this.form.service_branch });
 				Object.assign(row, { uom: defaults?.uom || row.uom, rate: defaults?.rate ?? row.rate, service_type: defaults?.service_type || row.service_type, treatment_type: defaults?.treatment_type || row.treatment_type });
@@ -435,6 +458,24 @@ export default {
 		},
 		isDefaultConsultationFee(row) {
 			return row?.source_type === "Consultation" && row?.source_detail_name === this.feePolicy.default_consultation_source_detail;
+		},
+		sourceTreatmentRateEditable(row) {
+			if (this.detail.scope_locked || !this.detail.can_write) return false;
+			if (!["", "Pending", "Draft Invoiced"].includes(row?.billing_status || "")) return false;
+			if (["Paid", "Partly Paid", "Cancelled"].includes(row?.payment_status || "Not Billed")) return false;
+			if (row?.source_type === "Lab Order") return Boolean(this.feePolicy.allow_editing_lab_billing);
+			if (row?.source_type === "Vaccination") return Boolean(this.feePolicy.allow_editing_vaccination_billing);
+			return false;
+		},
+		treatmentFieldLocked(row, field) {
+			if (['Lab Order', 'Vaccination'].includes(row?.source_type)) {
+				return field !== 'rate' || !this.sourceTreatmentRateEditable(row);
+			}
+			return this.treatmentRowLocked(row);
+		},
+		treatmentRemovalLocked(row) {
+			if (['Lab Order', 'Vaccination'].includes(row?.source_type)) return true;
+			return this.treatmentRowLocked(row);
 		},
 		treatmentRowLocked(row) {
 			if (this.detail.scope_locked) return true;
