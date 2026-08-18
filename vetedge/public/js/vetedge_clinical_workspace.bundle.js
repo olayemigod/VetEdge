@@ -50,15 +50,47 @@ async function fetchRelatedRows(doctype, config, consultation) {
 
 function confirmRelatedDelete(row, doctype) {
 	const label = row?.display_name || row?.name || doctype;
+	const prompt = typeof __ === 'function'
+		? __('Delete {0}? Draft treatment/billing rows will be removed too. Submitted or paid accounting records will never be changed.', [label])
+		: `Delete ${label}? Draft treatment/billing rows will be removed too.`;
+	const presenter = window.VetEdgeEdgeModalPresenter;
+	if (!presenter?.open) return Promise.resolve(window.confirm(prompt));
+
 	return new Promise((resolve) => {
-		const prompt = typeof __ === 'function'
-			? __('Delete {0}? Draft treatment/billing rows will be removed too. Submitted or paid accounting records will never be changed.', [label])
-			: `Delete ${label}? Draft treatment/billing rows will be removed too.`;
-		if (typeof frappe.confirm === 'function') {
-			frappe.confirm(prompt, () => resolve(true), () => resolve(false));
-			return;
-		}
-		resolve(window.confirm(prompt));
+		let settled = false;
+		let confirmation = null;
+		const settle = (value) => {
+			if (settled) return;
+			settled = true;
+			resolve(value);
+		};
+		confirmation = presenter.open({
+			title: tr('Delete related clinical record?'),
+			subtitle: label,
+			size: 'sm',
+			message: prompt,
+			onClose: () => settle(false),
+			actions: [
+				{
+					label: tr('Cancel'),
+					closeOnSuccess: false,
+					onClick() {
+						settle(false);
+						confirmation?.close?.();
+					},
+				},
+				{
+					label: tr('Delete'),
+					primary: true,
+					danger: true,
+					closeOnSuccess: false,
+					onClick() {
+						settle(true);
+						confirmation?.close?.();
+					},
+				},
+			],
+		});
 	});
 }
 
