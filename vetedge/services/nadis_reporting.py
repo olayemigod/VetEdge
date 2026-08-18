@@ -6,7 +6,7 @@ from frappe.utils import cint, cstr
 
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.report_visibility import normalize_report_filters
-from vetedge.services.reporting_structure import _get_user_full_name_map
+from vetedge.services.reporting_structure import _date_filter_dict, _get_user_full_name_map
 
 
 VACCINATION_DOCTYPE = "Veterinary Vaccination Record"
@@ -38,16 +38,10 @@ def _require_permissions() -> None:
 
 
 def _query_filters(report_filters: dict) -> dict:
-    filters = {}
-    from_date = report_filters.get("from_date")
-    to_date = report_filters.get("to_date")
-    if from_date and to_date:
-        filters["administered_on"] = ["between", [from_date, to_date]]
-    elif from_date:
-        filters["administered_on"] = [">=", from_date]
-    elif to_date:
-        filters["administered_on"] = ["<=", to_date]
-
+    # Use the same date normalization as the established VetEdge report
+    # services so a selected end date includes the full reporting day for
+    # Datetime fields rather than stopping at midnight.
+    filters = _date_filter_dict("administered_on", frappe._dict(report_filters))
     mappings = {
         "branch": "service_branch",
         "patient": "patient",
