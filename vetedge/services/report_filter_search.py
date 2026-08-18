@@ -118,7 +118,7 @@ def _search_customer(txt: str, start: int, page_length: int, normalized: dict) -
         owner = cstr(frappe.db.get_value("Veterinary Patient", patient, "primary_owner") or "").strip()
         if not owner:
             return []
-        row = frappe.get_value("Customer", owner, ["name", "customer_name"], as_dict=True)
+        row = frappe.db.get_value("Customer", owner, ["name", "customer_name"], as_dict=True)
         if not row:
             return []
         label = row.get("customer_name") or row.get("name")
