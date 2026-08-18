@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import frappe
 from frappe.model.document import Document
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
@@ -24,6 +25,7 @@ class VeterinaryConsultation(Document):
 		reset_vetedge_copy_state(self)
 		set_default_consultation_type(self)
 		normalize_consultation_payment_status_fields(self)
+		validate_treatment_rows_have_erpnext_item(self)
 		validate_consultation(self)
 
 	def after_insert(self) -> None:
@@ -34,6 +36,17 @@ class VeterinaryConsultation(Document):
 	def on_update(self) -> None:
 		sync_service_appointment_status_from_consultation(self)
 		sync_follow_up_appointment_from_consultation(self)
+
+
+def validate_treatment_rows_have_erpnext_item(doc) -> None:
+	for row in doc.get("planned_treatments") or []:
+		if row.get("item"):
+			continue
+		label = row.get("description") or row.get("source_detail_name") or row.get("source_type") or "Treatment"
+		frappe.throw(
+			f"ERPNext Item is required for Treatment Plan row {label}. Configure the originating master before adding the service to a Consultation.",
+			frappe.ValidationError,
+		)
 
 
 def normalize_consultation_payment_status_fields(doc) -> None:
