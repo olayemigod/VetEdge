@@ -9,6 +9,7 @@ from frappe.utils import cint
 from vetedge.services import clinical_workspace, pricing_master_workspace
 
 CANDIDATE_LIMIT = 100
+MAX_ANCHORS = 4
 
 
 def _shared_ranker() -> Callable[..., list] | None:
@@ -34,6 +35,106 @@ def _rank(rows: list[dict[str, Any]], query: str, limit: int) -> list[dict[str, 
 	)
 
 
+def _query_anchors(query: str) -> tuple[str, ...]:
+	term = " ".join(str(query or "").strip().casefold().split())
+	if not term:
+		return ("",)
+	anchors = [term]
+	for token in term.split():
+		if len(token) >= 3:
+			anchors.append(token[:3])
+		if len(token) >= 2:
+			anchors.append(token[-2:])
+	unique: list[str] = []
+	for anchor in anchors:
+		if anchor not in unique:
+			unique.append(anchor)
+		if len(unique) >= MAX_ANCHORS:
+			break
+	return tuple(unique)
+
+
+def _collect_tuple_candidates(searcher: Callable[[str, int], list], query: str) -> list[list[Any]]:
+	rows: list[list[Any]] = []
+	seen: set[str] = set()
+	for anchor in _query_anchors(query):
+		remaining = CANDIDATE_LIMIT - len(rows)
+		if remaining <= 0:
+			break
+		for row in searcher(anchor, remaining):
+			key = str(row[0] if row else "")
+			if not key or key in seen:
+				continue
+			seen.add(key)
+			rows.append(row)
+			if len(rows) >= CANDIDATE_LIMIT:
+				break
+	return rows
+
+
+def _pricing_rows(
+	doctype: str,
+	*,
+	fields: list[str],
+	filters: dict[str, Any],
+	search_fields: tuple[str, ...],
+	query: str,
+	order_by: str,
+) -> list[dict[str, Any]]:
+	search_text = str(query or "").strip()
+	if not search_text:
+		return [
+			dict(row)
+			for row in frappe.get_list(
+				doctype,
+				fields=fields,
+				filters=filters,
+				order_by=order_by,
+				page_length=CANDIDATE_LIMIT,
+			)
+		]
+
+	rows: list[dict[str, Any]] = []
+	seen: set[str] = set()
+	exact = frappe.get_list(
+		doctype,
+		fields=fields,
+		filters=filters,
+		or_filters={fieldname: search_text for fieldname in search_fields},
+		order_by=order_by,
+		page_length=CANDIDATE_LIMIT,
+	)
+	for source in exact:
+		row = dict(source)
+		key = str(row.get("name") or "")
+		if key and key not in seen:
+			seen.add(key)
+			rows.append(row)
+
+	for anchor in _query_anchors(search_text):
+		remaining = CANDIDATE_LIMIT - len(rows)
+		if remaining <= 0:
+			break
+		matches = frappe.get_list(
+			doctype,
+			fields=fields,
+			filters=filters,
+			or_filters={fieldname: ["like", f"%{anchor}%"] for fieldname in search_fields},
+			order_by=order_by,
+			page_length=remaining,
+		)
+		for source in matches:
+			row = dict(source)
+			key = str(row.get("name") or "")
+			if not key or key in seen:
+				continue
+			seen.add(key)
+			rows.append(row)
+			if len(rows) >= CANDIDATE_LIMIT:
+				break
+	return rows
+
+
 @frappe.whitelist()
 def get_clinical_link_options(
 	kind: str,
@@ -49,14 +150,20 @@ def get_clinical_link_options(
 	page_len = min(max(cint(limit) or 20, 1), 50)
 
 	if kind == "practitioner":
-		rows = clinical_workspace.get_veterinary_doctor_users(
-			"User", "", "name", 0, CANDIDATE_LIMIT, {}
+		rows = _collect_tuple_candidates(
+			lambda txt, page_length: clinical_workspace.get_veterinary_doctor_users(
+				"User", txt, "name", 0, page_length, {}
+			),
+			search,
 		)
 		options = [{"value": row[0], "label": row[1]} for row in rows]
 		return _rank(options, search, page_len)
 	if kind == "treatment_item":
-		rows = clinical_workspace.get_treatment_item_link_options(
-			"Item", "", "name", 0, CANDIDATE_LIMIT, {}
+		rows = _collect_tuple_candidates(
+			lambda txt, page_length: clinical_workspace.get_treatment_item_link_options(
+				"Item", txt, "name", 0, page_length, {}
+			),
+			search,
 		)
 		options = [{"value": row[0], "label": row[1]} for row in rows]
 		return _rank(options, search, page_len)
@@ -113,17 +220,19 @@ def get_pricing_master_link_options(
 		if len(fields) >= 6:
 			break
 
-	rows = frappe.get_list(
+	search_fields = tuple(dict.fromkeys(fields))
+	rows = _pricing_rows(
 		options,
 		fields=fields,
 		filters=filters,
+		search_fields=search_fields,
+		query=query,
 		order_by=f"{title_field} asc",
-		page_length=CANDIDATE_LIMIT,
 	)
-	search_fields = [fieldname for fieldname in fields if fieldname != "name"]
+	description_fields = [name for name in fields if name not in {"name", title_field}]
 	candidates = []
 	for row in rows:
-		description_parts = [str(row.get(name) or "") for name in search_fields]
+		description_parts = [str(row.get(name) or "") for name in description_fields]
 		candidates.append(
 			{
 				"value": row.get("name"),
