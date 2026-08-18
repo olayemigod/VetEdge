@@ -8,6 +8,7 @@ import frappe
 from frappe.utils import cint
 
 from vetedge.services.report_visibility import normalize_report_filters
+from vetedge.services.reporting_catalog import require_reporting_entitlement
 
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
@@ -20,6 +21,7 @@ FILTER_SEARCH_CONFIG = {
 def search_stock_expiry_filter_options(field: str, txt: str = "", start: int = 0, page_length: int = 20):
 	"""Return a small permission-aware search window for Stock Expiry filters."""
 	check_expiry_permissions()
+	require_reporting_entitlement("Stock Expiry Status", scope_type="report")
 	config = FILTER_SEARCH_CONFIG.get(str(field or "").strip())
 	if not config:
 		frappe.throw("This Stock Expiry filter is not searchable.", frappe.PermissionError)
@@ -79,6 +81,7 @@ def _validate_reference_filter(filters: dict, field: str) -> None:
 def get_stock_expiry_data(filters=None):
 	"""Fetch Stock Expiry summary plus one server-paginated interactive window."""
 	check_expiry_permissions()
+	require_reporting_entitlement("Stock Expiry Status", scope_type="report")
 	filters = _normalize_stock_expiry_filters(filters)
 
 	_validate_reference_filter(filters, "warehouse")
