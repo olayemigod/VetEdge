@@ -27,11 +27,17 @@ from vetedge.services.clinical_workspace import (
 )
 from vetedge.services.clinical_workspace_context import assert_consultation_write_ownership
 from vetedge.services.consultation_billing_plan import DEFAULT_CONSULTATION_SOURCE_DETAIL
+from vetedge.services.consultation_related_records import (
+	apply_consultation_source_billing_edits,
+	consultation_source_billing_edit_policy,
+)
 from vetedge.services.permissions import can_access_consultation
 from vetedge.services.platform_access import require_vetedge_platform_access
 
 PROTECTED_TREATMENT_SOURCE_TYPES = {"Consultation", "Lab Order", "Vaccination"}
 LOCKED_TREATMENT_PAYMENT_STATUSES = {"Paid", "Partly Paid", "Cancelled"}
+SOURCE_BILLING_EDITABLE_STATUSES = {"", "Pending", "Draft Invoiced"}
+SOURCE_BILLING_EDITABLE_FIELDS = {"item", "rate"}
 
 
 def _source_treatment_row(row) -> bool:
@@ -79,8 +85,63 @@ def _treatment_row_removal_is_protected(row) -> bool:
 	return bool(_source_treatment_row(row) or _treatment_row_billing_is_locked(row))
 
 
-def _replace_planned_treatments(doc, rows: list[dict]) -> None:
+def _changed_treatment_fields(existing, incoming: dict) -> set[str]:
+	changed: set[str] = set()
+	for fieldname in PLANNED_TREATMENT_EDITABLE_FIELDS:
+		if fieldname == "name":
+			continue
+		left = existing.get(fieldname)
+		right = incoming.get(fieldname)
+		if fieldname in {"qty", "rate"}:
+			if flt(left) != flt(right):
+				changed.add(fieldname)
+		elif (left or "") != (right or ""):
+			changed.add(fieldname)
+	return changed
+
+
+def _source_billing_edit_is_allowed(existing, incoming: dict, policy: dict[str, bool]) -> bool:
+	source_type = existing.get("source_type")
+	if source_type == "Lab Order":
+		policy_allows = policy.get("allow_editing_lab_billing", False)
+	elif source_type == "Vaccination":
+		policy_allows = policy.get("allow_editing_vaccination_billing", False)
+	else:
+		return False
+	if not policy_allows:
+		return False
+	if (existing.get("billing_status") or "") not in SOURCE_BILLING_EDITABLE_STATUSES:
+		return False
+	if (existing.get("payment_status") or "Not Billed") in LOCKED_TREATMENT_PAYMENT_STATUSES:
+		return False
+	changed = _changed_treatment_fields(existing, incoming)
+	if not changed.issubset(SOURCE_BILLING_EDITABLE_FIELDS):
+		return False
+	if existing.get("item") and not incoming.get("item"):
+		return False
+	return True
+
+
+def _source_billing_edit_payload(existing, incoming: dict) -> dict | None:
+	changed = _changed_treatment_fields(existing, incoming)
+	if not changed:
+		return None
+	return {
+		"source_type": existing.get("source_type"),
+		"source_document": existing.get("source_document"),
+		"source_detail_name": existing.get("source_detail_name"),
+		"item": incoming.get("item") or existing.get("item"),
+		"rate": flt(incoming.get("rate")),
+	}
+
+
+def _treatment_label(row) -> str:
+	return row.get("description") or row.get("item") or row.get("source_detail_name") or row.get("name") or _("Treatment row")
+
+
+def _replace_planned_treatments(doc, rows: list[dict]) -> list[dict]:
 	settings = get_consultation_billing_settings()
+	policy = consultation_source_billing_edit_policy()
 	existing_by_name = {row.name: row for row in doc.get("planned_treatments") or [] if row.name}
 	incoming_names = {row.get("name") for row in rows or [] if row.get("name")}
 	for existing in existing_by_name.values():
@@ -88,18 +149,29 @@ def _replace_planned_treatments(doc, rows: list[dict]) -> None:
 			continue
 		if _treatment_row_removal_is_protected(existing):
 			frappe.throw(
-				_("Source-generated or billed treatment row {0} cannot be removed from the Clinical Workspace.").format(existing.item),
+				_("Source-generated or billed treatment row {0} cannot be removed from the Clinical Workspace. Delete the source Lab Order or Vaccination from its related-record popup when permitted.").format(_treatment_label(existing)),
 				frappe.ValidationError,
 			)
 	prepared: list[dict[str, Any]] = []
+	source_edits: list[dict] = []
 	for raw in rows or []:
 		name = raw.get("name")
 		existing = existing_by_name.get(name)
-		if existing and _treatment_row_edit_is_protected(existing, settings) and not _same_editable_treatment(existing, raw):
-			frappe.throw(
-				_("Source-generated or billed treatment row {0} cannot be edited. Create a new treatment row instead.").format(existing.item),
-				frappe.ValidationError,
-			)
+		if existing and not _same_editable_treatment(existing, raw):
+			if existing.get("source_type") in {"Lab Order", "Vaccination"}:
+				if not _source_billing_edit_is_allowed(existing, raw, policy):
+					frappe.throw(
+						_("Only the Billing Item and Rate of source-generated Lab/Vaccination rows can be edited while draft billing is still open and policy permits it: {0}.").format(_treatment_label(existing)),
+						frappe.ValidationError,
+					)
+				payload = _source_billing_edit_payload(existing, raw)
+				if payload:
+					source_edits.append(payload)
+			elif _treatment_row_edit_is_protected(existing, settings):
+				frappe.throw(
+					_("Source-generated or billed treatment row {0} cannot be edited. Create a new treatment row instead.").format(_treatment_label(existing)),
+					frappe.ValidationError,
+				)
 		row = {
 			field: raw.get(field)
 			for field in PLANNED_TREATMENT_EDITABLE_FIELDS
@@ -119,6 +191,7 @@ def _replace_planned_treatments(doc, rows: list[dict]) -> None:
 	doc.set("planned_treatments", [])
 	for row in prepared:
 		doc.append("planned_treatments", row)
+	return source_edits
 
 
 @frappe.whitelist()
@@ -132,6 +205,7 @@ def get_default_consultation_fee_policy() -> dict:
 			and can_edit_default_consultation_billing_item(settings)
 		),
 		"default_consultation_source_detail": DEFAULT_CONSULTATION_SOURCE_DETAIL,
+		**consultation_source_billing_edit_policy(),
 	}
 
 
@@ -165,10 +239,13 @@ def save_consultation(payload: str | dict) -> dict:
 		_replace_simple_table(doc, "symptoms", values.get("symptoms") or [], SYMPTOM_FIELDS)
 	if "diagnoses" in values:
 		_replace_simple_table(doc, "diagnoses", values.get("diagnoses") or [], DIAGNOSIS_FIELDS)
+	source_billing_edits: list[dict] = []
 	if "planned_treatments" in values:
-		_replace_planned_treatments(doc, values.get("planned_treatments") or [])
+		source_billing_edits = _replace_planned_treatments(doc, values.get("planned_treatments") or [])
 	if doc.is_new():
 		doc.insert()
 	else:
 		doc.save()
+	if source_billing_edits:
+		apply_consultation_source_billing_edits(source_billing_edits)
 	return get_consultation_detail(doc.name)
