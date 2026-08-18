@@ -5,6 +5,7 @@ from frappe import _
 from frappe.utils import cint, cstr
 
 from vetedge.services.report_visibility import validate_dashboard_access, validate_report_access
+from vetedge.services.reporting_catalog import get_reporting_entitlement, require_reporting_entitlement
 
 
 PRINT_SETTING = "enable_reporting_print"
@@ -34,6 +35,9 @@ def _validate_scope(scope_name: str, scope_type: str, user: str | None = None) -
 		validate_report_access(scope_name, user=user)
 	else:
 		frappe.throw(_("Unsupported reporting scope type."))
+	# Tier/subscription is deliberately a separate gate from role/branch view
+	# permission so product packaging never replaces data authorization.
+	require_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
 
 
 def _report_ref_doctype(report_name: str) -> str:
@@ -58,10 +62,11 @@ def _has_action_permission(scope_name: str, scope_type: str, action: str, user: 
 
 
 def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user: str | None = None) -> dict:
-	"""Return shell capabilities from settings + view scope + action permission."""
+	"""Return shell capabilities from subscription tier + settings + scope + action permission."""
 	scope_name = cstr(scope_name or "").strip()
 	scope_type = cstr(scope_type or "report").strip().lower()
 	_validate_scope(scope_name, scope_type, user=user)
+	entitlement = get_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
 	print_setting = _setting_enabled(PRINT_SETTING, default=True)
 	export_setting = _setting_enabled(EXPORT_SETTING, default=True)
 	can_print = print_setting and _has_action_permission(scope_name, scope_type, "print", user=user)
@@ -72,7 +77,13 @@ def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user
 		"can_view": True,
 		"can_print": can_print,
 		"can_export": can_export,
-		"authorization_model": "settings_scope_and_action_permission",
+		"report_tier": entitlement["tier"],
+		"is_advanced": entitlement["is_advanced"],
+		"subscription_feature_key": entitlement.get("feature_key"),
+		"subscription_entitled": entitlement["entitled"],
+		"entitlement_source": entitlement["entitlement_source"],
+		"entitlement_reason_code": entitlement["entitlement_reason_code"],
+		"authorization_model": "subscription_tier_then_settings_scope_and_action_permission",
 	}
 
 
