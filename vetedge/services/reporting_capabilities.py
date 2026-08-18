@@ -35,9 +35,6 @@ def _validate_scope(scope_name: str, scope_type: str, user: str | None = None) -
 		validate_report_access(scope_name, user=user)
 	else:
 		frappe.throw(_("Unsupported reporting scope type."))
-	# Tier/subscription is deliberately a separate gate from role/branch view
-	# permission so product packaging never replaces data authorization.
-	require_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
 
 
 def _report_ref_doctype(report_name: str) -> str:
@@ -67,20 +64,21 @@ def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user
 	scope_type = cstr(scope_type or "report").strip().lower()
 	_validate_scope(scope_name, scope_type, user=user)
 	entitlement = get_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
+	entitled = bool(entitlement["entitled"])
 	print_setting = _setting_enabled(PRINT_SETTING, default=True)
 	export_setting = _setting_enabled(EXPORT_SETTING, default=True)
-	can_print = print_setting and _has_action_permission(scope_name, scope_type, "print", user=user)
-	can_export = export_setting and _has_action_permission(scope_name, scope_type, "export", user=user)
+	can_print = entitled and print_setting and _has_action_permission(scope_name, scope_type, "print", user=user)
+	can_export = entitled and export_setting and _has_action_permission(scope_name, scope_type, "export", user=user)
 	return {
 		"scope_name": scope_name,
 		"scope_type": scope_type,
-		"can_view": True,
+		"can_view": entitled,
 		"can_print": can_print,
 		"can_export": can_export,
 		"report_tier": entitlement["tier"],
 		"is_advanced": entitlement["is_advanced"],
 		"subscription_feature_key": entitlement.get("feature_key"),
-		"subscription_entitled": entitlement["entitled"],
+		"subscription_entitled": entitled,
 		"entitlement_source": entitlement["entitlement_source"],
 		"entitlement_reason_code": entitlement["entitlement_reason_code"],
 		"authorization_model": "subscription_tier_then_settings_scope_and_action_permission",
@@ -95,6 +93,8 @@ def require_reporting_action(
 ) -> dict:
 	capabilities = get_reporting_capabilities(scope_name, scope_type=scope_type, user=user)
 	action = cstr(action or "view").strip().lower()
+	if not capabilities["can_view"]:
+		require_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
 	if action == "view":
 		return capabilities
 	if action == "print" and capabilities["can_print"]:
