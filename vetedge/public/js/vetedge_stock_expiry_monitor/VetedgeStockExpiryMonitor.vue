@@ -59,6 +59,8 @@
       :exportBusy="exportBusy"
       :printBusy="printBusy"
       :exportInitialOptions="exportInitialOptions"
+      :tier="capabilities.report_tier || ''"
+      :subscriptionEntitled="capabilities.subscription_entitled !== false"
       emptyTitle="No expiry records"
       emptyDescription="No batch stock matches the current expiry filters."
       loadingMessage="Fetching batch inventory data…"
@@ -168,7 +170,13 @@ export default {
       userName: '',
       exportBusy: false,
       printBusy: false,
-      capabilities: { can_view: true, can_print: false, can_export: false },
+      capabilities: {
+        can_view: true,
+        can_print: false,
+        can_export: false,
+        report_tier: '',
+        subscription_entitled: true
+      },
       notificationDrawerOpen: false,
       notificationLoading: false,
       notificationError: '',
@@ -292,7 +300,13 @@ export default {
           });
         }
       } catch (_error) {
-        this.capabilities = { can_view: true, can_print: false, can_export: false };
+        this.capabilities = {
+          can_view: true,
+          can_print: false,
+          can_export: false,
+          report_tier: '',
+          subscription_entitled: true
+        };
       }
     },
     async searchStockFilter(field, term) {
