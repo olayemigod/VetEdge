@@ -128,6 +128,7 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 
 	if changed:
 		_save_consultation(consultation)
+		_sync_active_consultation_billing_session(consultation)
 
 
 def sync_vaccination_to_consultation_plan(doc) -> None:
@@ -308,3 +309,24 @@ def _save_consultation(consultation) -> None:
 			flags.vetedge_billing_core_syncing = previous_core
 			flags.vetedge_billing_modal_syncing = previous_modal
 			flags.ignore_consultation_treatment_lock_for_billing_sync = previous_lock_bypass
+
+
+def _sync_active_consultation_billing_session(consultation) -> None:
+	"""Push newly-linked Lab charges into an already-open Consultation billing cycle.
+
+	Creating a Lab Order should not create a billing session on its own. If billing has
+	already started for the Consultation, however, the new plan row must be reconciled
+	into that session immediately. Billing Core remains authoritative for draft updates,
+	new-draft creation after a submitted invoice, and submitted-invoice immutability.
+	"""
+	flags = getattr(frappe, "flags", None)
+	if getattr(flags, "vetedge_billing_core_syncing", False):
+		return
+	from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session, sync_source_to_billing_session
+
+	if not is_billing_sessions_enabled():
+		return
+	session = resolve_billing_session(CONSULTATION_DOCTYPE, consultation.name)
+	if not session:
+		return
+	sync_source_to_billing_session(CONSULTATION_DOCTYPE, consultation.name)
