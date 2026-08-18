@@ -7,6 +7,8 @@ import datetime
 import frappe
 from frappe.utils import cint
 
+from vetedge.services.report_visibility import normalize_report_filters
+
 FILTER_SEARCH_MAX_PAGE_LENGTH = 20
 FILTER_SEARCH_CONFIG = {
 	"warehouse": {"doctype": "Warehouse", "filters": {"is_group": 0}},
@@ -44,6 +46,14 @@ def search_stock_expiry_filter_options(field: str, txt: str = "", start: int = 0
 	return [{"value": row.name, "label": row.name} for row in rows]
 
 
+def _normalize_stock_expiry_filters(filters=None) -> dict:
+	parsed = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	if not isinstance(parsed, dict):
+		frappe.throw("Expected Stock Expiry filters as a JSON object.", frappe.ValidationError)
+	cleaned = {key: value for key, value in parsed.items() if value not in (None, "")}
+	return dict(normalize_report_filters("Stock Expiry Status", cleaned) or {})
+
+
 def _validate_reference_filter(filters: dict, field: str) -> None:
 	value = str(filters.get(field) or "").strip()
 	if not value:
@@ -69,7 +79,7 @@ def _validate_reference_filter(filters: dict, field: str) -> None:
 def get_stock_expiry_data(filters=None):
 	"""Fetch Stock Expiry summary plus one server-paginated interactive window."""
 	check_expiry_permissions()
-	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	filters = _normalize_stock_expiry_filters(filters)
 
 	_validate_reference_filter(filters, "warehouse")
 	_validate_reference_filter(filters, "item_group")
