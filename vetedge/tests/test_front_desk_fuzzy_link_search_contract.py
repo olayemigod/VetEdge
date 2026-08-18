@@ -29,11 +29,14 @@ def test_fuzzy_provider_uses_shared_edgesuite_ranker_with_bounded_candidates():
 	assert "from edgesuite_ui.search_ranking import rank_search_records" in content
 	assert "CANDIDATE_LIMIT = 100" in content
 	assert "RESULT_LIMIT = 20" in content
-	assert "page_length=CANDIDATE_LIMIT" in content
 	assert 'exact_fields=("value",)' in content
 	assert "limit=RESULT_LIMIT" in content
 	assert 'fieldname == "branch"' in content
 	assert 'fieldname == "practitioner"' in content
+	assert "_query_anchors" in content
+	assert "MAX_ANCHORS = 4" in content
+	assert "remaining = CANDIDATE_LIMIT - len(rows)" in content
+	assert 'or_filters={fieldname: ["like", f"%{anchor}%"] for fieldname in search_fields}' in content
 
 
 def test_fuzzy_provider_preserves_permissions_and_backward_compatibility():
