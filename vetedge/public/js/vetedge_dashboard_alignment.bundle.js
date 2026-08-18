@@ -256,7 +256,13 @@ function dashboardShellLayoutAdapter(BasePageLayout, EdgeDashboardShell) {
 		inheritAttrs: false,
 		data() {
 			return {
-				capabilities: { can_view: true, can_print: false, can_export: false },
+				capabilities: {
+					can_view: true,
+					can_print: false,
+					can_export: false,
+					report_tier: "",
+					subscription_entitled: true,
+				},
 				exportBusy: false,
 				printBusy: false,
 			};
@@ -272,7 +278,13 @@ function dashboardShellLayoutAdapter(BasePageLayout, EdgeDashboardShell) {
 					this.capabilities = await apiCall(CAPABILITIES_API, { scope_name: key, scope_type: "dashboard" });
 				} catch (error) {
 					console.warn("VetEdge dashboard action capabilities could not be loaded", error);
-					this.capabilities = { can_view: true, can_print: false, can_export: false };
+					this.capabilities = {
+						can_view: true,
+						can_print: false,
+						can_export: false,
+						report_tier: "",
+						subscription_entitled: true,
+					};
 				}
 			},
 			async handleExport(options) {
@@ -322,6 +334,8 @@ function dashboardShellLayoutAdapter(BasePageLayout, EdgeDashboardShell) {
 					printEnabled: Boolean(this.capabilities.can_print),
 					exportBusy: this.exportBusy,
 					printBusy: this.printBusy,
+					tier: this.capabilities.report_tier || "",
+					subscriptionEntitled: this.capabilities.subscription_entitled !== false,
 					onExport: this.handleExport,
 					onPrint: this.handlePrint,
 				},
