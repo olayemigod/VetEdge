@@ -24,6 +24,32 @@ def test_deceased_patient_guard_covers_hospitalisation_delivery_transitions():
     assert '"Veterinary Hospitalisation": {"Admitted", "Under Care", "Ready for Discharge"}' in source
 
 
+def test_hospitalisation_read_permissions_are_branch_scoped_and_fail_closed():
+    permissions = (ROOT / "services/hospitalisation_permissions.py").read_text(encoding="utf-8")
+    hooks = (ROOT / "hooks.py").read_text(encoding="utf-8")
+
+    for expected in (
+        'return "1=0"',
+        "get_assigned_branches(user)",
+        "user_has_global_branch_access(user)",
+        "is_internal_staff_user(user)",
+        "is_portal_owner_user(user)",
+        'BRANCH_FIELD = "service_branch"',
+        "branch in allowed",
+    ):
+        assert expected in permissions
+
+    assert (
+        '"Veterinary Hospitalisation": '
+        '"vetedge.services.hospitalisation_permissions.get_hospitalisation_query"'
+    ) in hooks
+    assert (
+        '"Veterinary Hospitalisation": '
+        '"vetedge.services.hospitalisation_permissions.has_hospitalisation_permission"'
+    ) in hooks
+    assert "ignore_permissions" not in permissions
+
+
 def test_retired_hospitalisation_dashboard_is_filtered_at_runtime():
     source = (ROOT / "install/dashboard.py").read_text(encoding="utf-8")
     assert '"veterinary-hospitalisation-dashboard"' in source
