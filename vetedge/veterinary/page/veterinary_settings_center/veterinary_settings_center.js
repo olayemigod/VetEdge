@@ -42,20 +42,25 @@ function reconcileVeterinarySettingsWriteAccess(wrapper) {
 	);
 }
 
-frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({
-		parent: wrapper,
-		title: __("Veterinary Settings"),
-		single_column: true,
-	});
-	page.main.addClass("veterinary-settings-center-page");
+function showVeterinarySettingsMountFailure(root, message) {
+	root.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+}
 
+function mountVeterinarySettings(wrapper) {
+	if (wrapper.__veterinarySettingsApp?.view || wrapper.settings_mounting) return;
+
+	wrapper.settings_mounting = true;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+	const page = wrapper.page;
 	const root = document.createElement("div");
 	root.className = "veterinary-settings-center-root";
 	root.dataset.edgeProduct = "veterinary";
 	page.body.empty().append(root);
+
+	const finishMountAttempt = () => {
+		if (wrapper.current_visit_id === visitId) wrapper.settings_mounting = false;
+	};
 
 	frappe.require("edgeui.bundle.js", () => {
 		if (wrapper.current_visit_id !== visitId) return;
@@ -75,10 +80,26 @@ frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
 		];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
 		if (!runtime?.createEdgeApp || missing.length) {
-			root.innerHTML = `<div class="alert alert-danger">${__("EdgeSuite UI 0.6.3 or newer is required for Veterinary Settings. Missing: {0}", [missing.join(", ")])}</div>`;
+			showVeterinarySettingsMountFailure(
+				root,
+				__("EdgeSuite UI 0.6.3 or newer is required for Veterinary Settings. Missing: {0}", [missing.join(", ")]),
+			);
+			finishMountAttempt();
 			return;
 		}
-		frappe.require("vetedge_professional_ui.js", () => {
+
+		const mountWithProfessionalShell = () => {
+			if (wrapper.current_visit_id !== visitId) return;
+			const professional = window.VetEdgeProfessionalUI?.install?.();
+			if (!professional?.installed) {
+				showVeterinarySettingsMountFailure(
+					root,
+					professional?.message || __("The Veterinary professional shell is unavailable."),
+				);
+				finishMountAttempt();
+				return;
+			}
+
 			window.VetEdgeUIBridge?.install?.();
 			frappe.require("veterinary_settings_center.bundle.js", () => {
 				if (wrapper.current_visit_id !== visitId || !window.mountVeterinarySettingsCenter) return;
@@ -87,13 +108,19 @@ frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
 				wrapper.__veterinarySettingsApp = window.mountVeterinarySettingsCenter(root);
 				reconcileVeterinarySettingsWriteAccess(wrapper);
 				wrapper.settings_last_refresh_at = Date.now();
+				finishMountAttempt();
 			});
-		});
-	});
-};
+		};
 
-frappe.pages["veterinary-settings-center"].on_page_show = function (wrapper) {
-	window.VetEdgeUIBridge?.install?.();
+		if (window.VetEdgeProfessionalUI?.install) {
+			mountWithProfessionalShell();
+		} else {
+			frappe.require("/assets/vetedge/js/vetedge_professional_ui.js", mountWithProfessionalShell);
+		}
+	});
+}
+
+function refreshMountedVeterinarySettings(wrapper) {
 	const view = wrapper.__veterinarySettingsApp?.view;
 	if (!view) return;
 	reconcileVeterinarySettingsWriteAccess(wrapper);
@@ -107,6 +134,25 @@ frappe.pages["veterinary-settings-center"].on_page_show = function (wrapper) {
 			wrapper.settings_last_refresh_at = Date.now();
 		})
 		.catch((error) => console.error("Error refreshing Veterinary Settings:", error));
+}
+
+frappe.pages["veterinary-settings-center"].on_page_load = function (wrapper) {
+	const page = frappe.ui.make_app_page({
+		parent: wrapper,
+		title: __("Veterinary Settings"),
+		single_column: true,
+	});
+	page.main.addClass("veterinary-settings-center-page");
+	wrapper.page = page;
+};
+
+frappe.pages["veterinary-settings-center"].on_page_show = function (wrapper) {
+	window.VetEdgeUIBridge?.install?.();
+	if (wrapper.__veterinarySettingsApp?.view) {
+		refreshMountedVeterinarySettings(wrapper);
+		return;
+	}
+	mountVeterinarySettings(wrapper);
 };
 
 frappe.pages["veterinary-settings-center"].on_page_unload = function (wrapper) {
@@ -114,4 +160,5 @@ frappe.pages["veterinary-settings-center"].on_page_unload = function (wrapper) {
 	wrapper.__veterinarySettingsApp?.unmount?.();
 	wrapper.__veterinarySettingsApp = null;
 	wrapper.settings_access_checked = false;
+	wrapper.settings_mounting = false;
 };
