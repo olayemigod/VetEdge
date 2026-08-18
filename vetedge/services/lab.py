@@ -460,12 +460,9 @@ def validate_lab_order_completion_gate(doc, previous=None) -> None:
 		return
 
 	if use_billing_core_for_lab_order() and doc.get("name"):
-		from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session
+		from vetedge.services.lab_billing_context import get_lab_billing_core_gate_state
 
-		session = resolve_billing_session(LAB_ORDER_DOCTYPE, doc.name, include_closed_satisfied=True)
-		if not session:
-			frappe.throw("A Sales Invoice must be generated before service can proceed.", frappe.ValidationError)
-		gate = get_payment_gate_status(session)
+		gate = get_lab_billing_core_gate_state(doc)
 		if not gate.get("can_proceed"):
 			frappe.throw(gate.get("message") or "Please submit the invoice before completing this workflow.", frappe.ValidationError)
 		return
