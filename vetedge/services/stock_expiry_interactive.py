@@ -61,8 +61,10 @@ def get_stock_expiry_interactive_data(
 	summary_rows = frappe.db.sql(
 		f"""
 		SELECT
+			COUNT(*) AS total_items,
 			COALESCE(SUM(CASE WHEN expiry_status = 'Expired' THEN 1 ELSE 0 END), 0) AS expired_items,
 			COALESCE(SUM(CASE WHEN expiry_status = 'Expiring Soon' THEN 1 ELSE 0 END), 0) AS expiring_soon,
+			COALESCE(SUM(CASE WHEN expiry_status = 'Safe' THEN 1 ELSE 0 END), 0) AS safe_items,
 			COALESCE(
 				SUM(
 					CASE
@@ -90,11 +92,9 @@ def get_stock_expiry_interactive_data(
 		as_dict=True,
 	)
 	summary = dict(summary_rows[0]) if summary_rows else _empty_summary()
-	summary["expired_items"] = cint(summary.get("expired_items"))
-	summary["expiring_soon"] = cint(summary.get("expiring_soon"))
+	for key in ("total_items", "expired_items", "expiring_soon", "safe_items", "affected_warehouses", "highest_risk_items"):
+		summary[key] = cint(summary.get(key))
 	summary["affected_qty"] = flt(summary.get("affected_qty"))
-	summary["affected_warehouses"] = cint(summary.get("affected_warehouses"))
-	summary["highest_risk_items"] = cint(summary.get("highest_risk_items"))
 
 	window_condition = _window_condition(expiry_window)
 	rows = frappe.db.sql(
@@ -251,8 +251,10 @@ def _window_condition(expiry_window: str) -> str:
 
 def _empty_summary() -> dict:
 	return {
+		"total_items": 0,
 		"expired_items": 0,
 		"expiring_soon": 0,
+		"safe_items": 0,
 		"affected_qty": 0.0,
 		"affected_warehouses": 0,
 		"highest_risk_items": 0,
