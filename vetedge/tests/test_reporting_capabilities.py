@@ -40,7 +40,7 @@ def test_reporting_catalog_has_standard_and_advanced_tiers_with_safe_default():
 		'ADVANCED_REPORTS_FEATURE_KEY = "advanced_reports"',
 		'"Consultation Register": {"tier": STANDARD_TIER}',
 		'"Stock Expiry Status": {',
-		'"Executive"' if False else '"executive": {',
+		'"executive": {',
 		'catalog.get(str(scope_name or "").strip()) or {"tier": STANDARD_TIER}',
 		'check_vetedge_feature_access(ADVANCED_REPORTS_FEATURE_KEY, user=user)',
 		'is_enabled("advanced_reports")',
@@ -69,14 +69,46 @@ def test_stock_expiry_interactive_path_enforces_branch_normalization_and_bounded
 	assert "limit_page_length: 500" not in source
 
 
-def test_stock_expiry_current_page_export_uses_paginated_query_not_full_dataset():
+def test_stock_expiry_current_page_export_uses_paginated_query_and_large_export_guard():
 	source = (ROOT / "services/stock_expiry_reporting_actions.py").read_text()
 	current_page_block = source.split('if export_options["scope"] == "current_page":', 1)[1].split(
-		"# All-filtered export", 1
+		"# Protect the synchronous web worker", 1
 	)[0]
 	assert "get_stock_expiry_interactive_data(" in current_page_block
 	assert "get_stock_expiry_rows(" not in current_page_block
 	assert '_normalize_stock_expiry_filters(_json_dict(filters))' in source
+	assert "MAX_SYNC_ALL_FILTERED_ROWS = 20000" in source
+	assert "matching_rows > MAX_SYNC_ALL_FILTERED_ROWS" in source
+
+
+def test_dashboard_aggregate_paths_do_not_materialize_clinical_detail_rows():
+	aggregates = (ROOT / "services/dashboard_aggregates.py").read_text()
+	host = (ROOT / "services/dashboard_host_payload.py").read_text()
+	for expected in (
+		"COUNT(*) AS `row_count`",
+		"GROUP BY DATE(c.`consultation_datetime`)",
+		"GROUP BY c.`service_branch`",
+		"GROUP BY c.`consultation_type`",
+		'"detail_rows_materialized": False',
+	):
+		assert expected in aggregates
+	for expected in (
+		"get_consultation_dashboard_aggregates",
+		"get_lab_order_report_view(filters=filters, start=0, page_length=1)",
+		"get_vaccination_report_view(filters=filters, start=0, page_length=1)",
+		'"consultation_mode": "database_aggregate"',
+		'"lab_mode": "aggregate_provider"',
+		'"vaccination_mode": "aggregate_provider"',
+	):
+		assert expected in host
+
+
+def test_dashboard_v5_endpoint_is_overridden_to_optimized_host():
+	hooks = (ROOT / "hooks.py").read_text()
+	assert (
+		'"vetedge.services.reporting_logic_v5.get_dashboard_payload": '
+		'"vetedge.services.dashboard_host_payload.get_dashboard_payload"'
+	) in hooks
 
 
 def test_shell_action_endpoints_reauthorize_server_side():
