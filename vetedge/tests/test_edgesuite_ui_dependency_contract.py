@@ -144,6 +144,53 @@ def test_clinical_related_service_actions_stay_in_edgesuite_modals():
 	assert 'frappe.set_route("List", doctype)' not in content
 
 
+def test_clinical_related_billing_keeps_erpnext_item_as_source_truth():
+	planned_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/planned_treatment_item/planned_treatment_item.json"
+		).read_text(encoding="utf-8")
+	)
+	lab_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/veterinary_lab_test/veterinary_lab_test.json"
+		).read_text(encoding="utf-8")
+	)
+	vaccine_meta = json.loads(
+		(
+			REPOSITORY_ROOT
+			/ "vetedge/veterinary/doctype/veterinary_vaccine/veterinary_vaccine.json"
+		).read_text(encoding="utf-8")
+	)
+	planned_fields = {row["fieldname"]: row for row in planned_meta["fields"]}
+	lab_fields = {row["fieldname"]: row for row in lab_meta["fields"]}
+	vaccine_fields = {row["fieldname"]: row for row in vaccine_meta["fields"]}
+
+	assert planned_fields["item"]["options"] == "Item"
+	assert planned_fields["item"]["reqd"] == 1
+	assert lab_fields["linked_item"]["options"] == "Item"
+	assert lab_fields["linked_item"]["reqd"] == 1
+	assert vaccine_fields["default_item"]["options"] == "Item"
+	assert vaccine_fields["default_item"]["reqd"] == 1
+
+	consultation_controller = (
+		REPOSITORY_ROOT
+		/ "vetedge/veterinary/doctype/veterinary_consultation/veterinary_consultation.py"
+	).read_text(encoding="utf-8")
+	stage3 = (REPOSITORY_ROOT / "vetedge/services/clinical_workspace_stage3.py").read_text(encoding="utf-8")
+	workspace = (
+		REPOSITORY_ROOT
+		/ "vetedge/public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue"
+	).read_text(encoding="utf-8")
+
+	assert "validate_treatment_rows_have_erpnext_item(self)" in consultation_controller
+	assert 'SOURCE_BILLING_EDITABLE_FIELDS = {"rate"}' in stage3
+	assert "The ERPNext Item remains fixed by the clinical master" in stage3
+	assert "ERPNext Item for Lab/Vaccination rows is fixed by its clinical master" in workspace
+	assert "return field !== 'rate' || !this.sourceTreatmentRateEditable(row);" in workspace
+
+
 def test_billing_uses_one_canonical_shared_renderer_and_compatibility_shim():
 	canonical = CANONICAL_BILLING.read_text(encoding="utf-8")
 	compatibility = BILLING_EDGE.read_text(encoding="utf-8")
