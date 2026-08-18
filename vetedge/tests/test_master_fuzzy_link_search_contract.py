@@ -27,10 +27,14 @@ def test_master_fuzzy_provider_uses_shared_ranker_and_alias_fields():
 	assert "from edgesuite_ui.search_ranking import rank_search_records" in content
 	assert "CANDIDATE_LIMIT = 100" in content
 	assert "RESULT_LIMIT_MAX = 50" in content
-	assert "page_length=CANDIDATE_LIMIT" in content
 	assert 'exact_fields=("value",)' in content
 	assert 'search_fields=("label", "description")' in content
 	assert 'alias_fields=("aliases",)' in content
+	assert "_query_anchors" in content
+	assert "MAX_ANCHORS = 4" in content
+	assert "_candidate_rows" in content
+	assert "remaining = CANDIDATE_LIMIT - len(rows)" in content
+	assert 'or_filters={fieldname: ["like", f"%{anchor}%"] for fieldname in search_fields}' in content
 
 
 def test_master_fuzzy_provider_preserves_link_permissions_and_resource_filters():
