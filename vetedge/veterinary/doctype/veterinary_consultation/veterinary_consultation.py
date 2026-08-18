@@ -11,6 +11,14 @@ from vetedge.services.consultation_flow import (
 from vetedge.services.billing_core import get_consultation_payment_status
 
 
+def sync_follow_up_appointment_from_consultation(*args, **kwargs):
+	from vetedge.services.appointment_flow import (
+		sync_follow_up_appointment_from_consultation as _sync_follow_up_appointment_from_consultation,
+	)
+
+	return _sync_follow_up_appointment_from_consultation(*args, **kwargs)
+
+
 class VeterinaryConsultation(Document):
 	def validate(self) -> None:
 		reset_vetedge_copy_state(self)
@@ -21,9 +29,11 @@ class VeterinaryConsultation(Document):
 	def after_insert(self) -> None:
 		claim_linked_appointment_for_consultation(self)
 		sync_service_appointment_status_from_consultation(self)
+		sync_follow_up_appointment_from_consultation(self)
 
 	def on_update(self) -> None:
 		sync_service_appointment_status_from_consultation(self)
+		sync_follow_up_appointment_from_consultation(self)
 
 
 def normalize_consultation_payment_status_fields(doc) -> None:
