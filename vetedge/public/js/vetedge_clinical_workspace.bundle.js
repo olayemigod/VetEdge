@@ -48,6 +48,29 @@ async function fetchRelatedRows(doctype, config, consultation) {
 	});
 }
 
+async function openRelatedClinicalRecord(view, doctype, row, consultation, refresh) {
+	const openEditor = async () => {
+		if (!window.VetEdgeClinicalRecordEditor?.open) {
+			throw new Error(tr('The EdgeSuite clinical record editor is unavailable.'));
+		}
+		return window.VetEdgeClinicalRecordEditor.open({
+			doctype,
+			name: row.name,
+			onSaved: async () => {
+				await view.loadDetail?.(consultation);
+				await refresh?.();
+			},
+		});
+	};
+
+	if (window.VetEdgeClinicalRecordEditor?.open) return openEditor();
+	return new Promise((resolve, reject) => {
+		frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+			Promise.resolve(openEditor()).then(resolve).catch(reject);
+		});
+	});
+}
+
 function confirmRelatedDelete(row, doctype) {
 	const label = row?.display_name || row?.name || doctype;
 	const prompt = typeof __ === 'function'
@@ -96,22 +119,28 @@ function confirmRelatedDelete(row, doctype) {
 
 function relatedRowActions(view, doctype, consultation, rows, refresh) {
 	if (!['Veterinary Lab Order', 'Veterinary Vaccination Record'].includes(doctype)) return [];
-	return (rows || []).map((row) => ({
-		key: row.name,
-		row,
-		actions: row.can_delete ? [{
-			label: tr('Delete'), danger: true,
-			async onClick() {
-				if (!(await confirmRelatedDelete(row, doctype))) return;
-				await call('vetedge.services.consultation_related_records.delete_consultation_related_record', {
-					consultation, doctype, name: row.name,
-				});
-				await view.loadDetail?.(consultation);
-				await refresh?.();
-				frappe.show_alert({ message: tr('Related clinical record deleted and draft billing reconciled.'), indicator: 'green' });
-			},
-		}] : [],
-	}));
+	return (rows || []).map((row) => {
+		const actions = [{
+			label: tr('Open'),
+			primary: true,
+			onClick: () => openRelatedClinicalRecord(view, doctype, row, consultation, refresh),
+		}];
+		if (row.can_delete) {
+			actions.push({
+				label: tr('Delete'), danger: true,
+				async onClick() {
+					if (!(await confirmRelatedDelete(row, doctype))) return;
+					await call('vetedge.services.consultation_related_records.delete_consultation_related_record', {
+						consultation, doctype, name: row.name,
+					});
+					await view.loadDetail?.(consultation);
+					await refresh?.();
+					frappe.show_alert({ message: tr('Related clinical record deleted and draft billing reconciled.'), indicator: 'green' });
+				},
+			});
+		}
+		return { key: row.name, row, actions };
+	});
 }
 
 function showRelatedRecords(view, doctype) {
