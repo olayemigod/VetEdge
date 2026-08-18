@@ -70,12 +70,16 @@ def _status_counts(query_filters: dict) -> dict[str, int]:
 
 
 def _species_count(query_filters: dict) -> int:
+    species_filters = dict(query_filters)
+    species_filters["species"] = ["is", "set"]
     rows = frappe.get_all(
         DOCTYPE,
-        filters=query_filters,
-        fields=[{"COUNT": "DISTINCT species", "as": "species_count"}],
+        filters=species_filters,
+        fields=["species"],
+        group_by="species",
+        page_length=500,
     )
-    return cint(rows[0].get("species_count")) if rows else 0
+    return len(rows)
 
 
 def _summary(query_filters: dict, total: int) -> list[dict]:
