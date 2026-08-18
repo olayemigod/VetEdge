@@ -5,8 +5,7 @@ from copy import deepcopy
 import frappe
 from frappe import _
 
-from vetedge.coreedge_adapter import check_vetedge_feature_access, is_coreedge_enabled
-from vetedge.services.feature_flags import is_enabled
+from vetedge.services.reporting_entitlement_adapter import check_advanced_reporting_entitlement
 
 STANDARD_TIER = "standard"
 ADVANCED_TIER = "advanced"
@@ -121,26 +120,6 @@ def get_reporting_definition(scope_name: str, scope_type: str = "report") -> dic
 	return definition
 
 
-def _advanced_entitlement(user: str | None = None) -> dict:
-	user = user or frappe.session.user
-	if is_coreedge_enabled():
-		result = check_vetedge_feature_access(ADVANCED_REPORTS_FEATURE_KEY, user=user) or {}
-		allowed = bool(result.get("allowed", result.get("access_result") == "Allowed"))
-		return {
-			"allowed": allowed,
-			"source": "coreedge",
-			"feature_key": ADVANCED_REPORTS_FEATURE_KEY,
-			"reason_code": result.get("primary_reason_code") or result.get("reason_code") or "",
-		}
-
-	return {
-		"allowed": bool(is_enabled("advanced_reports")),
-		"source": "veterinary_settings",
-		"feature_key": ADVANCED_REPORTS_FEATURE_KEY,
-		"reason_code": "LOCAL_FEATURE_ENABLED" if is_enabled("advanced_reports") else "LOCAL_FEATURE_DISABLED",
-	}
-
-
 def get_reporting_entitlement(scope_name: str, scope_type: str = "report", user: str | None = None) -> dict:
 	definition = get_reporting_definition(scope_name, scope_type)
 	if not definition["is_advanced"]:
@@ -151,12 +130,13 @@ def get_reporting_entitlement(scope_name: str, scope_type: str = "report", user:
 			"entitlement_reason_code": "STANDARD_INCLUDED",
 		}
 
-	entitlement = _advanced_entitlement(user=user)
+	entitlement = check_advanced_reporting_entitlement(user=user)
 	return {
 		**definition,
 		"entitled": bool(entitlement["allowed"]),
 		"entitlement_source": entitlement["source"],
 		"entitlement_reason_code": entitlement["reason_code"],
+		"upgrade_opportunity": bool(entitlement.get("upgrade_opportunity")),
 	}
 
 
