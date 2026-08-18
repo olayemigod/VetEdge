@@ -692,10 +692,7 @@ def validate_consultation_children(doc) -> None:
 		if row.get("rate") not in (None, "") and flt(row.rate) < 0:
 			frappe.throw("Planned Treatment Rate cannot be negative.", frappe.ValidationError)
 		row.amount = flt(row.qty) * flt(row.get("rate"))
-		if row.get("item"):
-			validate_enabled_item(row.item)
-		elif row.get("source_type") not in {"Lab Order", "Vaccination"}:
-			frappe.throw("Planned Treatment Item is required for manual treatment rows.", frappe.ValidationError)
+		validate_enabled_item(row.item)
 		validate_enabled_link("Veterinary Service Type", row.service_type, "Service Type", required=False)
 		validate_enabled_link("Veterinary Treatment Type", row.treatment_type, "Treatment Type", required=False)
 
