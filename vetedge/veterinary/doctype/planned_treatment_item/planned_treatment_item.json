@@ -23,7 +23,7 @@
   "notes"
  ],
  "fields": [
-  {"fieldname": "item", "fieldtype": "Link", "in_list_view": 1, "label": "Item", "options": "Item", "reqd": 1},
+  {"description": "Required for manual Treatment rows. Source-generated Lab Order or Vaccination rows may remain blank until a billing item is assigned.", "fieldname": "item", "fieldtype": "Link", "in_list_view": 1, "label": "Item", "options": "Item"},
   {"fieldname": "description", "fieldtype": "Small Text", "in_list_view": 1, "label": "Description"},
   {"default": "1", "fieldname": "qty", "fieldtype": "Float", "in_list_view": 1, "label": "Qty", "reqd": 1},
   {"fieldname": "uom", "fieldtype": "Link", "label": "UOM", "options": "UOM"},
