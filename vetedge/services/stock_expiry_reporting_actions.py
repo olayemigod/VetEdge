@@ -33,6 +33,7 @@ from vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor import (
 
 SCOPE_NAME = "Stock Expiry Status"
 REPORT_TITLE = "Stock Expiry Monitor"
+MAX_SYNC_ALL_FILTERED_ROWS = 20000
 
 
 def _normalized_filters(filters: str | dict | None) -> dict:
@@ -73,12 +74,13 @@ def _document_model(filters: str | dict | None, options: str | dict | None, star
 	if not columns:
 		frappe.throw(_("No Stock Expiry columns are available for this action."))
 
+	window = filters_dict.get("expiry_window") or "all"
 	if export_options["scope"] == "current_page":
 		start = max(0, cint(start))
 		page_length = min(MAX_CURRENT_PAGE_LENGTH, max(1, cint(page_length) or 50))
 		interactive = get_stock_expiry_interactive_data(
 			filters_dict,
-			expiry_window=filters_dict.get("expiry_window") or "all",
+			expiry_window=window,
 			limit=page_length,
 			offset=start,
 		)
@@ -87,9 +89,20 @@ def _document_model(filters: str | dict | None, options: str | dict | None, star
 		chart = get_status_chart(summary)
 		return filters_dict, export_options, columns, rows, summary, chart
 
-	# All-filtered export remains a separate full-dataset workflow. It does not
-	# affect interactive page payloads; a later large-export threshold/queue may
-	# replace this synchronous path for very large installations.
+	# Protect the synchronous web worker before materialising a complete export.
+	# A future queued exporter can raise/remove this cap without changing the
+	# interactive report contract.
+	guard = get_stock_expiry_interactive_data(filters_dict, expiry_window=window, limit=1, offset=0)
+	matching_rows = cint(guard.get("total_count"))
+	if matching_rows > MAX_SYNC_ALL_FILTERED_ROWS:
+		frappe.throw(
+			_("This export contains {0} rows, which exceeds the synchronous export limit of {1}. Narrow the filters before exporting all records.").format(
+				matching_rows, MAX_SYNC_ALL_FILTERED_ROWS
+			),
+			frappe.ValidationError,
+			title=_("Export Too Large"),
+		)
+
 	source_rows = get_stock_expiry_rows(filters_dict)
 	rows = _apply_window(source_rows, filters_dict)
 	summary = get_summary(source_rows)
