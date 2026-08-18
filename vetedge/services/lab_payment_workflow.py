@@ -42,30 +42,9 @@ def get_lab_service_payment_gate_state(doc) -> dict:
         }
 
     if use_billing_core_for_lab_order() and doc.get("name"):
-        from vetedge.services.billing_core import get_payment_gate_status, resolve_billing_session
+        from vetedge.services.lab_billing_context import get_lab_billing_core_gate_state
 
-        session = resolve_billing_session(
-            "Veterinary Lab Order",
-            doc.name,
-            include_closed_satisfied=True,
-        )
-        if not session:
-            return {
-                "can_proceed": False,
-                "billable": True,
-                "gate": "Billing Required",
-                "message": _(
-                    "Create the Lab Order invoice in Billing & Payment before laboratory processing can begin."
-                ),
-            }
-        state = dict(get_payment_gate_status(session) or {})
-        state.setdefault("billable", True)
-        state.setdefault("gate", session.get("payment_gate_mode") or "Payment Gate")
-        if not state.get("can_proceed") and not state.get("message"):
-            state["message"] = _(
-                "Complete the required Billing & Payment step before laboratory processing can continue."
-            )
-        return state
+        return get_lab_billing_core_gate_state(doc)
 
     invoice_name = doc.get("linked_invoice")
     if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
