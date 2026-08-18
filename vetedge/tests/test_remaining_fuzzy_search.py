@@ -26,6 +26,16 @@ def test_remaining_adapter_uses_shared_ranker_and_bounded_candidates():
 	assert "pricing_master_workspace.get_pricing_master_link_options" in source
 
 
+def test_remaining_search_anchors_provider_queries_before_ranking():
+	source = (ROOT / "vetedge" / "services" / "remaining_link_search.py").read_text()
+	assert "_query_anchors" in source
+	assert "MAX_ANCHORS = 4" in source
+	assert "_collect_tuple_candidates" in source
+	assert "_pricing_rows" in source
+	assert "remaining = CANDIDATE_LIMIT - len(rows)" in source
+	assert 'or_filters={fieldname: ["like", f"%{anchor}%"] for fieldname in search_fields}' in source
+
+
 def test_clinical_adapter_preserves_curated_treatment_and_practitioner_sources():
 	source = (ROOT / "vetedge" / "services" / "remaining_link_search.py").read_text()
 	assert "get_veterinary_doctor_users" in source
