@@ -10,12 +10,14 @@ from vetedge.services import reporting_logic_v4 as v4
 from vetedge.services import reporting_logic_v5 as v5
 from vetedge.services.executive_financial_metrics import count_executive_unpaid_invoices
 from vetedge.services.report_visibility import normalize_dashboard_filters, validate_dashboard_access
+from vetedge.services.reporting_catalog import require_reporting_entitlement
 
 
 @frappe.whitelist()
 def get_dashboard_payload(dashboard_key: str, filters=None):
 	"""Shared-dashboard adapter with optimized Executive and QA chart enrichments."""
 	key = cstr(dashboard_key or "").strip()
+	require_reporting_entitlement(key, scope_type="dashboard")
 	if key != "executive":
 		if key not in {"branch_performance", "practitioner_performance"}:
 			return v5.get_dashboard_payload(key, filters)
