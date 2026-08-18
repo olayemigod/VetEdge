@@ -37,6 +37,8 @@ def _filters(value: str | dict | None) -> dict:
     if not isinstance(parsed, dict):
         frappe.throw(_("Expected report filters as a JSON object."), frappe.ValidationError)
     cleaned = {key: item for key, item in parsed.items() if item not in (None, "")}
+    if cleaned.get("customer") and not cleaned.get("owner"):
+        cleaned["owner"] = cleaned.get("customer")
     return dict(normalize_report_filters("Planned Treatment", cleaned) or {})
 
 
