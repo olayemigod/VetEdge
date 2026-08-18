@@ -49,6 +49,34 @@ async function openRequestedNewConsultation(view, requested, syncUrl = true) {
 	);
 }
 
+function installNewestTreatmentFirst(component) {
+	const methods = component?.methods || {};
+	const original = methods.addTreatment;
+	if (typeof original !== 'function' || original.__vetedgeNewestTreatmentFirst) return;
+
+	const newestFirst = function (...args) {
+		const before = Array.isArray(this.form?.planned_treatments) ? this.form.planned_treatments.length : 0;
+		const result = original.apply(this, args);
+		const moveNewestFirst = () => {
+			const rows = this.form?.planned_treatments;
+			if (!Array.isArray(rows) || rows.length <= before) return;
+			const newest = rows.pop();
+			if (newest) rows.unshift(newest);
+		};
+		if (result && typeof result.then === 'function') {
+			return Promise.resolve(result).then((value) => {
+				moveNewestFirst();
+				return value;
+			});
+		}
+		moveNewestFirst();
+		return result;
+	};
+	newestFirst.__vetedgeNewestTreatmentFirst = true;
+	methods.addTreatment = newestFirst;
+	component.methods = methods;
+}
+
 function installClinicalRouteRequestListener(wrapper) {
 	if (wrapper.__vetedge_clinical_route_request_handler) return;
 	const handler = (event) => {
@@ -186,6 +214,7 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 							try {
 								$loading.remove();
 								const root = $('<div class="vetedge-clinical-workspace-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+								installNewestTreatmentFirst(window.VetEdgeClinicalWorkspace);
 								wrapper.vue_app = window.mountVetEdgeClinicalWorkspace(root[0]);
 								wrapper.clinical_workflow = window.installVetEdgeClinicalWorkflowModal(root[0], wrapper.vue_app?.view);
 								wrapper.clinical_route_key = clinicalRouteState().key;
