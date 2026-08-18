@@ -63,8 +63,6 @@ def _search_branch(txt: str, start: int, page_length: int) -> list[dict]:
     filters = []
     if not user_has_global_branch_access(user):
         assigned = sorted({cstr(branch).strip() for branch in get_assigned_branches(user) if cstr(branch).strip()})
-        # normalize_report_filters() has already failed closed for branch-scoped
-        # users with zero assignments. This guard also makes direct helper use safe.
         if not assigned:
             return []
         filters.append(["Branch", "name", "in", assigned])
@@ -89,6 +87,9 @@ def _search_patient(txt: str, start: int, page_length: int, normalized: dict) ->
     branch = cstr(normalized.get("branch") or "").strip()
     if branch:
         filters["default_branch"] = branch
+    owner = cstr(normalized.get("customer") or normalized.get("owner") or "").strip()
+    if owner:
+        filters["primary_owner"] = owner
     or_filters = []
     if txt:
         pattern = f"%{txt}%"
@@ -111,6 +112,20 @@ def _search_patient(txt: str, start: int, page_length: int, normalized: dict) ->
 def _search_customer(txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
     if not frappe.has_permission("Customer", "read"):
         return []
+
+    patient = cstr(normalized.get("patient") or "").strip()
+    if patient:
+        owner = cstr(frappe.db.get_value("Veterinary Patient", patient, "primary_owner") or "").strip()
+        if not owner:
+            return []
+        row = frappe.get_value("Customer", owner, ["name", "customer_name"], as_dict=True)
+        if not row:
+            return []
+        label = row.get("customer_name") or row.get("name")
+        if txt and txt.lower() not in f"{row.get('name')} {label}".lower():
+            return []
+        return [_option(row.get("name"), label)]
+
     branch = cstr(normalized.get("branch") or "").strip()
     if not branch:
         or_filters = []
@@ -177,8 +192,6 @@ def _branch_allowed_users(users: list[list | tuple], branch: str) -> list[list |
 
 def _search_practitioner(report_name: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
     searcher = get_vaccination_staff_users if report_name == "Vaccination Report" else get_veterinary_doctor_users
-    # Ask for a slightly wider bounded candidate window so branch filtering does
-    # not routinely leave a nearly-empty 20-row chooser. No unbounded User load.
     candidate_limit = min(MAX_PAGE_LENGTH * 3, 60)
     rows = searcher("User", txt, "name", 0, candidate_limit, {}) or []
     rows = _branch_allowed_users(rows, cstr(normalized.get("branch") or "").strip())
@@ -186,23 +199,40 @@ def _search_practitioner(report_name: str, txt: str, start: int, page_length: in
     return [_option(row[0], row[1] if len(row) > 1 else row[0]) for row in rows]
 
 
-def _search_master(field: str, txt: str, start: int, page_length: int) -> list[dict]:
+def _search_master(field: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
     doctype, requested_filters = MASTER_FIELDS[field]
     if not frappe.has_permission(doctype, "read"):
         return []
     meta = frappe.get_meta(doctype)
     filters = {key: value for key, value in requested_filters.items() if meta.has_field(key)}
+    if field == "breed" and normalized.get("species") and meta.has_field("species"):
+        filters["species"] = normalized.get("species")
     if txt:
+        if field == "breed" and meta.has_field("breed_name"):
+            pattern = f"%{txt}%"
+            rows = frappe.get_list(
+                doctype,
+                fields=["name", "breed_name"],
+                filters=filters,
+                or_filters=[[doctype, "name", "like", pattern], [doctype, "breed_name", "like", pattern]],
+                order_by="breed_name asc, name asc",
+                start=start,
+                page_length=page_length,
+            )
+            return [_option(row.name, row.breed_name or row.name) for row in rows]
         filters["name"] = ["like", f"%{txt}%"]
+    fields = ["name"]
+    if field == "breed" and meta.has_field("breed_name"):
+        fields.append("breed_name")
     rows = frappe.get_list(
         doctype,
-        fields=["name"],
+        fields=fields,
         filters=filters,
         order_by="name asc",
         start=start,
         page_length=page_length,
     )
-    return [_option(row.name) for row in rows]
+    return [_option(row.name, row.get("breed_name") or row.name) for row in rows]
 
 
 @frappe.whitelist()
@@ -237,5 +267,5 @@ def search_report_filter_options(
     if field == "practitioner":
         return _search_practitioner(report_name, txt, start, page_length, normalized)
     if field in MASTER_FIELDS:
-        return _search_master(field, txt, start, page_length)
+        return _search_master(field, txt, start, page_length, normalized)
     return []
