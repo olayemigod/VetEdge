@@ -93,6 +93,7 @@ has_permission = {
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
+	"vetedge.services.front_desk_action_center.get_front_desk_link_options": "vetedge.services.front_desk_link_search.get_front_desk_link_options",
 	"vetedge.services.resource_center.get_resource_page": "vetedge.services.resource_center_v3.get_resource_page",
 	"vetedge.services.resource_center.get_resource_editor": "vetedge.services.resource_editor_state.get_resource_editor",
 	"vetedge.services.resource_center.save_resource_record": "vetedge.services.resource_editor_state.save_resource_record",
