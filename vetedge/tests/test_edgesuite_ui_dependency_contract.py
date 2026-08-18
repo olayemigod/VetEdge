@@ -30,7 +30,25 @@ CLINICAL_LOADER = (
 	/ "vetedge_clinical_workspace"
 	/ "vetedge_clinical_workspace.js"
 )
+MASTER_LOADER = (
+	REPOSITORY_ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_master_workspace"
+	/ "vetedge_master_workspace.js"
+)
+PRICING_LOADER = (
+	REPOSITORY_ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "page"
+	/ "vetedge_pricing_master_workspace"
+	/ "vetedge_pricing_master_workspace.js"
+)
 CLINICAL_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
+MASTER_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_master_workspace.bundle.js"
+PRICING_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_pricing_master_workspace.bundle.js"
 MODAL_PRESENTER = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_edge_modal_presenter.bundle.js"
 BILLING_EDGE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_billing_edgesuite.bundle.js"
 CANONICAL_BILLING = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "billing_modal.js"
@@ -139,9 +157,31 @@ def test_clinical_related_service_actions_stay_in_edgesuite_modals():
 		"get_active_lab_tests_for_picker",
 		"get_vaccination_billing_defaults",
 		"frappe.desk.search.search_link",
+		"Delete related clinical record?",
+		"onClose: () => settle(false)",
 	):
 		assert contract in content
 	assert 'frappe.set_route("List", doctype)' not in content
+	assert "frappe.confirm(" not in content
+
+
+def test_master_and_pricing_sidebar_routes_keep_resource_query_on_first_visit():
+	master_loader = MASTER_LOADER.read_text(encoding="utf-8")
+	pricing_loader = PRICING_LOADER.read_text(encoding="utf-8")
+	master_bundle = MASTER_BUNDLE.read_text(encoding="utf-8")
+	pricing_bundle = PRICING_BUNDLE.read_text(encoding="utf-8")
+
+	assert "hydrateMasterWorkspaceRouteFromFrappeOptions" in master_loader
+	assert "hydratePricingWorkspaceRouteFromFrappeOptions" in pricing_loader
+	for loader in (master_loader, pricing_loader):
+		assert "window.frappe?.route_options" in loader
+		assert "window.history.replaceState" in loader
+	for bundle, route in (
+		(master_bundle, "/desk/vetedge-master-workspace"),
+		(pricing_bundle, "/desk/vetedge-pricing-master-workspace"),
+	):
+		assert "installCanonicalDeskLocation" in bundle
+		assert route in bundle
 
 
 def test_clinical_related_billing_keeps_erpnext_item_as_source_truth():
