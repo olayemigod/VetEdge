@@ -18,6 +18,7 @@ from vetedge.services.report_export import (
 	_xlsx_bytes,
 )
 from vetedge.services.reporting_capabilities import require_reporting_action
+from vetedge.services.stock_expiry_interactive import get_stock_expiry_interactive_data
 from vetedge.services.stock_expiry_monitor import (
 	get_report_columns,
 	get_status_chart,
@@ -25,6 +26,7 @@ from vetedge.services.stock_expiry_monitor import (
 	get_summary,
 )
 from vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor import (
+	_normalize_stock_expiry_filters,
 	_validate_reference_filter,
 	check_expiry_permissions,
 )
@@ -34,7 +36,7 @@ REPORT_TITLE = "Stock Expiry Monitor"
 
 
 def _normalized_filters(filters: str | dict | None) -> dict:
-	value = _json_dict(filters)
+	value = _normalize_stock_expiry_filters(_json_dict(filters))
 	value.pop("limit", None)
 	value.pop("offset", None)
 	threshold = value.get("days_threshold")
@@ -54,11 +56,18 @@ def _apply_window(rows: list[dict], filters: dict) -> list[dict]:
 	return rows
 
 
+def _summary_from_aggregate(summary: dict) -> list[dict]:
+	return [
+		{"label": _("Total Items"), "value": cint(summary.get("total_items")), "indicator": "Blue", "datatype": "Int"},
+		{"label": _("Expired"), "value": cint(summary.get("expired_items")), "indicator": "Red", "datatype": "Int"},
+		{"label": _("Expiring Soon"), "value": cint(summary.get("expiring_soon")), "indicator": "Orange", "datatype": "Int"},
+		{"label": _("Safe"), "value": cint(summary.get("safe_items")), "indicator": "Green", "datatype": "Int"},
+	]
+
+
 def _document_model(filters: str | dict | None, options: str | dict | None, start: int, page_length: int):
 	filters_dict = _normalized_filters(filters)
 	export_options = _normalize_options(options)
-	source_rows = get_stock_expiry_rows(filters_dict)
-	rows = _apply_window(source_rows, filters_dict)
 	all_columns = [_column_dict(column, index) for index, column in enumerate(get_report_columns())]
 	columns = _select_columns(all_columns, export_options["columns"])
 	if not columns:
@@ -67,10 +76,22 @@ def _document_model(filters: str | dict | None, options: str | dict | None, star
 	if export_options["scope"] == "current_page":
 		start = max(0, cint(start))
 		page_length = min(MAX_CURRENT_PAGE_LENGTH, max(1, cint(page_length) or 50))
-		rows = rows[start : start + page_length]
+		interactive = get_stock_expiry_interactive_data(
+			filters_dict,
+			expiry_window=filters_dict.get("expiry_window") or "all",
+			limit=page_length,
+			offset=start,
+		)
+		rows = interactive.get("rows") or []
+		summary = _summary_from_aggregate(interactive.get("summary") or {})
+		chart = get_status_chart(summary)
+		return filters_dict, export_options, columns, rows, summary, chart
 
-	# The monitor summary intentionally reflects the complete filtered inventory
-	# population even when the interactive table is narrowed to one risk window.
+	# All-filtered export remains a separate full-dataset workflow. It does not
+	# affect interactive page payloads; a later large-export threshold/queue may
+	# replace this synchronous path for very large installations.
+	source_rows = get_stock_expiry_rows(filters_dict)
+	rows = _apply_window(source_rows, filters_dict)
 	summary = get_summary(source_rows)
 	chart = get_status_chart(summary)
 	return filters_dict, export_options, columns, rows, summary, chart
