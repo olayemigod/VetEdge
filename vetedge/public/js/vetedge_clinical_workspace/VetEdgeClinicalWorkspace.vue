@@ -128,7 +128,7 @@
 							<div class="clinical-treatment-meta"><EdgeStatusBadge :label="row.billing_status || 'Pending'" :status="row.billing_status || 'Pending'" /><span>{{ row.payment_status || 'Not Billed' }}</span><strong>{{ formatMoney((Number(row.qty) || 0) * (Number(row.rate) || 0)) }}</strong></div>
 							<button type="button" class="edge-button edge-button--danger edge-button--compact" :disabled="treatmentRowLocked(row)" @click="removeChild('planned_treatments', index)">Remove</button>
 						</div>
-						<EdgeInput :model-value="form.follow_up_date" type="date" label="Follow-up Date" @update:model-value="(value) => updateField('follow_up_date', value)" />
+						<EdgeInput :model-value="form.follow_up_date" type="datetime-local" label="Follow-up Date/Time" @update:model-value="(value) => updateField('follow_up_date', value)" />
 					</section>
 
 					<section v-if="activeTab === 'vitals'" class="clinical-panel">
@@ -371,6 +371,7 @@ export default {
 				patient_label: values.patient_label || payload?.patient_label || values.patient || "",
 				primary_owner_label: values.primary_owner_label || payload?.values?.primary_owner_label || payload?.owner_label || values.primary_owner || "",
 				consultation_datetime: localDatetime(values.consultation_datetime),
+				follow_up_date: localDatetime(values.follow_up_date),
 				symptoms: (values.symptoms || []).map((row) => ({ ...row, _key: rowKey(row) })),
 				diagnoses: (values.diagnoses || []).map((row) => ({ ...row, _key: rowKey(row) })),
 				planned_treatments: (values.planned_treatments || []).map((row) => ({ ...row, _key: rowKey(row) })),
@@ -451,6 +452,7 @@ export default {
 					name: this.detail.name || undefined,
 					modified: this.detail.modified || undefined,
 					consultation_datetime: serverDatetime(this.form.consultation_datetime),
+					follow_up_date: serverDatetime(this.form.follow_up_date),
 					symptoms: this.form.symptoms.map(({ _key, ...row }) => row),
 					diagnoses: this.form.diagnoses.map(({ _key, ...row }) => row),
 					planned_treatments: this.form.planned_treatments.map(({ _key, ...row }) => row),
