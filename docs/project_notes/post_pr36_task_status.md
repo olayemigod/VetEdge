@@ -7,7 +7,7 @@
 | Export / Print / PDF Foundation | Implementation complete — QA pending | Report and dashboard shells expose opt-in Print/Export only when server-derived capabilities allow them. Stock Expiry has dedicated permission-rechecked export/print endpoints; Current Page export uses the paginated provider and All Filtered synchronous export has a 20,000-row safety ceiling. Report Center uses shell-owned Export/Print controls. |
 | Dashboard/report performance hardening | In progress | Consultation dashboard KPIs/charts use database aggregates; Lab and Vaccination dashboard paths reuse aggregate/bounded providers. Shared branch-scoped reporting fails closed when a branch-scoped user has no assigned Veterinary Branch. Revenue Summary and Financial Dashboard remain on the canonical financial dataset because Branch is resolved from clinical links, invoice fields, Payment Entries and cost-center mapping; no simplistic Sales Invoice paginator will replace that accounting-safe resolver. |
 | Remaining report migration/optimization | In progress | Planned Treatment, Consultation Register, Laboratory/Lab Order, Vaccination, Owner Register and Patient Register have optimized paginated providers. Further reports are classified by actual volume/value and business safety before dedicated providers are added. |
-| VCN / NADIS reporting | Audit starting | Regulatory reporting will use the shared reporting/export foundation. Exact VCN spreadsheet column/template mapping remains a verification gate because the historical NADIS source workbooks are not currently retrievable in this session; fields will not be guessed. |
+| VCN / NADIS reporting | Phase 7A implemented — template mapping pending | A read-only paginated NADIS Vaccination source adapter now derives existing regulatory facts from Vaccination + Patient data while explicitly remaining non-submission-ready until the authoritative workbook is mapped. Disease-outbreak audit confirms a dedicated outbreak event model is likely required; consultation diagnoses alone must not be treated as an outbreak. |
 | Hospitalisation EdgeSuite completion | New | Complete only genuine operational gaps after implementation audit. |
 | Training Centre / remaining legacy surfaces | New | Migrate verified remaining native resources. |
 | Advanced reporting/intelligence | New | Saved views, drill-through, comparison, grouping, scheduled/exception reporting. |
@@ -43,11 +43,11 @@ PR #36 clinical and final consolidation QA remains ongoing and is not duplicated
 - Print/Export visibility is derived from `get_shell_capabilities`; locked Advanced reports stop before provider loading and show plan-access state without exposing report data.
 - Standard / Advanced / Advanced · Locked tier display is driven by the same server capability response.
 - Existing URL filter retention, dashboard return navigation, provider badge and chart rendering are preserved.
-- Smart filter definitions now cover Consultation Register, Planned Treatment, Laboratory/Lab Order, Vaccination, Patient Register, Owner Register and Service Revenue Breakdown.
-- Link discovery is routed through `report_filter_search.py`, is capped at 20 results, rechecks report access/entitlement and uses Branch-aware Patient/Owner/practitioner filtering.
+- Smart filter definitions cover Consultation Register, Planned Treatment, Laboratory/Lab Order, Vaccination, Patient Register, Owner Register and Service Revenue Breakdown.
+- Link discovery is routed through `report_filter_search.py`, capped at 20 results, rechecks report access/entitlement and uses Branch-aware Patient/Owner/practitioner filtering.
 - Practitioner choices reuse VetEdge doctor/vaccination staff queries rather than exposing all Users.
 - Cascades clear stale combinations: Branch invalidates Patient/Owner/Practitioner, Owner/Patient constrain one another, and Species constrains Breed.
-- Planned Treatment now explicitly normalizes Report Center `customer` to the backend `owner` filter, preventing a visible Owner filter from being silently ignored.
+- Planned Treatment explicitly normalizes Report Center `customer` to the backend `owner` filter, preventing a visible Owner filter from being silently ignored.
 
 ### Optimized report providers
 
@@ -77,6 +77,7 @@ PR #36 clinical and final consolidation QA remains ongoing and is not duplicated
 - Advanced reports require normal permission checks plus the Advanced entitlement.
 - Shell capability lookup returns locked metadata (`can_view = false`) without exposing report data.
 - Actual data, Print and Export endpoints fail closed when Advanced entitlement is absent.
+- Mandatory/regulatory NADIS reports are classified as Standard compliance capability; clinics should not require Advanced Reporting entitlement to prepare required submissions.
 
 ## Branch/report isolation hardening
 
@@ -93,13 +94,24 @@ PR #36 clinical and final consolidation QA remains ongoing and is not duplicated
 - Its Branch is not reliably just `Sales Invoice.branch`; resolution may come from linked clinical documents, invoice fields, Payment Entries or cost-center mapping.
 - Therefore a simple direct Sales Invoice paginator is intentionally not introduced. Any future dedicated Revenue Summary provider must preserve that complete resolver and submitted-invoice truth before it can replace the canonical dataset path.
 
+## Phase 7A — VCN / NADIS regulatory source foundation
+
+- `nadis_reporting.py` provides a read-only, query-paginated vaccination source endpoint.
+- It reuses the established Vaccination Report role/Branch visibility contract and checks Vaccination + Patient read permission.
+- Source fields currently available from operational truth include Vaccination Record, administered date/time, Branch, Company, patient/name, owner, species, breed, vaccine, dose, route, batch, batch expiry, practitioner, status and next due date.
+- The response explicitly returns `template_mapping_verified = false` and `submission_ready = false`; the normalized source is not represented as the final official workbook.
+- Repository audit found no dedicated disease-outbreak DocType. `Consultation Diagnosis` + `Veterinary Diagnosis` can support disease-occurrence surveillance but cannot safely represent a regulatory outbreak event with outbreak-level epidemiological data.
+- The detailed mapping/implementation sequence is recorded in `docs/project_notes/vcn_nadis_reporting_plan.md`.
+- Attempts to retrieve the previously supplied NADIS workbooks from File Library failed in the current session, and the public-source verification pass did not locate reliable copies. Exact workbook mapping therefore remains a hard gate rather than being guessed.
+
 ## Current validation state
 
 - VetEdge PR #47 remains Draft and mergeable. No pull-request-triggered VetEdge GitHub Actions workflow has been confirmed for the latest continuation head; source-contract checks must not be reported as CI acceptance.
 - EdgeSuite UI PR #19 CI run #378 completed successfully on the current shared report-shell/Link-column checkpoint.
-- VetEdge source-contract coverage guards Standard/Advanced classification, CoreEdge Feature-entitlement use, standalone fallback, shared branch fail-closed behavior, bounded/cascading Report Center smart filters, Planned Treatment owner/customer aliasing, optimized provider registration, Stock Expiry export limits, Report Center `EdgeReportShell` adoption, dashboard tier-aware `EdgeDashboardShell` adoption and no-mutation/no-permission-bypass rules.
+- VetEdge source-contract coverage guards Standard/Advanced classification, CoreEdge Feature-entitlement use, standalone fallback, shared branch fail-closed behavior, bounded/cascading Report Center smart filters, Planned Treatment owner/customer aliasing, optimized provider registration, Stock Expiry export limits, Report Center `EdgeReportShell` adoption, dashboard tier-aware `EdgeDashboardShell` adoption, NADIS vaccination pagination/non-submission-ready state and no-mutation/no-permission-bypass rules.
 - Browser QA remains required for Stock Expiry filters/pagination/navigation/branch refresh/locked state and notification coexistence.
 - Report Center browser QA must verify each smart filter family, cascades, optimized/fallback providers, summaries, charts, pagination, Link drill-through, Standard/Advanced/Locked badges, Print/Export visibility and Back-to-Dashboard navigation.
 - Browser/file QA remains required across XLSX, CSV, PDF and Print, including Current Page vs All Filtered, selected columns, raw/presentation mode, chart inclusion and file integrity.
+- NADIS browser/workbook QA is not yet applicable to an official export because the authoritative template mapping is still pending.
 - Representative dashboard QA must include Executive, Financial and Branch Performance so direct/legacy rendering paths are confirmed to pass through the shared dashboard adapter without duplicated shell chrome.
 - The reporting-action settings patch remains idempotent and the synchronized branch preserves PR #36's vaccination consultation billing-edit settings patch.
