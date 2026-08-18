@@ -53,10 +53,15 @@ def test_existing_provider_retains_business_filters_and_permissions():
 		assert contract in content
 
 
-def test_adapter_keeps_pagination_and_old_edgesuite_fallback_safe():
+def test_adapter_keeps_pagination_fallback_and_anchored_candidates_safe():
 	content = read(ADAPTER)
 
 	assert "if not query or start_value or not _shared_ranker():" in content
 	assert "page_length=limit" in content
 	assert "candidate_limit = min(CANDIDATE_POOL_MAX" in content
-	assert 'txt=""' in content
+	assert "_query_anchors" in content
+	assert "_collect_candidates" in content
+	assert "MAX_ANCHORS = 4" in content
+	assert "txt=anchor" in content
+	assert "remaining = candidate_limit - len(candidates)" in content
+	assert 'txt=""' not in content
