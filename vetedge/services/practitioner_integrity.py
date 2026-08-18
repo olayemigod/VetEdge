@@ -10,6 +10,7 @@ PRACTITIONER_REQUIRED_DOCTYPES = {
 	"Veterinary Appointment": "practitioner",
 	"Veterinary Lab Order": "requested_by",
 	"Veterinary Vaccination Record": "administered_by",
+	"Veterinary Hospitalisation": "attending_veterinarian",
 	"Pet Grooming Appointment": "groomer",
 	"Pet Grooming Session": "groomer",
 }
@@ -84,6 +85,21 @@ def _populate_responsible_user(doc, fieldname: str) -> None:
 				doc.set(fieldname, practitioner)
 				return
 
+		current_user = _current_user()
+		if current_user:
+			doc.set(fieldname, current_user)
+		return
+
+	if doc.doctype == "Veterinary Hospitalisation":
+		if doc.get("linked_consultation"):
+			practitioner = frappe.db.get_value(
+				"Veterinary Consultation",
+				doc.linked_consultation,
+				"consulting_practitioner",
+			)
+			if practitioner:
+				doc.set(fieldname, practitioner)
+				return
 		current_user = _current_user()
 		if current_user:
 			doc.set(fieldname, current_user)
