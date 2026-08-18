@@ -101,6 +101,13 @@ def test_patient_register_is_registered_as_query_level_provider():
     assert 'COUNT": "DISTINCT species"' not in backend
 
 
+def test_planned_treatment_accepts_report_center_customer_owner_alias():
+    source = (APP / "services/treatment_plan_report.py").read_text()
+    assert 'if cleaned.get("customer") and not cleaned.get("owner"):' in source
+    assert 'cleaned["owner"] = cleaned.get("customer")' in source
+    assert '_get_consultation_rows(frappe._dict(report_filters))' in source
+
+
 def test_stock_expiry_shell_actions_are_read_only_and_reauthorize():
     source = (APP / "services/stock_expiry_reporting_actions.py").read_text()
 
