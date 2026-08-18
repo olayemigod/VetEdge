@@ -13,6 +13,9 @@ def sync_next_vaccination_appointment_from_record(*args, **kwargs):
 class VeterinaryVaccinationRecord(Document):
 	def validate(self) -> None:
 		validate_vaccination_record(self)
+		from vetedge.services.consultation_related_records import validate_consultation_vaccination_duplicate
+
+		validate_consultation_vaccination_duplicate(self)
 
 	def after_insert(self) -> None:
 		from vetedge.services.consultation_billing_plan import sync_vaccination_to_consultation_plan
