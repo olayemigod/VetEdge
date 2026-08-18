@@ -322,7 +322,11 @@ def _sync_active_consultation_billing_session(consultation) -> None:
 	flags = getattr(frappe, "flags", None)
 	if getattr(flags, "vetedge_billing_core_syncing", False):
 		return
-	from vetedge.services.billing_core import is_billing_sessions_enabled, resolve_billing_session, sync_source_to_billing_session
+	from vetedge.services.billing_core import (
+		is_billing_sessions_enabled,
+		resolve_billing_session,
+		sync_source_to_billing_session,
+	)
 
 	if not is_billing_sessions_enabled():
 		return
