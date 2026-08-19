@@ -161,9 +161,11 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					printBusy: false,
 					comparisonLoading: false,
 					comparison: null,
+					comparisonRequestGeneration: 0,
 					groupingLoading: false,
 					groupingDimension: "",
 					grouping: null,
+					groupingRequestGeneration: 0,
 					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true, advanced_features_entitled: false },
 				};
 			},
@@ -171,7 +173,10 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				await this.refresh();
 				if (this.capabilities.can_view !== false) await this.loadSavedViews();
 			},
-			beforeUnmount() { this.chartInstance?.destroy?.(); },
+			beforeUnmount() {
+				this.invalidateInsightRequests();
+				this.chartInstance?.destroy?.();
+			},
 			computed: {
 				providerLabel() {
 					if (!this.provider) return __("Query Report");
@@ -232,6 +237,18 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					});
 					return response.message || [];
 				},
+				insightRequestSignature(extra = {}) {
+					const filters = Object.entries(this.reportFilters())
+						.sort(([left], [right]) => left.localeCompare(right))
+						.map(([key, value]) => [key, value]);
+					return JSON.stringify({ report_name: this.reportName, filters, ...extra });
+				},
+				invalidateInsightRequests() {
+					this.comparisonRequestGeneration += 1;
+					this.groupingRequestGeneration += 1;
+					this.comparisonLoading = false;
+					this.groupingLoading = false;
+				},
 				setFilter(field, value) {
 					const previous = this.filters[field] || "";
 					if (previous === value) return;
@@ -244,6 +261,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					if (field === "patient") this.filters.customer = "";
 					if (field === "species") this.filters.breed = "";
 					this.filters[field] = value || "";
+					this.invalidateInsightRequests();
 					this.selectedSavedViewId = "";
 					this.comparison = null;
 					this.grouping = null;
@@ -305,6 +323,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						const nextFilters = {};
 						for (const key of REPORT_FILTER_KEYS) nextFilters[key] = state.filters?.[key] ?? "";
 						this.filters = nextFilters;
+						this.invalidateInsightRequests();
 						this.viewState = { visible_columns: normalizeReportColumnKeys(state.visible_columns) };
 						this.selectedSavedViewId = state.view?.view_id || viewId;
 						this.pageStart = 0;
@@ -382,6 +401,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				async refresh(resetPage = false) {
 					if (!this.reportName) { this.error = __("No report was selected."); return; }
 					if (resetPage) {
+						this.invalidateInsightRequests();
 						this.pageStart = 0;
 						this.comparison = null;
 						this.grouping = null;
@@ -431,17 +451,22 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						});
 						return;
 					}
+					const generation = ++this.comparisonRequestGeneration;
+					const signature = this.insightRequestSignature();
 					this.comparisonLoading = true;
 					try {
 						const response = await frappe.call(REPORT_COMPARISON_API, {
 							report_name: this.reportName,
 							filters: JSON.stringify(this.reportFilters()),
 						});
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
 						this.comparison = response.message || null;
 					} catch (error) {
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
 						this.comparison = null;
 						frappe.msgprint({ title: __("Comparison Failed"), message: error?.message || __("The comparison could not be generated."), indicator: "red" });
 					} finally {
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
 						this.comparisonLoading = false;
 						await nextTick();
 						this.chartInstance?.destroy?.();
@@ -462,6 +487,8 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						});
 						return;
 					}
+					const generation = ++this.groupingRequestGeneration;
+					const signature = this.insightRequestSignature({ dimension: this.groupingDimension });
 					this.groupingLoading = true;
 					try {
 						const response = await frappe.call(REPORT_GROUPING_API, {
@@ -469,12 +496,15 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 							dimension: this.groupingDimension,
 							filters: JSON.stringify(this.reportFilters()),
 						});
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
 						this.grouping = response.message || null;
 					} catch (error) {
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
 						this.grouping = null;
 						this.groupingDimension = "";
 						frappe.msgprint({ title: __("Grouping Failed"), message: error?.message || __("The grouped summary could not be generated."), indicator: "red" });
 					} finally {
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
 						this.groupingLoading = false;
 					}
 				},
