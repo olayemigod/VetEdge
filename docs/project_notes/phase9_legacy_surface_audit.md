@@ -37,6 +37,7 @@ Implemented:
 - Added `public/js/vetedge_training_centre/VetEdgeTrainingCentre.vue`.
 - Added `public/js/vetedge_training_centre.bundle.js` using shared workspace safety.
 - Replaced the large Frappe Page implementation with a thin EdgeSuite runtime/mount loader.
+- Training Centre now uses the accepted `EdgePageLayout` named `#header` slot for `EdgePageHeader` rather than placing the header as an unscoped direct child.
 - Preserved the existing `get_training_modules` and `get_training_module_content` APIs; no training content model or role rule was rewritten.
 - Module list remains a single small role-filtered request.
 - Guide content remains lazy: content is requested only when a module is opened.
@@ -64,11 +65,40 @@ Implemented:
 12. Test mobile widths and long tables/code blocks.
 13. Network QA: record initial module-list bytes, one guide-content request per opened module, Mermaid request only when required and no polling.
 
+## Phase 9B — Legacy route cleanup
+
+Status: **implemented, browser QA pending**.
+
+Repository audit found that several older custom Pages no longer own unique business UI:
+
+- `veterinary-appointment-queue` is a compatibility alias for `vetedge-front-desk-action-center?tab=queue`.
+- `kennel-availability` is a compatibility alias for `vetedge-service-operations?resource=availability`.
+- `kennel-availability-board` is also a compatibility alias for the same canonical Service Operations availability view.
+
+The canonical EdgeSuite surfaces already preserve the useful business behavior, so rebuilding or maintaining separate native/manual tables would create duplicate UX and duplicate maintenance.
+
+Implemented:
+
+- The three compatibility Pages remain present so old bookmarks and historical routes do not become 404s.
+- Their page-local operational tables/actions are removed; they contain no data API calls or duplicated business logic.
+- Redirects are now **Frappe Desk router first**: `history.replaceState` changes the URL and `frappe.router.route()` resolves the canonical EdgeSuite Page without forcing the whole Desk shell to reload.
+- `window.location.replace` remains only as a safe fallback when the Desk router is unavailable or fails.
+- The globally loaded VetEdge UI bridge still maps the same legacy destinations to the canonical EdgeSuite workspaces during normal product-menu navigation.
+
+### Phase 9B browser/network QA
+
+1. Open each old route directly from a fresh bookmarked URL.
+2. Confirm it resolves to the expected EdgeSuite Front Desk or Service Operations tab.
+3. Confirm Back/Forward history does not bounce repeatedly through the legacy alias.
+4. Confirm no duplicate native page chrome appears before the canonical workspace settles.
+5. Confirm router-first navigation avoids a second full Desk JS/CSS boot in Network tools.
+6. Temporarily simulate unavailable router behavior and confirm fallback navigation still reaches the canonical page.
+
 ## Current legacy-surface classification
 
 ### Already EdgeSuite / shared-shell based — do not restart
 
-- VetEdge home/product shell.
+- VetEdge home/product route — compatibility redirect to Resource Center.
 - Front Desk Action Center.
 - Clinical Workspace.
 - Resource Center and its migrated resource families.
@@ -78,9 +108,16 @@ Implemented:
 - Medical History.
 - Stock Expiry Monitor.
 - Generic Report Center.
-- EdgeSuite-adapted dashboards.
+- EdgeSuite-adapted dashboards, including Financial Dashboard host/adaptation.
 - Hospitalisation Operations workbench.
+- Service Operations, including canonical Kennel Availability.
 - Training Centre after Phase 9A.
+
+### Compatibility-only routes — preserve aliases, do not rebuild
+
+- Veterinary Appointment Queue.
+- Kennel Availability.
+- Kennel Availability Board.
 
 ### Native DocType form remains authoritative by design
 
@@ -98,11 +135,10 @@ Use EdgeSuite queues/workbenches/editors around these records where simplificati
 
 Do not implement these until repository and browser audit confirms the current route is genuinely legacy or creates user friction:
 
-- Kennel Availability / Kennel Availability Board overlap: determine whether both routes are still needed or one is obsolete.
-- Remaining standalone custom Pages not already represented by shared EdgeSuite bundles.
-- Sidebar DocType links that duplicate a current Resource Center or operational workbench route.
+- Sidebar DocType links that duplicate a current Resource Center or operational workbench route: normal EdgeSuite product-menu navigation is already adapted, but browser QA should identify any raw Frappe sidebar path that bypasses that adapter.
 - Setup/master DocTypes that still force normal users into technical native forms even though Master Workspace can safely own their common create/edit flow.
 - Boarding and Grooming native operational details: keep core workflow but check whether queue/detail navigation can be consolidated further.
+- Standalone Vital Signs remains outside this continuation slice while PR #36 QA owns its current acceptance path.
 
 ## Safety rules for remaining Phase 9
 
@@ -113,7 +149,8 @@ Do not implement these until repository and browser audit confirms the current r
 - Preserve Branch/company/tenant and role visibility on every new workbench/list endpoint.
 - Prefer lazy loading and page-level pagination over large hidden payloads.
 - Preserve white-label/generic Veterinary wording on operational UI.
+- Preserve old routes as compatibility aliases until browser QA proves they can be removed safely from upgraded sites.
 
-## Phase 9A acceptance state
+## Phase 9 acceptance state
 
-Implementation and source contracts are complete. Browser/build/CI acceptance is still pending. PR #47 remains Draft until its stacked-base and QA gates are resolved.
+Training Centre migration and legacy-route cleanup are source-implemented. Browser/build/network/CI acceptance is still pending. PR #47 remains Draft until its stacked-base and QA gates are resolved.
