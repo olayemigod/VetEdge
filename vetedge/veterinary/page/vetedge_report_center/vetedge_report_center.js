@@ -3,7 +3,9 @@ const VETEDGE_REPORT_PAGE_LENGTH = 50;
 const CAPABILITIES_API = "vetedge.services.reporting_capabilities.get_shell_capabilities";
 const SMART_FILTER_API = "vetedge.services.report_filter_search.search_report_filter_options";
 const SAVED_VIEWS_GET_API = "vetedge.services.report_saved_views.get_saved_report_views";
+const SAVED_VIEWS_APPLY_API = "vetedge.services.report_saved_views.apply_saved_report_view";
 const SAVED_VIEWS_SAVE_API = "vetedge.services.report_saved_views.save_report_view";
+const SAVED_VIEWS_RENAME_API = "vetedge.services.report_saved_views.rename_saved_report_view";
 const SAVED_VIEWS_DELETE_API = "vetedge.services.report_saved_views.delete_saved_report_view";
 const REPORT_FILTER_KEYS = [
 	"branch", "from_date", "to_date", "date_preset", "customer", "patient", "practitioner",
@@ -155,9 +157,9 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true },
 				};
 			},
-			mounted() {
-				this.refresh();
-				this.loadSavedViews();
+			async mounted() {
+				await this.refresh();
+				if (this.capabilities.can_view !== false) await this.loadSavedViews();
 			},
 			beforeUnmount() { this.chartInstance?.destroy?.(); },
 			computed: {
@@ -168,10 +170,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					return this.provider.kind === "paginated" ? __("Paginated provider") : __("Query Report provider");
 				},
 				savedViewOptions() {
-					return (this.savedViews || []).map((view) => ({
-						value: view.view_id,
-						label: view.is_default ? `${view.label} · ${__("Default")}` : view.label,
-					}));
+					return (this.savedViews || []).map((view) => ({ value: view.view_id, label: view.label }));
 				},
 				selectedSavedView() {
 					return (this.savedViews || []).find((view) => view.view_id === this.selectedSavedViewId) || null;
@@ -272,33 +271,43 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					this.updateLocation();
 				},
 				async applySavedView(viewId) {
-					const view = (this.savedViews || []).find((item) => item.view_id === viewId);
-					if (!view) { this.selectedSavedViewId = ""; return; }
-					const nextFilters = {};
-					for (const key of REPORT_FILTER_KEYS) nextFilters[key] = view.filters?.[key] ?? "";
-					this.filters = nextFilters;
-					this.viewState = { visible_columns: normalizeReportColumnKeys(view.visible_columns) };
-					this.selectedSavedViewId = view.view_id;
-					this.pageStart = 0;
-					this.updateLocation();
-					await this.refresh(true);
+					if (!viewId) { this.selectedSavedViewId = ""; return; }
+					try {
+						const response = await frappe.call(SAVED_VIEWS_APPLY_API, { view_id: viewId, report_name: this.reportName });
+						const state = response.message || {};
+						const nextFilters = {};
+						for (const key of REPORT_FILTER_KEYS) nextFilters[key] = state.filters?.[key] ?? "";
+						this.filters = nextFilters;
+						this.viewState = { visible_columns: normalizeReportColumnKeys(state.visible_columns) };
+						this.selectedSavedViewId = state.view?.view_id || viewId;
+						this.pageStart = 0;
+						this.updateLocation();
+						if (Array.isArray(state.removed_filter_keys) && state.removed_filter_keys.length) {
+							frappe.show_alert?.({ message: __("Some saved filters were removed because your current access or report context changed."), indicator: "orange" });
+						}
+						await this.refresh(true);
+					} catch (error) {
+						this.selectedSavedViewId = "";
+						frappe.msgprint({ title: __("Saved View Failed"), message: error?.message || __("The saved view could not be applied."), indicator: "red" });
+					}
 				},
 				promptSaveView(existing = null) {
 					frappe.prompt(
-						[
-							{ fieldname: "label", fieldtype: "Data", label: __("View Name"), reqd: 1, default: existing?.label || "" },
-							{ fieldname: "set_default", fieldtype: "Check", label: __("Make this my default view"), default: existing?.is_default ? 1 : 0 },
-						],
+						[{ fieldname: "label", fieldtype: "Data", label: __("View Name"), reqd: 1, default: existing?.label || "" }],
 						async (values) => {
 							try {
-								const response = await frappe.call(SAVED_VIEWS_SAVE_API, {
-									label: values.label,
-									report_name: this.reportName,
-									filters: JSON.stringify(existing ? existing.filters || {} : this.reportFilters()),
-									visible_columns: JSON.stringify(existing ? existing.visible_columns || [] : normalizeReportColumnKeys(this.viewState?.visible_columns)),
-									view_id: existing?.view_id || "",
-									set_default: values.set_default ? 1 : 0,
-								});
+								let response;
+								if (existing) {
+									response = await frappe.call(SAVED_VIEWS_RENAME_API, { view_id: existing.view_id, report_name: this.reportName, label: values.label });
+								} else {
+									response = await frappe.call(SAVED_VIEWS_SAVE_API, {
+										label: values.label,
+										report_name: this.reportName,
+										filters: JSON.stringify(this.reportFilters()),
+										visible_columns: JSON.stringify(normalizeReportColumnKeys(this.viewState?.visible_columns)),
+										set_default: 0,
+									});
+								}
 								await this.loadSavedViews();
 								this.selectedSavedViewId = response.message?.view_id || existing?.view_id || "";
 								frappe.show_alert?.({ message: existing ? __("Saved view renamed.") : __("Saved view created."), indicator: "green" });
