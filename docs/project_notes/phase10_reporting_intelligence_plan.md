@@ -89,7 +89,7 @@ Source contracts:
 
 ## Phase 10C — Previous-Period Comparison
 
-Status: **shared presentation + first aggregate backend implemented; Report Center UI adoption pending**.
+Status: **first reference implementation complete; browser/network QA pending**.
 
 ### Subscription rule
 
@@ -102,7 +102,7 @@ This distinction allows, for example:
 
 ### Shared EdgeSuite presentation
 
-EdgeSuite UI PR #19 now provides `EdgeReportComparisonPanel`:
+EdgeSuite UI PR #19 provides `EdgeReportComparisonPanel`:
 
 - product-neutral current/comparison metric presentation;
 - period labels;
@@ -110,6 +110,8 @@ EdgeSuite UI PR #19 now provides `EdgeReportComparisonPanel`:
 - optional positive/negative/warning delta tones;
 - responsive 4/2/1-column layout;
 - no Frappe API/database/product/permission logic.
+
+EdgeSuite CI #400 passed Fast validation, frontend compilation and Playwright browser smoke for the comparison component.
 
 ### First VetEdge reference — Consultation Register
 
@@ -137,27 +139,55 @@ Metadata explicitly reports `aggregate_only=true` and `detail_rows_materialized=
 
 Vaccination Due Soon/Overdue was deliberately not used as the first comparison reference because those are present-state due snapshots; mechanically comparing them to a previous date period would be semantically misleading.
 
-Source contract: `vetedge/tests/test_report_comparison_contract.py`.
+### Report Center adoption
 
-### Phase 10C UI next
+Report Center now:
 
-Report Center should expose Compare Previous Period only when:
+- detects `EdgeReportComparisonPanel` as an optional shared runtime capability, so an older EdgeSuite runtime does not break the report page;
+- shows the comparison control only for a supported comparison report;
+- uses the separate `advanced_features_entitled` capability rather than the report's Standard/Advanced tier;
+- calls only the aggregate comparison endpoint;
+- never calls `provider.load()` from the comparison action;
+- does not change page start/page size or fetch a second detail dataset;
+- renders comparison alongside the existing report chart through the shared EdgeSuite panel;
+- clears an existing comparison when filters or a saved view change so stale visible comparison data is not retained under a new filter state.
 
-- the current report has a supported comparison provider; and
-- `advanced_features_entitled` is true.
+Source contracts:
 
-Toggling comparison must load only the aggregate comparison endpoint. It must not fetch a second detail-row dataset or disturb report pagination. If report filters change while comparison is visible, refresh the aggregate comparison once using the new filters.
+- `vetedge/tests/test_report_comparison_contract.py`;
+- `vetedge/tests/test_report_comparison_ui_contract.py`;
+- `vetedge/tests/test_reporting_capabilities.py`.
 
 ## Phase 10D — Grouping, Subtotals and Conditional Highlighting
 
-Implement shared presentation only after provider contracts can supply safe grouping metadata.
+Status: **next implementation slice**.
 
-Examples:
+Grouping must be an aggregate/provider capability, not a browser grouping of the current 50-row page.
 
-- group Consultation Register by Branch, Practitioner, Type or Status;
-- group Vaccination by Vaccine/Branch/due status;
-- highlight overdue vaccination, missing price, unpaid invoice, pending stock posting or operational exceptions;
-- subtotal numeric columns from server-authoritative aggregates where required.
+First reference should use Consultation Register because its normalized filters and aggregate SQL are already mature.
+
+Proposed initial grouping dimensions:
+
+- Branch;
+- Practitioner;
+- Consultation Type;
+- Status.
+
+Rules:
+
+- group totals are calculated server-side across the complete filtered result set;
+- interactive detail pagination remains independent;
+- group subtotals must identify the aggregation basis explicitly;
+- grouping must respect the same report entitlement, role, Branch and practitioner self-view rules as the underlying report;
+- changing group dimension must not trigger full-detail materialization;
+- EdgeSuite should own only product-neutral group/subtotal presentation;
+- conditional highlighting should consume explicit product-supplied state/tone metadata rather than infer Veterinary business rules in the shared UI.
+
+Later grouping examples:
+
+- Vaccination by Vaccine/Branch/due status;
+- Hospitalisation by service Branch/care location/status;
+- financial reports only after accounting-safe aggregation is preserved.
 
 Do not let browser-side grouping replace server pagination for large datasets.
 
