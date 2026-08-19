@@ -7,6 +7,8 @@ from frappe import _
 from frappe.model.utils.user_settings import get_user_settings, update_user_settings
 from frappe.utils import cint, now
 
+from vetedge.services.report_filter_search import REPORT_FIELDS, search_report_filter_options
+from vetedge.services.report_visibility import normalize_report_filters
 from vetedge.services.reporting_capabilities import require_reporting_action
 
 USER_SETTINGS_SCOPE = "VetEdge Report Center"
@@ -134,25 +136,83 @@ def _save_views(views: list[dict]) -> None:
 	update_user_settings(USER_SETTINGS_SCOPE, {SETTINGS_KEY: views})
 
 
-def _public_view(view: dict) -> dict:
-	return {
+def _public_view(view: dict, include_state: bool = False) -> dict:
+	result = {
 		"view_id": str(view.get("view_id") or ""),
 		"label": str(view.get("label") or ""),
 		"report_name": str(view.get("report_name") or ""),
-		"filters": dict(view.get("filters") or {}),
-		"visible_columns": list(view.get("visible_columns") or []),
 		"is_default": cint(view.get("is_default")),
 		"created_on": view.get("created_on"),
 		"modified_on": view.get("modified_on"),
 	}
+	if include_state:
+		result["filters"] = dict(view.get("filters") or {})
+		result["visible_columns"] = list(view.get("visible_columns") or [])
+	return result
+
+
+def _find_view(view_id: str, report_name: str | None = None) -> dict:
+	view_id = str(view_id or "").strip()
+	if not view_id:
+		frappe.throw(_("Saved report view is required."))
+	view = next((item for item in _load_views() if str(item.get("view_id") or "") == view_id), None)
+	if not view or (report_name and str(view.get("report_name") or "") != report_name):
+		frappe.throw(_("Saved report view was not found."), frappe.DoesNotExistError)
+	return view
+
+
+def _normalize_saved_scope(report_name: str, stored_filters: dict) -> tuple[dict, list[str]]:
+	filters = _normalize_filters(stored_filters)
+	removed: list[str] = []
+	try:
+		normalized = dict(normalize_report_filters(report_name, filters) or {})
+	except frappe.PermissionError:
+		if "branch" not in filters:
+			raise
+		filters.pop("branch", None)
+		removed.append("branch")
+		normalized = dict(normalize_report_filters(report_name, filters) or {})
+
+	for field in sorted(REPORT_FIELDS.get(report_name, set()) - {"branch"}):
+		value = normalized.get(field)
+		if value in (None, ""):
+			continue
+		options = search_report_filter_options(
+			report_name=report_name,
+			field=field,
+			txt=str(value),
+			start=0,
+			page_length=20,
+			filters=normalized,
+		)
+		if any(str(option.get("value") or "") == str(value) for option in options):
+			continue
+		normalized.pop(field, None)
+		removed.append(field)
+
+	return {key: value for key, value in normalized.items() if key in ALLOWED_FILTER_KEYS and value not in (None, "")}, sorted(set(removed))
 
 
 @frappe.whitelist()
 def get_saved_report_views(report_name: str) -> list[dict]:
 	_require_system_user()
 	report_name = _normalize_report_name(report_name)
-	views = [_public_view(view) for view in _load_views() if view.get("report_name") == report_name]
+	views = [_public_view(view, include_state=False) for view in _load_views() if view.get("report_name") == report_name]
 	return sorted(views, key=lambda view: (not bool(view["is_default"]), view["label"].lower(), view["view_id"]))
+
+
+@frappe.whitelist()
+def apply_saved_report_view(view_id: str, report_name: str) -> dict:
+	_require_system_user()
+	report_name = _normalize_report_name(report_name)
+	view = _find_view(view_id, report_name=report_name)
+	filters, removed = _normalize_saved_scope(report_name, dict(view.get("filters") or {}))
+	return {
+		"view": _public_view(view, include_state=False),
+		"filters": filters,
+		"visible_columns": _normalize_columns(view.get("visible_columns") or []),
+		"removed_filter_keys": removed,
+	}
 
 
 @frappe.whitelist()
@@ -233,7 +293,37 @@ def save_report_view(
 		view.setdefault("created_on", timestamp)
 
 	_save_views(views)
-	return _public_view(view)
+	return _public_view(view, include_state=False)
+
+
+@frappe.whitelist()
+def rename_saved_report_view(view_id: str, report_name: str, label: str) -> dict:
+	_require_system_user()
+	report_name = _normalize_report_name(report_name)
+	label = str(label or "").strip()
+	if not label:
+		frappe.throw(_("View name is required."))
+	if len(label) > MAX_LABEL_LENGTH:
+		frappe.throw(_("View name must be {0} characters or fewer.").format(MAX_LABEL_LENGTH))
+
+	views = _load_views()
+	view = next(
+		(item for item in views if str(item.get("view_id") or "") == str(view_id or "").strip() and item.get("report_name") == report_name),
+		None,
+	)
+	if not view:
+		frappe.throw(_("Saved report view was not found."), frappe.DoesNotExistError)
+	if any(
+		item.get("report_name") == report_name
+		and str(item.get("view_id") or "") != str(view.get("view_id") or "")
+		and str(item.get("label") or "").strip().casefold() == label.casefold()
+		for item in views
+	):
+		frappe.throw(_("A saved view with this name already exists for the report."))
+	view["label"] = label
+	view["modified_on"] = now()
+	_save_views(views)
+	return _public_view(view, include_state=False)
 
 
 @frappe.whitelist()
