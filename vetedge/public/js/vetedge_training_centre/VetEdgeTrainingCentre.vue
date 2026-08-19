@@ -9,24 +9,22 @@
     data-edge-product="vetedge"
   >
     <EdgePageLayout>
-      <EdgePageHeader
-        title="Training Centre"
-        eyebrow="Help & Training"
-        subtitle="Role-aware Veterinary guides, workflow references, videos and practice exercises."
-      />
+      <template #header>
+        <EdgePageHeader
+          title="Training Centre"
+          eyebrow="Help & Training"
+          subtitle="Role-aware Veterinary guides, workflow references, videos and practice exercises."
+        />
+      </template>
 
       <div v-if="!currentModule" class="vtc-list-view">
         <div class="vtc-toolbar">
-          <EdgeInput
-            v-model="search"
-            label="Search Training"
-            placeholder="Search modules"
-          />
+          <EdgeInput v-model="search" label="Search Training" placeholder="Search modules" />
           <button class="edge-button" type="button" :disabled="loading" @click="loadModules">Refresh</button>
         </div>
 
         <EdgeLoadingState v-if="loading" message="Loading training modules…" />
-        <EdgeErrorState v-else-if="error" :message="error" @retry="loadModules" />
+        <EdgeErrorState v-else-if="error" title="Training Centre could not load" :message="error" action-label="Try again" @retry="loadModules" />
         <EdgeEmptyState
           v-else-if="!filteredModules.length"
           title="No training modules found"
@@ -40,9 +38,7 @@
               <p>{{ module.short_description || 'No description provided.' }}</p>
             </div>
             <div class="vtc-card-actions">
-              <button class="edge-button edge-button--primary" type="button" @click="openModule(module.module_id)">
-                Read Guide
-              </button>
+              <button class="edge-button edge-button--primary" type="button" @click="openModule(module.module_id)">Read Guide</button>
               <span class="vtc-video-status" :class="{ 'vtc-video-status--available': module.has_video }">
                 {{ module.has_video ? 'Video available' : (module.video_display_status || 'Video coming soon') }}
               </span>
@@ -61,15 +57,34 @@
         </div>
 
         <div class="vtc-tabs" role="tablist" aria-label="Training module sections">
-          <button v-for="tab in tabs" :key="tab.value" class="edge-button" :class="{ 'edge-button--primary': activeTab === tab.value }" type="button" @click="activeTab = tab.value">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            class="edge-button"
+            :class="{ 'edge-button--primary': activeTab === tab.value }"
+            type="button"
+            @click="activeTab = tab.value"
+          >
             {{ tab.label }}
           </button>
         </div>
 
         <EdgeLoadingState v-if="moduleLoading" message="Loading guide…" />
-        <EdgeErrorState v-else-if="moduleError" :message="moduleError" @retry="openModule(currentModuleId, { updateUrl: false })" />
+        <EdgeErrorState
+          v-else-if="moduleError"
+          title="Training guide could not load"
+          :message="moduleError"
+          action-label="Try again"
+          @retry="openModule(currentModuleId, { updateUrl: false })"
+        />
         <div v-else class="vtc-panel">
-          <div v-if="activeTab === 'guide'" ref="guidePanel" class="vtc-markdown-host" v-html="renderedGuide" @click="handleContentClick"></div>
+          <div
+            v-if="activeTab === 'guide'"
+            ref="guidePanel"
+            class="vtc-markdown-host"
+            v-html="renderedGuide"
+            @click="handleContentClick"
+          ></div>
 
           <div v-else-if="activeTab === 'video'">
             <div v-if="currentModule.module?.video_embed_url" class="vtc-video-frame">
@@ -97,7 +112,13 @@
           </div>
 
           <div v-else-if="activeTab === 'practice'">
-            <div v-if="currentModule.practice_exercise" ref="practicePanel" class="vtc-markdown-host" v-html="renderedPractice" @click="handleContentClick"></div>
+            <div
+              v-if="currentModule.practice_exercise"
+              ref="practicePanel"
+              class="vtc-markdown-host"
+              v-html="renderedPractice"
+              @click="handleContentClick"
+            ></div>
             <EdgeEmptyState v-else title="No practice exercise" description="This guide does not currently contain a practice exercise section." />
           </div>
         </div>
@@ -210,8 +231,9 @@ export default {
         this.modules = Array.isArray(payload) ? payload : [];
         const requested = this.requestedModuleId();
         if (requested) {
-          if (this.modules.some((module) => module.module_id === requested)) await this.openModule(requested, { updateUrl: false });
-          else {
+          if (this.modules.some((module) => module.module_id === requested)) {
+            await this.openModule(requested, { updateUrl: false });
+          } else {
             this.error = 'That training module is not available for your role.';
             this.updateTrainingUrl('');
           }
@@ -295,7 +317,9 @@ export default {
       return this.escape(text)
         .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
           const safeSrc = /^(\/|https?:\/\/)/i.test(src) ? this.escapeAttr(src) : '';
-          return safeSrc ? `<img class="vtc-guide-image" src="${safeSrc}" alt="${this.escapeAttr(alt)}" loading="lazy">` : this.escape(alt);
+          return safeSrc
+            ? `<img class="vtc-guide-image" src="${safeSrc}" alt="${this.escapeAttr(alt)}" loading="lazy">`
+            : this.escape(alt);
         })
         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => this.renderLink(label, href))
         .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -316,7 +340,10 @@ export default {
       const quote = line.match(/^>\s?(.*)$/);
       if (quote) return `<blockquote>${this.inline(quote[1])}</blockquote>`;
       const checklist = line.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
-      if (checklist) return `<div class="vtc-check"><input type="checkbox" disabled ${checklist[1].toLowerCase() === 'x' ? 'checked' : ''}> <span>${this.inline(checklist[2])}</span></div>`;
+      if (checklist) {
+        const checked = checklist[1].toLowerCase() === 'x' ? 'checked' : '';
+        return `<div class="vtc-check"><input type="checkbox" disabled ${checked}> <span>${this.inline(checklist[2])}</span></div>`;
+      }
       const bullet = line.match(/^-\s+(.+)$/);
       if (bullet) return `<div class="vtc-bullet">&bull; ${this.inline(bullet[1])}</div>`;
       if (/^\d+\.\s+/.test(line)) return `<div class="vtc-numbered">${this.inline(line)}</div>`;
@@ -364,7 +391,9 @@ export default {
         }
         blocks.push(this.renderLine(line));
       }
-      if (inCode) blocks.push(`<pre><code class="language-${this.escapeAttr(codeLang)}">${this.escape(codeLines.join('\n'))}</code></pre>`);
+      if (inCode) {
+        blocks.push(`<pre><code class="language-${this.escapeAttr(codeLang)}">${this.escape(codeLines.join('\n'))}</code></pre>`);
+      }
       return `<div class="vtc-markdown">${blocks.join('\n')}</div>`;
     },
     loadMermaid() {
