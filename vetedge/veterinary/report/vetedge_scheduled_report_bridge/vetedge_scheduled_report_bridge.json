@@ -20,19 +20,10 @@
   {"role": "System Manager"},
   {"role": "VetEdge Administrator"},
   {"role": "Branch Manager"},
-  {"role": "VetEdge Branch Manager"},
   {"role": "VetEdge Doctor"},
   {"role": "Veterinary Nurse"},
-  {"role": "VetEdge Nurse"},
   {"role": "VetEdge Front Desk"},
   {"role": "Lab Technician"},
-  {"role": "VetEdge Lab Technician"},
-  {"role": "Dispensary User"},
-  {"role": "VetEdge Dispensary User"},
-  {"role": "Accounts Manager"},
-  {"role": "Sales Manager"},
-  {"role": "Accounts Cashier"},
-  {"role": "VetEdge Accounts/Cashier"},
-  {"role": "VetEdge Groomer"}
+  {"role": "Dispensary User"}
  ]
 }
