@@ -1312,7 +1312,7 @@ def hydrate_reference_context(
 			"service_branch",
 			"vaccine",
 			"administered_by",
-			"vaccination_date",
+			"administered_on",
 			"next_due_date",
 			"linked_invoice",
 			"linked_consultation",
