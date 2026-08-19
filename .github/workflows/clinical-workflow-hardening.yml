@@ -41,6 +41,7 @@ jobs:
             vetedge/services/clinical_consultation_context.py \
             vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/vaccination.py \
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
             vetedge/services/lab_billing_context.py \
@@ -82,6 +83,7 @@ jobs:
             vetedge/services/clinical_consultation_context.py \
             vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/vaccination.py \
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
             vetedge/services/lab_billing_context.py \
@@ -96,6 +98,7 @@ jobs:
             vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_medical_history_and_consultation_context_contract.py \
             vetedge/tests/test_medical_history_clinical_truth_contract.py \
+            vetedge/tests/test_vaccination_administration_regressions.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
@@ -108,6 +111,7 @@ jobs:
             vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_medical_history_and_consultation_context_contract.py \
             vetedge/tests/test_medical_history_clinical_truth_contract.py \
+            vetedge/tests/test_vaccination_administration_regressions.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_warm_navigation_reuse.py \
             vetedge/tests/test_veterinary_settings_first_load_contract.py
