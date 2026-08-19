@@ -6,13 +6,17 @@ OPERATIONS_UI = ROOT / "public/js/vetedge_hospitalisation_operations/VetEdgeHosp
 REPORT_CENTER_UI = ROOT / "veterinary/page/vetedge_report_center/vetedge_report_center.js"
 
 
-def test_hospitalisation_pending_stock_exception_is_bounded_advanced_and_read_only():
+def test_hospitalisation_exceptions_are_bounded_advanced_and_read_only():
     source = SOURCE.read_text(encoding="utf-8")
 
     for expected in (
-        'SUPPORTED_EXCEPTION_KEYS = {"hospitalisation_pending_stock"}',
+        '"hospitalisation_pending_stock"',
+        '"hospitalisation_pending_billing"',
+        '"hospitalisation_missing_price"',
+        '"hospitalisation_operations"',
         "MAX_EXCEPTION_ITEMS = 50",
         "CANDIDATE_PARENT_WINDOW = 250",
+        "CANDIDATE_CHILD_WINDOW = 500",
         "@frappe.read_only()",
         "check_advanced_reporting_entitlement()",
         'require_reporting_action(PENDING_ACTIONS_REPORT, "report", "view")',
@@ -30,6 +34,23 @@ def test_pending_stock_rule_reuses_existing_hospitalisation_stock_truth():
         '"stock_status": ["!=", "Posted"]',
         '"stock_entry": ["is", "not set"]',
         '"Stock-affecting Hospitalisation activities have not yet produced a Stock Entry."',
+    ):
+        assert expected in source
+
+
+def test_new_exception_types_reuse_existing_billing_and_missing_price_truth():
+    source = SOURCE.read_text(encoding="utf-8")
+
+    for expected in (
+        '"billable": 1',
+        '"billing_status": ["not in", ["Charged", "Cancelled"]]',
+        '"billing_status": ["not in", ["Invoiced", "Cancelled"]]',
+        "qty = flt(row.get(\"qty\")) or 1",
+        "rate = flt(row.get(\"rate\"))",
+        "amount = flt(row.get(\"amount\")) or qty * rate",
+        "if rate <= 0 or amount <= 0:",
+        '"exception_type": "pending_billing"',
+        '"exception_type": "missing_price"',
     ):
         assert expected in source
 
@@ -55,6 +76,7 @@ def test_exception_feed_returns_clickable_source_reference_not_mutations():
         '"reference_name": name',
         '"action_label": _("Open Hospitalisation")',
         '"tone": "warning"',
+        '"tone": "danger"',
     ):
         assert expected in source
 
@@ -67,6 +89,18 @@ def test_exception_feed_returns_clickable_source_reference_not_mutations():
         assert forbidden not in source
 
 
+def test_combined_operations_feed_is_one_browser_request_and_capped():
+    source = SOURCE.read_text(encoding="utf-8")
+    combined = source.split("def _hospitalisation_operations_exceptions", 1)[1].split("@frappe.whitelist()", 1)[0]
+
+    assert "_hospitalisation_missing_price(filters)" in combined
+    assert "_hospitalisation_pending_stock(filters)" in combined
+    assert "_hospitalisation_pending_billing(filters)" in combined
+    assert "items[:MAX_EXCEPTION_ITEMS]" in combined
+    assert '"browser_request_count": 1' in combined
+    assert '"included_types": ["missing_price", "pending_stock", "pending_billing"]' in combined
+
+
 def test_hospitalisation_exception_panel_lives_in_operations_not_generic_report_center():
     operations = OPERATIONS_UI.read_text(encoding="utf-8")
     report_center = REPORT_CENTER_UI.read_text(encoding="utf-8")
@@ -74,7 +108,7 @@ def test_hospitalisation_exception_panel_lives_in_operations_not_generic_report_
     for expected in (
         "EdgeReportExceptionPanel",
         "vetedge.services.report_exceptions.get_report_exceptions",
-        "hospitalisation_pending_stock",
+        "hospitalisation_operations",
         "Pending Hospitalisation Actions",
         "advanced_features_entitled",
         '@open="openException"',
