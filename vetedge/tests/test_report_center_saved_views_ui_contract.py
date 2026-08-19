@@ -9,7 +9,9 @@ def test_report_center_wires_private_saved_view_endpoints_and_controls():
 
     for expected in (
         "vetedge.services.report_saved_views.get_saved_report_views",
+        "vetedge.services.report_saved_views.apply_saved_report_view",
         "vetedge.services.report_saved_views.save_report_view",
+        "vetedge.services.report_saved_views.rename_saved_report_view",
         "vetedge.services.report_saved_views.delete_saved_report_view",
         "savedViews: []",
         "selectedSavedViewId",
@@ -26,19 +28,21 @@ def test_report_center_wires_private_saved_view_endpoints_and_controls():
         assert expected in source
 
 
-def test_saved_view_application_replaces_filters_and_columns_then_refreshes_once():
+def test_saved_view_application_revalidates_state_then_refreshes_provider_once():
     source = SOURCE.read_text(encoding="utf-8")
     method = source.split("async applySavedView(viewId)", 1)[1].split("promptSaveView", 1)[0]
 
+    assert "frappe.call(SAVED_VIEWS_APPLY_API" in method
     assert "for (const key of REPORT_FILTER_KEYS)" in method
     assert "this.filters = nextFilters" in method
     assert "this.viewState = { visible_columns:" in method
     assert "this.pageStart = 0" in method
     assert "this.updateLocation()" in method
+    assert "removed_filter_keys" in method
     assert "await this.refresh(true)" in method
     assert method.count("this.refresh(") == 1
+    assert method.count("frappe.call(") == 1
     assert "provider.load" not in method
-    assert "frappe.call" not in method
 
 
 def test_manual_filter_or_column_changes_clear_selected_saved_view_marker():
@@ -59,3 +63,4 @@ def test_saved_view_ui_does_not_store_or_materialize_report_rows():
     assert "provider.load" not in saved_view_methods
     assert "localStorage" not in saved_view_methods
     assert "sessionStorage" not in saved_view_methods
+    assert "Make this my default view" not in saved_view_methods
