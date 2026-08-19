@@ -61,11 +61,29 @@ def _require_same(label: str, actual, expected) -> None:
         )
 
 
+def _previous_doc(doc):
+    getter = getattr(doc, "get_doc_before_save", None)
+    return getter() if callable(getter) else None
+
+
+def _is_unchanged_historical_owner(doc, previous, patient_name: str) -> bool:
+    if not previous:
+        return False
+    return bool(
+        _clean(previous.get("patient")) == patient_name
+        and _clean(previous.get("customer"))
+        and _clean(previous.get("customer")) == _clean(doc.get("customer"))
+    )
+
+
 def resolve_hospitalisation_context(doc) -> None:
     """Normalize and validate Hospitalisation clinical context.
 
     Patient.default_branch is a fallback only. A linked Consultation, when
     supplied, is authoritative for Patient, Owner, service Branch and Company.
+    Existing direct admissions preserve their recorded episode owner if the
+    Patient's Primary Owner changes later; changing the Hospitalisation owner
+    itself is validated against the Patient's current Primary Owner.
     """
     consultation = None
     if doc.get("linked_consultation"):
@@ -86,19 +104,25 @@ def resolve_hospitalisation_context(doc) -> None:
 
     patient = _patient_context(patient_name)
     patient_owner = _clean(patient.get("primary_owner"))
+    previous = _previous_doc(doc)
 
     if consultation:
         if _clean(consultation.get("patient")) != patient_name:
             frappe.throw(_("Linked Consultation must belong to the selected Veterinary Patient."), frappe.ValidationError)
-        consultation_owner = _clean(consultation.get("primary_owner"))
-        if patient_owner and consultation_owner and patient_owner != consultation_owner:
-            frappe.throw(_("Linked Consultation Owner does not match the selected Patient's Primary Owner."), frappe.ValidationError)
+        # The Consultation preserves the owner for that clinical episode. Do not
+        # rewrite or invalidate historical Hospitalisations when Patient ownership
+        # changes after the Consultation was created.
+        if not _clean(doc.get("customer")):
+            doc.set("customer", consultation.get("primary_owner"))
     else:
         _set_if_missing(doc, "customer", patient_owner)
         _set_if_missing(doc, "service_branch", patient.get("default_branch"))
-
-    if _clean(doc.get("customer")) != patient_owner:
-        frappe.throw(_("Hospitalisation Pet Owner must match the selected Patient's Primary Owner."), frappe.ValidationError)
+        if not _is_unchanged_historical_owner(doc, previous, patient_name):
+            if _clean(doc.get("customer")) != patient_owner:
+                frappe.throw(
+                    _("Hospitalisation Pet Owner must match the selected Patient's current Primary Owner."),
+                    frappe.ValidationError,
+                )
 
     if not _clean(doc.get("service_branch")):
         frappe.throw(_("Service Branch is required for Veterinary Hospitalisation."), frappe.ValidationError)
