@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import frappe
 
+from vetedge.services.clinical_consultation_context import decorate_consultation_link_field
 from vetedge.services.display_labels import get_display_label
 from vetedge.services.portal_access import require_internal_user
 
@@ -80,7 +81,9 @@ def _align_vaccination_state(state: dict) -> dict:
 
     # Identity, workflow-produced administration metadata, inventory lineage and
     # accounting references are never edited directly from the EdgeSuite modal.
-    # Their authoritative workflow actions populate them server-side.
+    # Their authoritative workflow actions populate them server-side. The
+    # standalone Consultation link is selectively reopened later only while the
+    # record is Draft/unbilled and has never been linked.
     for fieldname in VACCINATION_SYSTEM_FIELDS:
         field = fields.get(fieldname)
         if field:
@@ -128,6 +131,7 @@ def get_clinical_record_editor(doctype: str, name: str) -> dict:
     state = _align_link_labels(original(doctype=doctype, name=name))
     if doctype == "Veterinary Vaccination Record":
         state = _align_vaccination_state(state)
+        state = decorate_consultation_link_field(state, doctype, name)
     return state
 
 
