@@ -36,6 +36,7 @@ def test_training_centre_component_preserves_lazy_role_safe_content_loading():
     for expected in (
         "<EdgeAppShell",
         "<EdgePageLayout",
+        '<template #header>',
         "<EdgePageHeader",
         "get_training_modules",
         "get_training_module_content",
