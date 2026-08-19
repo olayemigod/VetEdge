@@ -7,6 +7,7 @@ const SAVED_VIEWS_APPLY_API = "vetedge.services.report_saved_views.apply_saved_r
 const SAVED_VIEWS_SAVE_API = "vetedge.services.report_saved_views.save_report_view";
 const SAVED_VIEWS_RENAME_API = "vetedge.services.report_saved_views.rename_saved_report_view";
 const SAVED_VIEWS_DELETE_API = "vetedge.services.report_saved_views.delete_saved_report_view";
+const REPORT_COMPARISON_API = "vetedge.services.report_comparison.get_report_comparison";
 const REPORT_FILTER_KEYS = [
 	"branch", "from_date", "to_date", "date_preset", "customer", "patient", "practitioner",
 	"consultation_type", "status", "payment_status", "service_category", "item", "vaccine",
@@ -24,6 +25,7 @@ function ensureVetEdgeReportCenterStyles() {
 		.vetedge-report-center-saved-view{min-width:12rem;max-width:18rem}
 		.vetedge-report-provider-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:var(--edge-color-surface-muted);color:var(--edge-color-ink-500);font-size:.7rem;font-weight:600}
 		.vetedge-report-center-chart{min-height:280px}
+		.vetedge-report-center-insights{display:grid;gap:1rem}
 		:root[data-edge-palette] .vetedge-report-center-root .edge-shell-main{background:linear-gradient(180deg,var(--edge-color-brand-50) 0,var(--edge-color-surface-soft) 180px,var(--edge-color-surface-muted) 420px)!important}
 		:root[data-edge-palette] .graph-svg-tip,:root[data-edge-appearance] .graph-svg-tip{background:var(--edge-color-surface)!important;border:1px solid var(--edge-color-border)!important;color:var(--edge-color-ink-950)!important}
 		@media(max-width:900px){.vetedge-report-center-filter-grid{grid-template-columns:repeat(2,minmax(10rem,1fr))}}
@@ -129,6 +131,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 		const h = runtime.Vue.h;
 		const nextTick = runtime.Vue.nextTick;
 		const { EdgeAppShell, EdgeReportShell, EdgeLinkField, EdgeDropdown, EdgeInput } = runtime.components;
+		const EdgeReportComparisonPanel = runtime.components.EdgeReportComparisonPanel || null;
 		const initial = reportCenterParams();
 		const profile = reportCenterProfile();
 
@@ -154,7 +157,9 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					chartInstance: null,
 					exportBusy: false,
 					printBusy: false,
-					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true },
+					comparisonLoading: false,
+					comparison: null,
+					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true, advanced_features_entitled: false },
 				};
 			},
 			async mounted() {
@@ -174,6 +179,9 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				},
 				selectedSavedView() {
 					return (this.savedViews || []).find((view) => view.view_id === this.selectedSavedViewId) || null;
+				},
+				comparisonSupported() {
+					return Boolean(EdgeReportComparisonPanel && this.reportName === "Consultation Register");
 				},
 				pagination() {
 					const pageSize = Number(this.result.page_length || this.pageLength || VETEDGE_REPORT_PAGE_LENGTH);
@@ -221,6 +229,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					if (field === "species") this.filters.breed = "";
 					this.filters[field] = value || "";
 					this.selectedSavedViewId = "";
+					this.comparison = null;
 				},
 				reportFilters() {
 					return Object.fromEntries(Object.entries(this.filters).filter(([, value]) => value !== undefined && value !== null && String(value) !== ""));
@@ -236,7 +245,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						}
 					} catch (error) {
 						console.warn("VetEdge Report Center capabilities could not be loaded", error);
-						this.capabilities = { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true };
+						this.capabilities = { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true, advanced_features_entitled: false };
 					}
 				},
 				async loadSavedViews() {
@@ -281,6 +290,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						this.viewState = { visible_columns: normalizeReportColumnKeys(state.visible_columns) };
 						this.selectedSavedViewId = state.view?.view_id || viewId;
 						this.pageStart = 0;
+						this.comparison = null;
 						this.updateLocation();
 						if (Array.isArray(state.removed_filter_keys) && state.removed_filter_keys.length) {
 							frappe.show_alert?.({ message: __("Some saved filters were removed because your current access or report context changed."), indicator: "orange" });
@@ -351,7 +361,10 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				rowKey(row, index) { return row?.name || row?.invoice || row?.batch_no || `row-${Number(this.result.start || 0) + index}`; },
 				async refresh(resetPage = false) {
 					if (!this.reportName) { this.error = __("No report was selected."); return; }
-					if (resetPage) this.pageStart = 0;
+					if (resetPage) {
+						this.pageStart = 0;
+						this.comparison = null;
+					}
 					this.loading = true;
 					this.error = "";
 					this.chartInstance?.destroy?.();
@@ -385,6 +398,34 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					this.pageLength = Math.min(100, Math.max(1, Number(size || VETEDGE_REPORT_PAGE_LENGTH)));
 					this.pageStart = 0;
 					this.refresh();
+				},
+				async loadComparison() {
+					if (!this.comparisonSupported || this.comparisonLoading) return;
+					if (!this.capabilities.advanced_features_entitled) {
+						frappe.msgprint({
+							title: __("Advanced Reporting"),
+							message: __("Previous-period comparison is an Advanced reporting feature and is not included in the current Plan."),
+							indicator: "orange",
+						});
+						return;
+					}
+					this.comparisonLoading = true;
+					try {
+						const response = await frappe.call(REPORT_COMPARISON_API, {
+							report_name: this.reportName,
+							filters: JSON.stringify(this.reportFilters()),
+						});
+						this.comparison = response.message || null;
+					} catch (error) {
+						this.comparison = null;
+						frappe.msgprint({ title: __("Comparison Failed"), message: error?.message || __("The comparison could not be generated."), indicator: "red" });
+					} finally {
+						this.comparisonLoading = false;
+						await nextTick();
+						this.chartInstance?.destroy?.();
+						this.chartInstance = null;
+						this.renderChart();
+					}
 				},
 				renderChart() {
 					if (!this.result.chart?.data || !frappe.Chart || !this.$el) return;
@@ -468,6 +509,21 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: !this.selectedSavedView, onClick: this.deleteSelectedSavedView }, __("Delete")),
 					];
 				},
+				renderInsights() {
+					const nodes = [];
+					if (this.comparisonSupported && (this.comparison || this.comparisonLoading)) {
+						const payload = this.comparison || {};
+						nodes.push(h(EdgeReportComparisonPanel, {
+							title: payload.title || __("Previous Period Comparison"),
+							currentLabel: payload.current_label || __("Current period"),
+							comparisonLabel: payload.comparison_label || __("Previous period"),
+							metrics: payload.metrics || [],
+							loading: this.comparisonLoading,
+						}));
+					}
+					if (this.result.chart?.data) nodes.push(h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" }));
+					return h("div", { class: "vetedge-report-center-insights" }, nodes);
+				},
 			},
 			render() {
 				const reportShell = h(
@@ -511,9 +567,16 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						filters: () => this.renderFilters(),
 						filterActions: () => h("div", { class: "vetedge-report-center-actions" }, [
 							...this.renderSavedViewActions(),
+							...(this.comparisonSupported ? [h("button", {
+								class: "edge-button edge-button--secondary",
+								type: "button",
+								disabled: this.loading || this.comparisonLoading || this.capabilities.can_view === false || !this.capabilities.advanced_features_entitled,
+								title: this.capabilities.advanced_features_entitled ? __("Compare the selected period with the immediately preceding equal-length period.") : __("Advanced reporting feature"),
+								onClick: this.loadComparison,
+							}, this.comparisonLoading ? __("Comparing…") : (this.capabilities.advanced_features_entitled ? __("Compare Previous Period") : __("Compare · Advanced")))] : []),
 							h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading || this.capabilities.can_view === false, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh")),
 						]),
-						chart: this.result.chart?.data ? () => h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" }) : undefined,
+						chart: (this.result.chart?.data || this.comparison || this.comparisonLoading) ? () => this.renderInsights() : undefined,
 						resultMeta: () => h("span", {}, __("{0} · filters and columns retained in URL", [this.providerLabel])),
 					},
 				);
