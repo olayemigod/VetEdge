@@ -1,24 +1,5 @@
 === COMPILE ===
 === RUFF ===
-UP035 [*] Import from `collections.abc` instead: `Callable`
- --> vetedge/services/remaining_link_search.py:3:1
-  |
-1 | from __future__ import annotations
-2 |
-3 | from typing import Any, Callable
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-4 |
-5 | import frappe
-  |
-help: Import from `collections.abc`
-  |
-2 |
-  - from typing import Any, Callable
-3 + from typing import Any
-4 + from collections.abc import Callable
-5 |
-  |
-
 I001 [*] Import block is un-sorted or un-formatted
  --> vetedge/tests/test_remaining_fuzzy_search.py:1:1
   |
@@ -31,8 +12,8 @@ help: Organize imports
 3 | ROOT = Path(__file__).resolve().parents[2]
   |
 
-Found 2 errors.
-[*] 2 fixable with the `--fix` option.
+Found 1 error.
+[*] 1 fixable with the `--fix` option.
 === PYTEST ===
 ....................                                                     [100%]
-20 passed in 0.10s
+20 passed in 0.12s
