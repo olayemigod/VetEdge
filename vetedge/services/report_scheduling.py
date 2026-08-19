@@ -16,6 +16,7 @@ from vetedge.services.report_visibility import normalize_report_filters
 
 AUTO_EMAIL_DOCTYPE = "Auto Email Report"
 BRIDGE_REPORT = "VetEdge Scheduled Report Bridge"
+DESCRIPTION_PREFIX = "Scheduled VetEdge report: "
 ALLOWED_FREQUENCIES = {"Daily", "Weekdays", "Weekly", "Monthly"}
 ALLOWED_FORMATS = {"HTML", "XLSX", "CSV", "PDF"}
 MAX_SCHEDULE_ROWS = 5000
@@ -84,7 +85,7 @@ def _schedule_doc(
 	day_of_week: str,
 	send_if_data: int,
 	row_limit: int,
-	description: str = "",
+	description: str,
 ):
 	doc = frappe.get_doc(
 		{
@@ -99,11 +100,26 @@ def _schedule_doc(
 			"enabled": 1,
 			"send_if_data": cint(send_if_data),
 			"no_of_rows": row_limit,
-			"description": description or None,
+			"description": description,
 		}
 	)
 	doc.insert()
 	return doc
+
+
+def _owned_vetedge_schedule(name: str):
+	doc = frappe.get_doc(AUTO_EMAIL_DOCTYPE, name)
+	doc.check_permission("read")
+	if doc.user != frappe.session.user or not cstr(doc.description or "").startswith(DESCRIPTION_PREFIX):
+		frappe.throw(_("You are not permitted to manage this scheduled report."), frappe.PermissionError)
+	return doc
+
+
+def _target_from_schedule(row: dict) -> str:
+	description = cstr(row.get("description") or "")
+	if description.startswith(DESCRIPTION_PREFIX):
+		return description[len(DESCRIPTION_PREFIX):].strip()
+	return ""
 
 
 @frappe.whitelist()
@@ -143,6 +159,7 @@ def create_native_report_schedule(
 		day_of_week=day_of_week,
 		send_if_data=send_if_data,
 		row_limit=row_limit,
+		description=f"{DESCRIPTION_PREFIX}{compatibility['report_name']}",
 	)
 	return {
 		"name": doc.name,
@@ -168,12 +185,7 @@ def create_vetedge_report_schedule(
 	send_if_data: int = 1,
 	no_of_rows: int = 500,
 ) -> dict:
-	"""Schedule optimized EdgeSuite/VetEdge report data through Frappe Auto Email Report.
-
-	Frappe remains responsible for cadence, background processing and email delivery.
-	The internal bridge report is responsible only for re-executing the target
-	VetEdge provider under the schedule owner's report/Branch permissions.
-	"""
+	"""Schedule optimized EdgeSuite/VetEdge report data through Frappe Auto Email Report."""
 	require_internal_user()
 	compatibility = get_report_scheduling_compatibility(report_name)
 	if not compatibility.get("can_configure"):
@@ -206,7 +218,7 @@ def create_vetedge_report_schedule(
 		day_of_week=day_of_week,
 		send_if_data=send_if_data,
 		row_limit=row_limit,
-		description=_("Scheduled VetEdge report: {0}").format(compatibility["report_name"]),
+		description=f"{DESCRIPTION_PREFIX}{compatibility['report_name']}",
 	)
 	return {
 		"name": doc.name,
@@ -221,3 +233,58 @@ def create_vetedge_report_schedule(
 		"filters": normalized_filters,
 		"selected_columns": columns,
 	}
+
+
+@frappe.whitelist()
+@frappe.read_only()
+def get_my_report_schedules(report_name: str | None = None) -> list[dict]:
+	require_internal_user()
+	filters = {"user": frappe.session.user, "description": ["like", f"{DESCRIPTION_PREFIX}%"]}
+	rows = frappe.get_list(
+		AUTO_EMAIL_DOCTYPE,
+		filters=filters,
+		fields=["name", "report", "description", "email_to", "frequency", "day_of_week", "format", "enabled", "send_if_data", "no_of_rows", "modified"],
+		order_by="modified desc",
+		page_length=100,
+	)
+	items = []
+	requested = cstr(report_name or "").strip()
+	for row in rows:
+		target = _target_from_schedule(row)
+		if requested and target != requested:
+			continue
+		items.append(
+			{
+				"name": row.get("name"),
+				"report_name": target,
+				"scheduler_report": row.get("report"),
+				"email_to": row.get("email_to"),
+				"frequency": row.get("frequency"),
+				"day_of_week": row.get("day_of_week"),
+				"format": row.get("format"),
+				"enabled": bool(cint(row.get("enabled"))),
+				"send_if_data": bool(cint(row.get("send_if_data"))),
+				"no_of_rows": cint(row.get("no_of_rows")),
+				"modified": row.get("modified"),
+			}
+		)
+	return items
+
+
+@frappe.whitelist()
+def set_report_schedule_enabled(name: str, enabled: int) -> dict:
+	require_internal_user()
+	doc = _owned_vetedge_schedule(name)
+	doc.check_permission("write")
+	doc.enabled = cint(enabled)
+	doc.save()
+	return {"name": doc.name, "enabled": bool(cint(doc.enabled))}
+
+
+@frappe.whitelist()
+def delete_report_schedule(name: str) -> dict:
+	require_internal_user()
+	doc = _owned_vetedge_schedule(name)
+	doc.check_permission("delete")
+	doc.delete()
+	return {"name": name, "deleted": True}
