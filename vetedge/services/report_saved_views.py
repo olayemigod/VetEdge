@@ -5,7 +5,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.utils.user_settings import get_user_settings, update_user_settings
-from frappe.utils import cint, now_datetime
+from frappe.utils import cint, now
 
 from vetedge.services.reporting_catalog import require_reporting_entitlement
 
@@ -199,7 +199,7 @@ def save_report_view(
 	if index is None and len(views) >= MAX_VIEWS_PER_USER:
 		frappe.throw(_("You can save up to {0} private report views.").format(MAX_VIEWS_PER_USER))
 
-	timestamp = now_datetime()
+	timestamp = now()
 	is_default = cint(set_default)
 	if is_default:
 		for view in views:
