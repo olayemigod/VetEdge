@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint, flt
 
+from vetedge.services.clinical_consultation_context import decorate_consultation_link_field
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -113,6 +114,7 @@ def get_clinical_record_editor(doctype: str, name: str) -> dict:
     state = original(doctype=doctype, name=name)
     if doctype != "Veterinary Lab Order":
         return state
+    state = decorate_consultation_link_field(state, doctype, name)
     _simplify_lab_fields(state)
     gate = _lab_gate(name)
     state["service_gate"] = gate
