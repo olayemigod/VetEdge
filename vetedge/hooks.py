@@ -46,6 +46,7 @@ app_include_js = [
 	"/assets/vetedge/js/vetedge_resource_center_action_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/vetedge_resource_center_hardening.js?v=20260815-1",
 	"/assets/vetedge/js/vetedge_lab_order_add_tests.js?v=20260815-1",
+	"/assets/vetedge/js/vetedge_clinical_consultation_context.js?v=20260819-1",
 	"/assets/vetedge/js/vetedge_sidebar_qa_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
