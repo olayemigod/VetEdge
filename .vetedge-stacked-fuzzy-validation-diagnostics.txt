@@ -1,6 +1,0 @@
-=== COMPILE ===
-=== RUFF ===
-All checks passed!
-=== PYTEST ===
-....................                                                     [100%]
-20 passed in 0.14s
