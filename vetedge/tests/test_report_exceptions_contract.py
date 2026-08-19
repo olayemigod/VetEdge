@@ -2,6 +2,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "services/report_exceptions.py"
+OPERATIONS_UI = ROOT / "public/js/vetedge_hospitalisation_operations/VetEdgeHospitalisationOperations.vue"
+REPORT_CENTER_UI = ROOT / "veterinary/page/vetedge_report_center/vetedge_report_center.js"
 
 
 def test_hospitalisation_pending_stock_exception_is_bounded_advanced_and_read_only():
@@ -63,3 +65,47 @@ def test_exception_feed_returns_clickable_source_reference_not_mutations():
         "frappe.db.set_value",
     ):
         assert forbidden not in source
+
+
+def test_hospitalisation_exception_panel_lives_in_operations_not_generic_report_center():
+    operations = OPERATIONS_UI.read_text(encoding="utf-8")
+    report_center = REPORT_CENTER_UI.read_text(encoding="utf-8")
+
+    for expected in (
+        "EdgeReportExceptionPanel",
+        "vetedge.services.report_exceptions.get_report_exceptions",
+        "hospitalisation_pending_stock",
+        "Pending Hospitalisation Actions",
+        "advanced_features_entitled",
+        '@open="openException"',
+        "frappe.set_route('Form', item.reference_doctype, item.reference_name)",
+    ):
+        assert expected in operations
+
+    assert "EdgeReportExceptionPanel" not in report_center
+    assert "report_exceptions.get_report_exceptions" not in report_center
+
+
+def test_exception_feed_uses_full_filtered_scope_and_does_not_follow_detail_pagination():
+    source = OPERATIONS_UI.read_text(encoding="utf-8")
+    refresh = source.split("async refreshOperationalView()", 1)[1].split("async fetchData()", 1)[0]
+    exception = source.split("async fetchExceptions()", 1)[1].split("goToPage(page)", 1)[0]
+    page_change = source.split("goToPage(page)", 1)[1].split("setPageSize(size)", 1)[0]
+
+    assert "this.fetchExceptions()" in refresh
+    assert "filters: JSON.stringify(this.requestFilters())" in exception
+    assert "page_length" not in exception
+    assert "currentPage" not in exception
+    assert "fetchExceptions" not in page_change
+
+
+def test_exception_feed_ignores_stale_filter_responses_and_skips_standard_plan_requests():
+    source = OPERATIONS_UI.read_text(encoding="utf-8")
+    exception = source.split("async fetchExceptions()", 1)[1].split("goToPage(page)", 1)[0]
+
+    assert "if (!this.exceptionPanelSupported || !this.advancedExceptionsEntitled) return" in exception
+    assert "const generation = ++this.exceptionRequestGeneration" in exception
+    assert "const signature = this.exceptionRequestSignature()" in exception
+    assert "generation !== this.exceptionRequestGeneration" in exception
+    assert "signature !== this.exceptionRequestSignature()" in exception
+    assert exception.index("generation !== this.exceptionRequestGeneration") < exception.index("this.exceptionPayload = payload || null")
