@@ -29,6 +29,7 @@
       :error="error"
       :rowKey="rowKey"
       :formatter="formatCell"
+      :rowPresentation="advancedExceptionsEntitled ? rowPresentation : null"
       :exportEnabled="false"
       :printEnabled="false"
       emptyTitle="No active hospitalisations"
@@ -263,6 +264,19 @@ export default {
   methods: {
     retryRuntime() { window.location.reload(); },
     rowKey(row, index) { return row?.hospitalisation || `hospitalisation-${index}`; },
+    rowPresentation(row) {
+      if (!this.advancedExceptionsEntitled || !row) return {};
+      if (Number(row.missing_price_count || 0) > 0) {
+        return { tone: 'danger', title: 'Pending Hospitalisation charges require pricing review before billing.' };
+      }
+      if (Number(row.pending_stock_count || 0) > 0) {
+        return { tone: 'warning', title: 'Stock-affecting Hospitalisation activity is still pending stock posting.' };
+      }
+      if (Number(row.pending_billable_activity_count || 0) > 0) {
+        return { tone: 'info', title: 'Billable Hospitalisation activity is still pending charge processing.' };
+      }
+      return {};
+    },
     syncShellContext() {
       const boot = window.frappe?.boot || {};
       const user = window.frappe?.session?.user || '';
