@@ -53,6 +53,21 @@ def _is_new_or_changed_link(doc, fieldname: str) -> bool:
     return _clean(doc.get(fieldname)) != _previous_link(doc, fieldname)
 
 
+def _validate_requested_consultation(patient: str, consultation: str) -> None:
+    context = _consultation_context(consultation)
+    if _clean(context.get("patient")) != _clean(patient):
+        frappe.throw(
+            _("The selected Consultation must belong to patient {0}.").format(patient),
+            frappe.ValidationError,
+        )
+    if context.get("status") in CLOSED_CONSULTATION_STATUSES:
+        frappe.throw(
+            _("Only an open Consultation for this patient can be linked."),
+            frappe.ValidationError,
+        )
+    can_access_consultation(frappe.session.user, consultation, raise_exception=True)
+
+
 def validate_consultation_context_link(doc, fieldname: str) -> None:
     consultation = _clean(doc.get(fieldname))
     if not consultation:
@@ -142,9 +157,7 @@ def assert_consultation_link_change_allowed(doc, requested_value) -> None:
             frappe.ValidationError,
         )
 
-    probe = doc.copy()
-    probe.set(fieldname, requested)
-    validate_consultation_context_link(probe, fieldname)
+    _validate_requested_consultation(doc.get("patient"), requested)
 
 
 def apply_editor_consultation_link_change(doctype: str, name: str, payload: dict) -> None:
