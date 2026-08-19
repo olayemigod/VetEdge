@@ -31,12 +31,15 @@ def test_hospitalisation_context_uses_patient_default_branch_only_as_fallback():
         '_require_same(_("Pet Owner"), doc.get("customer"), consultation.get("primary_owner"))',
         '_require_same(_("Service Branch"), doc.get("service_branch"), consultation.get("service_branch"))',
         '_require_same(_("Company"), doc.get("company"), consultation.get("company"))',
-        'Hospitalisation Pet Owner must match the selected Patient',
+        "_is_unchanged_historical_owner",
+        "current Primary Owner",
+        "Consultation preserves the owner for that clinical episode",
     ):
         assert expected in source
 
     assert "patient.default_branch !=" not in source
     assert "default_branch ==" not in source
+    assert "Linked Consultation Owner does not match the selected Patient's Primary Owner" not in source
 
 
 def test_deceased_patient_guard_covers_hospitalisation_delivery_transitions():
