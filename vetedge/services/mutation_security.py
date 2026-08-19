@@ -52,10 +52,22 @@ def create_clinical_record(doctype: str, values=None):
 def save_clinical_record_editor(doctype: str, name: str, values=None):
     _gate("save_clinical_record_editor", doctype, name)
     payload = _parse_values(values)
+
+    if doctype in {"Veterinary Lab Order", "Veterinary Vaccination Record"}:
+        from vetedge.services.clinical_consultation_context import apply_editor_consultation_link_change
+
+        # Consultation context is a special one-time assignment for standalone
+        # Lab/Vaccination records. It is persisted through the normal document
+        # lifecycle so patient/status/permission validation and consultation
+        # billing-plan synchronization remain authoritative.
+        apply_editor_consultation_link_change(doctype, name, payload)
+
     if doctype == "Veterinary Vaccination Record":
         # These fields are set by administration, inventory, scheduling and
         # billing authorities. A crafted API request must not be able to mutate
-        # them merely because an older editor schema once exposed them.
+        # them merely because an older editor schema once exposed them. The
+        # Consultation link has already been handled by the guarded one-time
+        # context-assignment path above.
         for fieldname in VACCINATION_PROTECTED_EDITOR_FIELDS:
             payload.pop(fieldname, None)
     from vetedge.services.clinical_record_editor import save_clinical_record_editor as original
