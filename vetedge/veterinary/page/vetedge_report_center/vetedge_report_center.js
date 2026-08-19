@@ -2,6 +2,9 @@ const VETEDGE_REPORT_CENTER_STYLE_ID = "vetedge-report-center-style";
 const VETEDGE_REPORT_PAGE_LENGTH = 50;
 const CAPABILITIES_API = "vetedge.services.reporting_capabilities.get_shell_capabilities";
 const SMART_FILTER_API = "vetedge.services.report_filter_search.search_report_filter_options";
+const SAVED_VIEWS_GET_API = "vetedge.services.report_saved_views.get_saved_report_views";
+const SAVED_VIEWS_SAVE_API = "vetedge.services.report_saved_views.save_report_view";
+const SAVED_VIEWS_DELETE_API = "vetedge.services.report_saved_views.delete_saved_report_view";
 const REPORT_FILTER_KEYS = [
 	"branch", "from_date", "to_date", "date_preset", "customer", "patient", "practitioner",
 	"consultation_type", "status", "payment_status", "service_category", "item", "vaccine",
@@ -16,12 +19,13 @@ function ensureVetEdgeReportCenterStyles() {
 		.vetedge-report-center-root,.vetedge-report-center-root .edge-app-shell,.vetedge-report-center-root .edge-shell-body,.vetedge-report-center-root .edge-shell-main,.vetedge-report-center-root .edge-page-layout{width:100%;max-width:none;min-width:0}
 		.vetedge-report-center-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(12rem,1fr));gap:14px;width:100%;align-items:end}
 		.vetedge-report-center-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+		.vetedge-report-center-saved-view{min-width:12rem;max-width:18rem}
 		.vetedge-report-provider-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:var(--edge-color-surface-muted);color:var(--edge-color-ink-500);font-size:.7rem;font-weight:600}
 		.vetedge-report-center-chart{min-height:280px}
 		:root[data-edge-palette] .vetedge-report-center-root .edge-shell-main{background:linear-gradient(180deg,var(--edge-color-brand-50) 0,var(--edge-color-surface-soft) 180px,var(--edge-color-surface-muted) 420px)!important}
 		:root[data-edge-palette] .graph-svg-tip,:root[data-edge-appearance] .graph-svg-tip{background:var(--edge-color-surface)!important;border:1px solid var(--edge-color-border)!important;color:var(--edge-color-ink-950)!important}
 		@media(max-width:900px){.vetedge-report-center-filter-grid{grid-template-columns:repeat(2,minmax(10rem,1fr))}}
-		@media(max-width:576px){.vetedge-report-center-filter-grid{grid-template-columns:1fr}.vetedge-report-center-actions,.vetedge-report-center-actions .edge-button{width:100%}}
+		@media(max-width:576px){.vetedge-report-center-filter-grid{grid-template-columns:1fr}.vetedge-report-center-actions,.vetedge-report-center-actions .edge-button,.vetedge-report-center-saved-view{width:100%;max-width:none}}
 	`;
 	document.head.appendChild(style);
 }
@@ -136,6 +140,9 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					sourceRoute: initial.source,
 					filters,
 					viewState: { visible_columns: normalizeReportColumnKeys(initial.columns) },
+					savedViews: [],
+					selectedSavedViewId: "",
+					savedViewsLoading: false,
 					loading: false,
 					error: "",
 					provider: null,
@@ -148,7 +155,10 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true },
 				};
 			},
-			mounted() { this.refresh(); },
+			mounted() {
+				this.refresh();
+				this.loadSavedViews();
+			},
 			beforeUnmount() { this.chartInstance?.destroy?.(); },
 			computed: {
 				providerLabel() {
@@ -156,6 +166,15 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					if (["query-level", "query-level-detail"].includes(this.result.metadata?.pagination_mode)) return __("Optimized paginated provider");
 					if (this.result.metadata?.pagination_mode === "materialize-then-slice") return __("Paged response · optimization pending");
 					return this.provider.kind === "paginated" ? __("Paginated provider") : __("Query Report provider");
+				},
+				savedViewOptions() {
+					return (this.savedViews || []).map((view) => ({
+						value: view.view_id,
+						label: view.is_default ? `${view.label} · ${__("Default")}` : view.label,
+					}));
+				},
+				selectedSavedView() {
+					return (this.savedViews || []).find((view) => view.view_id === this.selectedSavedViewId) || null;
 				},
 				pagination() {
 					const pageSize = Number(this.result.page_length || this.pageLength || VETEDGE_REPORT_PAGE_LENGTH);
@@ -202,6 +221,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					if (field === "patient") this.filters.customer = "";
 					if (field === "species") this.filters.breed = "";
 					this.filters[field] = value || "";
+					this.selectedSavedViewId = "";
 				},
 				reportFilters() {
 					return Object.fromEntries(Object.entries(this.filters).filter(([, value]) => value !== undefined && value !== null && String(value) !== ""));
@@ -220,6 +240,20 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						this.capabilities = { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true };
 					}
 				},
+				async loadSavedViews() {
+					if (!this.reportName || this.capabilities.can_view === false) return;
+					this.savedViewsLoading = true;
+					try {
+						const response = await frappe.call(SAVED_VIEWS_GET_API, { report_name: this.reportName });
+						this.savedViews = Array.isArray(response.message) ? response.message : [];
+						if (this.selectedSavedViewId && !this.savedViews.some((view) => view.view_id === this.selectedSavedViewId)) this.selectedSavedViewId = "";
+					} catch (error) {
+						console.warn("VetEdge saved report views could not be loaded", error);
+						this.savedViews = [];
+					} finally {
+						this.savedViewsLoading = false;
+					}
+				},
 				resolveProvider() {
 					const adapters = window.VetEdgeReportProviders;
 					this.provider = adapters?.getProvider?.(this.reportName) || adapters?.ensureQueryProvider?.(this.reportName, this.reportName) || null;
@@ -234,7 +268,64 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				},
 				setViewState(state = {}) {
 					this.viewState = { visible_columns: normalizeReportColumnKeys(state.visible_columns) };
+					this.selectedSavedViewId = "";
 					this.updateLocation();
+				},
+				async applySavedView(viewId) {
+					const view = (this.savedViews || []).find((item) => item.view_id === viewId);
+					if (!view) { this.selectedSavedViewId = ""; return; }
+					const nextFilters = {};
+					for (const key of REPORT_FILTER_KEYS) nextFilters[key] = view.filters?.[key] ?? "";
+					this.filters = nextFilters;
+					this.viewState = { visible_columns: normalizeReportColumnKeys(view.visible_columns) };
+					this.selectedSavedViewId = view.view_id;
+					this.pageStart = 0;
+					this.updateLocation();
+					await this.refresh(true);
+				},
+				promptSaveView(existing = null) {
+					frappe.prompt(
+						[
+							{ fieldname: "label", fieldtype: "Data", label: __("View Name"), reqd: 1, default: existing?.label || "" },
+							{ fieldname: "set_default", fieldtype: "Check", label: __("Make this my default view"), default: existing?.is_default ? 1 : 0 },
+						],
+						async (values) => {
+							try {
+								const response = await frappe.call(SAVED_VIEWS_SAVE_API, {
+									label: values.label,
+									report_name: this.reportName,
+									filters: JSON.stringify(existing ? existing.filters || {} : this.reportFilters()),
+									visible_columns: JSON.stringify(existing ? existing.visible_columns || [] : normalizeReportColumnKeys(this.viewState?.visible_columns)),
+									view_id: existing?.view_id || "",
+									set_default: values.set_default ? 1 : 0,
+								});
+								await this.loadSavedViews();
+								this.selectedSavedViewId = response.message?.view_id || existing?.view_id || "";
+								frappe.show_alert?.({ message: existing ? __("Saved view renamed.") : __("Saved view created."), indicator: "green" });
+							} catch (error) {
+								frappe.msgprint({ title: __("Saved View Failed"), message: error?.message || __("The saved view could not be stored."), indicator: "red" });
+							}
+						},
+						__(existing ? "Rename Saved View" : "Save Current View"),
+						__(existing ? "Rename" : "Save"),
+					);
+				},
+				deleteSelectedSavedView() {
+					const view = this.selectedSavedView;
+					if (!view) return;
+					frappe.confirm(
+						__("Delete saved view {0}?", [view.label]),
+						async () => {
+							try {
+								await frappe.call(SAVED_VIEWS_DELETE_API, { view_id: view.view_id });
+								this.selectedSavedViewId = "";
+								await this.loadSavedViews();
+								frappe.show_alert?.({ message: __("Saved view deleted."), indicator: "green" });
+							} catch (error) {
+								frappe.msgprint({ title: __("Delete Saved View Failed"), message: error?.message || __("The saved view could not be deleted."), indicator: "red" });
+							}
+						},
+					);
 				},
 				formatValue(value, column = {}) {
 					if (value === undefined || value === null || value === "") return "—";
@@ -353,6 +444,21 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					});
 					return h("div", { class: "vetedge-report-center-filter-grid" }, [...common, ...extra]);
 				},
+				renderSavedViewActions() {
+					return [
+						h(EdgeDropdown, {
+							class: "vetedge-report-center-saved-view",
+							modelValue: this.selectedSavedViewId,
+							options: this.savedViewOptions,
+							placeholder: this.savedViewsLoading ? __("Loading saved views…") : __("Saved Views"),
+							disabled: this.savedViewsLoading || this.capabilities.can_view === false,
+							"onUpdate:modelValue": (value) => this.applySavedView(value || ""),
+						}),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.capabilities.can_view === false, onClick: () => this.promptSaveView() }, __("Save View")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: !this.selectedSavedView, onClick: () => this.promptSaveView(this.selectedSavedView) }, __("Rename")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: !this.selectedSavedView, onClick: this.deleteSelectedSavedView }, __("Delete")),
+					];
+				},
 			},
 			render() {
 				const reportShell = h(
@@ -395,6 +501,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						]),
 						filters: () => this.renderFilters(),
 						filterActions: () => h("div", { class: "vetedge-report-center-actions" }, [
+							...this.renderSavedViewActions(),
 							h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading || this.capabilities.can_view === false, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh")),
 						]),
 						chart: this.result.chart?.data ? () => h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" }) : undefined,
