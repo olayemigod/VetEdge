@@ -147,6 +147,7 @@ const runtimeComponents = () => {
 
 const OPERATIONS_API = 'vetedge.services.hospitalisation_operations.get_hospitalisation_operations';
 const FILTER_API = 'vetedge.services.hospitalisation_filter_search.search_hospitalisation_filter_options';
+const VISIBILITY_API = 'vetedge.services.report_visibility.get_visibility_context';
 
 export default {
   name: 'VetEdgeHospitalisationOperations',
@@ -166,6 +167,7 @@ export default {
       tenantName: '',
       branchName: 'All Branches',
       userName: '',
+      visibilityDefaultBranch: '',
       filters: {
         branch: '',
         patient: '',
@@ -223,7 +225,7 @@ export default {
     if (window.jQuery) {
       window.jQuery(document).on('branch-change.vetedge_hospitalisation_ops session-defaults-changed.vetedge_hospitalisation_ops', this.handleContextChange);
     }
-    this.fetchData();
+    this.initialize();
   },
   beforeUnmount() {
     if (window.jQuery) window.jQuery(document).off('.vetedge_hospitalisation_ops');
@@ -238,16 +240,35 @@ export default {
       this.tenantName = boot.sysdefaults?.company || 'Veterinary';
       this.branchName = boot.session_defaults?.branch || boot.edgesuite_product_menu?.branch || boot.user_info?.[user]?.branch || 'All Branches';
     },
-    handleContextChange() {
+    async initialize() {
+      await this.loadVisibilityContext();
+      await this.fetchData();
+    },
+    async handleContextChange() {
       this.syncShellContext();
       this.currentPage = 1;
-      this.fetchData();
+      this.filters.branch = '';
+      await this.loadVisibilityContext();
+      await this.fetchData();
     },
     callFrappe(method, args = {}) {
       return new Promise((resolve, reject) => {
         if (!window.frappe?.call) return reject(new Error('Frappe Desk is not ready.'));
         frappe.call({ method, args, callback: (response) => resolve(response?.message || {}), error: reject });
       });
+    },
+    async loadVisibilityContext() {
+      try {
+        const context = await this.callFrappe(VISIBILITY_API, {
+          scope_name: 'Active Hospitalisations',
+          scope_type: 'report'
+        });
+        this.visibilityDefaultBranch = context?.default_branch || '';
+        if (!this.filters.branch && this.visibilityDefaultBranch) this.filters.branch = this.visibilityDefaultBranch;
+        if (this.filters.branch) this.branchName = this.filters.branch;
+      } catch (error) {
+        this.error = error?.message || 'Hospitalisation Branch visibility could not be resolved.';
+      }
     },
     requestFilters() {
       return Object.fromEntries(
@@ -274,6 +295,7 @@ export default {
       this.filters.customer = '';
       this.filters.practitioner = '';
       this.filters.care_location = '';
+      this.branchName = this.filters.branch || this.visibilityDefaultBranch || 'All Branches';
       this.applyFilters();
     },
     onPatientChanged() {
@@ -286,9 +308,10 @@ export default {
     },
     clearFilters() {
       this.filters = {
-        branch: '', patient: '', customer: '', practitioner: '', care_location: '', status: '',
+        branch: this.visibilityDefaultBranch || '', patient: '', customer: '', practitioner: '', care_location: '', status: '',
         care_level: '', from_date: '', to_date: '', active_only: 1
       };
+      this.branchName = this.filters.branch || 'All Branches';
       this.currentPage = 1;
       this.fetchData();
     },
