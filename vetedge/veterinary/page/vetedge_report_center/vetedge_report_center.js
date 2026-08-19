@@ -60,6 +60,11 @@ function reportCenterRoute(route) {
 	return true;
 }
 
+function normalizeReportColumnKeys(value) {
+	const values = Array.isArray(value) ? value : String(value || "").split(",");
+	return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
 function reportCenterParams() {
 	const params = new URLSearchParams(window.location.search || "");
 	const routeOptions = frappe.route_options || {};
@@ -67,6 +72,7 @@ function reportCenterParams() {
 	const result = {
 		report: get("report"),
 		source: get("source", "/desk/vetedge-executive-dashboard"),
+		columns: get("columns"),
 	};
 	for (const key of REPORT_FILTER_KEYS) result[key] = get(key);
 	return result;
@@ -129,6 +135,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 					reportName: initial.report,
 					sourceRoute: initial.source,
 					filters,
+					viewState: { visible_columns: normalizeReportColumnKeys(initial.columns) },
 					loading: false,
 					error: "",
 					provider: null,
@@ -221,7 +228,13 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 				updateLocation() {
 					const params = new URLSearchParams({ report: this.reportName, source: this.sourceRoute || "/desk/vetedge-executive-dashboard" });
 					for (const [key, value] of Object.entries(this.filters)) if (value) params.set(key, value);
+					const visibleColumns = normalizeReportColumnKeys(this.viewState?.visible_columns);
+					if (visibleColumns.length) params.set("columns", visibleColumns.join(","));
 					window.history.replaceState({}, "", `/desk/vetedge-report-center?${params.toString()}`);
+				},
+				setViewState(state = {}) {
+					this.viewState = { visible_columns: normalizeReportColumnKeys(state.visible_columns) };
+					this.updateLocation();
 				},
 				formatValue(value, column = {}) {
 					if (value === undefined || value === null || value === "") return "—";
@@ -356,6 +369,8 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						error: this.error,
 						rowKey: this.rowKey,
 						formatter: this.formatValue,
+						columnChooserEnabled: true,
+						viewState: this.viewState,
 						exportEnabled: Boolean(this.capabilities.can_export),
 						printEnabled: Boolean(this.capabilities.can_print),
 						exportBusy: this.exportBusy,
@@ -369,6 +384,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						onRetry: () => this.refresh(),
 						onPageChange: this.goToPage,
 						onPageSizeChange: this.setPageSize,
+						onViewStateChange: this.setViewState,
 						onExport: this.runExport,
 						onPrint: this.runPrint,
 					},
@@ -382,7 +398,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 							h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading || this.capabilities.can_view === false, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh")),
 						]),
 						chart: this.result.chart?.data ? () => h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" }) : undefined,
-						resultMeta: () => h("span", {}, __("{0} · filters retained in URL", [this.providerLabel])),
+						resultMeta: () => h("span", {}, __("{0} · filters and columns retained in URL", [this.providerLabel])),
 					},
 				);
 
