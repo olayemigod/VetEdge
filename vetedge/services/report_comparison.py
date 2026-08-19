@@ -130,7 +130,13 @@ def get_report_comparison(report_name: str, filters=None) -> dict:
 	report_name = cstr(report_name or "").strip()
 	if report_name not in SUPPORTED_REPORTS:
 		frappe.throw(_("Period comparison is not available for this report yet."), frappe.ValidationError)
-	require_reporting_action(report_name, "report", "view")
+	capabilities = require_reporting_action(report_name, "report", "view")
+	if not capabilities.get("advanced_features_entitled"):
+		frappe.throw(
+			_("Previous-period comparison is an Advanced Reporting feature and is not included in the current Plan."),
+			frappe.PermissionError,
+			title=_("Advanced Reporting Access Required"),
+		)
 	parsed_filters = _parse_filters(filters)
 	if report_name == "Consultation Register":
 		return _consultation_comparison(parsed_filters)
