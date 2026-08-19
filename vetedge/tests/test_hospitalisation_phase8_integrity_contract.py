@@ -13,10 +13,30 @@ def test_hospitalisation_participates_in_shared_save_integrity():
     assert '"Veterinary Hospitalisation": "service_branch"' in branch_source
     assert '"Veterinary Hospitalisation": "attending_veterinarian"' in practitioner_source
     assert 'if doc.doctype == "Veterinary Hospitalisation":' in practitioner_source
+    assert "resolve_hospitalisation_context(self)" in controller
     assert "enforce_branch_integrity(self)" in controller
+    assert "validate_hospitalisation_branch_access(self)" in controller
     assert "enforce_practitioner_integrity(self)" in controller
     assert 'validate_doctor_user(self.attending_veterinarian, label="Attending Veterinarian")' in controller
     assert "validate_hospitalisation(self)" in controller
+
+
+def test_hospitalisation_context_uses_patient_default_branch_only_as_fallback():
+    source = (ROOT / "services/hospitalisation_context.py").read_text(encoding="utf-8")
+
+    for expected in (
+        '"primary_owner", "default_branch"',
+        '_set_if_missing(doc, "service_branch", patient.get("default_branch"))',
+        '_require_same(_("Patient"), doc.get("patient"), consultation.get("patient"))',
+        '_require_same(_("Pet Owner"), doc.get("customer"), consultation.get("primary_owner"))',
+        '_require_same(_("Service Branch"), doc.get("service_branch"), consultation.get("service_branch"))',
+        '_require_same(_("Company"), doc.get("company"), consultation.get("company"))',
+        'Hospitalisation Pet Owner must match the selected Patient',
+    ):
+        assert expected in source
+
+    assert "patient.default_branch !=" not in source
+    assert "default_branch ==" not in source
 
 
 def test_deceased_patient_guard_covers_hospitalisation_delivery_transitions():
@@ -24,7 +44,7 @@ def test_deceased_patient_guard_covers_hospitalisation_delivery_transitions():
     assert '"Veterinary Hospitalisation": {"Admitted", "Under Care", "Ready for Discharge"}' in source
 
 
-def test_hospitalisation_read_permissions_are_branch_scoped_and_fail_closed():
+def test_hospitalisation_read_and_save_permissions_are_branch_scoped_and_fail_closed():
     permissions = (ROOT / "services/hospitalisation_permissions.py").read_text(encoding="utf-8")
     hooks = (ROOT / "hooks.py").read_text(encoding="utf-8")
 
@@ -36,6 +56,9 @@ def test_hospitalisation_read_permissions_are_branch_scoped_and_fail_closed():
         "is_portal_owner_user(user)",
         'BRANCH_FIELD = "service_branch"',
         "branch in allowed",
+        "validate_hospitalisation_branch_access",
+        "You do not have an assigned Veterinary Branch",
+        "You do not have access to the selected Hospitalisation Branch",
     ):
         assert expected in permissions
 
