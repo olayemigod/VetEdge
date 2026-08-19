@@ -19,6 +19,23 @@
 		const methods = component.methods || {};
 		const originalLoad = methods.load;
 		const originalOpenRow = methods.openHistoryRow;
+		const computed = component.computed || {};
+		const originalActiveHistoryColumns = computed.activeHistoryColumns;
+
+		component.computed = {
+			...computed,
+			activeHistoryColumns() {
+				const columns = typeof originalActiveHistoryColumns === "function"
+					? originalActiveHistoryColumns.call(this) || []
+					: [];
+				if (!["labs", "vaccinations"].includes(this.activeHistory)) return columns;
+				return columns.map((column) => {
+					if (column.key !== "status") return column;
+					return { ...column, key: "workflow_status", label: __("Workflow Status") };
+				});
+			},
+		};
+
 		component.methods = {
 			...methods,
 			async load(...args) {
