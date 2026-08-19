@@ -7,7 +7,7 @@ from frappe import _
 from frappe.model.utils.user_settings import get_user_settings, update_user_settings
 from frappe.utils import cint, now
 
-from vetedge.services.reporting_catalog import require_reporting_entitlement
+from vetedge.services.reporting_capabilities import require_reporting_action
 
 USER_SETTINGS_SCOPE = "VetEdge Report Center"
 SETTINGS_KEY = "vetedge_report_views_v1"
@@ -111,7 +111,7 @@ def _normalize_report_name(report_name: str) -> str:
 		frappe.throw(_("Report is required."))
 	if len(name) > MAX_REPORT_NAME_LENGTH:
 		frappe.throw(_("Report name is too long."))
-	require_reporting_entitlement(name, "report", user=frappe.session.user)
+	require_reporting_action(name, "report", "view", user=frappe.session.user)
 	return name
 
 
