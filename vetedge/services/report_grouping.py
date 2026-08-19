@@ -45,23 +45,25 @@ def _group_rows(where_sql: str, params: dict, dimension: str) -> list[dict]:
 	planned_treatment_available = frappe.db.exists("DocType", "Planned Treatment Item")
 	planned_join = ""
 	planned_expression = "0"
+	row_count_expression = "COUNT(*)"
+	completed_expression = "SUM(CASE WHEN c.`status` = 'Completed' THEN 1 ELSE 0 END)"
 	if planned_treatment_available:
 		planned_join = """
-			LEFT JOIN (
-				SELECT
-					pt.`parent` AS `consultation`,
-					SUM(
-						CASE
-							WHEN IFNULL(pt.`amount`, 0) != 0 THEN pt.`amount`
-							ELSE IFNULL(pt.`qty`, 0) * IFNULL(pt.`rate`, 0)
-						END
-					) AS `planned_total`
-				FROM `tabPlanned Treatment Item` pt
-				WHERE pt.`parenttype` = 'Veterinary Consultation'
-				GROUP BY pt.`parent`
-			) planned ON planned.`consultation` = c.`name`
+			LEFT JOIN `tabPlanned Treatment Item` pt
+				ON pt.`parent` = c.`name`
+				AND pt.`parenttype` = 'Veterinary Consultation'
 		"""
-		planned_expression = "SUM(IFNULL(planned.`planned_total`, 0))"
+		planned_expression = """
+			SUM(
+				CASE
+					WHEN pt.`name` IS NULL THEN 0
+					WHEN IFNULL(pt.`amount`, 0) != 0 THEN pt.`amount`
+					ELSE IFNULL(pt.`qty`, 0) * IFNULL(pt.`rate`, 0)
+				END
+			)
+		"""
+		row_count_expression = "COUNT(DISTINCT c.`name`)"
+		completed_expression = "COUNT(DISTINCT CASE WHEN c.`status` = 'Completed' THEN c.`name` END)"
 
 	query_params = dict(params)
 	query_params["limit"] = MAX_GROUPS
@@ -69,8 +71,8 @@ def _group_rows(where_sql: str, params: dict, dimension: str) -> list[dict]:
 		f"""
 		SELECT
 			IFNULL(c.`{field}`, '') AS `group_key`,
-			COUNT(*) AS `row_count`,
-			SUM(CASE WHEN c.`status` = 'Completed' THEN 1 ELSE 0 END) AS `completed`,
+			{row_count_expression} AS `row_count`,
+			{completed_expression} AS `completed`,
 			{planned_expression} AS `planned_value`
 		FROM `tabVeterinary Consultation` c
 		{planned_join}
@@ -149,5 +151,6 @@ def get_report_grouping(report_name: str, dimension: str, filters=None) -> dict:
 			"detail_rows_materialized": False,
 			"group_limit": MAX_GROUPS,
 			"source": "consultation-register",
+			"planned_value_mode": "filtered_child_join",
 		},
 	}
