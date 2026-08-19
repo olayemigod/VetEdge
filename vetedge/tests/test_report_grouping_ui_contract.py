@@ -40,9 +40,22 @@ def test_filter_or_saved_view_change_invalidates_grouping_but_pagination_does_no
     pagination = source.split("goToPage(pageNumber)", 1)[1].split("setPageSize(size)", 1)[0]
 
     for block in (set_filter, saved_view):
+        assert "this.invalidateInsightRequests()" in block
         assert "this.grouping = null" in block
         assert 'this.groupingDimension = ""' in block
     assert "loadGrouping" not in pagination
+
+
+def test_grouping_ignores_late_response_after_filter_or_dimension_signature_changes():
+    source = SOURCE.read_text(encoding="utf-8")
+    method = source.split("async loadGrouping(dimension)", 1)[1].split("renderChart()", 1)[0]
+
+    assert "const generation = ++this.groupingRequestGeneration" in method
+    assert "const signature = this.insightRequestSignature({ dimension: this.groupingDimension })" in method
+    assert "generation !== this.groupingRequestGeneration" in method
+    assert "signature !== this.insightRequestSignature({ dimension: this.groupingDimension })" in method
+    assert "this.grouping = response.message || null" in method
+    assert method.index("generation !== this.groupingRequestGeneration") < method.index("this.grouping = response.message || null")
 
 
 def test_grouping_component_is_optional_for_backward_runtime_compatibility():
