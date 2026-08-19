@@ -6,6 +6,7 @@ from frappe.utils import cint, cstr
 
 from vetedge.services.report_visibility import validate_dashboard_access, validate_report_access
 from vetedge.services.reporting_catalog import get_reporting_entitlement, require_reporting_entitlement
+from vetedge.services.reporting_entitlement_adapter import check_advanced_reporting_entitlement
 
 
 PRINT_SETTING = "enable_reporting_print"
@@ -58,6 +59,17 @@ def _has_action_permission(scope_name: str, scope_type: str, action: str, user: 
 	return bool(frappe.has_permission(ref_doctype, ptype=action, user=user))
 
 
+def _advanced_feature_context(entitlement: dict, user: str | None = None) -> dict:
+	if entitlement.get("is_advanced"):
+		return {
+			"allowed": bool(entitlement.get("entitled")),
+			"source": entitlement.get("entitlement_source"),
+			"reason_code": entitlement.get("entitlement_reason_code"),
+			"feature_key": entitlement.get("feature_key") or "advanced_reports",
+		}
+	return check_advanced_reporting_entitlement(user=user)
+
+
 def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user: str | None = None) -> dict:
 	"""Return shell capabilities from subscription tier + settings + scope + action permission."""
 	scope_name = cstr(scope_name or "").strip()
@@ -65,6 +77,7 @@ def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user
 	_validate_scope(scope_name, scope_type, user=user)
 	entitlement = get_reporting_entitlement(scope_name, scope_type=scope_type, user=user)
 	entitled = bool(entitlement["entitled"])
+	advanced_features = _advanced_feature_context(entitlement, user=user)
 	print_setting = _setting_enabled(PRINT_SETTING, default=True)
 	export_setting = _setting_enabled(EXPORT_SETTING, default=True)
 	can_print = entitled and print_setting and _has_action_permission(scope_name, scope_type, "print", user=user)
@@ -81,6 +94,10 @@ def get_reporting_capabilities(scope_name: str, scope_type: str = "report", user
 		"subscription_entitled": entitled,
 		"entitlement_source": entitlement["entitlement_source"],
 		"entitlement_reason_code": entitlement["entitlement_reason_code"],
+		"advanced_features_entitled": bool(advanced_features.get("allowed")),
+		"advanced_features_source": advanced_features.get("source"),
+		"advanced_features_reason_code": advanced_features.get("reason_code"),
+		"advanced_features_key": advanced_features.get("feature_key") or "advanced_reports",
 		"authorization_model": "subscription_tier_then_settings_scope_and_action_permission",
 	}
 
