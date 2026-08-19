@@ -23,7 +23,7 @@ def test_private_saved_views_use_frappe_user_settings_without_new_doctype():
     assert "ignore_permissions=True" not in source
 
 
-def test_saved_view_payload_is_bounded_and_does_not_store_report_rows():
+def test_saved_view_payload_is_bounded_json_safe_and_does_not_store_report_rows():
     source = SOURCE.read_text(encoding="utf-8")
 
     for expected in (
@@ -34,6 +34,7 @@ def test_saved_view_payload_is_bounded_and_does_not_store_report_rows():
         "ALLOWED_FILTER_KEYS = {",
         '"filters": filters',
         '"visible_columns": columns',
+        "timestamp = now()",
     ):
         assert expected in source
 
@@ -41,6 +42,7 @@ def test_saved_view_payload_is_bounded_and_does_not_store_report_rows():
         '"rows"',
         '"result_rows"',
         '"report_data"',
+        "now_datetime",
         "frappe.db.sql",
         "frappe.db.set_value",
     ):
