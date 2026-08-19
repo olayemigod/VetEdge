@@ -15,8 +15,8 @@ Product-neutral presentation/runtime capability:
 - report/dashboard shell composition;
 - column visibility controls;
 - serializable presentation view state;
-- common grouping/subtotal presentation primitives where safe;
 - comparison-period presentation primitives;
+- common grouping/subtotal presentation primitives where safe;
 - conditional-highlight presentation primitives;
 - export/print UI contracts;
 - empty/loading/error/pagination behavior.
@@ -32,6 +32,7 @@ Product/data authority:
 - Branch/company/role/plan visibility;
 - query-level pagination and aggregates;
 - report-specific comparison calculations;
+- premium Advanced Reporting feature entitlement;
 - report drill-through targets;
 - saved-view validation and product integration;
 - scheduled-report recipient permissions;
@@ -42,123 +43,110 @@ Product/data authority:
 
 Status: **implemented; browser/network QA pending**.
 
-### Shared capability
-
-EdgeSuite UI PR #19 adds an opt-in `EdgeReportShell` column chooser:
-
-- `columnChooserEnabled=false` by default;
-- `viewState.visible_columns` initializes visible columns;
-- `view-state-change` emits `{ visible_columns: [...] }`;
-- at least one report column remains visible;
-- `Show all` restores the full provider column set;
-- current visible columns are supplied to Export dialog initialization;
-- no localStorage/sessionStorage/database/API persistence in shared runtime;
-- responsive chooser presentation is shared.
-
-### VetEdge adoption
-
-Report Center is the first consumer.
-
-Implemented contract:
-
-1. `columns` is Report Center URL state only; it is never sent to report providers.
-2. A compact comma-separated `columns=` value initializes `viewState.visible_columns`.
-3. `columnChooserEnabled` is enabled on Report Center `EdgeReportShell`.
-4. `view-state-change` updates presentation state and `history.replaceState` only.
-5. Column changes do **not** reload the provider or call a backend API.
-6. Stale/unknown column keys are reconciled by the shared shell against current provider columns.
-7. A copied URL reproduces report, filters and visible-column selection.
-8. Export dialog starts from the current visible-column set while server export validation remains authoritative.
-
-Example:
-
-`/desk/vetedge-report-center?report=Consultation+Register&branch=Lagos&columns=consultation,patient,practitioner,status`
+EdgeSuite UI PR #19 supplies an opt-in `EdgeReportShell` column chooser. VetEdge Report Center consumes it through URL-only `columns=` state. Column changes are presentation-only and do not reload report providers or call backend APIs. Screen-visible columns and Export-dialog defaults use the same shared shell state.
 
 Source contract: `vetedge/tests/test_report_center_view_state_contract.py`.
 
 ## Phase 10B — Private Named Saved Views
 
-Status: **backend persistence implemented; Report Center UI adoption next**.
+Status: **implementation complete; automated/browser QA pending**.
 
-### Storage decision
+### Storage and ownership
 
-Do **not** add a new saved-view DocType for private views.
+Private views use Frappe v16 per-user `__UserSettings` through `frappe.model.utils.user_settings`; no VetEdge DocType or migration was added.
 
-Frappe v16 already provides per-user `__UserSettings` storage through `frappe.model.utils.user_settings`. VetEdge therefore stores private named report views under the `VetEdge Report Center` user-settings scope. This gives user ownership without another schema migration and preserves standalone deployment.
-
-The shared EdgeSuite shell remains persistence-free.
-
-### Implemented backend
-
-`vetedge.services.report_saved_views` provides:
-
-- `get_saved_report_views(report_name)`;
-- `save_report_view(...)`;
-- `delete_saved_report_view(view_id)`.
-
-Safety and data limits:
-
-- current authenticated Frappe user only;
-- Guest is rejected;
-- report entitlement is rechecked on list/save;
+- scope: `VetEdge Report Center`;
+- key: `vetedge_report_views_v1`;
 - maximum 25 private views per user;
-- 80-character view names;
-- report/filter/column values are bounded;
-- only Report Center-supported filter keys are stored;
-- at most 100 visible-column keys;
-- duplicate view names within one report are rejected;
-- one optional default view per report;
-- only filter/presentation metadata is stored — never report result rows;
-- no `ignore_permissions`, arbitrary SQL or new DocType/table;
-- no team/public sharing fields yet.
+- current authenticated user only;
+- no team/public sharing model yet.
 
-Source contract: `vetedge/tests/test_report_saved_views_contract.py`.
+Frappe synchronizes the user-settings cache to the database through its standard hourly-maintenance `sync_user_settings` job.
 
-### Phase 10B UI slice — next
+### Security/privacy contract
 
-Report Center should use existing EdgeSuite primitives rather than native custom HTML:
+- report View authorization is revalidated on list/save/rename/apply;
+- Advanced report entitlement therefore remains enforced;
+- list returns view metadata only, not stored Patient/Owner/filter values;
+- stored state is returned only through explicit Apply after current scope revalidation;
+- stale/inaccessible Branch is removed and current server Branch normalization reapplied;
+- supported smart-filter values are rechecked through the existing bounded permission-aware report-filter search;
+- invalid stale filter values are removed without disclosing their old values to the client;
+- report result rows/charts/summary datasets are never stored.
 
-- `EdgeDropdown` for the current report's saved views;
-- `EdgeModal` + `EdgeInput` for Save/Rename View;
-- explicit Save Current View / Update View / Delete View actions;
-- apply a saved view by replacing Report Center filters + `viewState`, updating URL, then performing the ordinary report refresh once;
-- column-only edits remain presentation-only until the user explicitly saves/updates the named view;
-- load only saved views for the current report;
-- no polling;
-- no hidden preload of views for every report;
-- delete/update must operate only on IDs returned for the current user.
+### Report Center UX
 
-### Shared/team views remain deferred
+Report Center now supplies Saved Views, Save View, Rename and Delete controls. Applying a view performs one state-validation request and exactly one ordinary provider refresh, resets pagination and updates the shareable URL. Manual filter/column edits clear the selected-view marker.
 
-Private user settings are intentionally not the storage model for team/public views. Before shared views exist, define:
+Default auto-apply is intentionally deferred because it must be designed as a single-load startup path rather than adding a second initial report request.
 
-- tenant/company/Branch ownership scope;
-- who may publish or withdraw a shared view;
-- read/edit/delete roles;
-- naming collisions between private/shared views;
-- whether Branch-limited views may be shared outside that Branch;
-- CoreEdge governance in shared-hosted/white-label environments;
-- audit trail requirements.
+Detailed record: `docs/project_notes/phase10b_saved_views_implementation.md`.
 
-Stored state must never become a permission bypass. Filters, report entitlement, Branch/company and role access are always revalidated at execution time.
+Source contracts:
 
-## Phase 10C — Comparison Periods
+- `vetedge/tests/test_report_saved_views_contract.py`;
+- `vetedge/tests/test_report_center_saved_views_ui_contract.py`.
 
-Prefer report-provider support rather than browser-side materialization.
+## Phase 10C — Previous-Period Comparison
 
-Examples:
+Status: **shared presentation + first aggregate backend implemented; Report Center UI adoption pending**.
 
-- Current period vs previous period;
-- Current month vs prior month;
-- Branch vs Branch where user has access;
-- practitioner/service performance comparison.
+### Subscription rule
 
-Rules:
+Comparison is an **Advanced Reporting feature**, even when the underlying operational report is Standard. Report shell capabilities therefore expose a separate `advanced_features_entitled` result backed by the existing `advanced_reports` feature entitlement.
 
-- server calculates comparison aggregates;
-- interactive row pagination remains independent;
-- do not fetch two full row datasets merely to calculate KPI deltas;
-- financial comparison must retain the canonical accounting/Branch resolver.
+This distinction allows, for example:
+
+- Consultation Register: Standard report and normally viewable;
+- Previous-period Consultation comparison: available only when `advanced_reports` is entitled.
+
+### Shared EdgeSuite presentation
+
+EdgeSuite UI PR #19 now provides `EdgeReportComparisonPanel`:
+
+- product-neutral current/comparison metric presentation;
+- period labels;
+- delta and percentage-delta presentation;
+- optional positive/negative/warning delta tones;
+- responsive 4/2/1-column layout;
+- no Frappe API/database/product/permission logic.
+
+### First VetEdge reference — Consultation Register
+
+`vetedge.services.report_comparison.get_report_comparison()` initially supports Consultation Register only.
+
+Comparison model:
+
+- current selected period vs immediately preceding equal-length period;
+- if no date range is supplied, current period defaults to the latest 30 days;
+- server calculates metrics using the existing Consultation aggregate/query helpers;
+- no current-period detail rows are materialized for comparison;
+- no previous-period detail rows are materialized;
+- interactive report pagination remains independent.
+
+Initial metrics:
+
+- Total Consultations;
+- Completed;
+- Completion Rate;
+- Average Planned Value;
+- Follow-up Required;
+- Cancelled.
+
+Metadata explicitly reports `aggregate_only=true` and `detail_rows_materialized=false`.
+
+Vaccination Due Soon/Overdue was deliberately not used as the first comparison reference because those are present-state due snapshots; mechanically comparing them to a previous date period would be semantically misleading.
+
+Source contract: `vetedge/tests/test_report_comparison_contract.py`.
+
+### Phase 10C UI next
+
+Report Center should expose Compare Previous Period only when:
+
+- the current report has a supported comparison provider; and
+- `advanced_features_entitled` is true.
+
+Toggling comparison must load only the aggregate comparison endpoint. It must not fetch a second detail-row dataset or disturb report pagination. If report filters change while comparison is visible, refresh the aggregate comparison once using the new filters.
 
 ## Phase 10D — Grouping, Subtotals and Conditional Highlighting
 
@@ -187,81 +175,29 @@ Potential Veterinary exceptions:
 - repeated missed appointments;
 - stale treatment plans/follow-ups where business rules define them.
 
-Each exception requires:
-
-- explicit business definition;
-- role/Branch visibility;
-- bounded query;
-- clickable source record;
-- state that explains why the record is exceptional;
-- no hidden mutations from the report itself unless a permission-aware existing action is deliberately exposed.
+Each exception requires an explicit business definition, role/Branch visibility, bounded query, clickable source record and an explanation of why the record is exceptional.
 
 ## Phase 10F — Scheduled Reports
 
 Schedule only after saved-view/filter state is stable.
 
-Requirements:
+Requirements include execution-time permission revalidation, recipient governance, Branch/company/tenant revalidation, attachment-size/row limits, retry/failure audit and automatic disabling when report/view access is lost.
 
-- permission-aware report/view resolution at execution time, not only schedule creation time;
-- recipient governance;
-- Branch/company/tenant scope revalidation;
-- safe attachment size/row limits;
-- failure/retry audit;
-- no queued export of unlimited datasets;
-- disable schedules automatically when the underlying report/view is retired or access is lost;
-- use CoreEdge messaging/email services where appropriate in platform deployments without making EdgeSuite UI depend on CoreEdge.
+## Performance rules
 
-## Tests required
-
-### Shared EdgeSuite UI
-
-- column chooser default-off backward compatibility;
-- serialization/reconciliation of visible columns;
-- last-column protection;
-- responsive/mobile panel;
-- export-dialog alignment;
-- no product/API/persistence logic in shared shell.
-
-### VetEdge Phase 10A
-
-- URL parsing/serialization;
-- stale column keys ignored safely;
-- no provider reload when only columns change;
-- filters remain provider-owned and unchanged;
-- Back/Forward/shareable URL behavior;
-- export receives only validated requested columns;
-- locked Advanced report cannot leak columns/data through URL state.
-
-### VetEdge Phase 10B
-
-- private-user isolation through Frappe user settings;
-- Guest rejection;
-- report entitlement revalidation;
-- filter allowlist and payload bounds;
-- duplicate name behavior;
-- default-view behavior;
-- maximum-view limit;
-- apply/load/delete UI behavior;
-- one ordinary provider refresh when a saved filter view is applied;
-- no provider refresh for unsaved column-only presentation changes;
-- no result-row persistence.
-
-### Later shared/scheduled phases
-
-- owner/shared permissions;
-- Branch/company fail-closed behavior;
-- migration/version compatibility;
-- schedule execution reauthorization;
-- recipient and attachment safety;
-- manual browser/network QA.
+- server filtering/query-level pagination for detail datasets;
+- bounded permission-aware remote Link search;
+- no large hidden master preloads;
+- comparison/grouping KPIs use aggregates rather than duplicated detail datasets;
+- full export remains separate from interactive pagination;
+- no polling;
+- column-only presentation changes do not reload providers.
 
 ## Things not to change
 
 - Do not mutate submitted ERPNext accounting documents.
 - Do not move report-role/Branch/tenant enforcement into JavaScript.
 - Do not introduce browser-side full-dataset materialization for grouping/comparison.
-- Do not add polling for report state.
-- Do not add a private saved-view DocType when Frappe user settings already provide the required user-owned storage.
 - Do not use private user settings as the future team/public sharing model.
-- Do not build a VetEdge-only column chooser; consume the shared EdgeSuite contract.
-- Do not claim Phase 10A/10B accepted until EdgeSuite UI PR #19 and VetEdge consumer browser/network QA pass.
+- Do not build VetEdge-only reusable report presentation components where EdgeSuite owns the generic capability.
+- Do not claim Phase 10 accepted until EdgeSuite UI PR #19 and VetEdge consumer automated/browser/network QA pass.
