@@ -19,17 +19,33 @@ def test_capability_policy_combines_subscription_settings_scope_and_action_permi
 		"validate_dashboard_access",
 		"get_reporting_entitlement",
 		"require_reporting_entitlement",
+		"check_advanced_reporting_entitlement",
 		"enable_reporting_print",
 		"enable_reporting_export",
 		"frappe.has_permission(ref_doctype, ptype=action, user=user)",
 		'"authorization_model": "subscription_tier_then_settings_scope_and_action_permission"',
 		'"report_tier"',
 		'"subscription_entitled"',
+		'"advanced_features_entitled"',
+		'"advanced_features_source"',
+		'"advanced_features_reason_code"',
+		'"advanced_features_key"',
 		"can_print",
 		"can_export",
 	):
 		assert expected in source
 	assert "ignore_permissions" not in source
+
+
+def test_standard_report_and_advanced_feature_entitlements_are_separate():
+	source = (ROOT / "services/reporting_capabilities.py").read_text()
+	advanced_context = source.split("def _advanced_feature_context", 1)[1].split(
+		"def get_reporting_capabilities", 1
+	)[0]
+
+	assert 'if entitlement.get("is_advanced")' in advanced_context
+	assert "check_advanced_reporting_entitlement(user=user)" in advanced_context
+	assert '"allowed": bool(entitlement.get("entitled"))' in advanced_context
 
 
 def test_reporting_catalog_has_standard_and_advanced_tiers_with_safe_default():
