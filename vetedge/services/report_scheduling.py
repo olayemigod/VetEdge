@@ -7,10 +7,15 @@ from frappe import _
 from frappe.utils import cint, cstr, validate_email_address
 
 from vetedge.services.portal_access import require_internal_user
-from vetedge.services.report_scheduling_compatibility import NATIVE_AUTO_EMAIL, get_report_scheduling_compatibility
+from vetedge.services.report_scheduling_compatibility import (
+	NATIVE_AUTO_EMAIL,
+	VETEDGE_EXPORT_ADAPTER,
+	get_report_scheduling_compatibility,
+)
 from vetedge.services.report_visibility import normalize_report_filters
 
 AUTO_EMAIL_DOCTYPE = "Auto Email Report"
+BRIDGE_REPORT = "VetEdge Scheduled Report Bridge"
 ALLOWED_FREQUENCIES = {"Daily", "Weekdays", "Weekly", "Monthly"}
 ALLOWED_FORMATS = {"HTML", "XLSX", "CSV", "PDF"}
 MAX_SCHEDULE_ROWS = 5000
@@ -23,6 +28,15 @@ def _parse_filters(value) -> dict:
 	if not isinstance(parsed, dict):
 		frappe.throw(_("Scheduled report filters must be a JSON object."), frappe.ValidationError)
 	return dict(parsed)
+
+
+def _parse_columns(value) -> list[str]:
+	if not value:
+		return []
+	parsed = value if isinstance(value, list) else frappe.parse_json(value)
+	if not isinstance(parsed, list):
+		frappe.throw(_("Scheduled report columns must be a JSON list."), frappe.ValidationError)
+	return [cstr(item).strip() for item in parsed if cstr(item).strip()]
 
 
 def _normalize_recipients(value: str) -> str:
@@ -60,6 +74,38 @@ def _require_auto_email_create_permission() -> None:
 		frappe.throw(_("You do not have permission to configure scheduled report delivery."), frappe.PermissionError)
 
 
+def _schedule_doc(
+	*,
+	report: str,
+	recipients: str,
+	frequency: str,
+	file_format: str,
+	filters: dict,
+	day_of_week: str,
+	send_if_data: int,
+	row_limit: int,
+	description: str = "",
+):
+	doc = frappe.get_doc(
+		{
+			"doctype": AUTO_EMAIL_DOCTYPE,
+			"report": report,
+			"user": frappe.session.user,
+			"email_to": recipients,
+			"frequency": frequency,
+			"day_of_week": day_of_week or None,
+			"format": file_format,
+			"filters": json.dumps(filters, default=str, sort_keys=True),
+			"enabled": 1,
+			"send_if_data": cint(send_if_data),
+			"no_of_rows": row_limit,
+			"description": description or None,
+		}
+	)
+	doc.insert()
+	return doc
+
+
 @frappe.whitelist()
 def create_native_report_schedule(
 	report_name: str,
@@ -71,12 +117,7 @@ def create_native_report_schedule(
 	send_if_data: int = 1,
 	no_of_rows: int = 500,
 ) -> dict:
-	"""Create only schedules proven compatible with Frappe Auto Email Report.
-
-	EdgeSuite-provider reports intentionally fail closed here until their VetEdge
-	export adapter path is implemented, so scheduled output cannot silently differ
-	from the report the user configured.
-	"""
+	"""Create only schedules proven compatible with Frappe Auto Email Report."""
 	require_internal_user()
 	compatibility = get_report_scheduling_compatibility(report_name)
 	if not compatibility.get("can_configure"):
@@ -93,22 +134,16 @@ def create_native_report_schedule(
 	normalized_filters = dict(normalize_report_filters(compatibility["report_name"], _parse_filters(filters)) or {})
 	row_limit = min(max(cint(no_of_rows) or 500, 1), MAX_SCHEDULE_ROWS)
 
-	doc = frappe.get_doc(
-		{
-			"doctype": AUTO_EMAIL_DOCTYPE,
-			"report": compatibility["report_name"],
-			"user": frappe.session.user,
-			"email_to": recipients,
-			"frequency": frequency,
-			"day_of_week": day_of_week or None,
-			"format": file_format,
-			"filters": json.dumps(normalized_filters, default=str, sort_keys=True),
-			"enabled": 1,
-			"send_if_data": cint(send_if_data),
-			"no_of_rows": row_limit,
-		}
+	doc = _schedule_doc(
+		report=compatibility["report_name"],
+		recipients=recipients,
+		frequency=frequency,
+		file_format=file_format,
+		filters=normalized_filters,
+		day_of_week=day_of_week,
+		send_if_data=send_if_data,
+		row_limit=row_limit,
 	)
-	doc.insert()
 	return {
 		"name": doc.name,
 		"report_name": compatibility["report_name"],
@@ -118,4 +153,71 @@ def create_native_report_schedule(
 		"enabled": True,
 		"no_of_rows": row_limit,
 		"filters": normalized_filters,
+	}
+
+
+@frappe.whitelist()
+def create_vetedge_report_schedule(
+	report_name: str,
+	email_to: str,
+	frequency: str = "Daily",
+	file_format: str = "XLSX",
+	filters=None,
+	selected_columns=None,
+	day_of_week: str | None = None,
+	send_if_data: int = 1,
+	no_of_rows: int = 500,
+) -> dict:
+	"""Schedule optimized EdgeSuite/VetEdge report data through Frappe Auto Email Report.
+
+	Frappe remains responsible for cadence, background processing and email delivery.
+	The internal bridge report is responsible only for re-executing the target
+	VetEdge provider under the schedule owner's report/Branch permissions.
+	"""
+	require_internal_user()
+	compatibility = get_report_scheduling_compatibility(report_name)
+	if not compatibility.get("can_configure"):
+		frappe.throw(_("Scheduled report delivery is not available for this report or current Plan."), frappe.PermissionError)
+	if compatibility.get("delivery_mode") != VETEDGE_EXPORT_ADAPTER:
+		frappe.throw(_("This report does not require the VetEdge scheduled-report adapter."), frappe.ValidationError)
+
+	_require_auto_email_create_permission()
+	if not frappe.db.exists("Report", BRIDGE_REPORT):
+		frappe.throw(_("VetEdge Scheduled Report Bridge is not installed on this site."), frappe.ValidationError)
+
+	frequency, file_format, day_of_week = _validate_schedule_values(frequency, file_format, day_of_week)
+	recipients = _normalize_recipients(email_to)
+	normalized_filters = dict(normalize_report_filters(compatibility["report_name"], _parse_filters(filters)) or {})
+	columns = _parse_columns(selected_columns)
+	row_limit = min(max(cint(no_of_rows) or 500, 1), MAX_SCHEDULE_ROWS)
+	bridge_filters = {
+		"target_report": compatibility["report_name"],
+		"target_filters": json.dumps(normalized_filters, default=str, sort_keys=True),
+		"selected_columns": json.dumps(columns),
+		"row_limit": row_limit,
+	}
+
+	doc = _schedule_doc(
+		report=BRIDGE_REPORT,
+		recipients=recipients,
+		frequency=frequency,
+		file_format=file_format,
+		filters=bridge_filters,
+		day_of_week=day_of_week,
+		send_if_data=send_if_data,
+		row_limit=row_limit,
+		description=_("Scheduled VetEdge report: {0}").format(compatibility["report_name"]),
+	)
+	return {
+		"name": doc.name,
+		"report_name": compatibility["report_name"],
+		"delivery_mode": VETEDGE_EXPORT_ADAPTER,
+		"scheduler": AUTO_EMAIL_DOCTYPE,
+		"bridge_report": BRIDGE_REPORT,
+		"frequency": frequency,
+		"format": file_format,
+		"enabled": True,
+		"no_of_rows": row_limit,
+		"filters": normalized_filters,
+		"selected_columns": columns,
 	}
