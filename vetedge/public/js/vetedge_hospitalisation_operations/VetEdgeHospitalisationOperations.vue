@@ -34,7 +34,7 @@
       emptyTitle="No active hospitalisations"
       emptyDescription="No admitted, under-care or ready-for-discharge records match the current filters."
       loadingMessage="Loading Hospitalisation Operations…"
-      @retry="fetchData"
+      @retry="refreshOperationalView"
       @page-change="goToPage"
       @page-size-change="setPageSize"
       @cell-click="openCell"
@@ -124,6 +124,16 @@
           Clear Filters
         </button>
       </template>
+      <template v-if="exceptionPanelSupported && advancedExceptionsEntitled" #chart>
+        <EdgeReportExceptionPanel
+          :title="exceptionPayload?.title || 'Hospitalisation Exceptions'"
+          :description="exceptionPayload?.description || 'Operational exceptions requiring attention within the current Hospitalisation scope.'"
+          :items="exceptionPayload?.items || []"
+          :loading="exceptionLoading"
+          emptyMessage="No pending Hospitalisation stock actions match the current filters."
+          @open="openException"
+        />
+      </template>
       <template #resultMeta>
         <span>Active admissions only · activity and charge signals are enriched for the current page.</span>
       </template>
@@ -139,6 +149,7 @@ const requiredEdgeUIComponents = [
   'EdgeDropdown',
   'EdgeInput'
 ];
+const optionalEdgeUIComponents = ['EdgeReportExceptionPanel'];
 
 const runtimeComponents = () => {
   const runtime = typeof window !== 'undefined' ? (window.EdgeSuiteUI || window.EdgeUI || {}) : {};
@@ -148,10 +159,18 @@ const runtimeComponents = () => {
 const OPERATIONS_API = 'vetedge.services.hospitalisation_operations.get_hospitalisation_operations';
 const FILTER_API = 'vetedge.services.hospitalisation_filter_search.search_hospitalisation_filter_options';
 const VISIBILITY_API = 'vetedge.services.report_visibility.get_visibility_context';
+const CAPABILITIES_API = 'vetedge.services.reporting_capabilities.get_shell_capabilities';
+const EXCEPTIONS_API = 'vetedge.services.report_exceptions.get_report_exceptions';
+const EXCEPTION_SCOPE = 'Pending Hospitalisation Actions';
+const EXCEPTION_KEY = 'hospitalisation_pending_stock';
 
 export default {
   name: 'VetEdgeHospitalisationOperations',
-  components: Object.fromEntries(requiredEdgeUIComponents.map((name) => [name, runtimeComponents()[name]])),
+  components: Object.fromEntries(
+    [...requiredEdgeUIComponents, ...optionalEdgeUIComponents]
+      .map((name) => [name, runtimeComponents()[name]])
+      .filter(([, component]) => Boolean(component))
+  ),
   data() {
     return {
       edgeUIValid: true,
@@ -168,6 +187,10 @@ export default {
       branchName: 'All Branches',
       userName: '',
       visibilityDefaultBranch: '',
+      exceptionLoading: false,
+      exceptionPayload: null,
+      exceptionRequestGeneration: 0,
+      exceptionCapabilities: { advanced_features_entitled: false },
       filters: {
         branch: '',
         patient: '',
@@ -212,6 +235,12 @@ export default {
         has_previous: this.currentPage > 1,
         has_next: this.currentPage * pageSize < Number(this.totalCount || 0)
       };
+    },
+    exceptionPanelSupported() {
+      return Boolean(runtimeComponents().EdgeReportExceptionPanel);
+    },
+    advancedExceptionsEntitled() {
+      return Boolean(this.exceptionCapabilities?.advanced_features_entitled);
     }
   },
   created() {
@@ -228,6 +257,7 @@ export default {
     this.initialize();
   },
   beforeUnmount() {
+    this.invalidateExceptionRequest();
     if (window.jQuery) window.jQuery(document).off('.vetedge_hospitalisation_ops');
   },
   methods: {
@@ -242,14 +272,17 @@ export default {
     },
     async initialize() {
       await this.loadVisibilityContext();
-      await this.fetchData();
+      await this.loadExceptionCapabilities();
+      await this.refreshOperationalView();
     },
     async handleContextChange() {
       this.syncShellContext();
       this.currentPage = 1;
       this.filters.branch = '';
+      this.invalidateExceptionRequest();
       await this.loadVisibilityContext();
-      await this.fetchData();
+      await this.loadExceptionCapabilities();
+      await this.refreshOperationalView();
     },
     callFrappe(method, args = {}) {
       return new Promise((resolve, reject) => {
@@ -270,10 +303,35 @@ export default {
         this.error = error?.message || 'Hospitalisation Branch visibility could not be resolved.';
       }
     },
+    async loadExceptionCapabilities() {
+      if (!this.exceptionPanelSupported) return;
+      try {
+        this.exceptionCapabilities = await this.callFrappe(CAPABILITIES_API, {
+          scope_name: EXCEPTION_SCOPE,
+          scope_type: 'report'
+        });
+      } catch (_error) {
+        this.exceptionCapabilities = { advanced_features_entitled: false };
+      }
+      if (!this.advancedExceptionsEntitled) {
+        this.invalidateExceptionRequest();
+        this.exceptionPayload = null;
+      }
+    },
     requestFilters() {
       return Object.fromEntries(
         Object.entries(this.filters).filter(([, value]) => value !== undefined && value !== null && String(value) !== '')
       );
+    },
+    exceptionRequestSignature() {
+      const filters = Object.entries(this.requestFilters())
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => [key, value]);
+      return JSON.stringify({ exception_key: EXCEPTION_KEY, filters });
+    },
+    invalidateExceptionRequest() {
+      this.exceptionRequestGeneration += 1;
+      this.exceptionLoading = false;
     },
     async searchFilter(field, term) {
       const result = await this.callFrappe(FILTER_API, {
@@ -313,11 +371,18 @@ export default {
       };
       this.branchName = this.filters.branch || 'All Branches';
       this.currentPage = 1;
-      this.fetchData();
+      this.refreshOperationalView();
     },
     applyFilters() {
       this.currentPage = 1;
-      this.fetchData();
+      this.refreshOperationalView();
+    },
+    async refreshOperationalView() {
+      this.invalidateExceptionRequest();
+      this.exceptionPayload = null;
+      const requests = [this.fetchData()];
+      if (this.exceptionPanelSupported && this.advancedExceptionsEntitled) requests.push(this.fetchExceptions());
+      await Promise.all(requests);
     },
     async fetchData() {
       this.loading = true;
@@ -336,6 +401,27 @@ export default {
         this.error = error?.message || 'Hospitalisation Operations could not be loaded.';
       } finally {
         this.loading = false;
+      }
+    },
+    async fetchExceptions() {
+      if (!this.exceptionPanelSupported || !this.advancedExceptionsEntitled) return;
+      const generation = ++this.exceptionRequestGeneration;
+      const signature = this.exceptionRequestSignature();
+      this.exceptionLoading = true;
+      try {
+        const payload = await this.callFrappe(EXCEPTIONS_API, {
+          exception_key: EXCEPTION_KEY,
+          filters: JSON.stringify(this.requestFilters())
+        });
+        if (generation !== this.exceptionRequestGeneration || signature !== this.exceptionRequestSignature()) return;
+        this.exceptionPayload = payload || null;
+      } catch (error) {
+        if (generation !== this.exceptionRequestGeneration || signature !== this.exceptionRequestSignature()) return;
+        this.exceptionPayload = null;
+        console.warn('Hospitalisation exception feed could not be loaded', error);
+      } finally {
+        if (generation !== this.exceptionRequestGeneration || signature !== this.exceptionRequestSignature()) return;
+        this.exceptionLoading = false;
       }
     },
     goToPage(page) {
@@ -368,6 +454,10 @@ export default {
       else if (field === 'owner' && row?.owner) frappe.set_route('Form', 'Customer', row.owner);
       else if (field === 'care_location' && row?.care_location) frappe.set_route('Form', 'Veterinary Care Location', row.care_location);
       else if (field === 'attending_veterinarian' && value) frappe.set_route('Form', 'User', value);
+    },
+    openException(item) {
+      if (!window.frappe?.set_route || !item?.reference_doctype || !item?.reference_name) return;
+      frappe.set_route('Form', item.reference_doctype, item.reference_name);
     }
   }
 };
