@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe import _
 from frappe.utils import cstr
 
 from vetedge.services.permissions import (
@@ -75,3 +76,25 @@ def has_hospitalisation_permission(
 
     branch = cstr(doc.get(BRANCH_FIELD) if hasattr(doc, "get") else getattr(doc, BRANCH_FIELD, "") or "").strip()
     return bool(branch and branch in allowed)
+
+
+def validate_hospitalisation_branch_access(doc, user: str | None = None) -> None:
+    """Fail closed when a non-global user tries to save outside assigned Branches."""
+    user = user or get_current_user()
+    if (
+        not user
+        or user == "Guest"
+        or is_portal_owner_user(user)
+        or not is_internal_staff_user(user)
+    ):
+        frappe.throw(_("Hospitalisation is only available to authorised clinic staff."), frappe.PermissionError)
+
+    if user_has_global_branch_access(user):
+        return
+
+    allowed = _allowed_branches(user) or []
+    branch = cstr(doc.get(BRANCH_FIELD) if hasattr(doc, "get") else getattr(doc, BRANCH_FIELD, "") or "").strip()
+    if not allowed:
+        frappe.throw(_("You do not have an assigned Veterinary Branch for Hospitalisation operations."), frappe.PermissionError)
+    if not branch or branch not in allowed:
+        frappe.throw(_("You do not have access to the selected Hospitalisation Branch."), frappe.PermissionError)
