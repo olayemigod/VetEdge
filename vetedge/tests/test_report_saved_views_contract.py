@@ -14,7 +14,7 @@ def test_private_saved_views_use_frappe_user_settings_without_new_doctype():
         "get_saved_report_views(report_name: str)",
         "save_report_view(",
         "delete_saved_report_view(view_id: str)",
-        "require_reporting_entitlement(name, \"report\"",
+        'require_reporting_action(name, "report", "view"',
     ):
         assert expected in source
 
