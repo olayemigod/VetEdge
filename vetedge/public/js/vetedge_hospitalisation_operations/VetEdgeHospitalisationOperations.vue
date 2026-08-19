@@ -130,7 +130,7 @@
           :description="exceptionPayload?.description || 'Operational exceptions requiring attention within the current Hospitalisation scope.'"
           :items="exceptionPayload?.items || []"
           :loading="exceptionLoading"
-          emptyMessage="No pending Hospitalisation stock actions match the current filters."
+          emptyMessage="No Hospitalisation pricing, stock or billing exceptions match the current filters."
           @open="openException"
         />
       </template>
@@ -162,7 +162,7 @@ const VISIBILITY_API = 'vetedge.services.report_visibility.get_visibility_contex
 const CAPABILITIES_API = 'vetedge.services.reporting_capabilities.get_shell_capabilities';
 const EXCEPTIONS_API = 'vetedge.services.report_exceptions.get_report_exceptions';
 const EXCEPTION_SCOPE = 'Pending Hospitalisation Actions';
-const EXCEPTION_KEY = 'hospitalisation_pending_stock';
+const EXCEPTION_KEY = 'hospitalisation_operations';
 
 export default {
   name: 'VetEdgeHospitalisationOperations',
