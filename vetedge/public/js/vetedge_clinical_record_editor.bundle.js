@@ -22,7 +22,19 @@ function normalizedOptions(field) {
 		.map((value) => ({ value, label: value }));
 }
 
-async function searchLink(field, query) {
+async function searchLink(field, query, values = {}) {
+	if (field?.link_search_method) {
+		const contextField = field.link_search_context_field || "";
+		const contextValue = contextField ? values?.[contextField] : "";
+		if (contextField && !contextValue) return [];
+		const args = {
+			txt: String(query || ""),
+			page_length: 20,
+		};
+		if (contextField) args[contextField] = contextValue;
+		const response = await frappe.call(field.link_search_method, args);
+		return response.message || [];
+	}
 	if (!field?.options || Array.isArray(field.options)) return [];
 	const response = await frappe.call("frappe.desk.search.search_link", {
 		doctype: field.options,
@@ -34,7 +46,7 @@ async function searchLink(field, query) {
 	return response.message || [];
 }
 
-function fieldSpec(field) {
+function fieldSpec(field, context = {}) {
 	const typeMap = {
 		Select: "select",
 		Link: "link",
@@ -62,12 +74,14 @@ function fieldSpec(field) {
 		required: Boolean(field.reqd),
 		readOnly: Boolean(field.read_only || field.fieldtype === "Attach"),
 		default: field.value ?? "",
+		linkSearchContextField: field.link_search_context_field || "",
 	};
 	if (field.fieldtype === "Select" || field.fieldtype === "MultiSelect") spec.options = normalizedOptions(field);
 	if (field.fieldtype === "Link") {
 		spec.selectedLabel = field.selected_label || field.value || "";
-		spec.searcher = (query) => searchLink(field, query);
+		spec.searcher = (query) => searchLink(field, query, context.getValues?.() || {});
 	}
+	spec.onChange = (value, values, presenterView) => context.onChange?.(field, value, values, presenterView);
 	if (["Int", "Float", "Currency", "Percent"].includes(field.fieldtype)) spec.step = field.fieldtype === "Int" ? "1" : "any";
 	if (["Small Text", "Text", "Long Text"].includes(field.fieldtype)) spec.rows = field.fieldtype === "Long Text" ? 5 : 3;
 	return spec;
@@ -75,6 +89,27 @@ function fieldSpec(field) {
 
 function valuesFromFields(fields = []) {
 	return Object.fromEntries(fields.map((field) => [field.fieldname, field.value ?? (field.fieldtype === "MultiSelect" ? [] : "")]));
+}
+
+function buildFieldSpecs(fields = []) {
+	const state = {
+		values: valuesFromFields(fields),
+		specs: [],
+	};
+	const context = {
+		getValues: () => state.values,
+		onChange: (field, _value, values, presenterView) => {
+			state.values = { ...(values || {}) };
+			for (const dependent of state.specs) {
+				if (dependent.linkSearchContextField !== field.fieldname) continue;
+				if (!state.values[dependent.fieldname]) continue;
+				dependent.selectedLabel = "";
+				presenterView?.setField?.(dependent, "");
+			}
+		},
+	};
+	state.specs = fields.map((field) => fieldSpec(field, context));
+	return { fields: state.specs, values: state.values };
 }
 
 function sectionSpec(section, context = {}) {
@@ -174,7 +209,7 @@ async function openCreateModal({ doctype, onSaved } = {}) {
 	});
 	try {
 		const schema = await call(API.createSchema, { doctype });
-		const fields = (schema.fields || []).map(fieldSpec);
+		const form = buildFieldSpecs(schema.fields || []);
 		modal.update({
 			loading: false,
 			title: schema.title || __("Create Clinical Record"),
@@ -182,8 +217,8 @@ async function openCreateModal({ doctype, onSaved } = {}) {
 			message: doctype === "Veterinary Lab Order"
 				? __("Select the patient and required tests. Each test keeps its configured result format, upload rules, payment workflow and default price.")
 				: __("Create the record inside EdgeSuite. Server-side clinical, branch and role rules remain authoritative."),
-			fields,
-			values: valuesFromFields(schema.fields || []),
+			fields: form.fields,
+			values: form.values,
 			actions: [{
 				label: __("Create"),
 				primary: true,
@@ -234,7 +269,7 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 			]);
 			schema = recordSchema || {};
 			workflow = workflowSchema || { actions: [], message: "" };
-			const values = valuesFromFields(schema.fields || []);
+			const form = buildFieldSpecs(schema.fields || []);
 			const context = {
 				openLabResult: (row) => openLabResult(row),
 				uploadLabResult: (row) => uploadLabResult(row),
@@ -298,8 +333,8 @@ export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, on
 						? __("Edit the permitted fields below. Workflow, submitted billing and stock protections remain server-enforced.")
 						: __("This record is read-only for its current permission, workflow or billing state."),
 				].filter(Boolean).join("\n"),
-				fields: (schema.fields || []).map(fieldSpec),
-				values,
+				fields: form.fields,
+				values: form.values,
 				sections: (schema.sections || []).map((section) => sectionSpec(section, context)),
 				actions,
 			});
