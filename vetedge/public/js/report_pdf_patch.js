@@ -77,3 +77,4 @@ frappe.render_pdf = function (html, opts = {}) {
 };
 
 frappe.require("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
+frappe.require("/assets/vetedge/js/vetedge_report_scheduling_management_ui.js");
