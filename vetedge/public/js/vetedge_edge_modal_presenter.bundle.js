@@ -124,9 +124,14 @@ function createPresenter(edge) {
 				}
 			},
 			setField(field, value) {
+				if (field.type === "link" && !value) field.selectedLabel = "";
 				const values = { ...(this.spec.values || {}), [field.fieldname]: value };
 				this.spec = { ...this.spec, values };
 				field.onChange?.(value, values, this);
+			},
+			setLinkFieldLabel(field, option) {
+				field.selectedLabel = String(option?.label ?? option?.title ?? option?.value ?? "");
+				this.spec = { ...this.spec };
 			},
 			renderMultiSelect(field, value, index) {
 				const selected = normalizedMultiValue(value);
@@ -169,7 +174,18 @@ function createPresenter(edge) {
 					"onUpdate:modelValue": (next) => this.setField(field, next),
 				};
 				if (field.type === "select") return h(EdgeDropdown, { ...common, options: field.options || [], placeholder: field.placeholder || __("Select") });
-				if (field.type === "link") return h(EdgeLinkField, { ...common, selectedLabel: field.selectedLabel || "", options: field.options || [], searcher: field.searcher || null, minChars: field.minChars ?? 0, debounceMs: field.debounceMs ?? 220, placeholder: field.placeholder || __("Search records") });
+				if (field.type === "link") {
+					return h(EdgeLinkField, {
+						...common,
+						selectedLabel: field.selectedLabel || "",
+						options: field.options || [],
+						searcher: field.searcher || null,
+						minChars: field.minChars ?? 0,
+						debounceMs: field.debounceMs ?? 220,
+						placeholder: field.placeholder || __("Search records"),
+						onSelect: (option) => this.setLinkFieldLabel(field, option),
+					});
+				}
 				if (field.type === "textarea") return h(EdgeTextarea, { ...common, rows: field.rows || 3, placeholder: field.placeholder || "" });
 				return h(EdgeInput, { ...common, type: field.type || "text", placeholder: field.placeholder || "", min: field.min, max: field.max, step: field.step });
 			},
