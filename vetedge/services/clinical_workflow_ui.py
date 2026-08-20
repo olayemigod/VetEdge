@@ -178,11 +178,8 @@ def _lab_actions(name: str) -> dict[str, Any]:
 
 def _vaccination_actions(name: str) -> dict[str, Any]:
     from vetedge.services.permissions import can_access_branch_data
-    from vetedge.services.vaccination import (
-        VACCINATION_RECORD_DOCTYPE,
-        can_administer_vaccine,
-        enforce_vaccination_payment_before_administration,
-    )
+    from vetedge.services.vaccination import VACCINATION_RECORD_DOCTYPE, can_administer_vaccine
+    from vetedge.services.vaccination_payment_workflow import get_vaccination_administration_gate_state
 
     doc = frappe.get_doc(VACCINATION_RECORD_DOCTYPE, name)
     if not frappe.has_permission(VACCINATION_RECORD_DOCTYPE, "read", doc=doc):
@@ -191,6 +188,7 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
 
     actions = []
     billing_required = False
+    payment_state: dict = {}
     message = _(
         "Vaccination administration is a controlled server action. Payment, role/branch and stock gates are rechecked when it runs."
     )
@@ -199,14 +197,9 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
         doc,
         raise_exception=False,
     ):
-        payment_ready = True
-        payment_message = ""
-        try:
-            enforce_vaccination_payment_before_administration(doc, user=frappe.session.user)
-        except Exception as error:
-            payment_ready = False
-            billing_required = True
-            payment_message = str(error) or _("Complete Billing & Payment before administering this vaccination.")
+        payment_state = dict(get_vaccination_administration_gate_state(doc) or {})
+        payment_ready = bool(payment_state.get("can_proceed"))
+        payment_message = str(payment_state.get("message") or "")
         if payment_ready:
             actions.append(
                 {
@@ -221,13 +214,16 @@ def _vaccination_actions(name: str) -> dict[str, Any]:
                     ),
                 }
             )
-        elif payment_message:
-            message = f"{message} {payment_message}"
+        else:
+            billing_required = True
+            if payment_message:
+                message = f"{message} {payment_message}"
     return {
         "status": doc.status,
         "actions": actions,
         "message": message,
         "billing_required": billing_required,
+        "payment_gate": payment_state,
     }
 
 
