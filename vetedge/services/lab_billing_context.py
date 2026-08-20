@@ -148,6 +148,7 @@ def get_lab_billing_evidence(doc) -> dict:
     charges = _load_lab_charge_rows(doc)
     row_billing: dict[str, dict] = {}
     missing_rows: list[str] = []
+    unsubmitted_rows: list[str] = []
     invoice_names: list[str] = []
 
     for row in rows:
@@ -167,21 +168,27 @@ def get_lab_billing_evidence(doc) -> dict:
 
         evidence = max(candidates, key=_evidence_rank) if candidates else _invoice_evidence(None)
         row_key = str(row.get("name") or row.get("lab_test_template") or "")
+        row_label = row.get("lab_test_name") or row.get("lab_test_template") or row_key
         if row_key:
             row_billing[row_key] = evidence
         if row.get("lab_test_template"):
             row_billing.setdefault(str(row.get("lab_test_template")), evidence)
 
-        if evidence.get("docstatus") not in {0, 1}:
-            missing_rows.append(row.get("lab_test_name") or row.get("lab_test_template") or row_key)
-        if evidence.get("invoice") and evidence.get("docstatus") in {0, 1}:
+        docstatus = cint(evidence.get("docstatus")) if evidence.get("docstatus") is not None else None
+        if docstatus not in {0, 1}:
+            missing_rows.append(row_label)
+        elif docstatus != 1:
+            unsubmitted_rows.append(row_label)
+        if evidence.get("invoice") and docstatus in {0, 1}:
             if evidence["invoice"] not in invoice_names:
                 invoice_names.append(evidence["invoice"])
 
     return {
         "coverage_complete": bool(rows) and not missing_rows,
+        "source_invoices_submitted": bool(rows) and not missing_rows and not unsubmitted_rows,
         "row_billing": row_billing,
         "missing_rows": missing_rows,
+        "unsubmitted_rows": unsubmitted_rows,
         "invoice_names": invoice_names,
     }
 
@@ -190,9 +197,9 @@ def get_lab_billing_core_gate_state(doc) -> dict:
     """Evaluate Lab workflow billing against its real accounting context.
 
     Consultation-linked Lab Orders are billed as Consultation treatment-plan
-    charges. Every Lab Test must first have matching invoice evidence; only then
-    can the Consultation payment gate satisfy the Lab workflow. Standalone Lab
-    Orders retain their own Billing Core source/gate behaviour.
+    charges. Every Lab Test must first have matching *submitted* invoice evidence;
+    only then can the Consultation payment gate satisfy the Lab workflow.
+    Standalone Lab Orders retain their own Billing Core source/gate behaviour.
     """
     evidence = get_lab_billing_evidence(doc)
     consultation = doc.get("consultation")
@@ -215,16 +222,36 @@ def get_lab_billing_core_gate_state(doc) -> dict:
             "billing_context": "consultation" if consultation else "standalone_lab",
             "row_billing": evidence.get("row_billing") or {},
             "lab_charge_coverage_complete": False,
+            "lab_source_invoices_submitted": False,
             "lab_invoice_names": evidence.get("invoice_names") or [],
         }
 
-    from vetedge.services.billing_core import get_source_payment_gate_status
+    if not evidence.get("source_invoices_submitted"):
+        unsubmitted = ", ".join(
+            str(value) for value in evidence.get("unsubmitted_rows") or [] if value
+        )
+        message = _("Submit the Sales Invoice containing every Lab Test before laboratory processing can begin.")
+        if unsubmitted:
+            message = f"{message} {_('Awaiting invoice submission')}: {unsubmitted}."
+        return {
+            "can_proceed": False,
+            "billable": True,
+            "gate": "Submitted Invoice Required",
+            "message": message,
+            "billing_context": "consultation" if consultation else "standalone_lab",
+            "row_billing": evidence.get("row_billing") or {},
+            "lab_charge_coverage_complete": True,
+            "lab_source_invoices_submitted": False,
+            "lab_invoice_names": evidence.get("invoice_names") or [],
+        }
+
+    from vetedge.services.clinical_payment_gate import get_strict_source_payment_gate_status
 
     if consultation:
-        state = dict(get_source_payment_gate_status(CONSULTATION_DOCTYPE, consultation) or {})
+        state = dict(get_strict_source_payment_gate_status(CONSULTATION_DOCTYPE, consultation) or {})
         context = "consultation"
     else:
-        state = dict(get_source_payment_gate_status(LAB_ORDER_DOCTYPE, doc.name) or {})
+        state = dict(get_strict_source_payment_gate_status(LAB_ORDER_DOCTYPE, doc.name) or {})
         context = "standalone_lab"
 
     state.setdefault("billable", True)
@@ -232,6 +259,7 @@ def get_lab_billing_core_gate_state(doc) -> dict:
     state["billing_context"] = context
     state["row_billing"] = evidence.get("row_billing") or {}
     state["lab_charge_coverage_complete"] = True
+    state["lab_source_invoices_submitted"] = True
     state["lab_invoice_names"] = evidence.get("invoice_names") or []
     if not state.get("can_proceed") and not state.get("message"):
         state["message"] = _(
