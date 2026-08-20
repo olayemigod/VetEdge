@@ -43,6 +43,14 @@ def test_standalone_vaccination_preserves_vaccination_payment_policy():
     assert "get_invoice_collection_payment_gate_status" in source
 
 
+def test_vaccination_workflow_ui_uses_same_hardened_preflight():
+    source = _read("services/clinical_workflow_ui.py")
+
+    assert "get_vaccination_administration_gate_state" in source
+    assert "payment_ready = bool(payment_state.get" in source
+    assert '"billing_required": billing_required' in source
+
+
 def test_strict_clinical_gate_blocks_pending_and_draft_active_billing_cycles():
     source = _read("services/clinical_payment_gate.py")
 
