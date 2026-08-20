@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -5,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CLINICAL_BUNDLE = ROOT / "vetedge/public/js/vetedge_clinical_workspace.bundle.js"
 EDITOR_BUNDLE = ROOT / "vetedge/public/js/vetedge_clinical_record_editor.bundle.js"
 WORKFLOW_SERVICE = ROOT / "vetedge/services/clinical_workflow_ui.py"
+VACCINATION_META = ROOT / "vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.json"
 
 
 def read(path: Path) -> str:
@@ -40,6 +42,22 @@ def test_related_record_open_action_coexists_with_permission_aware_safe_delete()
     assert "if (row.can_delete)" in block
     assert "delete_consultation_related_record" in block
     assert block.index("label: tr('Open')") < block.index("if (row.can_delete)")
+
+
+def test_consultation_vaccination_route_uses_select_and_matches_doctype_options():
+    clinical = read(CLINICAL_BUNDLE)
+    metadata = json.loads(read(VACCINATION_META))
+    route_field = next(field for field in metadata["fields"] if field.get("fieldname") == "route")
+    expected = [value.strip() for value in str(route_field.get("options") or "").splitlines() if value.strip()]
+
+    assert route_field.get("fieldtype") == "Select"
+    assert expected
+    assert "const VACCINATION_ROUTE_OPTIONS = Object.freeze(" in clinical
+    for value in expected:
+        assert repr(value) in clinical
+    assert "fieldname: 'route', label: tr('Route'), type: 'select'" in clinical
+    assert "options: VACCINATION_ROUTE_OPTIONS.map" in clinical
+    assert "fieldname: 'route', label: tr('Route'), type: 'text'" not in clinical
 
 
 def test_existing_editor_and_server_workflow_remain_authoritative_for_lab_progress_and_results():
