@@ -23,6 +23,27 @@ class TestVitals(TestCase):
 		):
 			self.assertRaises(frappe.ValidationError, validate_vital_signs, doc)
 
+	def test_standalone_vitals_remain_valid_without_consultation(self):
+		doc = frappe._dict(
+			consultation=None,
+			patient="VP-001",
+			service_branch="Branch A",
+			recorded_by=None,
+			recorded_on=None,
+			temperature=38.5,
+		)
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(get_value=lambda *args, **kwargs: "Buddy"),
+		)
+
+		with patch("vetedge.services.vitals.frappe", frappe_stub):
+			validate_vital_signs(doc)
+
+		self.assertIsNone(doc.consultation)
+		self.assertEqual(doc.patient, "VP-001")
+		self.assertEqual(doc.service_branch, "Branch A")
+		self.assertEqual(doc.vitals_title, "Buddy - Vitals - 2026-04-18 10:00 - Branch A")
+
 	def test_vitals_resolve_patient_and_branch_from_consultation(self):
 		doc = frappe._dict(
 			consultation="VCON-001",
@@ -39,7 +60,7 @@ class TestVitals(TestCase):
 		def get_value(doctype, name, fields=None, **kwargs):
 			if fields == "patient_name":
 				return "Buddy"
-			return frappe._dict(patient="VP-001", service_branch="Branch B")
+			return frappe._dict(patient="VP-001", service_branch="Branch B", status="In Progress")
 
 		frappe_stub = make_frappe_stub(
 			db=SimpleNamespace(
@@ -54,6 +75,53 @@ class TestVitals(TestCase):
 		self.assertEqual(doc.service_branch, "Branch B")
 		self.assertEqual(doc.recorded_by, "test@example.com")
 		self.assertEqual(doc.vitals_title, "Buddy - Vitals - 2026-04-18 10:00 - Branch B")
+
+	def test_new_vitals_link_rejects_closed_consultation(self):
+		doc = frappe._dict(
+			consultation="VCON-001",
+			patient="VP-001",
+			service_branch="Branch B",
+			recorded_by=None,
+			recorded_on=None,
+		)
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(
+				get_value=lambda *args, **kwargs: frappe._dict(
+					patient="VP-001",
+					service_branch="Branch B",
+					status="Completed",
+				)
+			)
+		)
+
+		with patch("vetedge.services.vitals.frappe", frappe_stub):
+			self.assertRaises(frappe.ValidationError, validate_vital_signs, doc)
+
+	def test_existing_vitals_link_remains_valid_if_consultation_closes_later(self):
+		doc = frappe._dict(
+			consultation="VCON-001",
+			patient="VP-001",
+			service_branch="Branch B",
+			recorded_by="test@example.com",
+			recorded_on="2026-04-18 10:00:00",
+		)
+		doc.get_doc_before_save = lambda: frappe._dict(consultation="VCON-001")
+
+		def get_value(doctype, name, fields=None, **kwargs):
+			if fields == "patient_name":
+				return "Buddy"
+			return frappe._dict(patient="VP-001", service_branch="Branch B", status="Completed")
+
+		frappe_stub = make_frappe_stub(
+			db=SimpleNamespace(get_value=get_value),
+		)
+
+		with patch("vetedge.services.vitals.frappe", frappe_stub):
+			validate_vital_signs(doc)
+
+		self.assertEqual(doc.consultation, "VCON-001")
+		self.assertEqual(doc.patient, "VP-001")
 
 	def test_create_vitals_from_consultation_inserts_real_vitals_doc(self):
 		created = []
@@ -109,6 +177,7 @@ class TestVitals(TestCase):
 				get_value=lambda *args, **kwargs: frappe._dict(
 					patient="VP-001",
 					service_branch="Branch B",
+					status="In Progress",
 				)
 			)
 		)
