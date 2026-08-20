@@ -19,10 +19,14 @@ def test_consultation_lab_gate_requires_lab_specific_billing_evidence_before_usi
     assert '"source_name": consultation' in context
     assert '"source_doctype": LAB_ORDER_DOCTYPE' in context
     assert '"source_name": doc.name' in context
-    assert 'evidence.get("docstatus") not in {0, 1}' in context
-    assert 'get_source_payment_gate_status(CONSULTATION_DOCTYPE, consultation)' in context
+    assert "docstatus not in {0, 1}" in context
+    assert "docstatus != 1" in context
+    assert "source_invoices_submitted" in context
+    assert "get_strict_source_payment_gate_status(CONSULTATION_DOCTYPE, consultation)" in context
     assert '"lab_charge_coverage_complete": False' in context
     assert '"lab_charge_coverage_complete"] = True' in context
+    assert '"lab_source_invoices_submitted": False' in context
+    assert '"lab_source_invoices_submitted"] = True' in context
     assert "get_or_create_billing_session" not in context
     assert "sync_source_to_billing_session" not in context
     assert "ignore_permissions" not in context
