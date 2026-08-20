@@ -18,6 +18,10 @@ CONTEXT_FIELDS = {
     "Veterinary Lab Order": "consultation",
     "Veterinary Vaccination Record": "linked_consultation",
 }
+CREATE_CONTEXT_FIELDS = {
+    **CONTEXT_FIELDS,
+    "Veterinary Vital Signs": "consultation",
+}
 
 
 def _clean(value) -> str:
@@ -204,7 +208,7 @@ def decorate_consultation_link_field(state: dict, doctype: str, name: str | None
 
 
 def decorate_create_schema(state: dict, doctype: str) -> dict:
-    fieldname = CONTEXT_FIELDS.get(doctype)
+    fieldname = CREATE_CONTEXT_FIELDS.get(doctype)
     if not fieldname:
         return state
     field = next((row for row in state.get("fields") or [] if row.get("fieldname") == fieldname), None)
