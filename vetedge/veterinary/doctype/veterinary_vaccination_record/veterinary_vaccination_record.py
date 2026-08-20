@@ -3,7 +3,19 @@ from __future__ import annotations
 import frappe
 from frappe.model.document import Document
 
-from vetedge.services.vaccination import validate_vaccination_record
+from vetedge.services import vaccination as vaccination_service
+from vetedge.services.vaccination_payment_workflow import (
+	enforce_vaccination_payment_before_administration,
+)
+
+# The service endpoint resolves this function from the vaccination module after
+# loading the Vaccination Record controller via frappe.get_doc(). Keep every
+# administration path (API, native form and EdgeSuite) on the same hardened
+# billing/payment gate without maintaining a second clinical implementation.
+vaccination_service.enforce_vaccination_payment_before_administration = (
+	enforce_vaccination_payment_before_administration
+)
+validate_vaccination_record = vaccination_service.validate_vaccination_record
 
 
 def sync_next_vaccination_appointment_from_record(*args, **kwargs):
