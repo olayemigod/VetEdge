@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import cint
 
 
 SERVICE_PROGRESS_STATUSES = {
@@ -22,6 +21,17 @@ RESULT_CONTENT_FIELDS = (
     "remarks",
     "abnormal_flag",
 )
+
+
+def _standalone_lab_payment_gate_mode() -> str:
+    from vetedge.services.payment_gate import FULL_PAYMENT_REQUIRED
+
+    if not frappe.db.exists("DocType", "Veterinary Settings"):
+        return FULL_PAYMENT_REQUIRED
+    meta = frappe.get_meta("Veterinary Settings")
+    if not meta.has_field("default_payment_gate_mode"):
+        return FULL_PAYMENT_REQUIRED
+    return frappe.db.get_single_value("Veterinary Settings", "default_payment_gate_mode") or FULL_PAYMENT_REQUIRED
 
 
 def get_lab_service_payment_gate_state(doc) -> dict:
@@ -54,25 +64,15 @@ def get_lab_service_payment_gate_state(doc) -> dict:
             "gate": "Billing Required",
             "message": _("Create a Sales Invoice before laboratory processing can begin."),
         }
-    invoice = frappe.db.get_value(
-        "Sales Invoice",
-        invoice_name,
-        ["docstatus", "status", "outstanding_amount"],
-        as_dict=True,
-    )
-    if not invoice or cint(invoice.get("docstatus")) != 1:
-        return {
-            "can_proceed": False,
-            "billable": True,
-            "gate": "Submitted Invoice Required",
-            "message": _("Submit the linked Sales Invoice before laboratory processing can begin."),
-        }
-    return {
-        "can_proceed": True,
-        "billable": True,
-        "gate": "Submitted Invoice",
-        "message": _("The linked Sales Invoice is submitted."),
-    }
+
+    from vetedge.services.payment_gate import evaluate_invoice_payment_gate, get_consultation_payment_gate
+
+    mode = get_consultation_payment_gate() if doc.get("consultation") else _standalone_lab_payment_gate_mode()
+    state = dict(evaluate_invoice_payment_gate(invoice_name, mode, "laboratory") or {})
+    state["billable"] = True
+    state["billing_context"] = "consultation" if doc.get("consultation") else "standalone_lab"
+    state["invoices"] = [invoice_name]
+    return state
 
 
 def _row_key(row) -> str:
