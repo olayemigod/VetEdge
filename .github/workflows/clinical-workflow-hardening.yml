@@ -42,6 +42,7 @@ jobs:
             vetedge/services/clinical_payment_gate.py \
             vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/clinical_workflow_ui.py \
             vetedge/services/vaccination.py \
             vetedge/services/vaccination_payment_workflow.py \
             vetedge/services/vaccination_state_alignment.py \
@@ -87,6 +88,7 @@ jobs:
             vetedge/services/clinical_payment_gate.py \
             vetedge/services/clinical_record_state.py \
             vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/clinical_workflow_ui.py \
             vetedge/services/vaccination.py \
             vetedge/services/vaccination_payment_workflow.py \
             vetedge/services/vaccination_state_alignment.py \
