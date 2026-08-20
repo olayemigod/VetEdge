@@ -40,6 +40,24 @@ def test_lab_and_vaccination_consultation_links_are_patient_scoped_and_open_only
     assert '"Veterinary Vaccination Record": "linked_consultation"' in source
 
 
+def test_standalone_vitals_consultation_picker_is_patient_scoped_optional_and_readable():
+    context = read("vetedge/services/clinical_consultation_context.py")
+    vitals = read("vetedge/services/vitals.py")
+    presenter = read("vetedge/public/js/vetedge_edge_modal_presenter.bundle.js")
+
+    assert "CREATE_CONTEXT_FIELDS" in context
+    assert '"Veterinary Vital Signs": "consultation"' in context
+    assert "fieldname = CREATE_CONTEXT_FIELDS.get(doctype)" in context
+    assert 'field["link_search_context_field"] = "patient"' in context
+    assert 'field["description"] = _("Optional. Shows only open consultations for the selected patient.")' in context
+    assert '["patient", "service_branch", "status"]' in vitals
+    assert "_consultation_link_is_new_or_changed" in vitals
+    assert "CLOSED_CONSULTATION_STATUSES" in vitals
+    assert 'field.type === "link" && !value' in presenter
+    assert "setLinkFieldLabel" in presenter
+    assert "onSelect: (option) => this.setLinkFieldLabel(field, option)" in presenter
+
+
 def test_consultation_link_becomes_read_only_after_assignment_or_progress():
     source = read("vetedge/services/clinical_consultation_context.py")
     assert 'LAB_CONTEXT_EDITABLE_STATUSES = {"Draft", "Ordered"}' in source
