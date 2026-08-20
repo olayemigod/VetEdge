@@ -29,6 +29,15 @@ const RELATED_MODAL_CONFIG = Object.freeze({
 	},
 });
 
+const VACCINATION_ROUTE_OPTIONS = Object.freeze([
+	'Oral',
+	'Subcutaneous',
+	'Intramuscular',
+	'Intranasal',
+	'Topical',
+	'Other',
+]);
+
 const call = (method, args = {}) => frappe.call({ method, args }).then((response) => response.message || {});
 const tr = (value) => typeof __ === 'function' ? __(value) : value;
 
@@ -305,7 +314,11 @@ function vaccinationFields(view, modal) {
 		{ fieldname: 'billing_item', label: tr('ERPNext Billing Item'), type: 'text', readOnly: true },
 		{ fieldname: 'rate', label: tr('Rate'), type: 'number', min: 0, step: '0.01' },
 		{ fieldname: 'dose', label: tr('Dose'), type: 'text' },
-		{ fieldname: 'route', label: tr('Route'), type: 'text' },
+		{
+			fieldname: 'route', label: tr('Route'), type: 'select',
+			options: VACCINATION_ROUTE_OPTIONS.map((value) => ({ value, label: tr(value) })),
+			placeholder: tr('Select route'),
+		},
 		{ fieldname: 'next_due_date', label: tr('Next Due Date/Time'), type: 'datetime-local' },
 		{ fieldname: 'notes', label: tr('Notes'), type: 'textarea', rows: 3 },
 		{ fieldname: 'create_invoice', label: tr('Create / update billing invoice'), type: 'checkbox', default: 1 },
