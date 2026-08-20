@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import frappe
 from frappe.utils import cint
 
 
