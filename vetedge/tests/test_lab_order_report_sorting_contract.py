@@ -40,7 +40,7 @@ def test_lab_order_sorting_is_server_allowlisted_and_stable():
 def test_lab_order_page_enriched_result_timestamp_is_not_claimed_sortable():
     source = read("services/lab_order_report.py")
 
-    assert '"result_entered_on", "label": _("Result Entered On")' in source
+    assert '"fieldname": "result_entered_on", "label": _("Result Entered On")' in source
     assert 'column["sortable"] = column.get("fieldname") in SORT_FIELDS' in source
     sort_fields = source.split("SORT_FIELDS = {", 1)[1].split("}", 1)[0]
     assert '"result_entered_on"' not in sort_fields
