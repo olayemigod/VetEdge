@@ -35,7 +35,9 @@ def test_saved_view_application_revalidates_state_then_refreshes_provider_once()
     assert "frappe.call(SAVED_VIEWS_APPLY_API" in method
     assert "for (const key of REPORT_FILTER_KEYS)" in method
     assert "this.filters = nextFilters" in method
-    assert "this.viewState = { visible_columns:" in method
+    assert "this.viewState = {" in method
+    assert "visible_columns: normalizeReportColumnKeys(state.visible_columns)" in method
+    assert "sort: normalizeReportSort(state.sort)" in method
     assert "this.pageStart = 0" in method
     assert "this.updateLocation()" in method
     assert "removed_filter_keys" in method
@@ -45,7 +47,7 @@ def test_saved_view_application_revalidates_state_then_refreshes_provider_once()
     assert "provider.load" not in method
 
 
-def test_manual_filter_or_column_changes_clear_selected_saved_view_marker():
+def test_manual_filter_column_or_sort_changes_clear_selected_saved_view_marker():
     source = SOURCE.read_text(encoding="utf-8")
 
     set_filter = source.split("setFilter(field, value)", 1)[1].split("reportFilters()", 1)[0]
@@ -53,6 +55,7 @@ def test_manual_filter_or_column_changes_clear_selected_saved_view_marker():
 
     assert 'this.selectedSavedViewId = ""' in set_filter
     assert 'this.selectedSavedViewId = ""' in set_view_state
+    assert "const sortChanged" in set_view_state
 
 
 def test_saved_view_ui_does_not_store_or_materialize_report_rows():
