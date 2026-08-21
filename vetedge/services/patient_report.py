@@ -10,6 +10,18 @@ from vetedge.services.report_visibility import normalize_report_filters
 
 DOCTYPE = "Veterinary Patient"
 PAGE_LENGTH_MAX = 100
+SORT_FIELDS = {
+    "patient": "name",
+    "patient_name": "patient_name",
+    "primary_owner": "primary_owner",
+    "species": "species",
+    "breed": "breed",
+    "default_branch": "default_branch",
+    "registration_status": "registration_status",
+    "status": "status",
+    "created_on": "creation",
+}
+DEFAULT_SORT = {"field": "created_on", "direction": "desc"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -22,6 +34,28 @@ def _filters(value: str | dict | None) -> dict:
     if cleaned.get("customer") and not cleaned.get("owner"):
         cleaned["owner"] = cleaned.get("customer")
     return dict(normalize_report_filters("Patient Register", cleaned) or {})
+
+
+def _normalize_sort(value: str | dict | None) -> dict:
+    if not value:
+        return dict(DEFAULT_SORT)
+    parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    if not isinstance(parsed, dict):
+        frappe.throw(_("Expected report sort as a JSON object."), frappe.ValidationError)
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+    direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+    if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+    field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+    direction = "asc" if sort.get("direction") == "asc" else "desc"
+    source = SORT_FIELDS[field]
+    if field == "patient":
+        return f"{source} {direction}"
+    return f"{source} {direction}, name {direction}"
 
 
 def _require_read_permission() -> None:
@@ -46,7 +80,7 @@ def _query_filters(report_filters: dict) -> dict:
 
 
 def _columns() -> list[dict]:
-    return [
+    columns = [
         {"fieldname": "patient", "label": _("Patient"), "fieldtype": "Link", "options": DOCTYPE},
         {"fieldname": "patient_name", "label": _("Patient Name"), "fieldtype": "Data"},
         {"fieldname": "primary_owner", "label": _("Primary Owner"), "fieldtype": "Link", "options": "Customer"},
@@ -57,6 +91,9 @@ def _columns() -> list[dict]:
         {"fieldname": "status", "label": _("Status"), "fieldtype": "Data"},
         {"fieldname": "created_on", "label": _("Created On"), "fieldtype": "Datetime"},
     ]
+    for column in columns:
+        column["sortable"] = column.get("fieldname") in SORT_FIELDS
+    return columns
 
 
 def _status_counts(query_filters: dict) -> dict[str, int]:
@@ -102,11 +139,13 @@ def get_patient_register_view(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     _require_read_permission()
     report_filters = _filters(filters)
     query_filters = _query_filters(report_filters)
+    normalized_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -125,7 +164,7 @@ def get_patient_register_view(
             "status",
             "creation",
         ],
-        order_by="creation desc, name desc",
+        order_by=_order_by(normalized_sort),
         limit_start=start,
         limit_page_length=page_length,
     )
@@ -153,8 +192,10 @@ def get_patient_register_view(
         "total": total,
         "start": start,
         "page_length": page_length,
+        "sort": normalized_sort,
         "metadata": {
             "pagination_mode": "query-level",
+            "sorting_mode": "server-allowlist",
             "detail_rows_materialized": False,
             "summary_mode": "database-aggregate",
             "source": "patient-register",
