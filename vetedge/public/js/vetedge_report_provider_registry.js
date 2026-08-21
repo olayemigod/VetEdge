@@ -135,6 +135,33 @@
 		});
 	}
 
+	function registerLabOrderReport() {
+		const reports = adapter();
+		if (!reports?.registerPaginatedProvider || reports.getProvider("Lab Order Report")) return;
+		const provider = reports.registerPaginatedProvider("Lab Order Report", {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50, sort = null }) => {
+				const payload = await call("vetedge.services.lab_order_report.get_lab_order_report_view", {
+					filters,
+					start,
+					page_length,
+					sort,
+				});
+				return {
+					...payload,
+					total_count: Number(payload.total || payload.total_count || 0),
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: payload.metadata?.pagination_mode || "query-level",
+						sorting_mode: payload.metadata?.sorting_mode || "server-allowlist",
+					},
+				};
+			},
+		});
+		if (provider) reports.registerProvider("Laboratory Report", provider);
+	}
+
 	function registerServerPaginatedReport(reportKey, method, aliases = []) {
 		const reports = adapter();
 		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
@@ -159,11 +186,7 @@
 
 	function registerClinicalReports() {
 		registerConsultationReport();
-		registerServerPaginatedReport(
-			"Lab Order Report",
-			"vetedge.services.lab_order_report.get_lab_order_report_view",
-			["Laboratory Report"],
-		);
+		registerLabOrderReport();
 		registerServerPaginatedReport(
 			"Vaccination Report",
 			"vetedge.services.vaccination_report.get_vaccination_report_view",
