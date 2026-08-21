@@ -188,6 +188,28 @@
 		});
 	}
 
+	function registerSortableServerReport(reportKey, method, aliases = []) {
+		const reports = adapter();
+		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
+		const provider = reports.registerPaginatedProvider(reportKey, {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50, sort = null }) => {
+				const payload = await call(method, { filters, start, page_length, sort });
+				return {
+					...payload,
+					total_count: Number(payload.total || payload.total_count || 0),
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: payload.metadata?.pagination_mode || "query-level",
+						sorting_mode: payload.metadata?.sorting_mode || "server-allowlist",
+					},
+				};
+			},
+		});
+		if (provider) aliases.forEach((alias) => reports.registerProvider(alias, provider));
+	}
+
 	function registerServerPaginatedReport(reportKey, method, aliases = []) {
 		const reports = adapter();
 		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
@@ -217,11 +239,11 @@
 	}
 
 	function registerMasterReports() {
-		registerServerPaginatedReport(
+		registerSortableServerReport(
 			"Owner Register",
 			"vetedge.services.owner_report.get_owner_register_view",
 		);
-		registerServerPaginatedReport(
+		registerSortableServerReport(
 			"Patient Register",
 			"vetedge.services.patient_report.get_patient_register_view",
 		);
