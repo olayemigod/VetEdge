@@ -4,11 +4,13 @@ import frappe
 from frappe.model.document import Document
 
 from vetedge.services.lab import handle_lab_order_after_insert, handle_lab_order_on_update, validate_lab_order
+from vetedge.services.lab_cancellation import enforce_lab_order_cancellation, enforce_lab_order_delete
 
 
 class VeterinaryLabOrder(Document):
 	def validate(self) -> None:
 		validate_lab_order(self)
+		enforce_lab_order_cancellation(self)
 		for row in self.get("lab_tests") or []:
 			if not row.get("billing_item"):
 				frappe.throw(
@@ -23,4 +25,9 @@ class VeterinaryLabOrder(Document):
 		handle_lab_order_after_insert(self)
 
 	def on_update(self) -> None:
+		if self.status == "Cancelled":
+			return
 		handle_lab_order_on_update(self)
+
+	def on_trash(self) -> None:
+		enforce_lab_order_delete(self)
