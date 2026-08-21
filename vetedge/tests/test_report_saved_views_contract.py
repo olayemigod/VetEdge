@@ -33,9 +33,11 @@ def test_saved_view_payload_is_bounded_json_safe_and_does_not_store_report_rows(
         "MAX_LABEL_LENGTH = 80",
         "MAX_FILTER_VALUE_LENGTH = 500",
         "MAX_VISIBLE_COLUMNS = 100",
+        "MAX_SORT_FIELD_LENGTH = 140",
         "ALLOWED_FILTER_KEYS = {",
         '"filters": filters',
         '"visible_columns": columns',
+        '"sort": sort_state',
         "timestamp = now()",
     ):
         assert expected in source
@@ -51,6 +53,27 @@ def test_saved_view_payload_is_bounded_json_safe_and_does_not_store_report_rows(
         assert forbidden not in source
 
 
+def test_saved_view_sort_is_normalized_and_backward_compatible():
+    source = SOURCE.read_text(encoding="utf-8")
+    normalizer = source.split("def _normalize_sort", 1)[1].split("def _normalize_report_name", 1)[0]
+
+    for expected in (
+        'if value in (None, "", {}):',
+        'field, _, direction = value.partition(":")',
+        'direction not in {"asc", "desc"}',
+        'return {"field": field, "direction": direction}',
+    ):
+        assert expected in normalizer
+
+    apply_method = source.split("def apply_saved_report_view", 1)[1].split("def save_report_view", 1)[0]
+    assert '"sort": _normalize_sort(view.get("sort") or {})' in apply_method
+
+    save_method = source.split("def save_report_view", 1)[1].split("def rename_saved_report_view", 1)[0]
+    assert "sort: Any = None" in save_method
+    assert "sort_state = _normalize_sort(sort)" in save_method
+    assert '"sort": sort_state' in save_method
+
+
 def test_saved_view_list_hides_state_and_apply_revalidates_current_scope():
     source = SOURCE.read_text(encoding="utf-8")
 
@@ -61,6 +84,7 @@ def test_saved_view_list_hides_state_and_apply_revalidates_current_scope():
     assert "include_state=False" in list_method
     assert '"filters"' not in list_method
     assert '"visible_columns"' not in list_method
+    assert '"sort"' not in list_method
     assert "_normalize_saved_scope" in apply_method
     assert "removed_filter_keys" in apply_method
     assert "normalize_report_filters" in normalizer
