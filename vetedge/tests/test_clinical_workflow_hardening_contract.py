@@ -114,6 +114,18 @@ def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     assert "VetEdgeLabOrderAddTests?.install?.()" in loader
 
 
+def test_lab_multi_test_results_advance_parent_only_after_all_active_rows_have_results():
+    service = read("vetedge/services/lab.py")
+    workflow = service.split("def normalize_lab_order_result_workflow", 1)[1].split(
+        "def validate_lab_order_status_requirements", 1
+    )[0]
+
+    assert "all_results_entered = all(_row_has_lab_result_content(row) for row in active_rows)" in workflow
+    assert "if not all_results_entered:" in workflow
+    assert workflow.index("if not all_results_entered:") < workflow.index('doc.status = "Awaiting Review"')
+    assert workflow.index("if not all_results_entered:") < workflow.index('doc.status = "Result Entered"')
+
+
 def test_resource_center_native_source_owns_summary_filters_labels_and_patient_shortcut():
     service = read("vetedge/services/resource_center_v3.py")
     component = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
