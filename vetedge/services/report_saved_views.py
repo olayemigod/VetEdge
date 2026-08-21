@@ -19,6 +19,7 @@ MAX_REPORT_NAME_LENGTH = 140
 MAX_FILTER_VALUE_LENGTH = 500
 MAX_VISIBLE_COLUMNS = 100
 MAX_COLUMN_KEY_LENGTH = 140
+MAX_SORT_FIELD_LENGTH = 140
 
 ALLOWED_FILTER_KEYS = {
 	"branch",
@@ -107,6 +108,28 @@ def _normalize_columns(value: Any) -> list[str]:
 	return columns
 
 
+def _normalize_sort(value: Any) -> dict:
+	if value in (None, "", {}):
+		return {}
+	if isinstance(value, str):
+		try:
+			parsed = frappe.parse_json(value)
+		except Exception:
+			field, _, direction = value.partition(":")
+			parsed = {"field": field, "direction": direction}
+	else:
+		parsed = value
+	if not isinstance(parsed, dict):
+		frappe.throw(_("Saved report sort must be an object."))
+	field = str(parsed.get("field") or parsed.get("fieldname") or parsed.get("key") or "").strip()
+	direction = str(parsed.get("direction") or parsed.get("order") or "").strip().lower()
+	if not field or direction not in {"asc", "desc"}:
+		return {}
+	if len(field) > MAX_SORT_FIELD_LENGTH:
+		frappe.throw(_("A saved report sort field is too long."))
+	return {"field": field, "direction": direction}
+
+
 def _normalize_report_name(report_name: str) -> str:
 	name = str(report_name or "").strip()
 	if not name:
@@ -148,6 +171,7 @@ def _public_view(view: dict, include_state: bool = False) -> dict:
 	if include_state:
 		result["filters"] = dict(view.get("filters") or {})
 		result["visible_columns"] = list(view.get("visible_columns") or [])
+		result["sort"] = _normalize_sort(view.get("sort") or {})
 	return result
 
 
@@ -211,6 +235,7 @@ def apply_saved_report_view(view_id: str, report_name: str) -> dict:
 		"view": _public_view(view, include_state=False),
 		"filters": filters,
 		"visible_columns": _normalize_columns(view.get("visible_columns") or []),
+		"sort": _normalize_sort(view.get("sort") or {}),
 		"removed_filter_keys": removed,
 	}
 
@@ -221,6 +246,7 @@ def save_report_view(
 	report_name: str,
 	filters: Any = None,
 	visible_columns: Any = None,
+	sort: Any = None,
 	view_id: str | None = None,
 	set_default: int | bool = 0,
 ) -> dict:
@@ -234,6 +260,7 @@ def save_report_view(
 
 	filters = _normalize_filters(filters)
 	columns = _normalize_columns(visible_columns)
+	sort_state = _normalize_sort(sort)
 	requested_id = str(view_id or "").strip()
 	views = _load_views()
 
@@ -273,6 +300,7 @@ def save_report_view(
 			"report_name": report_name,
 			"filters": filters,
 			"visible_columns": columns,
+			"sort": sort_state,
 			"is_default": is_default,
 			"created_on": timestamp,
 			"modified_on": timestamp,
@@ -286,6 +314,7 @@ def save_report_view(
 				"report_name": report_name,
 				"filters": filters,
 				"visible_columns": columns,
+				"sort": sort_state,
 				"is_default": is_default,
 				"modified_on": timestamp,
 			}
