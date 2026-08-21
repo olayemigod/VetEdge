@@ -48,12 +48,14 @@ jobs:
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
             vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_cancellation.py \
             vetedge/services/lab_payment_workflow.py \
             vetedge/services/medical_history_lazy.py \
             vetedge/services/medical_history_integrity.py \
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
+            vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
             vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py
 
       - name: Check hardened EdgeSuite JavaScript
@@ -94,12 +96,14 @@ jobs:
             vetedge/services/vaccination_state_alignment.py \
             vetedge/services/lab_order_extensions.py \
             vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_cancellation.py \
             vetedge/services/lab_payment_workflow.py \
             vetedge/services/medical_history_lazy.py \
             vetedge/services/medical_history_integrity.py \
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
+            vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
             vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
             vetedge/tests/test_consultation_related_record_editor_reachability.py \
