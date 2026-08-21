@@ -96,6 +96,7 @@ def _lab_completion_gate(doc) -> tuple[bool, str, dict]:
 
 def _lab_actions(name: str) -> dict[str, Any]:
     from vetedge.services.lab import LAB_ORDER_DOCTYPE, VALID_LAB_ORDER_STATUS_TRANSITIONS
+    from vetedge.services.lab_cancellation import build_lab_order_cancellation_preflight
     from vetedge.services.lab_payment_workflow import SERVICE_PROGRESS_STATUSES
     from vetedge.services.permissions import can_access_lab_order
 
@@ -113,10 +114,17 @@ def _lab_actions(name: str) -> dict[str, Any]:
     blockers: list[str] = []
     payment_state: dict = {}
     billing_required = False
+    cancellation_state = build_lab_order_cancellation_preflight(doc)
     valid_targets = VALID_LAB_ORDER_STATUS_TRANSITIONS.get(doc.status, set())
 
     for label, target, primary, danger in LAB_ACTIONS.get(doc.status, []):
         if target not in valid_targets or not _lab_target_permitted(doc, target):
+            continue
+
+        if target == "Cancelled" and not cancellation_state.get("can_cancel"):
+            reason = str(cancellation_state.get("message") or "")
+            if reason and reason not in blockers:
+                blockers.append(reason)
             continue
 
         if target in SERVICE_PROGRESS_STATUSES:
@@ -143,7 +151,7 @@ def _lab_actions(name: str) -> dict[str, Any]:
             )
         elif target == "Cancelled":
             confirm = _(
-                "Cancel this Lab Order? Billing cleanup follows the existing billing-session rules; submitted invoices are never silently mutated."
+                "Cancel this uncommitted Lab Order? Only safe uninvoiced Lab billing references will be retired. Submitted invoices and payments are never changed by this action."
             )
         elif target == "Completed":
             confirm = _(
@@ -173,6 +181,7 @@ def _lab_actions(name: str) -> dict[str, Any]:
         "message": " ".join(part for part in message_parts if part),
         "billing_required": billing_required,
         "payment_gate": payment_state,
+        "cancellation": cancellation_state,
     }
 
 
