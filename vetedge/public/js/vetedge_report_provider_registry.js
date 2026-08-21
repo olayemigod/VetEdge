@@ -106,6 +106,30 @@
 		if (provider) reports.registerProvider("Planned Treatment Report", provider);
 	}
 
+	function registerConsultationReport() {
+		const reports = adapter();
+		if (!reports?.registerPaginatedProvider || reports.getProvider("Consultation Register")) return;
+		reports.registerPaginatedProvider("Consultation Register", {
+			defaultPageLength: 50,
+			maxPageLength: 100,
+			loadPage: async ({ filters = {}, start = 0, page_length = 50, sort = null }) => {
+				const payload = await call(
+					"vetedge.services.consultation_report_sorting.get_consultation_register_view",
+					{ filters, start, page_length, sort },
+				);
+				return {
+					...payload,
+					total_count: Number(payload.total || payload.total_count || 0),
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: payload.metadata?.pagination_mode || "query-level",
+						sorting_mode: payload.metadata?.sorting_mode || "server-allowlist",
+					},
+				};
+			},
+		});
+	}
+
 	function registerServerPaginatedReport(reportKey, method, aliases = []) {
 		const reports = adapter();
 		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
@@ -128,10 +152,7 @@
 	}
 
 	function registerClinicalReports() {
-		registerServerPaginatedReport(
-			"Consultation Register",
-			"vetedge.services.consultation_report.get_consultation_register_view",
-		);
+		registerConsultationReport();
 		registerServerPaginatedReport(
 			"Lab Order Report",
 			"vetedge.services.lab_order_report.get_lab_order_report_view",
