@@ -16,6 +16,18 @@ PENDING_STATUSES = {"Draft", "Ordered"}
 IN_PROGRESS_STATUSES = {"Sample Collected", "Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review"}
 COMPLETED_STATUSES = {"Reviewed", "Completed"}
 CANCELLED_STATUSES = {"Cancelled"}
+SORT_FIELDS = {
+    "lab_order": "name",
+    "owner": "primary_owner",
+    "consultation": "consultation",
+    "service_branch": "service_branch",
+    "requested_by": "requested_by",
+    "status": "status",
+    "requested_on": "requested_on",
+    "reviewed_on": "doctor_reviewed_on",
+    "linked_invoice": "linked_invoice",
+}
+DEFAULT_SORT = {"field": "requested_on", "direction": "desc"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -50,8 +62,30 @@ def _query_filters(report_filters: dict) -> dict:
     return filters
 
 
+def _normalize_sort(value: str | dict | None) -> dict:
+    if not value:
+        return dict(DEFAULT_SORT)
+    parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    if not isinstance(parsed, dict):
+        frappe.throw(_("Expected report sort as a JSON object."), frappe.ValidationError)
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+    direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+    if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+    field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+    direction = "asc" if sort.get("direction") == "asc" else "desc"
+    source = SORT_FIELDS[field]
+    if source == "name":
+        return f"name {direction}"
+    return f"{source} {direction}, name {direction}"
+
+
 def _columns() -> list[dict]:
-    return [
+    columns = [
         {"fieldname": "lab_order", "label": _("Lab Order"), "fieldtype": "Link", "options": DOCTYPE},
         {"fieldname": "patient", "label": _("Patient"), "fieldtype": "Data"},
         {"fieldname": "owner", "label": _("Owner"), "fieldtype": "Link", "options": "Customer"},
@@ -64,6 +98,9 @@ def _columns() -> list[dict]:
         {"fieldname": "reviewed_on", "label": _("Reviewed On"), "fieldtype": "Datetime"},
         {"fieldname": "linked_invoice", "label": _("Linked Invoice"), "fieldtype": "Link", "options": "Sales Invoice"},
     ]
+    for column in columns:
+        column["sortable"] = column.get("fieldname") in SORT_FIELDS
+    return columns
 
 
 def _page_result_entered_map(order_names: list[str]) -> dict[str, object]:
@@ -156,11 +193,13 @@ def get_lab_order_report_view(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     _require_read_permission()
     report_filters = _filters(filters)
     query_filters = _query_filters(report_filters)
+    normalized_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -174,7 +213,8 @@ def get_lab_order_report_view(
             "total": 0,
             "start": start,
             "page_length": page_length,
-            "metadata": {"pagination_mode": "query-level", "detail_rows_materialized": False},
+            "sort": normalized_sort,
+            "metadata": {"pagination_mode": "query-level", "sorting_mode": "server-allowlist", "detail_rows_materialized": False},
         }
 
     total = frappe.db.count(DOCTYPE, filters=query_filters)
@@ -193,7 +233,7 @@ def get_lab_order_report_view(
             "doctor_reviewed_on",
             "linked_invoice",
         ],
-        order_by="requested_on desc, name desc",
+        order_by=_order_by(normalized_sort),
         limit_start=start,
         limit_page_length=page_length,
     )
@@ -208,8 +248,10 @@ def get_lab_order_report_view(
         "total": cint(total),
         "start": start,
         "page_length": page_length,
+        "sort": normalized_sort,
         "metadata": {
             "pagination_mode": "query-level",
+            "sorting_mode": "server-allowlist",
             "detail_rows_materialized": False,
             "summary_mode": "aggregate",
             "source": "lab-order-report",
