@@ -72,3 +72,13 @@ def test_consultation_provider_passes_shared_sort_contract_only_to_adopted_endpo
     generic = registry[generic_start:generic_end]
     assert "sort = null" not in generic
     assert "{ filters, start, page_length, sort }" not in generic
+
+
+def test_non_adopted_server_paginated_reports_do_not_expose_misleading_sort_controls():
+    registry = read("public/js/vetedge_report_provider_registry.js")
+
+    assert "function nonSortableColumns(columns = [])" in registry
+    assert "({ ...column, sortable: false })" in registry
+    assert "columns: nonSortableColumns(payload.columns)" in registry
+    assert registry.count("columns: nonSortableColumns(payload.columns)") >= 2
+    assert 'fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date", sortable: false' in registry
