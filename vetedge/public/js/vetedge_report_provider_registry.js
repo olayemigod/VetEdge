@@ -2,16 +2,16 @@
 	"use strict";
 
 	const STOCK_EXPIRY_COLUMNS = [
-		{ fieldname: "item_code", label: "Item Code", fieldtype: "Link", options: "Item" },
-		{ fieldname: "item_name", label: "Item Name", fieldtype: "Data" },
-		{ fieldname: "batch_no", label: "Batch No", fieldtype: "Link", options: "Batch" },
-		{ fieldname: "warehouse", label: "Warehouse", fieldtype: "Link", options: "Warehouse" },
-		{ fieldname: "qty", label: "Quantity", fieldtype: "Float" },
-		{ fieldname: "stock_uom", label: "UOM", fieldtype: "Data" },
-		{ fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date" },
-		{ fieldname: "days_to_expiry", label: "Days Left", fieldtype: "Int" },
-		{ fieldname: "expiry_status", label: "Risk Status", fieldtype: "Data" },
-		{ fieldname: "branch", label: "Branch", fieldtype: "Link", options: "Branch" },
+		{ fieldname: "item_code", label: "Item Code", fieldtype: "Link", options: "Item", sortable: false },
+		{ fieldname: "item_name", label: "Item Name", fieldtype: "Data", sortable: false },
+		{ fieldname: "batch_no", label: "Batch No", fieldtype: "Link", options: "Batch", sortable: false },
+		{ fieldname: "warehouse", label: "Warehouse", fieldtype: "Link", options: "Warehouse", sortable: false },
+		{ fieldname: "qty", label: "Quantity", fieldtype: "Float", sortable: false },
+		{ fieldname: "stock_uom", label: "UOM", fieldtype: "Data", sortable: false },
+		{ fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date", sortable: false },
+		{ fieldname: "days_to_expiry", label: "Days Left", fieldtype: "Int", sortable: false },
+		{ fieldname: "expiry_status", label: "Risk Status", fieldtype: "Data", sortable: false },
+		{ fieldname: "branch", label: "Branch", fieldtype: "Link", options: "Branch", sortable: false },
 	];
 
 	function call(method, args = {}) {
@@ -31,6 +31,10 @@
 
 	function adapter() {
 		return global.VetEdgeReportProviders || null;
+	}
+
+	function nonSortableColumns(columns = []) {
+		return (Array.isArray(columns) ? columns : []).map((column) => ({ ...column, sortable: false }));
 	}
 
 	function stockFilters(filters = {}, start = 0, pageLength = 50) {
@@ -94,6 +98,7 @@
 				});
 				return {
 					...payload,
+					columns: nonSortableColumns(payload.columns),
 					total_count: Number(payload.total || 0),
 					metadata: {
 						...(payload.metadata || {}),
@@ -140,6 +145,7 @@
 				const payload = await call(method, { filters, start, page_length });
 				return {
 					...payload,
+					columns: nonSortableColumns(payload.columns),
 					total_count: Number(payload.total || payload.total_count || 0),
 					metadata: {
 						...(payload.metadata || {}),
