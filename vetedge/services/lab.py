@@ -424,12 +424,15 @@ def normalize_lab_order_result_workflow(doc) -> None:
 	if not active_rows:
 		return
 
+	all_results_entered = all(_row_has_lab_result_content(row) for row in active_rows)
+	if not all_results_entered:
+		return
+
 	if any(row.get("result_status") == "Awaiting Review" or row.get("status") == "Awaiting Review" for row in active_rows):
 		doc.status = "Awaiting Review"
 		return
 
-	if all(_row_has_lab_result_content(row) for row in active_rows):
-		doc.status = "Result Entered"
+	doc.status = "Result Entered"
 
 
 def validate_lab_order_status_requirements(doc) -> None:
