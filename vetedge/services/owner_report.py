@@ -12,6 +12,11 @@ from vetedge.services.reporting_structure import _existing_field
 DOCTYPE = "Customer"
 PATIENT_DOCTYPE = "Veterinary Patient"
 PAGE_LENGTH_MAX = 100
+SORT_FIELDS = {
+    "owner": "c.`name`",
+    "customer_name": "c.`customer_name`",
+}
+DEFAULT_SORT = {"field": "customer_name", "direction": "asc"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -24,6 +29,28 @@ def _filters(value: str | dict | None) -> dict:
     if cleaned.get("customer") and not cleaned.get("owner"):
         cleaned["owner"] = cleaned.get("customer")
     return dict(normalize_report_filters("Owner Register", cleaned) or {})
+
+
+def _normalize_sort(value: str | dict | None) -> dict:
+    if not value:
+        return dict(DEFAULT_SORT)
+    parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    if not isinstance(parsed, dict):
+        frappe.throw(_("Expected report sort as a JSON object."), frappe.ValidationError)
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+    direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+    if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+    field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+    direction = "ASC" if sort.get("direction") == "asc" else "DESC"
+    source = SORT_FIELDS[field]
+    if field == "owner":
+        return f"{source} {direction}"
+    return f"{source} {direction}, c.`name` {direction}"
 
 
 def _require_read_permission() -> None:
@@ -83,7 +110,7 @@ def _where_clause(report_filters: dict) -> tuple[str, dict]:
 
 
 def _columns() -> list[dict]:
-    return [
+    columns = [
         {"fieldname": "owner", "label": _("Owner"), "fieldtype": "Link", "options": DOCTYPE},
         {"fieldname": "customer_name", "label": _("Customer Name"), "fieldtype": "Data"},
         {"fieldname": "phone", "label": _("Phone"), "fieldtype": "Data"},
@@ -91,6 +118,9 @@ def _columns() -> list[dict]:
         {"fieldname": "number_of_pets", "label": _("Number of Pets"), "fieldtype": "Int"},
         {"fieldname": "outstanding_amount", "label": _("Outstanding Amount"), "fieldtype": "Currency"},
     ]
+    for column in columns:
+        column["sortable"] = column.get("fieldname") in SORT_FIELDS
+    return columns
 
 
 def _count_rows(where_sql: str, params: dict) -> int:
@@ -102,18 +132,19 @@ def _count_rows(where_sql: str, params: dict) -> int:
     return cint(rows[0].get("row_count")) if rows else 0
 
 
-def _page_customers(where_sql: str, params: dict, start: int, page_length: int):
+def _page_customers(where_sql: str, params: dict, start: int, page_length: int, sort: dict):
     phone_field, email_field = _customer_contact_fields()
     phone_select = f"c.`{phone_field}` AS `phone`" if phone_field else "'' AS `phone`"
     email_select = f"c.`{email_field}` AS `email`" if email_field else "'' AS `email`"
     page_params = dict(params)
     page_params.update({"limit": page_length, "offset": start})
+    order_by = _order_by(sort)
     return frappe.db.sql(
         f"""
         SELECT c.`name`, c.`customer_name`, {phone_select}, {email_select}
         FROM `tabCustomer` c
         WHERE {where_sql}
-        ORDER BY c.`customer_name` ASC, c.`name` ASC
+        ORDER BY {order_by}
         LIMIT %(limit)s OFFSET %(offset)s
         """,
         page_params,
@@ -197,15 +228,17 @@ def get_owner_register_view(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     _require_read_permission()
     report_filters = _filters(filters)
     where_sql, params = _where_clause(report_filters)
+    normalized_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
     total = _count_rows(where_sql, params)
-    customers = _page_customers(where_sql, params, start, page_length)
+    customers = _page_customers(where_sql, params, start, page_length, normalized_sort)
     owner_names = [row.get("name") for row in customers if row.get("name")]
     pet_counts = _page_pet_counts(owner_names)
     outstanding = _page_outstanding(owner_names, report_filters.get("branch"))
@@ -230,8 +263,10 @@ def get_owner_register_view(
         "total": total,
         "start": start,
         "page_length": page_length,
+        "sort": normalized_sort,
         "metadata": {
             "pagination_mode": "query-level",
+            "sorting_mode": "server-allowlist",
             "detail_rows_materialized": False,
             "enrichment_mode": "page-only",
             "summary_mode": "database-aggregate",
