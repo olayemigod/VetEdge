@@ -11,6 +11,18 @@ from vetedge.services.reporting_structure import _date_filter_dict, _get_patient
 
 DOCTYPE = "Veterinary Vaccination Record"
 PAGE_LENGTH_MAX = 100
+SORT_FIELDS = {
+    "vaccination_record": "name",
+    "owner": "primary_owner",
+    "vaccine": "vaccine",
+    "service_branch": "service_branch",
+    "administered_by": "administered_by",
+    "administered_on": "administered_on",
+    "next_due_date": "next_due_date",
+    "status": "status",
+    "linked_invoice": "linked_invoice",
+}
+DEFAULT_SORT = {"field": "administered_on", "direction": "desc"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -64,8 +76,30 @@ def _with_due_filter(query_filters: dict, due_status: str | None) -> dict:
     return filters
 
 
+def _normalize_sort(value: str | dict | None) -> dict:
+    if not value:
+        return dict(DEFAULT_SORT)
+    parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    if not isinstance(parsed, dict):
+        frappe.throw(_("Expected report sort as a JSON object."), frappe.ValidationError)
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+    direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+    if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+    field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+    direction = "asc" if sort.get("direction") == "asc" else "desc"
+    source = SORT_FIELDS[field]
+    if source == "name":
+        return f"name {direction}"
+    return f"{source} {direction}, name {direction}"
+
+
 def _columns() -> list[dict]:
-    return [
+    columns = [
         {"fieldname": "vaccination_record", "label": _("Vaccination Record"), "fieldtype": "Link", "options": DOCTYPE},
         {"fieldname": "patient", "label": _("Patient"), "fieldtype": "Data"},
         {"fieldname": "owner", "label": _("Owner"), "fieldtype": "Link", "options": "Customer"},
@@ -78,6 +112,9 @@ def _columns() -> list[dict]:
         {"fieldname": "status", "label": _("Status"), "fieldtype": "Data"},
         {"fieldname": "linked_invoice", "label": _("Linked Invoice"), "fieldtype": "Link", "options": "Sales Invoice"},
     ]
+    for column in columns:
+        column["sortable"] = column.get("fieldname") in SORT_FIELDS
+    return columns
 
 
 def _count_for(base_filters: dict, extra: dict) -> int:
@@ -164,6 +201,7 @@ def get_vaccination_report_view(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     _require_read_permission()
@@ -171,6 +209,7 @@ def get_vaccination_report_view(
     base_filters = _base_query_filters(report_filters)
     due_status = cstr(report_filters.get("due_status") or "").strip()
     query_filters = _with_due_filter(base_filters, due_status)
+    normalized_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -184,7 +223,8 @@ def get_vaccination_report_view(
             "total": 0,
             "start": start,
             "page_length": page_length,
-            "metadata": {"pagination_mode": "query-level", "detail_rows_materialized": False},
+            "sort": normalized_sort,
+            "metadata": {"pagination_mode": "query-level", "sorting_mode": "server-allowlist", "detail_rows_materialized": False},
         }
 
     total = cint(frappe.db.count(DOCTYPE, filters=query_filters))
@@ -203,7 +243,7 @@ def get_vaccination_report_view(
             "status",
             "linked_invoice",
         ],
-        order_by="administered_on desc, name desc",
+        order_by=_order_by(normalized_sort),
         limit_start=start,
         limit_page_length=page_length,
     )
@@ -218,8 +258,10 @@ def get_vaccination_report_view(
         "total": total,
         "start": start,
         "page_length": page_length,
+        "sort": normalized_sort,
         "metadata": {
             "pagination_mode": "query-level",
+            "sorting_mode": "server-allowlist",
             "detail_rows_materialized": False,
             "summary_mode": "aggregate",
             "due_filter_mode": "database",
