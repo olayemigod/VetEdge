@@ -74,3 +74,37 @@ def test_lab_non_billing_core_fallback_applies_configured_payment_gate():
     assert "evaluate_invoice_payment_gate" in source
     assert "get_consultation_payment_gate" in source
     assert "default_payment_gate_mode" in source
+
+
+def test_lab_cancellation_blocks_result_and_financial_commitments_at_server_boundary():
+    cancellation = _read("services/lab_cancellation.py")
+    controller = _read("veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py")
+
+    assert "build_lab_order_cancellation_preflight" in cancellation
+    assert "submitted invoice/payment evidence" in cancellation
+    assert "draft billing" in cancellation
+    assert "diagnostic result evidence" in cancellation
+    assert "PROTECTED_PLAN_BILLING_STATUSES" in cancellation
+    assert "PROTECTED_PLAN_PAYMENT_STATUSES" in cancellation
+    assert "enforce_lab_order_cancellation" in controller
+    assert "enforce_lab_order_delete" in controller
+    assert "def on_trash" in controller
+
+
+def test_lab_cancellation_never_uses_submitted_invoice_mutation_for_cleanup():
+    cancellation = _read("services/lab_cancellation.py")
+
+    assert 'if docstatus in {0, 1}:' in cancellation
+    assert 'billing_status") in {"Submitted Invoiced", "Paid"}' in cancellation
+    assert '"billing_status": "Cancelled"' in cancellation
+    assert 'frappe.delete_doc("Sales Invoice"' not in cancellation
+    assert ".cancel()" not in cancellation
+
+
+def test_lab_workflow_ui_uses_same_cancellation_preflight_and_hides_unsafe_action():
+    source = _read("services/clinical_workflow_ui.py")
+
+    assert "build_lab_order_cancellation_preflight" in source
+    assert 'target == "Cancelled" and not cancellation_state.get("can_cancel")' in source
+    assert '"cancellation": cancellation_state' in source
+    assert "Submitted invoices and payments are never changed by this action." in source
