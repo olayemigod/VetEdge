@@ -97,19 +97,20 @@
 		const provider = reports.registerPaginatedProvider("Planned Treatment", {
 			defaultPageLength: 50,
 			maxPageLength: 100,
-			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
+			loadPage: async ({ filters = {}, start = 0, page_length = 50, sort = null }) => {
 				const payload = await call("vetedge.services.treatment_plan_report.get_planned_treatment_view", {
 					filters,
 					start,
 					page_length,
+					sort,
 				});
 				return {
 					...payload,
-					columns: nonSortableColumns(payload.columns),
 					total_count: Number(payload.total || 0),
 					metadata: {
 						...(payload.metadata || {}),
 						pagination_mode: payload.metadata?.pagination_mode || "query-level-detail",
+						sorting_mode: payload.metadata?.sorting_mode || "server-allowlist",
 						source: "planned-treatment",
 					},
 				};
