@@ -8,6 +8,7 @@ from vetedge.services.portal_access import require_internal_user
 
 
 GROOMING_PROGRESS_STATUSES = {"In Progress", "Completed"}
+INACTIVE_GROOMING_CHARGE_STATUSES = {"Cancelled", "Skipped"}
 
 
 def get_grooming_service_payment_gate_state(doc) -> dict:
@@ -80,10 +81,67 @@ def get_grooming_service_payment_gate_state(doc) -> dict:
     }
 
 
+def get_grooming_cancellation_state(doc) -> dict:
+    """Keep clinical cancellation aligned with active Grooming billing.
+
+    Cancellation is intentionally conservative until a dedicated Grooming
+    financial-correction workflow exists. Cancelled invoices/retired charges do
+    not block, but pending charges and any active Draft/Submitted invoice do.
+    """
+    active_invoices: set[str] = set()
+    pending_charge = False
+
+    linked_invoice = doc.get("linked_invoice")
+    if linked_invoice and frappe.db.exists("Sales Invoice", linked_invoice):
+        if cint(frappe.db.get_value("Sales Invoice", linked_invoice, "docstatus")) != 2:
+            active_invoices.add(linked_invoice)
+
+    if doc.get("name") and frappe.db.exists("DocType", "Veterinary Billing Session Charge"):
+        rows = frappe.get_all(
+            "Veterinary Billing Session Charge",
+            filters={"source_doctype": "Pet Grooming Session", "source_name": doc.name},
+            fields=["invoice", "billing_status"],
+            limit=100,
+        )
+        for row in rows:
+            if row.get("billing_status") in INACTIVE_GROOMING_CHARGE_STATUSES:
+                continue
+            invoice_name = row.get("invoice")
+            if not invoice_name:
+                pending_charge = True
+                continue
+            if not frappe.db.exists("Sales Invoice", invoice_name):
+                pending_charge = True
+                continue
+            if cint(frappe.db.get_value("Sales Invoice", invoice_name, "docstatus")) != 2:
+                active_invoices.add(invoice_name)
+
+    can_cancel = not pending_charge and not active_invoices
+    return {
+        "can_cancel": can_cancel,
+        "pending_charge": pending_charge,
+        "active_invoices": sorted(active_invoices),
+        "message": (
+            _("Grooming may be cancelled because it has no active billing history.")
+            if can_cancel
+            else _(
+                "This Grooming Session already has active billing. Resolve or cancel Draft/Unpaid billing first; paid or partly-paid invoices require the appropriate financial correction before the clinical session can be cancelled."
+            )
+        ),
+    }
+
+
 def enforce_grooming_service_payment_gate(doc, method: str | None = None) -> None:
     previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
     if not previous or doc.get("status") == previous.get("status"):
         return
+
+    if doc.get("status") == "Cancelled":
+        state = get_grooming_cancellation_state(doc)
+        if not state.get("can_cancel"):
+            frappe.throw(state.get("message"), frappe.ValidationError)
+        return
+
     if doc.get("status") not in GROOMING_PROGRESS_STATUSES:
         return
     state = get_grooming_service_payment_gate_state(doc)
