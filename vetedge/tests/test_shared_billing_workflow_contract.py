@@ -282,3 +282,17 @@ def test_grooming_cancellation_cannot_diverge_from_active_billing():
     assert "grooming_payment_workflow.enforce_grooming_service_payment_gate" in hooks
     assert 'blocked_keys.add("cancel-grooming")' in state
     assert 'detail["cancellation"] = cancellation' in state
+
+
+def test_boarding_cancellation_is_controller_gated_against_active_billing():
+    safety = read(APP / "services/boarding_cancellation_safety.py")
+    controller = read(APP / "veterinary/doctype/pet_boarding_booking/pet_boarding_booking.py")
+
+    assert "get_boarding_cancellation_state" in safety
+    assert "Veterinary Billing Session Charge" in safety
+    assert "require_vetedge_platform_access" in safety
+    assert 'doc.has_permission("write")' in safety
+    assert "can_access_branch_data" in safety
+    assert "active billing" in safety
+    assert "enforce_boarding_cancellation_safety" in controller
+    assert controller.index("enforce_boarding_cancellation_safety(self)") < controller.index("validate_pet_boarding_booking(self)")
