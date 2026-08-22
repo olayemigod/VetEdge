@@ -1,5 +1,12 @@
 const VETEDGE_SERVICE_OPERATIONS_REFRESH_MAX_AGE_MS = 15000;
-const VETEDGE_SERVICE_OPERATION_RESOURCES = new Set(['availability', 'boarding-stays', 'boarding-care-records', 'grooming-sessions']);
+const VETEDGE_SERVICE_OPERATION_RESOURCES = new Set([
+	'availability',
+	'boarding-bookings',
+	'boarding-stays',
+	'boarding-care-records',
+	'grooming-appointments',
+	'grooming-sessions',
+]);
 
 function serviceOperationsRouteState() {
 	const params = new URLSearchParams(window.location.search || '');
