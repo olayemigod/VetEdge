@@ -28,6 +28,14 @@ TREATMENT_FIELDS = [
     "notes",
     "idx",
 ]
+SORT_FIELDS = {
+    "consultation": "parent",
+    "item": "item",
+    "qty": "qty",
+    "uom": "uom",
+    "rate": "rate",
+}
+DEFAULT_SORT = {"field": "consultation", "direction": "asc"}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -42,8 +50,30 @@ def _filters(value: str | dict | None) -> dict:
     return dict(normalize_report_filters("Planned Treatment", cleaned) or {})
 
 
+def _normalize_sort(value: str | dict | None) -> dict:
+    if not value:
+        return dict(DEFAULT_SORT)
+    parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    if not isinstance(parsed, dict):
+        frappe.throw(_("Expected report sort as a JSON object."), frappe.ValidationError)
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+    direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+    if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+    field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+    direction = "asc" if sort.get("direction") == "asc" else "desc"
+    source = SORT_FIELDS[field]
+    if source == "parent":
+        return f"parent {direction}, idx {direction}"
+    return f"{source} {direction}, parent asc, idx asc"
+
+
 def _columns() -> list[dict]:
-    return [
+    columns = [
         {"fieldname": "consultation", "label": _("Consultation"), "fieldtype": "Link", "options": "Veterinary Consultation"},
         {"fieldname": "consultation_date", "label": _("Consultation Date"), "fieldtype": "Datetime"},
         {"fieldname": "service_branch", "label": _("Service Branch"), "fieldtype": "Link", "options": "Branch"},
@@ -61,6 +91,9 @@ def _columns() -> list[dict]:
         {"fieldname": "patient_total", "label": _("Patient Total"), "fieldtype": "Currency"},
         {"fieldname": "status", "label": _("Status"), "fieldtype": "Data"},
     ]
+    for column in columns:
+        column["sortable"] = column.get("fieldname") in SORT_FIELDS
+    return columns
 
 
 def _patient_owner_map(patient_ids) -> dict[str, str]:
@@ -126,12 +159,18 @@ def _aggregate_treatments(parent_names: list[str], item: str | None = None, grou
     return {"total": cint(row.get("total")), "grand_total": flt(row.get("grand_total"))}
 
 
-def _page_treatment_rows(consultation_names: list[str], report_filters: dict, start: int, page_length: int):
+def _page_treatment_rows(
+    consultation_names: list[str],
+    report_filters: dict,
+    start: int,
+    page_length: int,
+    sort: dict,
+):
     return frappe.get_all(
         "Planned Treatment Item",
         filters=_treatment_filters(consultation_names, report_filters),
         fields=TREATMENT_FIELDS,
-        order_by="parent asc, idx asc",
+        order_by=_order_by(sort),
         limit_start=start,
         limit_page_length=page_length,
     )
@@ -211,9 +250,11 @@ def get_planned_treatment_view(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     report_filters = _filters(filters)
+    normalized_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
@@ -233,7 +274,12 @@ def get_planned_treatment_view(
             "start": start,
             "page_length": page_length,
             "total": 0,
-            "metadata": {"pagination_mode": "query-level-detail", "parent_scope_mode": "scoped-consultations"},
+            "sort": normalized_sort,
+            "metadata": {
+                "pagination_mode": "query-level-detail",
+                "parent_scope_mode": "scoped-consultations",
+                "sorting_mode": "server-allowlist",
+            },
         }
 
     aggregate = _aggregate_treatments(
@@ -241,7 +287,13 @@ def get_planned_treatment_view(
         item=cstr(report_filters.get("item") or "").strip() or None,
         group_by_parent=False,
     )
-    page_rows = _page_treatment_rows(consultation_names, report_filters, start, page_length)
+    page_rows = _page_treatment_rows(
+        consultation_names,
+        report_filters,
+        start,
+        page_length,
+        normalized_sort,
+    )
     rows = _render_page_rows(page_rows, scoped_consultations, report_filters)
 
     return {
@@ -261,9 +313,11 @@ def get_planned_treatment_view(
         "start": start,
         "page_length": page_length,
         "total": cint(aggregate.get("total")),
+        "sort": normalized_sort,
         "metadata": {
             "pagination_mode": "query-level-detail",
             "parent_scope_mode": "scoped-consultations",
             "detail_rows_materialized": False,
+            "sorting_mode": "server-allowlist",
         },
     }
