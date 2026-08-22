@@ -268,3 +268,17 @@ def test_edgesuite_mutations_remain_permission_and_platform_gated():
         "transition_lab_order_status",
     ):
         assert f"mutation_security.{endpoint}" in hooks
+
+
+def test_grooming_cancellation_cannot_diverge_from_active_billing():
+    workflow = read(APP / "services/grooming_payment_workflow.py")
+    state = read(APP / "services/service_operations_state.py")
+    hooks = read(APP / "hooks.py")
+
+    assert "get_grooming_cancellation_state" in workflow
+    assert 'doc.get("status") == "Cancelled"' in workflow
+    assert "Veterinary Billing Session Charge" in workflow
+    assert "active billing" in workflow
+    assert "grooming_payment_workflow.enforce_grooming_service_payment_gate" in hooks
+    assert 'blocked_keys.add("cancel-grooming")' in state
+    assert 'detail["cancellation"] = cancellation' in state
