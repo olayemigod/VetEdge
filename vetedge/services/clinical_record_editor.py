@@ -324,16 +324,31 @@ def _can_delete_record(doc, config: dict[str, Any], billing_state: dict[str, Any
         return False, _("You do not have delete permission for this record.")
     if doc.docstatus != 0:
         return False, _("Submitted or cancelled documents cannot be deleted here.")
+
+    if doc.doctype == "Veterinary Lab Order":
+        if doc.get("status") not in {"Draft", "Ordered"}:
+            return False, _("Lab orders with active/result workflow history cannot be deleted.")
+        if any(
+            row.get("result_summary")
+            or row.get("result_value")
+            or row.get("result_text")
+            or row.get("result_attachment")
+            for row in doc.get("lab_tests") or []
+        ):
+            return False, _("Lab orders with entered or uploaded results cannot be deleted.")
+
+        from vetedge.services.lab_cancellation import build_lab_order_cancellation_preflight
+
+        preflight = build_lab_order_cancellation_preflight(doc)
+        if not preflight.get("can_cancel"):
+            return False, preflight.get("message") or _("This Lab Order cannot be deleted safely.")
+        return True, ""
+
     if billing_state.get("has_invoice"):
         return False, _("Delete is blocked because billing already exists for this clinical service.")
     if doc.doctype == "Veterinary Vaccination Record":
         if doc.get("status") == "Administered" or doc.get("stock_entry_reference"):
             return False, _("Administered or stock-posted vaccination records cannot be deleted.")
-    if doc.doctype == "Veterinary Lab Order":
-        if doc.get("status") not in {"Draft", "Ordered"}:
-            return False, _("Lab orders with active/result workflow history cannot be deleted.")
-        if any(row.get("result_summary") or row.get("result_value") or row.get("result_text") or row.get("result_attachment") for row in doc.get("lab_tests") or []):
-            return False, _("Lab orders with entered or uploaded results cannot be deleted.")
     return True, ""
 
 
