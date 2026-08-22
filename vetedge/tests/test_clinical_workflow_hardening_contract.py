@@ -89,7 +89,7 @@ def test_vaccination_state_is_workflow_billing_and_stock_aware():
     assert "allocate_item_batches" in vaccination
     assert "manual_batch_no=doc.batch_no" in vaccination
     assert "get_available_valid_batches" in expiry
-    assert "allocate_fefo_batches" in expiry
+    assert "allocate_fefo_batches" in vaccination
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
     assert "Administration user/time, batch, stock entry and linked invoice" in clinical_bundle
@@ -124,6 +124,27 @@ def test_lab_multi_test_results_advance_parent_only_after_all_active_rows_have_r
     assert "if not all_results_entered:" in workflow
     assert workflow.index("if not all_results_entered:") < workflow.index('doc.status = "Awaiting Review"')
     assert workflow.index("if not all_results_entered:") < workflow.index('doc.status = "Result Entered"')
+
+
+def test_lab_cancel_delete_uses_accounting_safe_reconciliation_and_derived_link_cleanup():
+    cancellation = read("vetedge/services/lab_cancellation.py")
+    editor = read("vetedge/services/clinical_record_editor.py")
+
+    assert 'HARD_BLOCK_PAYMENT_STATES = {"Partly Paid", "Paid"}' in cancellation
+    assert 'ALLOWED_BILLING_CONFIRMATIONS = {"remove_empty_draft_invoice", "cancel_unpaid_invoice"}' in cancellation
+    assert "sync_session_charges_to_invoice" in cancellation
+    assert "submitted invoice" in cancellation.lower()
+    assert "unrelated active charges" in cancellation
+    assert "Veterinary Notification Item" in cancellation
+    assert '"status": "Archived"' in cancellation
+    assert '"reference_doctype": None' in cancellation
+    assert "_detach_deleted_lab_billing_links" in cancellation
+    assert "build_lab_order_cancellation_preflight" in editor
+    lab_delete = editor.split('if doc.doctype == "Veterinary Lab Order":', 1)[1].split(
+        'if billing_state.get("has_invoice"):', 1
+    )[0]
+    assert "build_lab_order_cancellation_preflight" in lab_delete
+    assert "return True" in lab_delete
 
 
 def test_resource_center_native_source_owns_summary_filters_labels_and_patient_shortcut():
