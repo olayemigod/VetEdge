@@ -2,15 +2,15 @@
 	"use strict";
 
 	const STOCK_EXPIRY_COLUMNS = [
-		{ fieldname: "item_code", label: "Item Code", fieldtype: "Link", options: "Item", sortable: false },
-		{ fieldname: "item_name", label: "Item Name", fieldtype: "Data", sortable: false },
-		{ fieldname: "batch_no", label: "Batch No", fieldtype: "Link", options: "Batch", sortable: false },
-		{ fieldname: "warehouse", label: "Warehouse", fieldtype: "Link", options: "Warehouse", sortable: false },
-		{ fieldname: "qty", label: "Quantity", fieldtype: "Float", sortable: false },
-		{ fieldname: "stock_uom", label: "UOM", fieldtype: "Data", sortable: false },
-		{ fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date", sortable: false },
-		{ fieldname: "days_to_expiry", label: "Days Left", fieldtype: "Int", sortable: false },
-		{ fieldname: "expiry_status", label: "Risk Status", fieldtype: "Data", sortable: false },
+		{ fieldname: "item_code", label: "Item Code", fieldtype: "Link", options: "Item", sortable: true },
+		{ fieldname: "item_name", label: "Item Name", fieldtype: "Data", sortable: true },
+		{ fieldname: "batch_no", label: "Batch No", fieldtype: "Link", options: "Batch", sortable: true },
+		{ fieldname: "warehouse", label: "Warehouse", fieldtype: "Link", options: "Warehouse", sortable: true },
+		{ fieldname: "qty", label: "Quantity", fieldtype: "Float", sortable: true },
+		{ fieldname: "stock_uom", label: "UOM", fieldtype: "Data", sortable: true },
+		{ fieldname: "expiry_date", label: "Expiry Date", fieldtype: "Date", sortable: true },
+		{ fieldname: "days_to_expiry", label: "Days Left", fieldtype: "Int", sortable: true },
+		{ fieldname: "expiry_status", label: "Risk Status", fieldtype: "Data", sortable: true },
 		{ fieldname: "branch", label: "Branch", fieldtype: "Link", options: "Branch", sortable: false },
 	];
 
@@ -37,7 +37,7 @@
 		return (Array.isArray(columns) ? columns : []).map((column) => ({ ...column, sortable: false }));
 	}
 
-	function stockFilters(filters = {}, start = 0, pageLength = 50) {
+	function stockFilters(filters = {}, start = 0, pageLength = 50, sort = null) {
 		return {
 			warehouse: filters.warehouse || "",
 			item_group: filters.item_group || "",
@@ -46,6 +46,7 @@
 			item: filters.item || "",
 			limit: pageLength,
 			offset: start,
+			sort,
 		};
 	}
 
@@ -65,10 +66,10 @@
 		const provider = reports.registerPaginatedProvider("Stock Expiry Report", {
 			defaultPageLength: 50,
 			maxPageLength: 100,
-			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
+			loadPage: async ({ filters = {}, start = 0, page_length = 50, sort = null }) => {
 				const payload = await call(
 					"vetedge.veterinary.page.stock_expiry_monitor.stock_expiry_monitor.get_stock_expiry_data",
-					{ filters: stockFilters(filters, start, page_length) },
+					{ filters: stockFilters(filters, start, page_length, sort) },
 				);
 				return {
 					columns: STOCK_EXPIRY_COLUMNS,
@@ -77,7 +78,13 @@
 					total_count: Number(payload.total_count || 0),
 					start,
 					page_length,
-					metadata: { pagination_mode: "query-level", source: "stock-expiry-monitor" },
+					sort: payload.sort || sort,
+					metadata: {
+						...(payload.metadata || {}),
+						pagination_mode: "query-level",
+						sorting_mode: payload.metadata?.sorting_mode || "server-allowlist",
+						source: "stock-expiry-monitor",
+					},
 				};
 			},
 		});
