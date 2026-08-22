@@ -4,6 +4,8 @@ import frappe
 from frappe.utils import cint
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.services.permissions import can_access_branch_data, get_current_user
+from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -16,6 +18,55 @@ def _current_branch() -> str:
     except Exception:
         value = ""
     return "" if value.lower() in {"all", "all branches"} else value
+
+
+def _operational_branch_field(doctype: str) -> str | None:
+    meta = frappe.get_meta(doctype)
+    for fieldname in ("service_branch", "branch"):
+        if meta.has_field(fieldname):
+            return fieldname
+    return None
+
+
+def _enforce_operational_branch_state(state: dict, name: str | None) -> dict:
+    doctype = str(state.get("doctype") or "").strip()
+    if not doctype:
+        return state
+    fieldname = _operational_branch_field(doctype)
+    if not fieldname:
+        return state
+
+    values = state.setdefault("values", {})
+    branch = str(values.get(fieldname) or "").strip()
+    if name and not branch:
+        branch = str(frappe.db.get_value(doctype, name, fieldname) or "").strip()
+    if not name and not branch:
+        branch = _current_branch()
+        if branch:
+            values[fieldname] = branch
+    if branch:
+        can_access_branch_data(get_current_user(), branch, raise_exception=True)
+    return state
+
+
+def _enforce_operational_branch_save(doctype: str, payload: dict, name: str | None) -> None:
+    fieldname = _operational_branch_field(doctype)
+    if not fieldname:
+        return
+
+    existing_branch = ""
+    if name:
+        existing_branch = str(frappe.db.get_value(doctype, name, fieldname) or "").strip()
+        if existing_branch:
+            can_access_branch_data(get_current_user(), existing_branch, raise_exception=True)
+
+    requested_branch = str(payload.get(fieldname) or "").strip()
+    if not name and not requested_branch:
+        requested_branch = _current_branch()
+        if requested_branch:
+            payload[fieldname] = requested_branch
+    if requested_branch:
+        can_access_branch_data(get_current_user(), requested_branch, raise_exception=True)
 
 
 def _display_label(doctype: str, value: str | None) -> str:
@@ -76,6 +127,7 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
     from vetedge.services.resource_center import get_resource_editor as original
 
     state = original(resource=resource, name=name)
+    state = _enforce_operational_branch_state(state, name)
     if resource == "patients":
         return _normalize_patient_schema(state, name)
     return state
@@ -84,9 +136,18 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 @frappe.whitelist()
 def save_resource_record(resource: str, values: str | dict, name: str | None = None) -> dict:
     require_internal_user()
-    from vetedge.services.resource_center import _parse_values, save_resource_record as original
+    from vetedge.services.resource_center import _parse_values, _resource, save_resource_record as original
+
+    config = _resource(resource)
+    doctype = config["doctype"]
+    require_vetedge_platform_access(
+        action="save_resource_record",
+        reference_doctype=doctype,
+        reference_name=name,
+    )
 
     payload = _parse_values(values)
+    _enforce_operational_branch_save(doctype, payload, name)
     if resource == "patients" and not name:
         payload["status"] = "Active"
         payload["is_deceased"] = 0
