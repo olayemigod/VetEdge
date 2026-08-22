@@ -7,22 +7,34 @@ from vetedge.services.portal_access import require_internal_user
 
 
 def _align_grooming_detail(detail: dict, session_name: str) -> dict:
-    from vetedge.services.grooming_payment_workflow import get_grooming_service_payment_gate_state
+    from vetedge.services.grooming_payment_workflow import (
+        get_grooming_cancellation_state,
+        get_grooming_service_payment_gate_state,
+    )
 
     doc = frappe.get_doc("Pet Grooming Session", session_name)
     gate = get_grooming_service_payment_gate_state(doc)
+    cancellation = get_grooming_cancellation_state(doc)
     detail["payment_gate"] = gate
-    if gate.get("can_proceed"):
-        return detail
+    detail["cancellation"] = cancellation
 
-    blocked_keys = {"start-grooming", "complete-grooming"}
+    blocked_keys = set()
+    if not gate.get("can_proceed"):
+        blocked_keys.update({"start-grooming", "complete-grooming"})
+    if not cancellation.get("can_cancel"):
+        blocked_keys.add("cancel-grooming")
+
     actions = [action for action in detail.get("actions") or [] if action.get("key") not in blocked_keys]
-    billing = next((action for action in actions if action.get("key") == "billing"), None)
-    if billing:
-        billing["label"] = _("Billing / Payment Required")
-        billing["primary"] = True
+    if not gate.get("can_proceed"):
+        billing = next((action for action in actions if action.get("key") == "billing"), None)
+        if billing:
+            billing["label"] = _("Billing / Payment Required")
+            billing["primary"] = True
+        detail["workflow_message"] = gate.get("message")
+    if not cancellation.get("can_cancel"):
+        detail["cancellation_message"] = cancellation.get("message")
+
     detail["actions"] = actions
-    detail["workflow_message"] = gate.get("message")
     return detail
 
 
