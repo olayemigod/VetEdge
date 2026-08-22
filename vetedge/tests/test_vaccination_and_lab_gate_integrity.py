@@ -76,35 +76,38 @@ def test_lab_non_billing_core_fallback_applies_configured_payment_gate():
     assert "default_payment_gate_mode" in source
 
 
-def test_lab_cancellation_blocks_result_and_financial_commitments_at_server_boundary():
+def test_lab_cancellation_blocks_result_and_paid_financial_commitments_at_server_boundary():
     cancellation = _read("services/lab_cancellation.py")
     controller = _read("veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py")
 
     assert "build_lab_order_cancellation_preflight" in cancellation
-    assert "submitted invoice/payment evidence" in cancellation
-    assert "draft billing" in cancellation
+    assert 'HARD_BLOCK_PAYMENT_STATES = {"Partly Paid", "Paid"}' in cancellation
     assert "diagnostic result evidence" in cancellation
-    assert "PROTECTED_PLAN_BILLING_STATUSES" in cancellation
-    assert "PROTECTED_PLAN_PAYMENT_STATUSES" in cancellation
+    assert "HARD_BLOCK_PLAN_BILLING_STATUSES" in cancellation
+    assert "HARD_BLOCK_PLAN_PAYMENT_STATUSES" in cancellation
+    assert "active charges for other services" in cancellation
     assert "enforce_lab_order_cancellation" in controller
     assert "enforce_lab_order_delete" in controller
     assert "def on_trash" in controller
 
 
-def test_lab_cancellation_never_uses_submitted_invoice_mutation_for_cleanup():
+def test_lab_cancellation_uses_billing_core_for_draft_and_submitted_unpaid_cleanup():
     cancellation = _read("services/lab_cancellation.py")
 
-    assert 'if docstatus in {0, 1}:' in cancellation
-    assert 'billing_status") in {"Submitted Invoiced", "Paid"}' in cancellation
+    assert 'ALLOWED_BILLING_CONFIRMATIONS = {"remove_empty_draft_invoice", "cancel_unpaid_invoice"}' in cancellation
+    assert "sync_session_charges_to_invoice" in cancellation
     assert '"billing_status": "Cancelled"' in cancellation
-    assert 'frappe.delete_doc("Sales Invoice"' not in cancellation
-    assert ".cancel()" not in cancellation
+    assert 'payment_state not in {"Draft", "Unpaid"}' in cancellation
+    assert 'run_with_billing_core_sync_flag(lambda: frappe.delete_doc("Sales Invoice", invoice_name))' in cancellation
+    assert "run_with_billing_core_sync_flag(invoice.cancel)" in cancellation
+    assert "Paid or partly-paid Lab invoices require a financial correction workflow." in cancellation
 
 
-def test_lab_workflow_ui_uses_same_cancellation_preflight_and_hides_unsafe_action():
+def test_lab_workflow_ui_uses_same_cancellation_preflight_and_describes_safe_invoice_cleanup():
     source = _read("services/clinical_workflow_ui.py")
 
     assert "build_lab_order_cancellation_preflight" in source
     assert 'target == "Cancelled" and not cancellation_state.get("can_cancel")' in source
     assert '"cancellation": cancellation_state' in source
-    assert "Submitted invoices and payments are never changed by this action." in source
+    assert "may cancel a submitted unpaid invoice" in source
+    assert "Partly paid, paid, and shared submitted invoices remain protected." in source
