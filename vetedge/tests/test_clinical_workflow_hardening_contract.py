@@ -93,9 +93,26 @@ def test_vaccination_state_is_workflow_billing_and_stock_aware():
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
     assert "Administration user/time, batch, stock entry and linked invoice" in clinical_bundle
-    vaccination_creation = clinical_bundle.split("function vaccinationFields", 1)[1].split("function openHospitalisationModal", 1)[0]
+    vaccination_creation = clinical_bundle.split("function vaccinationFields", 1)[1].split(
+        "function openHospitalisationModal", 1
+    )[0]
     assert "fieldname: 'administered_on'" not in vaccination_creation
     assert "serverDatetime(values.administered_on)" not in vaccination_creation
+
+
+def test_vaccination_joins_an_existing_billing_cycle_without_creating_one():
+    controller = read(
+        "vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py"
+    )
+
+    assert "def _sync_existing_vaccination_billing_session" in controller
+    assert "resolve_billing_session" in controller
+    assert "if not session:" in controller
+    assert "get_or_create_billing_session" not in controller
+    assert "_session_has_vaccination_charge" in controller
+    assert "sync_single_source_to_billing_session" in controller
+    assert "sync_session_charges_to_invoice" in controller
+    assert controller.count("_sync_existing_vaccination_billing_session(self)") == 2
 
 
 def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
@@ -134,7 +151,11 @@ def test_lab_cancel_delete_uses_accounting_safe_reconciliation_and_derived_link_
     assert 'ALLOWED_BILLING_CONFIRMATIONS = {"remove_empty_draft_invoice", "cancel_unpaid_invoice"}' in cancellation
     assert "sync_session_charges_to_invoice" in cancellation
     assert "submitted invoice" in cancellation.lower()
-    assert "active charges for other services" in cancellation
+    assert "active or unproven charges for other services" in cancellation
+    assert 'filters={"invoice": invoice_name}' in cancellation
+    assert "extract_charge_key_from_invoice_item" in cancellation
+    assert "target_charge_keys" in cancellation
+    assert 'doc.get("status") not in {"Draft", "Ordered", "Cancelled"}' in cancellation
     assert "Veterinary Notification Item" in cancellation
     assert '"status": "Archived"' in cancellation
     assert '"reference_doctype": None' in cancellation
