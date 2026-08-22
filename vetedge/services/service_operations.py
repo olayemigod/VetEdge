@@ -404,6 +404,11 @@ def delete_service_order(resource: str, name: str) -> dict:
 	config = _config(resource)
 	if resource not in {"boarding-bookings", "grooming-appointments"}:
 		frappe.throw(_("Deletion is not available for this service record."), frappe.PermissionError)
+	require_vetedge_platform_access(
+		action="delete_service_order",
+		reference_doctype=config["doctype"],
+		reference_name=name,
+	)
 	doc = frappe.get_doc(config["doctype"], name)
 	doc.check_permission("delete")
 	branch = doc.get("service_branch")
