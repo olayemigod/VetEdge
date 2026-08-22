@@ -151,7 +151,7 @@ def _lab_actions(name: str) -> dict[str, Any]:
             )
         elif target == "Cancelled":
             confirm = _(
-                "Cancel this uncommitted Lab Order? Only safe uninvoiced Lab billing references will be retired. Submitted invoices and payments are never changed by this action."
+                "Cancel this Lab Order? VetEdge will retire safe Lab billing references, remove an empty draft invoice when necessary, and may cancel a submitted unpaid invoice that contains only this Lab Order's charges. Partly paid, paid, and shared submitted invoices remain protected."
             )
         elif target == "Completed":
             confirm = _(
