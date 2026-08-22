@@ -134,7 +134,7 @@ def test_lab_cancel_delete_uses_accounting_safe_reconciliation_and_derived_link_
     assert 'ALLOWED_BILLING_CONFIRMATIONS = {"remove_empty_draft_invoice", "cancel_unpaid_invoice"}' in cancellation
     assert "sync_session_charges_to_invoice" in cancellation
     assert "submitted invoice" in cancellation.lower()
-    assert "unrelated active charges" in cancellation
+    assert "active charges for other services" in cancellation
     assert "Veterinary Notification Item" in cancellation
     assert '"status": "Archived"' in cancellation
     assert '"reference_doctype": None' in cancellation
