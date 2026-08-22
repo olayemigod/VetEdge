@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import add_days, cint, flt, getdate, nowdate
+from frappe.utils import add_days, cint, cstr, flt, getdate, nowdate
 
 from vetedge.services.stock import get_branch_dispensary_warehouse
 from vetedge.services.stock_expiry_monitor import (
@@ -14,6 +14,46 @@ from vetedge.services.stock_expiry_monitor import (
 
 MAX_INTERACTIVE_PAGE_LENGTH = 500
 DEFAULT_INTERACTIVE_PAGE_LENGTH = 50
+SORT_FIELDS = {
+	"item_code": "item_code",
+	"item_name": "item_name",
+	"batch_no": "batch_no",
+	"warehouse": "warehouse",
+	"qty": "qty",
+	"stock_uom": "stock_uom",
+	"expiry_date": "expiry_date",
+	"days_to_expiry": "DATEDIFF(expiry_date, %(today)s)",
+	"expiry_status": "expiry_status",
+}
+DEFAULT_SORT = {"field": "expiry_date", "direction": "asc"}
+
+
+def _normalize_sort(value) -> dict:
+	if not value:
+		return dict(DEFAULT_SORT)
+	parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+	if not isinstance(parsed, dict):
+		frappe.throw("Expected Stock Expiry sort as a JSON object.", frappe.ValidationError)
+	field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+	direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+	if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+		return dict(DEFAULT_SORT)
+	return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+	field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+	direction = "ASC" if sort.get("direction") == "asc" else "DESC"
+	source = SORT_FIELDS[field]
+	parts = []
+	if field in {"item_name", "warehouse", "stock_uom", "expiry_date", "days_to_expiry"}:
+		parts.append(f"CASE WHEN {source} IS NULL THEN 1 ELSE 0 END ASC")
+	parts.append(f"{source} {direction}")
+	if field != "item_code":
+		parts.append("item_code ASC")
+	if field != "batch_no":
+		parts.append("batch_no ASC")
+	return ", ".join(parts)
 
 
 def get_stock_expiry_interactive_data(
@@ -22,6 +62,7 @@ def get_stock_expiry_interactive_data(
 	expiry_window: str = "all",
 	limit: int = DEFAULT_INTERACTIVE_PAGE_LENGTH,
 	offset: int = 0,
+	sort=None,
 ) -> dict:
 	"""Return summary plus one database-paginated Stock Expiry window.
 
@@ -31,6 +72,7 @@ def get_stock_expiry_interactive_data(
 	filters = frappe._dict(filters or {})
 	limit = min(max(cint(limit) or DEFAULT_INTERACTIVE_PAGE_LENGTH, 1), MAX_INTERACTIVE_PAGE_LENGTH)
 	offset = max(cint(offset), 0)
+	normalized_sort = _normalize_sort(sort or filters.get("sort"))
 
 	if not _has_stock_expiry_source():
 		return {
@@ -39,6 +81,8 @@ def get_stock_expiry_interactive_data(
 			"total_count": 0,
 			"limit": limit,
 			"offset": offset,
+			"sort": normalized_sort,
+			"metadata": {"sorting_mode": "server-allowlist"},
 		}
 
 	buckets = parse_expiry_buckets(filters.get("expiry_buckets") or _settings_bucket_value())
@@ -97,6 +141,7 @@ def get_stock_expiry_interactive_data(
 	summary["affected_qty"] = flt(summary.get("affected_qty"))
 
 	window_condition = _window_condition(expiry_window)
+	order_by = _order_by(normalized_sort)
 	rows = frappe.db.sql(
 		f"""
 		SELECT
@@ -114,11 +159,7 @@ def get_stock_expiry_interactive_data(
 			COUNT(*) OVER() AS total_count
 		FROM ({classified_sql}) classified
 		{window_condition}
-		ORDER BY
-			CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC,
-			expiry_date ASC,
-			item_code ASC,
-			batch_no ASC
+		ORDER BY {order_by}
 		LIMIT %(limit)s OFFSET %(offset)s
 		""",
 		values,
@@ -158,6 +199,8 @@ def get_stock_expiry_interactive_data(
 		"total_count": total_count,
 		"limit": limit,
 		"offset": offset,
+		"sort": normalized_sort,
+		"metadata": {"sorting_mode": "server-allowlist"},
 	}
 
 
