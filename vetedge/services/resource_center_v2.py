@@ -6,6 +6,7 @@ from frappe.utils import cint, flt
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
 from vetedge.services import resource_center as legacy
+from vetedge.services.permissions import get_assigned_branches, get_current_user, user_has_global_branch_access
 
 
 PATIENT_DISPLAY_FIELDS = [
@@ -56,7 +57,20 @@ def _branch_field(meta) -> str | None:
 def _base_filters(meta) -> dict:
     branch = _context_branch()
     fieldname = _branch_field(meta)
-    return {fieldname: branch} if branch and fieldname else {}
+    if branch and fieldname:
+        return {fieldname: branch}
+
+    # Operational resources using branch/service_branch must remain scoped even
+    # while the product context is "All Branches". Elevated users retain their
+    # global view; ordinary users with explicit assignments see only those
+    # assignments. Patient/default_branch keeps its existing dedicated policy.
+    if not fieldname or fieldname == "default_branch":
+        return {}
+    user = get_current_user()
+    if not user or user == "Guest" or user_has_global_branch_access(user):
+        return {}
+    assigned = get_assigned_branches(user)
+    return {fieldname: ["in", assigned]} if assigned else {}
 
 
 def _patient_filters(meta, default_branch: str, status: str, registration_status: str, species: str) -> dict:
