@@ -296,3 +296,18 @@ def test_boarding_cancellation_is_controller_gated_against_active_billing():
     assert "active billing" in safety
     assert "enforce_boarding_cancellation_safety" in controller
     assert controller.index("enforce_boarding_cancellation_safety(self)") < controller.index("validate_pet_boarding_booking(self)")
+
+
+def test_resource_center_operational_branch_scope_is_backend_enforced():
+    listing = read(APP / "services/resource_center_v2.py")
+    editor = read(APP / "services/resource_editor_state.py")
+
+    assert "get_assigned_branches" in listing
+    assert "user_has_global_branch_access" in listing
+    assert 'return {fieldname: ["in", assigned]} if assigned else {}' in listing
+    assert 'fieldname == "default_branch"' in listing
+    assert "_enforce_operational_branch_state" in editor
+    assert "_enforce_operational_branch_save" in editor
+    assert "can_access_branch_data" in editor
+    assert "require_vetedge_platform_access" in editor
+    assert 'action="save_resource_record"' in editor
