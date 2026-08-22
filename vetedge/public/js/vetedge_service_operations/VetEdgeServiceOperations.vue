@@ -13,7 +13,7 @@
 				<EdgePageHeader
 					eyebrow="Hospital & Services"
 					title="Hospital & Services Operations"
-					subtitle="Kennel availability, boarding stays, boarding care records and grooming sessions in one EdgeSuite workspace."
+					subtitle="Boarding reservations, stays and care plus grooming appointments, sessions and billing in one EdgeSuite workspace."
 					action-label="Refresh"
 					@action="load"
 				/>
@@ -105,6 +105,9 @@
 				<section class="service-card">
 					<header class="service-card-header">
 						<div><h2>{{ page.title || activeTab.label }}</h2><p>{{ page.subtitle || activeTab.description }}</p></div>
+						<button v-if="page.can_create" type="button" class="edge-button edge-button--primary" :disabled="loading || busy" @click="openCreate">
+							{{ createLabel }}
+						</button>
 					</header>
 					<EdgeDataTable
 						:columns="page.columns || []"
@@ -175,13 +178,18 @@ const API = Object.freeze({
 	page: "vetedge.services.service_operations.get_service_operations_page",
 	detail: "vetedge.services.service_operations.get_service_operation_detail",
 	care: "vetedge.services.service_operations.create_boarding_care_record",
+	boarding: "vetedge.services.service_operations.transition_boarding_booking",
 	grooming: "vetedge.services.service_operations.transition_grooming_session",
+	createGroomingSession: "vetedge.services.service_operations.create_or_open_grooming_session",
+	deleteOrder: "vetedge.services.service_operations.delete_service_order",
 	availability: "vetedge.services.boarding.get_kennel_availability_board_view",
 });
 const TABS = Object.freeze([
 	{ value: "availability", label: "Kennel Availability", description: "Capacity and occupancy" },
+	{ value: "boarding-bookings", label: "Boarding Bookings", description: "Reservation, billing and admission" },
 	{ value: "boarding-stays", label: "Boarding Stays", description: "Active and completed stays" },
 	{ value: "boarding-care-records", label: "Care Records", description: "Boarding care observations" },
+	{ value: "grooming-appointments", label: "Grooming Appointments", description: "Bookings and session readiness" },
 	{ value: "grooming-sessions", label: "Grooming Sessions", description: "Grooming workflow and billing" },
 ]);
 const optionRows = (values) => values.map((value) => ({ value, label: value }));
@@ -209,7 +217,7 @@ export default {
 			error: "",
 			start: 0,
 			pageLength: 25,
-			page: { title: "", subtitle: "", columns: [], rows: [], total: 0, start: 0, page_length: 25 },
+			page: { title: "", subtitle: "", columns: [], rows: [], total: 0, start: 0, page_length: 25, can_create: false, editor_resource: "" },
 			availability: { cards: [], rows: [] },
 			detail: { open: false, loading: false, data: {} },
 			careDialog: { open: false, stay: "", values: {} },
@@ -235,6 +243,11 @@ export default {
 		branchName() { return this.filters.branch || frappe.boot?.edgesuite_product_menu?.branch || "All Branches"; },
 		userName() { const user = frappe.session?.user || ""; const info = frappe.boot?.user_info?.[user] || {}; return info.fullname || info.full_name || user; },
 		activeTab() { return TABS.find((tab) => tab.value === this.resource) || TABS[0]; },
+		createLabel() {
+			if (this.resource === "boarding-bookings") return "New Boarding Booking";
+			if (this.resource === "grooming-appointments") return "New Grooming Appointment";
+			return "New Record";
+		},
 		currentPage() { return Math.floor((this.page.start || 0) / (this.page.page_length || this.pageLength)) + 1; },
 		totalPages() { return Math.max(1, Math.ceil((this.page.total || 0) / (this.page.page_length || this.pageLength))); },
 		hasPrevious() { return (this.page.start || 0) > 0; },
@@ -297,7 +310,22 @@ export default {
 			finally { this.detail.loading = false; }
 		},
 		closeDetail() { if (!this.busy) this.detail = { open: false, loading: false, data: {} }; },
-		openKennel(row) { const kennel = row?.kennel || row?.name; if (kennel) this.openRoute(`/app/vetedge-resource-center?resource=kennels&name=${encodeURIComponent(kennel)}`); },
+		openKennel(row) { const kennel = row?.kennel || row?.name; if (kennel) this.openRoute(`/desk/vetedge-resource-center?resource=kennels&name=${encodeURIComponent(kennel)}`); },
+		openCreate() {
+			if (!this.page.editor_resource) return;
+			this.openRoute(`/desk/vetedge-resource-center?resource=${encodeURIComponent(this.page.editor_resource)}&new=1`);
+		},
+		openGuidedEdit() {
+			const editorResource = this.detail.data.editor_resource;
+			const name = this.detail.data.name;
+			if (!editorResource || !name) return;
+			this.closeDetail();
+			this.openRoute(`/desk/vetedge-resource-center?resource=${encodeURIComponent(editorResource)}&name=${encodeURIComponent(name)}`);
+		},
+		async switchToRecord(resource, name) {
+			if (!name) return;
+			this.closeDetail(); this.resource = resource; this.parent = ""; this.start = 0; this.requestedName = name; await this.load();
+		},
 		isWideField(field) { return ["Small Text", "Text", "Long Text"].includes(field.type); },
 		formatDetailValue(field) {
 			const value = field?.value;
@@ -313,7 +341,22 @@ export default {
 				const stay = this.detail.data.name; this.closeDetail(); this.resource = "boarding-care-records"; this.parent = stay; this.start = 0; return this.load();
 			}
 			if (action.key === "add-care-record") return this.openCareDialog(this.detail.data.name);
-			if (action.key === "billing") return this.openBilling();
+			if (action.key === "edit-guided") return this.openGuidedEdit();
+			if (action.key === "billing" || action.key === "billing-target") return this.openBilling(action);
+			if (action.key === "open-booking") return this.switchToRecord("boarding-bookings", action.target_name);
+			if (action.key === "open-stay") return this.switchToRecord("boarding-stays", action.target_name);
+			if (action.key === "open-grooming-appointment") return this.switchToRecord("grooming-appointments", action.target_name);
+			if (action.key === "delete-order") return this.confirmDeleteOrder();
+			if (action.key === "create-grooming-session") return this.createGroomingSession();
+
+			const boardingAction = {
+				"reserve-boarding": "reserve",
+				"check-in-boarding": "check-in",
+				"check-out-boarding": "check-out",
+				"cancel-boarding": "cancel",
+			}[action.key];
+			if (boardingAction) return this.runBoardingAction(boardingAction);
+
 			const target = { "start-grooming": "In Progress", "complete-grooming": "Completed", "cancel-grooming": "Cancelled" }[action.key];
 			if (!target) return;
 			this.busy = true;
@@ -325,15 +368,61 @@ export default {
 			} catch (error) { this.error = error?.message || __("Grooming session could not be updated."); }
 			finally { this.busy = false; }
 		},
-		openBilling() {
-			if (!window.vetedgeBillingModal?.open || !this.detail.data.name) { this.error = __("Billing modal helper is unavailable."); return; }
+		async runBoardingAction(action) {
+			if (!this.detail.data.name || this.busy) return;
+			this.busy = true;
+			try {
+				const response = await frappe.call(API.boarding, { booking: this.detail.data.name, action });
+				this.detail.data = response.message || this.detail.data;
+				frappe.show_alert({ message: __("Boarding booking updated."), indicator: "green" });
+				await this.loadRecords();
+			} catch (error) { this.error = error?.message || __("Boarding booking could not be updated."); }
+			finally { this.busy = false; }
+		},
+		async createGroomingSession() {
+			if (!this.detail.data.name || this.busy) return;
+			this.busy = true;
+			try {
+				const response = await frappe.call(API.createGroomingSession, { appointment: this.detail.data.name });
+				const session = response.message?.name;
+				if (!session) throw new Error(__("The grooming session could not be created."));
+				frappe.show_alert({ message: __("Grooming session is ready."), indicator: "green" });
+				await this.switchToRecord("grooming-sessions", session);
+			} catch (error) { this.error = error?.message || __("The grooming session could not be created."); }
+			finally { this.busy = false; }
+		},
+		confirmDeleteOrder() {
+			if (!this.detail.data.name || this.busy) return;
+			frappe.confirm(
+				__("Delete this uncommitted service record? Records with billing or service-delivery history cannot be deleted."),
+				() => this.deleteOrder(),
+			);
+		},
+		async deleteOrder() {
+			if (!this.detail.data.name || this.busy) return;
+			this.busy = true;
+			try {
+				await frappe.call(API.deleteOrder, { resource: this.resource, name: this.detail.data.name });
+				frappe.show_alert({ message: __("Service record deleted."), indicator: "green" });
+				this.detail = { open: false, loading: false, data: {} };
+				await this.loadRecords();
+			} catch (error) { this.error = error?.message || __("The service record could not be deleted."); }
+			finally { this.busy = false; }
+		},
+		openBilling(action = {}) {
+			const doctype = action.target_doctype || this.detail.data.doctype;
+			const name = action.target_name || this.detail.data.name;
+			if (!window.vetedgeBillingModal?.open || !doctype || !name) { this.error = __("Billing modal helper is unavailable."); return; }
 			const workspace = this;
 			window.vetedgeBillingModal.open({
-				doc: { doctype: "Pet Grooming Session", name: this.detail.data.name },
+				doc: { doctype, name },
 				is_new: () => false,
 				is_dirty: () => false,
 				save: async () => null,
-				reload_doc: () => workspace.openDetail({ name: workspace.detail.data.name }),
+				reload_doc: async () => {
+					if (doctype === workspace.detail.data.doctype && name === workspace.detail.data.name) await workspace.openDetail({ name });
+					else await workspace.loadRecords();
+				},
 			});
 		},
 		openCareDialog(stay) {
@@ -358,5 +447,5 @@ export default {
 </script>
 
 <style scoped>
-.service-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem;margin-bottom:1rem}.service-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-700,#334b61);display:grid;gap:.15rem;padding:.85rem;text-align:left}.service-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87)}.service-tab span{font-weight:700}.service-tab small{color:var(--edge-color-ink-500,#617589)}.service-filter-grid{display:grid;grid-template-columns:minmax(15rem,2fr) minmax(12rem,1fr);gap:.75rem;width:100%}.service-filter-grid--availability{grid-template-columns:repeat(5,minmax(9rem,1fr))}.service-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.75rem;margin-bottom:1rem}.service-summary-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:grid;gap:.25rem;padding:1rem}.service-summary-card span{color:var(--edge-color-ink-500,#617589);font-size:.72rem;font-weight:700;text-transform:uppercase}.service-summary-card strong{font-size:1.45rem}.service-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:grid;gap:1rem;padding:1rem}.service-card-header h2,.service-card-header p{margin:0}.service-card-header p{color:var(--edge-color-ink-500,#617589);margin-top:.25rem}.service-pagination{align-items:center;display:flex;justify-content:space-between}.service-pagination div{display:flex;gap:.5rem}.service-detail-grid,.service-care-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.service-detail-field{background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.2rem;padding:.75rem}.service-detail-field span{color:var(--edge-color-ink-500,#617589);font-size:.7rem;font-weight:700;text-transform:uppercase}.service-detail-field strong{white-space:pre-wrap;word-break:break-word}.service-detail-field--wide,.service-care-wide{grid-column:1/-1}@media(max-width:70rem){.service-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.service-filter-grid--availability{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:48rem){.service-tabs,.service-filter-grid,.service-filter-grid--availability,.service-detail-grid,.service-care-grid{grid-template-columns:1fr}.service-pagination{align-items:stretch;flex-direction:column;gap:.75rem}}
+.service-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-bottom:1rem}.service-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);color:var(--edge-color-ink-700,#334b61);display:grid;gap:.15rem;padding:.85rem;text-align:left}.service-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87)}.service-tab span{font-weight:700}.service-tab small{color:var(--edge-color-ink-500,#617589)}.service-filter-grid{display:grid;grid-template-columns:minmax(15rem,2fr) minmax(12rem,1fr);gap:.75rem;width:100%}.service-filter-grid--availability{grid-template-columns:repeat(5,minmax(9rem,1fr))}.service-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.75rem;margin-bottom:1rem}.service-summary-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:grid;gap:.25rem;padding:1rem}.service-summary-card span{color:var(--edge-color-ink-500,#617589);font-size:.72rem;font-weight:700;text-transform:uppercase}.service-summary-card strong{font-size:1.45rem}.service-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem);display:grid;gap:1rem;padding:1rem}.service-card-header{align-items:flex-start;display:flex;gap:1rem;justify-content:space-between}.service-card-header h2,.service-card-header p{margin:0}.service-card-header p{color:var(--edge-color-ink-500,#617589);margin-top:.25rem}.service-pagination{align-items:center;display:flex;justify-content:space-between}.service-pagination div{display:flex;gap:.5rem}.service-detail-grid,.service-care-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.service-detail-field{background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.2rem;padding:.75rem}.service-detail-field span{color:var(--edge-color-ink-500,#617589);font-size:.7rem;font-weight:700;text-transform:uppercase}.service-detail-field strong{white-space:pre-wrap;word-break:break-word}.service-detail-field--wide,.service-care-wide{grid-column:1/-1}@media(max-width:70rem){.service-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.service-filter-grid--availability{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:48rem){.service-tabs,.service-filter-grid,.service-filter-grid--availability,.service-detail-grid,.service-care-grid{grid-template-columns:1fr}.service-card-header,.service-pagination{align-items:stretch;flex-direction:column;gap:.75rem}}
 </style>
