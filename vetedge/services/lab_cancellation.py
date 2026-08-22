@@ -214,23 +214,53 @@ def _find_charge_rows(doc) -> list[dict]:
 
 
 def _billing_core_invoice_has_unrelated_active_charges(invoice_name: str, target_rows: list[dict]) -> bool:
-    target_names = {row.get("name") for row in target_rows if row.get("name") and row.get("invoice") == invoice_name}
-    parents = {row.get("parent") for row in target_rows if row.get("parent") and row.get("invoice") == invoice_name}
-    if not target_names or not parents:
-        return False
+    """Fail closed when a submitted invoice contains anything beyond this Lab Order.
 
-    for parent in parents:
-        rows = frappe.get_all(
-            BILLING_SESSION_CHARGE_DOCTYPE,
-            filters={"parent": parent, "invoice": invoice_name},
-            fields=["name", "billing_status"],
-            limit=500,
-        )
-        if any(
-            row.get("name") not in target_names and row.get("billing_status") not in RETIRED_CHARGE_STATUSES
-            for row in rows
-        ):
-            return True
+    Shared-invoice safety must be invoice-wide, not limited to the Billing Session
+    that happens to own the Lab charge. This also protects invoices whose other
+    service charge was created in a different session or whose Billing Session
+    linkage is incomplete/stale.
+    """
+    target_names = {
+        row.get("name")
+        for row in target_rows
+        if row.get("name") and row.get("invoice") == invoice_name
+    }
+    target_charge_keys = {
+        str(row.get("charge_key"))
+        for row in target_rows
+        if row.get("invoice") == invoice_name and row.get("charge_key")
+    }
+    if not target_names or not target_charge_keys:
+        return True
+
+    invoice_charge_rows = frappe.get_all(
+        BILLING_SESSION_CHARGE_DOCTYPE,
+        filters={"invoice": invoice_name},
+        fields=["name", "charge_key", "billing_status"],
+        limit=1000,
+    )
+    if any(
+        row.get("name") not in target_names
+        and row.get("billing_status") not in RETIRED_CHARGE_STATUSES
+        for row in invoice_charge_rows
+    ):
+        return True
+
+    # A submitted invoice may also contain manual or otherwise untracked lines.
+    # Never auto-cancel it unless every invoice item can be proven to belong to
+    # this Lab Order's Billing Core charge keys.
+    try:
+        from vetedge.services.billing_core import extract_charge_key_from_invoice_item
+
+        invoice = frappe.get_doc("Sales Invoice", invoice_name)
+        for item in invoice.get("items") or []:
+            charge_key = extract_charge_key_from_invoice_item(item)
+            if not charge_key or str(charge_key) not in target_charge_keys:
+                return True
+    except Exception:
+        return True
+
     return False
 
 
@@ -286,8 +316,8 @@ def _build_financial_blockers(doc, invoice_evidence: list[dict], plan_rows: list
             ):
                 blockers.append(
                     _(
-                        "Submitted invoice {0} also contains active charges for other services. "
-                        "VetEdge will not mutate a submitted shared invoice; resolve those services separately before cancelling this Lab Order."
+                        "Submitted invoice {0} also contains active or unproven charges for other services. "
+                        "VetEdge will not alter a submitted shared invoice; resolve those services separately before cancelling this Lab Order."
                     ).format(invoice_name)
                 )
             continue
@@ -623,10 +653,10 @@ def enforce_lab_order_cancellation(doc) -> None:
 
 def enforce_lab_order_delete(doc) -> None:
     if cint(doc.get("docstatus")) != 0:
-        frappe.throw(_("Submitted or cancelled Lab Order documents cannot be deleted."), frappe.ValidationError)
-    if doc.get("status") not in {"Draft", "Ordered"}:
+        frappe.throw(_("Submitted Frappe documents cannot be deleted by the Lab cleanup workflow."), frappe.ValidationError)
+    if doc.get("status") not in {"Draft", "Ordered", "Cancelled"}:
         frappe.throw(
-            _("Only Draft or Ordered Lab Orders without clinical result history can be deleted."),
+            _("Only Draft, Ordered, or safely Cancelled Lab Orders without clinical result history can be deleted."),
             frappe.ValidationError,
         )
 
