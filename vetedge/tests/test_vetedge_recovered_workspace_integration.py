@@ -98,13 +98,27 @@ class TestRecoveredEdgeSuiteWorkspaces(FrappeTestCase):
 				self.assertEqual(listing["page_length"], 3)
 
 	def test_hospital_services_resources_execute_permission_aware_list_contracts(self):
-		for resource in ("boarding-stays", "boarding-care-records", "grooming-sessions"):
+		resources = (
+			"boarding-bookings",
+			"boarding-stays",
+			"boarding-care-records",
+			"grooming-appointments",
+			"grooming-sessions",
+		)
+		for resource in resources:
 			with self.subTest(resource=resource):
 				listing = get_service_operations_page(resource, page_length=3)
 				self.assertEqual(listing["resource"], resource)
 				self.assertIn("columns", listing)
 				self.assertIn("rows", listing)
 				self.assertEqual(listing["page_length"], 3)
+
+		boarding = get_service_operations_page("boarding-bookings", page_length=1)
+		grooming = get_service_operations_page("grooming-appointments", page_length=1)
+		self.assertEqual(boarding["editor_resource"], "boarding")
+		self.assertEqual(grooming["editor_resource"], "grooming")
+		self.assertTrue(boarding["can_create"])
+		self.assertTrue(grooming["can_create"])
 
 	def test_front_desk_provider_executes_on_clean_site(self):
 		summary = get_front_desk_summary()
