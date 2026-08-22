@@ -89,7 +89,7 @@ def test_vaccination_state_is_workflow_billing_and_stock_aware():
     assert "allocate_item_batches" in vaccination
     assert "manual_batch_no=doc.batch_no" in vaccination
     assert "get_available_valid_batches" in expiry
-    assert "allocate_fefo_batches" in vaccination
+    assert "allocate_fefo_batches" in expiry
     assert "align_vaccination_administration_metadata" in hooks
     assert "PRE_ADMIN_STATUSES" in alignment
     assert "Administration user/time, batch, stock entry and linked invoice" in clinical_bundle
