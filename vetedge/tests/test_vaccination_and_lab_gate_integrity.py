@@ -85,7 +85,8 @@ def test_lab_cancellation_blocks_result_and_paid_financial_commitments_at_server
     assert "diagnostic result evidence" in cancellation
     assert "HARD_BLOCK_PLAN_BILLING_STATUSES" in cancellation
     assert "HARD_BLOCK_PLAN_PAYMENT_STATUSES" in cancellation
-    assert "active charges for other services" in cancellation
+    assert "active or unproven charges for other services" in cancellation
+    assert "extract_charge_key_from_invoice_item" in cancellation
     assert "enforce_lab_order_cancellation" in controller
     assert "enforce_lab_order_delete" in controller
     assert "def on_trash" in controller
