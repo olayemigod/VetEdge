@@ -21,6 +21,7 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 ]);
 
 const CLINICAL_RESOURCES = new Set(['lab-orders', 'vaccinations']);
+const LEGACY_GROOMING_RESOURCE = 'grooming';
 
 function getRequestedRouteParams() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -88,10 +89,17 @@ export function mountVetEdgeResourceCenter(target) {
 		},
 	});
 	const quickEditorView = quickEditorApp.mount(quickEditorHost);
+	const originalData = VetEdgeResourceCenter.data;
 
 	const ResourceCenterRoot = {
 		...VetEdgeResourceCenter,
 		components: { ...runtime.components, ...(VetEdgeResourceCenter.components || {}) },
+		data() {
+			const state = typeof originalData === 'function' ? originalData.call(this) : {};
+			state.resourceOptions = (state.resourceOptions || []).filter((option) => option.value !== LEGACY_GROOMING_RESOURCE);
+			if (state.resource === LEGACY_GROOMING_RESOURCE) state.resource = 'appointments';
+			return state;
+		},
 		computed: {
 			...(VetEdgeResourceCenter.computed || {}),
 			primaryActionLabel() {
@@ -122,8 +130,9 @@ export function mountVetEdgeResourceCenter(target) {
 
 	const getRequestedState = () => {
 		const params = getRequestedRouteParams();
+		const requestedResource = valueFrom(params, 'resource', 'patients') || 'patients';
 		return {
-			resource: valueFrom(params, 'resource', 'patients') || 'patients',
+			resource: requestedResource === LEGACY_GROOMING_RESOURCE ? 'appointments' : requestedResource,
 			search: valueFrom(params, 'search'),
 			name: valueFrom(params, 'name'),
 			isNew: params.get('new') === '1',
