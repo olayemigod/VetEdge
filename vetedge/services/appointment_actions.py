@@ -6,7 +6,6 @@ import frappe
 from frappe import _
 from frappe.utils import cstr
 
-from vetedge.services.appointment_intelligence import resolve_appointment_vaccine
 from vetedge.services.permissions import can_access_branch_data, get_current_user
 from vetedge.services.portal_access import require_internal_user
 
@@ -16,7 +15,7 @@ READ_ONLY_ACTIONS = {
 	"open_registration",
 	"open_consultation",
 	"open_grooming_session",
-	"vaccination_workflow",
+	"open_vaccination_record",
 	"boarding_operations",
 }
 
@@ -52,17 +51,21 @@ def _existing_grooming_session(appointment: str) -> str | None:
 	return rows[0].name if rows else None
 
 
-def _vaccination_route(doc) -> str:
-	params = [
-		"resource=vaccinations",
-		"new=1",
-		f"patient={quote(cstr(doc.get('patient') or ''))}",
-		f"service_branch={quote(cstr(doc.get('branch') or ''))}",
-	]
-	vaccine = resolve_appointment_vaccine(doc)
-	if vaccine:
-		params.append(f"vaccine={quote(cstr(vaccine))}")
-	return "/desk/vetedge-resource-center?" + "&".join(params)
+def _vaccination_record_state(appointment: str) -> tuple[str | None, bool]:
+	from vetedge.services.appointment_vaccination_bridge import get_linked_vaccination_record_name
+
+	name = get_linked_vaccination_record_name(appointment)
+	if not name:
+		return None, False
+	try:
+		doc = frappe.get_doc("Veterinary Vaccination Record", name)
+		return name, bool(doc.has_permission("read"))
+	except Exception:
+		return name, False
+
+
+def _vaccination_record_route(name: str) -> str:
+	return f"/desk/vetedge-resource-center?resource=vaccinations&name={quote(cstr(name))}"
 
 
 def _boarding_route(doc) -> str:
@@ -84,6 +87,10 @@ def build_appointment_action_state(doc) -> dict:
 	can_write = bool(doc.has_permission("write"))
 	linked_consultation = cstr(doc.get("linked_consultation") or "").strip()
 	grooming_session = _existing_grooming_session(doc.name) if appointment_type == "Grooming" else None
+	vaccination_record = None
+	vaccination_record_can_read = False
+	if appointment_type == "Vaccination":
+		vaccination_record, vaccination_record_can_read = _vaccination_record_state(doc.name)
 	actions: list[dict] = []
 	message = ""
 
@@ -117,10 +124,22 @@ def build_appointment_action_state(doc) -> dict:
 		if status == "Checked In":
 			message = _("Continue this appointment in the Grooming Session workflow.")
 
-	if appointment_type == "Vaccination" and status in {"Confirmed", "Checked In"}:
-		actions.append(_action("vaccination_workflow", "Open Vaccination Workflow", navigation=True, primary=status == "Checked In"))
-		if status == "Checked In":
-			message = _("Continue in Vaccination. Billing, payment, stock, batch and administration rules remain authoritative there.")
+	if appointment_type == "Vaccination":
+		if vaccination_record and vaccination_record_can_read:
+			actions.append(
+				_action(
+					"open_vaccination_record",
+					"Open Vaccination Record",
+					navigation=True,
+					primary=status in {"Checked In", "Completed"},
+				)
+			)
+		elif vaccination_record:
+			message = _("A Vaccination Record already exists for this appointment, but your role cannot open it.")
+		elif can_write and status in {"Confirmed", "Checked In"}:
+			actions.append(_action("create_vaccination_record", "Create Vaccination Record", primary=status == "Checked In"))
+		if status == "Checked In" and not message:
+			message = _("Continue in the linked Vaccination Record. Billing, payment, stock, batch and administration rules remain authoritative there.")
 
 	if appointment_type == "Boarding":
 		actions.append(_action("boarding_operations", "Open Boarding Operations", navigation=True, primary=status == "Checked In"))
@@ -138,6 +157,8 @@ def build_appointment_action_state(doc) -> dict:
 		"actions": actions,
 		"linked_consultation": linked_consultation or None,
 		"grooming_session": grooming_session,
+		"vaccination_record": vaccination_record if vaccination_record_can_read else None,
+		"vaccination_record_exists": bool(vaccination_record),
 	}
 
 
@@ -189,8 +210,12 @@ def perform_appointment_action(appointment: str, action: str, expected_modified:
 		return _open_result(route=_consultation_route(doc.linked_consultation), message="Opening consultation.", state=state)
 	if action == "open_grooming_session":
 		return _open_result(route=_grooming_route(state.get("grooming_session")), message="Opening grooming session.", state=state)
-	if action == "vaccination_workflow":
-		return _open_result(route=_vaccination_route(doc), message="Opening vaccination workflow.", state=state)
+	if action == "open_vaccination_record":
+		return _open_result(
+			route=_vaccination_record_route(state.get("vaccination_record")),
+			message="Opening Vaccination Record.",
+			state=state,
+		)
 	if action == "boarding_operations":
 		return _open_result(route=_boarding_route(doc), message="Opening boarding operations.", state=state)
 
@@ -244,6 +269,19 @@ def perform_appointment_action(appointment: str, action: str, expected_modified:
 			"mutated": bool(result.get("created")),
 			"message": _("Grooming session is ready."),
 			"open": {"route": _grooming_route(result.get("name"))},
+			"state": None,
+		}
+
+	if action == "create_vaccination_record":
+		if normalize_appointment_type(doc) != "Vaccination":
+			frappe.throw(_("Only Vaccination appointments can create Vaccination Records."), frappe.ValidationError)
+		from vetedge.services.appointment_vaccination_bridge import create_or_open_vaccination_record_from_appointment
+
+		result = create_or_open_vaccination_record_from_appointment(doc.name)
+		return {
+			"mutated": bool(result.get("created")),
+			"message": _("Vaccination Record is ready."),
+			"open": {"route": _vaccination_record_route(result.get("name"))},
 			"state": None,
 		}
 
