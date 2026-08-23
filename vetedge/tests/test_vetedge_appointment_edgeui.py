@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
 BRIDGE = ROOT / "vetedge" / "services" / "appointment_grooming_bridge.py"
+PRACTITIONER_INTEGRITY = ROOT / "vetedge" / "services" / "practitioner_integrity.py"
 COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -231,6 +232,7 @@ def test_grooming_appointment_bridge_preserves_legacy_records_but_uses_veterinar
 	session_controller = read(SESSION_CONTROLLER)
 	session_schema = read(SESSION_SCHEMA)
 	consultation_controller = read(CONSULTATION_CONTROLLER)
+	practitioner_integrity = read(PRACTITIONER_INTEGRITY)
 
 	for contract in (
 		'GROOMING_APPOINTMENT_TYPE = "Grooming"',
@@ -243,7 +245,8 @@ def test_grooming_appointment_bridge_preserves_legacy_records_but_uses_veterinar
 	):
 		assert contract in bridge
 
-	assert 'if getattr(args[0], "appointment_type", None) == "Grooming"' in appointment_controller
+	assert 'doc.get("appointment_type") == "Grooming"' in appointment_controller
+	assert "validate_grooming_veterinary_appointment(doc)" in appointment_controller
 	assert 'appointment_type === "Grooming"' in appointment_client
 	assert "Create / Open Grooming Session" in appointment_client
 	assert "create_grooming_session_from_veterinary_appointment" in appointment_client
@@ -254,6 +257,8 @@ def test_grooming_appointment_bridge_preserves_legacy_records_but_uses_veterinar
 	assert "validate_veterinary_appointment_grooming_session" in session_controller
 	assert 'SERVICE_ONLY_APPOINTMENT_TYPES = {"Grooming", "Boarding"}' in consultation_controller
 	assert "validate_linked_appointment_service_type(self)" in consultation_controller
+	assert 'doc.get("appointment_type") or ""' in practitioner_integrity
+	assert '== "Grooming"' in practitioner_integrity
 
 
 def test_hospital_services_uses_business_documents_and_generic_veterinary_wording():
