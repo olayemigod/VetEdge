@@ -5,7 +5,7 @@
 		:tenant-name="identity.tenant_name || ''"
 		:branch-name="branchName"
 		:user-name="userName"
-		active-route="/app/vetedge-service-operations"
+		active-route="/desk/vetedge-service-operations"
 		@navigate="openRoute"
 	>
 		<EdgePageLayout>
@@ -13,7 +13,7 @@
 				<EdgePageHeader
 					eyebrow="Hospital & Services"
 					title="Hospital & Services Operations"
-					subtitle="Boarding reservations, stays and care plus grooming appointments, sessions and billing in one EdgeSuite workspace."
+					subtitle="Boarding reservations, stays and care plus grooming sessions and billing in one Veterinary workspace. Grooming schedules are managed from Appointments."
 					action-label="Refresh"
 					@action="load"
 				/>
@@ -100,7 +100,7 @@
 				<section class="service-summary" aria-label="Service record summary">
 					<div class="service-summary-card"><span>Visible Records</span><strong>{{ page.total || 0 }}</strong></div>
 					<div class="service-summary-card"><span>Current Page</span><strong>{{ currentPage }} / {{ totalPages }}</strong></div>
-					<div class="service-summary-card"><span>Workspace</span><strong>EdgeSuite</strong></div>
+					<div class="service-summary-card"><span>Workspace</span><strong>Veterinary</strong></div>
 				</section>
 				<section class="service-card">
 					<header class="service-card-header">
@@ -189,7 +189,6 @@ const TABS = Object.freeze([
 	{ value: "boarding-bookings", label: "Boarding Bookings", description: "Reservation, billing and admission" },
 	{ value: "boarding-stays", label: "Boarding Stays", description: "Active and completed stays" },
 	{ value: "boarding-care-records", label: "Care Records", description: "Boarding care observations" },
-	{ value: "grooming-appointments", label: "Grooming Appointments", description: "Bookings and session readiness" },
 	{ value: "grooming-sessions", label: "Grooming Sessions", description: "Grooming workflow and billing" },
 ]);
 const optionRows = (values) => values.map((value) => ({ value, label: value }));
@@ -244,8 +243,8 @@ export default {
 		userName() { const user = frappe.session?.user || ""; const info = frappe.boot?.user_info?.[user] || {}; return info.fullname || info.full_name || user; },
 		activeTab() { return TABS.find((tab) => tab.value === this.resource) || TABS[0]; },
 		createLabel() {
-			if (this.resource === "boarding-bookings") return "New Boarding Booking";
-			if (this.resource === "grooming-appointments") return "New Grooming Appointment";
+			if (["boarding-bookings", "boarding-stays"].includes(this.resource)) return "New Boarding Booking";
+			if (this.resource === "grooming-sessions") return "New Grooming Appointment";
 			return "New Record";
 		},
 		currentPage() { return Math.floor((this.page.start || 0) / (this.page.page_length || this.pageLength)) + 1; },
@@ -272,7 +271,7 @@ export default {
 			const params = new URLSearchParams({ resource: this.resource });
 			if (this.search) params.set("search", this.search);
 			if (this.parent) params.set("parent", this.parent);
-			window.history.replaceState({}, "", `/app/vetedge-service-operations?${params.toString()}`);
+			window.history.replaceState({}, "", `/desk/vetedge-service-operations?${params.toString()}`);
 		},
 		async load() {
 			if (this.loading && this.page?.rows?.length) return;
@@ -312,6 +311,10 @@ export default {
 		closeDetail() { if (!this.busy) this.detail = { open: false, loading: false, data: {} }; },
 		openKennel(row) { const kennel = row?.kennel || row?.name; if (kennel) this.openRoute(`/desk/vetedge-resource-center?resource=kennels&name=${encodeURIComponent(kennel)}`); },
 		openCreate() {
+			if (this.resource === "grooming-sessions") {
+				this.openRoute("/desk/vetedge-resource-center?resource=appointments&new=1&appointment_type=Grooming");
+				return;
+			}
 			if (!this.page.editor_resource) return;
 			this.openRoute(`/desk/vetedge-resource-center?resource=${encodeURIComponent(this.page.editor_resource)}&new=1`);
 		},
@@ -345,7 +348,14 @@ export default {
 			if (action.key === "billing" || action.key === "billing-target") return this.openBilling(action);
 			if (action.key === "open-booking") return this.switchToRecord("boarding-bookings", action.target_name);
 			if (action.key === "open-stay") return this.switchToRecord("boarding-stays", action.target_name);
-			if (action.key === "open-grooming-appointment") return this.switchToRecord("grooming-appointments", action.target_name);
+			if (action.key === "open-veterinary-appointment") {
+				this.closeDetail();
+				return this.openRoute(`/desk/vetedge-resource-center?resource=appointments&name=${encodeURIComponent(action.target_name || "")}`);
+			}
+			if (action.key === "open-legacy-grooming-appointment") {
+				this.closeDetail();
+				return this.openRoute(`/desk/pet-grooming-appointment/${encodeURIComponent(action.target_name || "")}`);
+			}
 			if (action.key === "delete-order") return this.confirmDeleteOrder();
 			if (action.key === "create-grooming-session") return this.createGroomingSession();
 
