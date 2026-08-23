@@ -75,5 +75,28 @@ def normalize_consultation_payment_status_fields(doc) -> None:
 
 
 def set_default_consultation_type(doc) -> None:
-	if not doc.get("consultation_type"):
-		doc.consultation_type = "General Consultation"
+	if doc.get("consultation_type"):
+		return
+
+	appointment_name = doc.get("linked_appointment")
+	if appointment_name and frappe.db.exists("Veterinary Appointment", appointment_name):
+		appointment = frappe.db.get_value(
+			"Veterinary Appointment",
+			appointment_name,
+			["appointment_type", "consultation_type", "follow_up_reference"],
+			as_dict=True,
+		)
+		if appointment and appointment.get("consultation_type"):
+			doc.consultation_type = appointment.consultation_type
+			return
+		if appointment and appointment.get("appointment_type") == "Follow Up" and appointment.get("follow_up_reference"):
+			origin_type = frappe.db.get_value(
+				"Veterinary Consultation",
+				appointment.follow_up_reference,
+				"consultation_type",
+			)
+			if origin_type:
+				doc.consultation_type = origin_type
+				return
+
+	doc.consultation_type = "General Consultation"
