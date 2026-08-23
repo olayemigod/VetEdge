@@ -21,6 +21,10 @@ def validate_appointment(*args, **kwargs):
 		from vetedge.services.appointment_grooming_bridge import validate_grooming_veterinary_appointment
 
 		return validate_grooming_veterinary_appointment(doc)
+	if doc and doc.get("appointment_type") == "Vaccination":
+		from vetedge.services.appointment_vaccination_bridge import validate_vaccination_veterinary_appointment
+
+		return validate_vaccination_veterinary_appointment(doc)
 	if doc:
 		prepare_appointment_service_context(doc)
 	from vetedge.services.appointment_flow import validate_appointment as _validate_appointment
