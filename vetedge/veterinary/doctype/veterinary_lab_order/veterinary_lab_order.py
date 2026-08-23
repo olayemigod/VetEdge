@@ -28,6 +28,20 @@ def _detach_veterinary_notification_logs(lab_order: str) -> None:
 		)
 
 
+def _sync_linked_consultation_billing_session(doc) -> None:
+	"""Reconcile one existing Consultation billing cycle after Lab plan projection."""
+	if not doc.get("consultation"):
+		return
+	flags = getattr(frappe, "flags", None)
+	if getattr(flags, "vetedge_billing_core_syncing", False):
+		return
+
+	from vetedge.services.consultation_billing_plan import _sync_active_consultation_billing_session
+
+	consultation = frappe.get_doc("Veterinary Consultation", doc.consultation)
+	_sync_active_consultation_billing_session(consultation)
+
+
 class VeterinaryLabOrder(Document):
 	def validate(self) -> None:
 		validate_lab_order(self)
@@ -50,11 +64,13 @@ class VeterinaryLabOrder(Document):
 
 	def after_insert(self) -> None:
 		handle_lab_order_after_insert(self)
+		_sync_linked_consultation_billing_session(self)
 
 	def on_update(self) -> None:
 		if self.status == "Cancelled":
 			return
 		handle_lab_order_on_update(self)
+		_sync_linked_consultation_billing_session(self)
 
 	def on_trash(self) -> None:
 		# Defensive/admin path only. The normal EdgeSuite Lab workflow no longer
