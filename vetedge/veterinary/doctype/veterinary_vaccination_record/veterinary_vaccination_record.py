@@ -81,6 +81,9 @@ def _sync_existing_vaccination_billing_session(doc) -> None:
 class VeterinaryVaccinationRecord(Document):
 	def validate(self) -> None:
 		validate_vaccination_record(self)
+		from vetedge.services.appointment_vaccination_bridge import validate_vaccination_record_appointment_link
+
+		validate_vaccination_record_appointment_link(self)
 		if not self.get("billing_item"):
 			frappe.throw(
 				"The selected Vaccine has no ERPNext billing Item. Configure Default Item on the Veterinary Vaccine master before using it.",
