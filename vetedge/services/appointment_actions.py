@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr
 
+from vetedge.services.appointment_intelligence import resolve_appointment_vaccine
 from vetedge.services.permissions import can_access_branch_data, get_current_user
 from vetedge.services.portal_access import require_internal_user
 
@@ -58,6 +59,9 @@ def _vaccination_route(doc) -> str:
 		f"patient={quote(cstr(doc.get('patient') or ''))}",
 		f"service_branch={quote(cstr(doc.get('branch') or ''))}",
 	]
+	vaccine = resolve_appointment_vaccine(doc)
+	if vaccine:
+		params.append(f"vaccine={quote(cstr(vaccine))}")
 	return "/desk/vetedge-resource-center?" + "&".join(params)
 
 
