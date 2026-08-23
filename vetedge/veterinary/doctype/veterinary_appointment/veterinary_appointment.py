@@ -12,7 +12,13 @@ from vetedge.services.notifications import notify_appointment_event
 
 
 def validate_appointment(*args, **kwargs):
+	doc = args[0] if args else kwargs.get("doc")
+	if doc and doc.get("appointment_type") == "Grooming":
+		from vetedge.services.appointment_grooming_bridge import validate_grooming_veterinary_appointment
+
+		return validate_grooming_veterinary_appointment(doc)
 	from vetedge.services.appointment_flow import validate_appointment as _validate_appointment
+
 	return _validate_appointment(*args, **kwargs)
 
 
