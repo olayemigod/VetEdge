@@ -281,6 +281,10 @@ def test_vaccination_appointment_bridge_is_idempotent_and_financially_safe():
 		"can_administer_vaccine(doc.practitioner, raise_exception=True)",
 		"search_vaccination_practitioners",
 		"get_vaccination_staff_users",
+		"_filter_staff_rows_by_branch",
+		"get_vaccination_appointment_staff",
+		'filters: dict[str, Any] = {"practitioner": ["in", users]}',
+		"not branches_by_user.get(row[0]) or branch in branches_by_user[row[0]]",
 		"create_edgeui_vaccination_appointment",
 		"get_linked_vaccination_record_name",
 		"validate_vaccination_record_appointment_link",
@@ -300,7 +304,8 @@ def test_vaccination_appointment_bridge_is_idempotent_and_financially_safe():
 	assert "validate_vaccination_record_appointment_link(self)" in controller
 	assert 'doc.get("appointment_type") == "Vaccination"' in appointment_controller
 	assert "validate_vaccination_veterinary_appointment(doc)" in appointment_controller
-	assert "get_vaccination_staff_users" in appointment_client
+	assert "get_vaccination_appointment_staff" in appointment_client
+	assert 'filters: { branch: frm.doc.branch || "" }' in appointment_client
 	assert "search_vaccination_practitioners" in bundle
 	assert "create_edgeui_vaccination_appointment" in bundle
 
@@ -338,7 +343,7 @@ def test_smart_appointment_actions_create_or_open_linked_service_records():
 	assert 'frm.set_query("consultation_type"' in appointment_client
 	assert 'frm.set_query("follow_up_reference"' in appointment_client
 	assert 'frm.set_query("vaccine"' in appointment_client
-	assert "get_vaccination_staff_users" in appointment_client
+	assert "get_vaccination_appointment_staff" in appointment_client
 	assert "get_appointment_action_state" in front_desk_bundle
 	assert "perform_appointment_action" in front_desk_bundle
 	assert "loadSmartAppointmentState" in front_desk_bundle
