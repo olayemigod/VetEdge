@@ -10,6 +10,25 @@ frappe.ui.form.on("Veterinary Appointment", {
 			query: "vetedge.services.permissions.get_veterinary_doctor_users",
 		}));
 
+		frm.set_query("consultation_type", () => ({
+			filters: { disabled: ["!=", 1] },
+		}));
+
+		frm.set_query("follow_up_reference", () => ({
+			filters: {
+				patient: frm.doc.patient || "",
+				status: ["!=", "Cancelled"],
+			},
+		}));
+
+		frm.set_query("vaccine", () => {
+			const filters = { is_active: 1 };
+			if (frm.__vetedge_patient_species) {
+				filters.species = ["in", ["", frm.__vetedge_patient_species]];
+			}
+			return { filters };
+		});
+
 		frm.set_query("grooming_service", () => ({
 			filters: { is_active: 1 },
 		}));
@@ -31,14 +50,16 @@ frappe.ui.form.on("Veterinary Appointment", {
 	},
 
 	patient(frm) {
+		frm.__vetedge_patient_species = "";
 		if (!frm.doc.patient) {
 			return;
 		}
 
 		frappe.db
-			.get_value("Veterinary Patient", frm.doc.patient, ["primary_owner", "default_branch"])
+			.get_value("Veterinary Patient", frm.doc.patient, ["primary_owner", "default_branch", "species"])
 			.then((result) => {
 				const patient = result?.message || {};
+				frm.__vetedge_patient_species = patient.species || "";
 				if (patient.primary_owner) {
 					frm.set_value("primary_owner", patient.primary_owner);
 				}
@@ -49,14 +70,48 @@ frappe.ui.form.on("Veterinary Appointment", {
 	},
 
 	appointment_type(frm) {
-		if (is_grooming_appointment(frm)) {
+		const type = normalized_appointment_type(frm);
+		if (type === "Grooming") {
 			frm.set_value("practitioner", "");
 			frm.set_value("practitioner_name", "");
+		} else {
+			frm.set_value("grooming_service", "");
+			frm.set_value("groomer", "");
+			frm.set_value("groomer_name", "");
+		}
+		if (!["Consultation", "Follow Up"].includes(type)) {
+			frm.set_value("consultation_type", "");
+		}
+		if (type !== "Follow Up") {
+			frm.set_value("follow_up_reference", "");
+		}
+		if (type !== "Vaccination") {
+			frm.set_value("vaccine", "");
+		}
+		set_consultation_link_display(frm);
+	},
+
+	follow_up_reference(frm) {
+		if (normalized_appointment_type(frm) !== "Follow Up" || !frm.doc.follow_up_reference) {
 			return;
 		}
-		frm.set_value("grooming_service", "");
-		frm.set_value("groomer", "");
-		frm.set_value("groomer_name", "");
+		frappe.db
+			.get_value(
+				"Veterinary Consultation",
+				frm.doc.follow_up_reference,
+				["patient", "service_branch", "consulting_practitioner", "consultation_type"]
+			)
+			.then((result) => {
+				const origin = result?.message || {};
+				if (origin.patient && frm.doc.patient && origin.patient !== frm.doc.patient) {
+					frm.set_value("follow_up_reference", "");
+					frappe.msgprint(__("Originating Consultation must belong to the selected patient."));
+					return;
+				}
+				if (origin.service_branch) frm.set_value("branch", origin.service_branch);
+				if (origin.consulting_practitioner) frm.set_value("practitioner", origin.consulting_practitioner);
+				if (origin.consultation_type) frm.set_value("consultation_type", origin.consultation_type);
+			});
 	},
 
 	practitioner(frm) {
@@ -88,19 +143,16 @@ function normalized_appointment_type(frm) {
 	return String(frm.doc.appointment_type || "Consultation").trim() || "Consultation";
 }
 
-function is_grooming_appointment(frm) {
-	return normalized_appointment_type(frm) === "Grooming";
-}
-
 function is_consultation_appointment(frm) {
 	return ["Consultation", "Follow Up"].includes(normalized_appointment_type(frm));
 }
 
 function set_consultation_link_display(frm) {
+	const type = normalized_appointment_type(frm);
 	const consultation = is_consultation_appointment(frm);
 	frm.toggle_display(
 		"follow_up_reference",
-		consultation && Boolean(frm.doc.is_follow_up || frm.doc.follow_up_reference)
+		type === "Follow Up" || Boolean(frm.doc.is_follow_up || frm.doc.follow_up_reference)
 	);
 	frm.toggle_display("linked_consultation", consultation && Boolean(frm.doc.linked_consultation));
 }
