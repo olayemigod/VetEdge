@@ -108,6 +108,9 @@ def test_vaccination_joins_an_existing_billing_cycle_without_creating_or_double_
 
     assert "def _sync_existing_vaccination_billing_session" in controller
     assert 'if doc.get("linked_consultation"):' in controller
+    assert 'frappe.get_doc("Veterinary Consultation", doc.linked_consultation)' in controller
+    assert "_sync_active_consultation_billing_session(consultation)" in controller
+    assert 'getattr(flags, "vetedge_billing_core_syncing", False)' in controller
     assert "resolve_billing_session" in controller
     assert "if not session:" in controller
     assert "get_or_create_billing_session" not in controller
@@ -116,13 +119,28 @@ def test_vaccination_joins_an_existing_billing_cycle_without_creating_or_double_
     assert "sync_session_charges_to_invoice" in controller
     assert controller.count("_sync_existing_vaccination_billing_session(self)") == 2
     assert "sync_vaccination_to_consultation_plan" in controller
-    assert "_sync_active_consultation_billing_session(consultation)" in plan
+
+    # Billing Core itself invokes these projection functions while restoring
+    # source-linked Consultation rows. They must never recursively save the same
+    # Billing Session that the outer sync already holds.
+    lab_projection = plan.split("def sync_lab_order_to_consultation_plan", 1)[1].split(
+        "def sync_vaccination_to_consultation_plan", 1
+    )[0]
+    vaccination_projection = plan.split("def sync_vaccination_to_consultation_plan", 1)[1].split(
+        "def _has_source_row", 1
+    )[0]
+    assert "_sync_active_consultation_billing_session" not in lab_projection
+    assert "_sync_active_consultation_billing_session" not in vaccination_projection
+    assert "def _sync_active_consultation_billing_session" in plan
 
 
 def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     service = read("vetedge/services/lab_order_extensions.py")
     frontend = read("vetedge/public/js/vetedge_lab_order_add_tests.js")
     loader = read("vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js")
+    controller = read(
+        "vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py"
+    )
 
     assert "get_addable_lab_tests" in service
     assert "add_lab_tests" in service
@@ -133,6 +151,14 @@ def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
     assert "Add Selected Tests" in frontend
     assert 'type: "select"' in frontend
     assert "VetEdgeLabOrderAddTests?.install?.()" in loader
+
+    # Lab plan projection is followed by one explicit active Consultation
+    # Billing Session reconciliation from the Lab controller, never recursively
+    # from the projection function itself.
+    assert "def _sync_linked_consultation_billing_session" in controller
+    assert "_sync_active_consultation_billing_session(consultation)" in controller
+    assert 'getattr(flags, "vetedge_billing_core_syncing", False)' in controller
+    assert controller.count("_sync_linked_consultation_billing_session(self)") == 2
 
 
 def test_lab_multi_test_results_advance_parent_only_after_all_active_rows_have_results():
