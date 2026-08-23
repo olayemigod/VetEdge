@@ -100,12 +100,14 @@ def test_vaccination_state_is_workflow_billing_and_stock_aware():
     assert "serverDatetime(values.administered_on)" not in vaccination_creation
 
 
-def test_vaccination_joins_an_existing_billing_cycle_without_creating_one():
+def test_vaccination_joins_an_existing_billing_cycle_without_creating_or_double_syncing_one():
     controller = read(
         "vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py"
     )
+    plan = read("vetedge/services/consultation_billing_plan.py")
 
     assert "def _sync_existing_vaccination_billing_session" in controller
+    assert 'if doc.get("linked_consultation"):' in controller
     assert "resolve_billing_session" in controller
     assert "if not session:" in controller
     assert "get_or_create_billing_session" not in controller
@@ -113,6 +115,8 @@ def test_vaccination_joins_an_existing_billing_cycle_without_creating_one():
     assert "sync_single_source_to_billing_session" in controller
     assert "sync_session_charges_to_invoice" in controller
     assert controller.count("_sync_existing_vaccination_billing_session(self)") == 2
+    assert "sync_vaccination_to_consultation_plan" in controller
+    assert "_sync_active_consultation_billing_session(consultation)" in plan
 
 
 def test_lab_order_supports_multi_test_extension_and_draft_billing_sync():
@@ -143,9 +147,13 @@ def test_lab_multi_test_results_advance_parent_only_after_all_active_rows_have_r
     assert workflow.index("if not all_results_entered:") < workflow.index('doc.status = "Result Entered"')
 
 
-def test_lab_cancel_delete_uses_accounting_safe_reconciliation_and_derived_link_cleanup():
+def test_lab_cancel_uses_accounting_safe_reconciliation_and_cleans_all_notification_links():
     cancellation = read("vetedge/services/lab_cancellation.py")
     editor = read("vetedge/services/clinical_record_editor.py")
+    state_v2 = read("vetedge/services/clinical_record_state_v2.py")
+    controller = read(
+        "vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py"
+    )
 
     assert 'HARD_BLOCK_PAYMENT_STATES = {"Partly Paid", "Paid"}' in cancellation
     assert 'ALLOWED_BILLING_CONFIRMATIONS = {"remove_empty_draft_invoice", "cancel_unpaid_invoice"}' in cancellation
@@ -155,17 +163,29 @@ def test_lab_cancel_delete_uses_accounting_safe_reconciliation_and_derived_link_
     assert 'filters={"invoice": invoice_name}' in cancellation
     assert "extract_charge_key_from_invoice_item" in cancellation
     assert "target_charge_keys" in cancellation
-    assert 'doc.get("status") not in {"Draft", "Ordered", "Cancelled"}' in cancellation
     assert "Veterinary Notification Item" in cancellation
     assert '"status": "Archived"' in cancellation
     assert '"reference_doctype": None' in cancellation
     assert "_detach_deleted_lab_billing_links" in cancellation
+
+    # The normal Veterinary UI exposes Cancel, not destructive Lab deletion.
+    assert "def _align_lab_state" in state_v2
+    assert 'state["can_delete"] = False' in state_v2
+    assert "Cancel is the supported Lab Order correction path" in state_v2
+
+    # The custom delivery audit log is retained but its Dynamic Link is cleared
+    # in the same transaction when a Lab cancellation/delete is attempted.
+    assert 'VETERINARY_NOTIFICATION_LOG_DOCTYPE = "Veterinary Notification Log"' in controller
+    assert "def _detach_veterinary_notification_logs" in controller
+    assert 'filters={"reference_doctype": "Veterinary Lab Order", "reference_name": lab_order}' in controller
+    assert '{"reference_doctype": None, "reference_name": None}' in controller
+    cancellation_validate = controller.split("def validate(self)", 1)[1].split("def after_insert", 1)[0]
+    assert 'if self.status == "Cancelled":' in cancellation_validate
+    assert "_detach_veterinary_notification_logs(self.name)" in cancellation_validate
+
+    # Server-side delete safety remains as a defensive/admin backstop even though
+    # the normal EdgeSuite workflow does not present a Delete action.
     assert "build_lab_order_cancellation_preflight" in editor
-    lab_delete = editor.split('if doc.doctype == "Veterinary Lab Order":', 1)[1].split(
-        'if billing_state.get("has_invoice"):', 1
-    )[0]
-    assert "build_lab_order_cancellation_preflight" in lab_delete
-    assert "return True" in lab_delete
 
 
 def test_resource_center_native_source_owns_summary_filters_labels_and_patient_shortcut():
