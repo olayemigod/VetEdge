@@ -116,15 +116,38 @@ def _validate_vaccination_appointment_branch_access(doc) -> None:
 	validate_practitioner_branch_access(doc.practitioner, doc.branch)
 
 
-def _branch_assigned_users(branch: str) -> set[str] | None:
-	if not branch or not frappe.db.exists("DocType", "Branch Practitioner Assignment"):
-		return None
+def _filter_staff_rows_by_branch(rows: list, branch: str | None) -> list:
+	"""Mirror validate_practitioner_branch_access without hiding globally valid staff.
+
+	A staff member with no Branch Practitioner Assignment rows remains available in
+	all permitted branches. Once that user has explicit assignments, only those
+	branches are valid. This is important for Veterinary Nurses because the existing
+	assignment master is historically doctor-oriented.
+	"""
+	branch = cstr(branch or "").strip()
+	if not rows or not branch or not frappe.db.exists("DocType", "Branch Practitioner Assignment"):
+		return rows
+
+	users = [row[0] for row in rows if row and row[0]]
+	if not users:
+		return rows
 	meta = frappe.get_meta("Branch Practitioner Assignment")
-	filters: dict[str, Any] = {"branch": branch}
+	filters: dict[str, Any] = {"practitioner": ["in", users]}
 	if meta.has_field("disabled"):
 		filters["disabled"] = ["!=", 1]
-	assigned = set(frappe.get_all("Branch Practitioner Assignment", filters=filters, pluck="practitioner"))
-	return assigned or None
+	assignments = frappe.get_all(
+		"Branch Practitioner Assignment",
+		filters=filters,
+		fields=["practitioner", "branch"],
+	)
+	branches_by_user: dict[str, set[str]] = {}
+	for assignment in assignments:
+		branches_by_user.setdefault(assignment.practitioner, set()).add(assignment.branch)
+	return [
+		row
+		for row in rows
+		if not branches_by_user.get(row[0]) or branch in branches_by_user[row[0]]
+	]
 
 
 @frappe.whitelist()
@@ -140,12 +163,22 @@ def search_vaccination_practitioners(
 	if branch:
 		can_access_branch_data(get_current_user(), branch, raise_exception=True)
 	rows = get_vaccination_staff_users("User", cstr(txt), "name", start, page_length, {})
-	allowed = _branch_assigned_users(cstr(branch))
+	rows = _filter_staff_rows_by_branch(rows, branch)
 	return [
 		{"value": user, "label": label or user, "description": _("Vaccination Staff")}
 		for user, label, *_rest in rows
-		if allowed is None or user in allowed
 	]
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_vaccination_appointment_staff(doctype, txt, searchfield, start, page_len, filters):
+	"""Native Link-query equivalent of the EdgeSuite Vaccination staff search."""
+	branch = cstr((filters or {}).get("branch") or "").strip()
+	if branch:
+		can_access_branch_data(get_current_user(), branch, raise_exception=True)
+	rows = get_vaccination_staff_users(doctype, txt, searchfield, start, page_len, {})
+	return _filter_staff_rows_by_branch(rows, branch)
 
 
 @frappe.whitelist()
