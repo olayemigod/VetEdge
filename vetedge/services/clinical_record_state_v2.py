@@ -123,12 +123,25 @@ def _align_vaccination_state(state: dict) -> dict:
     return state
 
 
+def _align_lab_state(state: dict) -> dict:
+    # Operational Lab Orders are corrected through the controlled Cancel path.
+    # Keep server-side delete safeguards as a defensive/admin backstop, but do
+    # not offer destructive Delete from the Veterinary clinical workspace.
+    state["can_delete"] = False
+    state["delete_reason"] = (
+        "Cancel is the supported Lab Order correction path. Delete is not available in the Veterinary workspace."
+    )
+    return state
+
+
 @frappe.whitelist()
 def get_clinical_record_editor(doctype: str, name: str) -> dict:
     require_internal_user()
     from vetedge.services.clinical_record_state import get_clinical_record_editor as original
 
     state = _align_link_labels(original(doctype=doctype, name=name))
+    if doctype == "Veterinary Lab Order":
+        state = _align_lab_state(state)
     if doctype == "Veterinary Vaccination Record":
         state = _align_vaccination_state(state)
         state = decorate_consultation_link_field(state, doctype, name)
