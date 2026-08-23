@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 import frappe
 from frappe import _
-from frappe.utils import cstr
+from frappe.utils import cint, cstr
 
 from vetedge.services.appointment_flow import (
 	ensure_appointments_enabled,
@@ -22,13 +24,29 @@ from vetedge.services.consultation_flow import (
 	validate_practitioner_branch_access,
 	validate_user_branch_access,
 )
-from vetedge.services.permissions import can_access_branch_data, get_current_user
+from vetedge.services.permissions import (
+	can_access_branch_data,
+	get_current_user,
+	get_vaccination_staff_users,
+)
 from vetedge.services.portal_access import require_internal_user
 
 
 VACCINATION_APPOINTMENT_TYPE = "Vaccination"
 VACCINATION_RECORD_DOCTYPE = "Veterinary Vaccination Record"
 VACCINATION_RECORD_START_STATUSES = {"Confirmed", "Checked In"}
+PAGE_LENGTH_MAX = 50
+
+
+def _parse_values(values: str | dict | None) -> dict[str, Any]:
+	if not values:
+		return {}
+	if isinstance(values, dict):
+		return values
+	parsed = frappe.parse_json(values)
+	if not isinstance(parsed, dict):
+		frappe.throw(_("Expected a JSON object."), frappe.ValidationError)
+	return parsed
 
 
 def is_vaccination_veterinary_appointment(doc) -> bool:
@@ -96,6 +114,87 @@ def _validate_vaccination_appointment_branch_access(doc) -> None:
 		return
 	validate_user_branch_access(doc.branch)
 	validate_practitioner_branch_access(doc.practitioner, doc.branch)
+
+
+def _branch_assigned_users(branch: str) -> set[str] | None:
+	if not branch or not frappe.db.exists("DocType", "Branch Practitioner Assignment"):
+		return None
+	meta = frappe.get_meta("Branch Practitioner Assignment")
+	filters: dict[str, Any] = {"branch": branch}
+	if meta.has_field("disabled"):
+		filters["disabled"] = ["!=", 1]
+	assigned = set(frappe.get_all("Branch Practitioner Assignment", filters=filters, pluck="practitioner"))
+	return assigned or None
+
+
+@frappe.whitelist()
+def search_vaccination_practitioners(
+	txt: str = "",
+	branch: str | None = None,
+	start: int = 0,
+	page_length: int = 20,
+) -> list[dict[str, str]]:
+	require_internal_user()
+	start = max(cint(start), 0)
+	page_length = min(max(cint(page_length) or 20, 1), PAGE_LENGTH_MAX)
+	if branch:
+		can_access_branch_data(get_current_user(), branch, raise_exception=True)
+	rows = get_vaccination_staff_users("User", cstr(txt), "name", start, page_length, {})
+	allowed = _branch_assigned_users(cstr(branch))
+	return [
+		{"value": user, "label": label or user, "description": _("Vaccination Staff")}
+		for user, label, *_rest in rows
+		if allowed is None or user in allowed
+	]
+
+
+@frappe.whitelist()
+def create_edgeui_vaccination_appointment(values: str | dict | None = None) -> dict:
+	require_internal_user()
+	ensure_appointments_enabled()
+	if not frappe.has_permission("Veterinary Appointment", "create"):
+		frappe.throw(_("You are not permitted to create Veterinary Appointments."), frappe.PermissionError)
+	payload = _parse_values(values)
+	patient = cstr(payload.get("patient") or "").strip()
+	branch = cstr(payload.get("branch") or "").strip()
+	practitioner = cstr(payload.get("practitioner") or "").strip()
+	vaccine = cstr(payload.get("vaccine") or "").strip()
+	appointment_datetime = cstr(payload.get("appointment_datetime") or "").strip()
+	if not patient or not branch or not practitioner or not vaccine or not appointment_datetime:
+		frappe.throw(
+			_("Patient, Service Branch, Vaccination Staff, Planned Vaccine and Appointment Date/Time are required."),
+			frappe.ValidationError,
+		)
+
+	from vetedge.services.platform_access import require_vetedge_platform_access
+
+	require_vetedge_platform_access(
+		action="create_vaccination_appointment",
+		reference_doctype="Veterinary Patient",
+		reference_name=patient,
+	)
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Veterinary Appointment",
+			"patient": patient,
+			"branch": branch,
+			"practitioner": practitioner,
+			"vaccine": vaccine,
+			"appointment_datetime": appointment_datetime,
+			"appointment_type": VACCINATION_APPOINTMENT_TYPE,
+			"status": "Scheduled",
+			"created_from": "Manual",
+			"notes": cstr(payload.get("notes") or "").strip(),
+		}
+	)
+	doc.insert()
+	return {
+		"name": doc.name,
+		"appointment_title": doc.appointment_title,
+		"appointment_type": doc.appointment_type,
+		"full_form_route": f"/desk/veterinary-appointment/{doc.name}",
+	}
 
 
 def get_linked_vaccination_record_name(appointment: str | None) -> str | None:
