@@ -34,13 +34,18 @@ def _session_has_vaccination_charge(session, record_name: str) -> bool:
 
 
 def _sync_existing_vaccination_billing_session(doc) -> None:
-	"""Keep an already-open billing cycle current without creating a new one.
+	"""Keep standalone Vaccination billing current without duplicating Consultation sync.
 
-	Consultation-plan sync remains preferred. This fallback closes the gap where
-	a Vaccination exists in the same clinical context but has not yet materialised
-	as a Billing Session charge. Draft invoices may be reconciled; submitted
-	invoice contents are never edited by this path.
+	A Consultation-linked Vaccination is already materialised as a Consultation
+	planned-treatment charge by sync_vaccination_to_consultation_plan(), which then
+	reconciles the active Consultation Billing Session. Running this direct source
+	sync as well can save the same Billing Session twice in one request and trigger
+	Frappe's modified-timestamp protection. Standalone Vaccinations retain this
+	fallback because they do not have a Consultation-plan sync path.
 	"""
+	if doc.get("linked_consultation"):
+		return
+
 	flags = getattr(frappe, "flags", None)
 	if getattr(flags, "vetedge_billing_core_syncing", False):
 		return
@@ -65,7 +70,7 @@ def _sync_existing_vaccination_billing_session(doc) -> None:
 		sync_single_source_to_billing_session(session, doc.doctype, doc.name)
 		session = frappe.get_doc(session.doctype, session.name)
 
-	# If billing already has an active Draft, add/update the Vaccination there.
+	# If standalone billing already has an active Draft, add/update the Vaccination there.
 	# If the previous invoice is submitted, Billing Core safely creates a new
 	# draft for the new service instead of mutating that submitted invoice.
 	sync_session_charges_to_invoice(session.name)
