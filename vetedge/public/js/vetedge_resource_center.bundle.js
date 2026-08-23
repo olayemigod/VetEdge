@@ -49,6 +49,61 @@ function valueFrom(params, key, fallback = '') {
 	return String(params.get(key) ?? fallback ?? '').trim();
 }
 
+function vaccinationAwareAppointmentFlow() {
+	const originalMethods = VetEdgeAppointmentFlow.methods || {};
+	const originalSearchPractitioner = originalMethods.searchPractitioner;
+	const originalSubmitAppointment = originalMethods.submitAppointment;
+	return {
+		...VetEdgeAppointmentFlow,
+		methods: {
+			...originalMethods,
+			searchPractitioner(query) {
+				if (!this.isVaccination) return originalSearchPractitioner?.call(this, query) || [];
+				return frappe.call('vetedge.services.appointment_vaccination_bridge.search_vaccination_practitioners', {
+					txt: query,
+					branch: this.form.branch,
+					start: 0,
+					page_length: 20,
+				}).then((response) => response.message || []);
+			},
+			async submitAppointment() {
+				if (!this.isVaccination) return originalSubmitAppointment?.call(this);
+				this.error = '';
+				if (!this.bootstrap.can_create_appointment) {
+					this.error = __('You do not have permission to create Veterinary Appointments.');
+					return;
+				}
+				if (!this.form.patient || !this.form.branch || !this.form.appointment_datetime) {
+					this.error = __('Patient, Service Branch and Appointment Date/Time are required.');
+					return;
+				}
+				if (!this.form.vaccine) {
+					this.error = __('Planned Vaccine is required for Vaccination appointments.');
+					return;
+				}
+				if (!this.form.practitioner) {
+					this.error = __('Veterinary Practitioner is required for this appointment type.');
+					return;
+				}
+				this.saving = true;
+				try {
+					const response = await frappe.call('vetedge.services.appointment_vaccination_bridge.create_edgeui_vaccination_appointment', {
+						values: this.appointmentPayload(),
+					});
+					const created = response.message || {};
+					frappe.show_alert({ message: __('Veterinary Appointment created'), indicator: 'green' });
+					this.$emit('created', created);
+					this.openState = false;
+				} catch (error) {
+					this.error = error?.message || __('The Veterinary Appointment could not be created.');
+				} finally {
+					this.saving = false;
+				}
+			},
+		},
+	};
+}
+
 export function mountVetEdgeResourceCenter(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
@@ -74,7 +129,7 @@ export function mountVetEdgeResourceCenter(target) {
 	let resourceView = null;
 	let lastRefreshAt = Date.now();
 
-	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
+	const flowApp = runtime.createEdgeApp(vaccinationAwareAppointmentFlow(), {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
 			lastRefreshAt = Date.now();
