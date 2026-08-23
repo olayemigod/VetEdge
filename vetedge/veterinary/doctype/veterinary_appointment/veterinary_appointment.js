@@ -7,7 +7,10 @@ frappe.ui.form.on("Veterinary Appointment", {
 		}));
 
 		frm.set_query("practitioner", () => ({
-			query: "vetedge.services.permissions.get_veterinary_doctor_users",
+			query:
+				normalized_appointment_type(frm) === "Vaccination"
+					? "vetedge.services.permissions.get_vaccination_staff_users"
+					: "vetedge.services.permissions.get_veterinary_doctor_users",
 		}));
 
 		frm.set_query("consultation_type", () => ({
