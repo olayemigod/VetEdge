@@ -19,6 +19,7 @@
   "vaccination_id",
   "vaccination_title",
   "linked_consultation",
+  "linked_appointment",
   "clinical_section",
   "dose",
   "route",
@@ -141,6 +142,17 @@
    "in_list_view": 1,
    "label": "Linked Consultation",
    "options": "Veterinary Consultation"
+  },
+  {
+   "description": "The Vaccination appointment that created this record. One appointment can own only one Vaccination Record.",
+   "fieldname": "linked_appointment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Linked Vaccination Appointment",
+   "no_copy": 1,
+   "options": "Veterinary Appointment",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "clinical_section",
@@ -313,7 +325,7 @@
   }
  ],
  "quick_entry": 1,
- "search_fields": "vaccination_id,patient,primary_owner,vaccine,service_branch,linked_consultation,status",
+ "search_fields": "vaccination_id,patient,primary_owner,vaccine,service_branch,linked_consultation,linked_appointment,status",
  "show_title_field_in_link": 1,
  "sort_field": "administered_on",
  "sort_order": "DESC",
