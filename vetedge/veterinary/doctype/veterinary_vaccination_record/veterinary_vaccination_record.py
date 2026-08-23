@@ -34,20 +34,22 @@ def _session_has_vaccination_charge(session, record_name: str) -> bool:
 
 
 def _sync_existing_vaccination_billing_session(doc) -> None:
-	"""Keep standalone Vaccination billing current without duplicating Consultation sync.
+	"""Reconcile exactly one active billing cycle after Vaccination plan projection.
 
-	A Consultation-linked Vaccination is already materialised as a Consultation
-	planned-treatment charge by sync_vaccination_to_consultation_plan(), which then
-	reconciles the active Consultation Billing Session. Running this direct source
-	sync as well can save the same Billing Session twice in one request and trigger
-	Frappe's modified-timestamp protection. Standalone Vaccinations retain this
-	fallback because they do not have a Consultation-plan sync path.
+	Consultation-plan projection is deliberately side-effect-safe because Billing
+	Core also invokes it while rebuilding consultation payloads. A source document
+	update therefore performs the one explicit Consultation Billing Session sync
+	here. Standalone Vaccinations retain their direct-source fallback.
 	"""
-	if doc.get("linked_consultation"):
-		return
-
 	flags = getattr(frappe, "flags", None)
 	if getattr(flags, "vetedge_billing_core_syncing", False):
+		return
+
+	if doc.get("linked_consultation"):
+		from vetedge.services.consultation_billing_plan import _sync_active_consultation_billing_session
+
+		consultation = frappe.get_doc("Veterinary Consultation", doc.linked_consultation)
+		_sync_active_consultation_billing_session(consultation)
 		return
 
 	from vetedge.services.billing_core import (
