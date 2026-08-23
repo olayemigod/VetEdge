@@ -11,8 +11,8 @@ VETERINARY_NOTIFICATION_LOG_DOCTYPE = "Veterinary Notification Log"
 
 
 def _detach_veterinary_notification_logs(lab_order: str) -> None:
-	"""Preserve notification audit rows without leaving reverse links to a deleted Lab Order."""
-	if not frappe.db.exists("DocType", VETERINARY_NOTIFICATION_LOG_DOCTYPE):
+	"""Preserve notification audit rows while clearing the Lab Order reverse link."""
+	if not lab_order or not frappe.db.exists("DocType", VETERINARY_NOTIFICATION_LOG_DOCTYPE):
 		return
 	for row in frappe.get_all(
 		VETERINARY_NOTIFICATION_LOG_DOCTYPE,
@@ -31,6 +31,12 @@ def _detach_veterinary_notification_logs(lab_order: str) -> None:
 class VeterinaryLabOrder(Document):
 	def validate(self) -> None:
 		validate_lab_order(self)
+		# The custom delivery log uses a Dynamic Link back to the Lab Order. Clear
+		# that reverse link inside the same transaction before cancellation cleanup
+		# so Frappe cannot reject the operation because an audit log points at it.
+		# If cancellation is blocked later, the request transaction rolls this back.
+		if self.status == "Cancelled":
+			_detach_veterinary_notification_logs(self.name)
 		enforce_lab_order_cancellation(self)
 		for row in self.get("lab_tests") or []:
 			if not row.get("billing_item"):
@@ -51,5 +57,7 @@ class VeterinaryLabOrder(Document):
 		handle_lab_order_on_update(self)
 
 	def on_trash(self) -> None:
-		enforce_lab_order_delete(self)
+		# Defensive/admin path only. The normal EdgeSuite Lab workflow no longer
+		# exposes Delete, but keep reverse-link cleanup safe for controlled cleanup.
 		_detach_veterinary_notification_logs(self.name)
+		enforce_lab_order_delete(self)
