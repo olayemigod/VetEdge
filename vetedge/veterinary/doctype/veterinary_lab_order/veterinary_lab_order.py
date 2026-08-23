@@ -7,6 +7,27 @@ from vetedge.services.lab import handle_lab_order_after_insert, handle_lab_order
 from vetedge.services.lab_cancellation import enforce_lab_order_cancellation, enforce_lab_order_delete
 
 
+VETERINARY_NOTIFICATION_LOG_DOCTYPE = "Veterinary Notification Log"
+
+
+def _detach_veterinary_notification_logs(lab_order: str) -> None:
+	"""Preserve notification audit rows without leaving reverse links to a deleted Lab Order."""
+	if not frappe.db.exists("DocType", VETERINARY_NOTIFICATION_LOG_DOCTYPE):
+		return
+	for row in frappe.get_all(
+		VETERINARY_NOTIFICATION_LOG_DOCTYPE,
+		filters={"reference_doctype": "Veterinary Lab Order", "reference_name": lab_order},
+		fields=["name"],
+		limit=500,
+	):
+		frappe.db.set_value(
+			VETERINARY_NOTIFICATION_LOG_DOCTYPE,
+			row.name,
+			{"reference_doctype": None, "reference_name": None},
+			update_modified=False,
+		)
+
+
 class VeterinaryLabOrder(Document):
 	def validate(self) -> None:
 		validate_lab_order(self)
@@ -31,3 +52,4 @@ class VeterinaryLabOrder(Document):
 
 	def on_trash(self) -> None:
 		enforce_lab_order_delete(self)
+		_detach_veterinary_notification_logs(self.name)
