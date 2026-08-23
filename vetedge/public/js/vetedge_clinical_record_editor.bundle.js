@@ -91,9 +91,23 @@ function valuesFromFields(fields = []) {
 	return Object.fromEntries(fields.map((field) => [field.fieldname, field.value ?? (field.fieldtype === "MultiSelect" ? [] : "")]));
 }
 
-function buildFieldSpecs(fields = []) {
+function withCreateDefaults(fields = [], defaults = {}) {
+	return fields.map((field) => {
+		if (!Object.prototype.hasOwnProperty.call(defaults || {}, field.fieldname)) return field;
+		const value = defaults[field.fieldname];
+		if (value === undefined || value === null || value === "") return field;
+		return {
+			...field,
+			value,
+			...(field.fieldtype === "Link" ? { selected_label: String(value) } : {}),
+		};
+	});
+}
+
+function buildFieldSpecs(fields = [], defaults = {}) {
+	const effectiveFields = withCreateDefaults(fields, defaults);
 	const state = {
-		values: valuesFromFields(fields),
+		values: valuesFromFields(effectiveFields),
 		specs: [],
 	};
 	const context = {
@@ -108,7 +122,7 @@ function buildFieldSpecs(fields = []) {
 			}
 		},
 	};
-	state.specs = fields.map((field) => fieldSpec(field, context));
+	state.specs = effectiveFields.map((field) => fieldSpec(field, context));
 	return { fields: state.specs, values: state.values };
 }
 
@@ -198,7 +212,7 @@ function chooseFile() {
 	});
 }
 
-async function openCreateModal({ doctype, onSaved } = {}) {
+async function openCreateModal({ doctype, onSaved, defaults = {} } = {}) {
 	if (!doctype || !presenter()?.ready?.()) throw new Error(__("The EdgeSuite clinical record creator is unavailable."));
 	const modal = presenter().open({
 		title: __("Create Clinical Record"),
@@ -209,7 +223,7 @@ async function openCreateModal({ doctype, onSaved } = {}) {
 	});
 	try {
 		const schema = await call(API.createSchema, { doctype });
-		const form = buildFieldSpecs(schema.fields || []);
+		const form = buildFieldSpecs(schema.fields || [], defaults);
 		modal.update({
 			loading: false,
 			title: schema.title || __("Create Clinical Record"),
@@ -244,11 +258,11 @@ async function openCreateModal({ doctype, onSaved } = {}) {
 	return modal;
 }
 
-export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, onSaved } = {}) {
+export async function openVetEdgeClinicalRecordEditor({ doctype, name = null, onSaved, defaults = {} } = {}) {
 	if (!doctype || !presenter()?.ready?.()) {
 		throw new Error("The EdgeSuite clinical record editor is unavailable.");
 	}
-	if (!name) return openCreateModal({ doctype, onSaved });
+	if (!name) return openCreateModal({ doctype, onSaved, defaults });
 
 	const modal = presenter().open({
 		title: __("Clinical Record"),
@@ -509,7 +523,7 @@ export function installVetEdgeClinicalRecordEditor() {
 	if (typeof window !== "undefined") {
 		window.VetEdgeClinicalRecordEditor = {
 			open: openVetEdgeClinicalRecordEditor,
-			create: (doctype, onSaved) => openCreateModal({ doctype, onSaved }),
+			create: (doctype, onSaved, defaults = {}) => openCreateModal({ doctype, onSaved, defaults }),
 			ready: () => Boolean(presenter()?.ready?.()),
 		};
 	}
