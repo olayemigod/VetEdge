@@ -119,6 +119,19 @@ export function mountVetEdgeResourceCenter(target) {
 				}
 				quickEditorView?.open?.({ resource: this.resource, name });
 			},
+			async openClinicalCreate() {
+				try {
+					const editor = await this.ensureClinicalEditor();
+					const defaults = Object.fromEntries(Object.entries({
+						patient: this.clinicalFilters?.patient || '',
+						service_branch: this.clinicalFilters?.service_branch || '',
+						vaccine: this.resource === 'vaccinations' ? (this.clinicalFilters?.vaccine || '') : '',
+					}).filter(([, value]) => Boolean(value)));
+					await editor.create(this.clinicalDoctype, () => this.loadPage(), defaults);
+				} catch (error) {
+					frappe.msgprint(error?.message || __('The clinical record creator is unavailable.'));
+				}
+			},
 		},
 	};
 
