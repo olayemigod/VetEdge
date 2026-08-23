@@ -41,6 +41,8 @@ RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
 		"doctype": "Pet Boarding Stay",
 		"title": _("Boarding Stays"),
 		"subtitle": _("Review active and completed boarding stays, kennel assignment and care-record activity."),
+		"entry_editor_resource": "boarding",
+		"entry_doctype": "Pet Boarding Booking",
 		"fields": [
 			"name", "booking", "patient", "primary_owner", "service_branch", "kennel",
 			"check_in_datetime", "check_out_datetime", "status", "feeding_instructions", "special_notes", "modified",
@@ -89,6 +91,8 @@ RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
 		"doctype": "Pet Grooming Session",
 		"title": _("Grooming Sessions"),
 		"subtitle": _("Run grooming sessions and keep their workflow and billing state visible inside the Veterinary workspace."),
+		"entry_editor_resource": "grooming",
+		"entry_doctype": "Pet Grooming Appointment",
 		"fields": [
 			"name", "patient", "primary_owner", "status", "service_branch", "appointment",
 			"grooming_service", "groomer", "groomer_name", "start_time", "end_time",
@@ -313,6 +317,9 @@ def get_service_operations_page(
 		start=start,
 		page_length=page_length,
 	)
+	editor_resource = config.get("editor_resource") or config.get("entry_editor_resource") or ""
+	create_doctype = config.get("entry_doctype") or doctype
+	can_create = bool(editor_resource and create_doctype and frappe.has_permission(create_doctype, "create"))
 	return {
 		"resource": config["key"],
 		"title": config["title"],
@@ -322,8 +329,9 @@ def get_service_operations_page(
 		"total": _count(doctype, filters, or_filters),
 		"start": start,
 		"page_length": page_length,
-		"can_create": bool(config.get("editor_resource") and frappe.has_permission(doctype, "create")),
-		"editor_resource": config.get("editor_resource") or "",
+		"can_create": can_create,
+		"editor_resource": editor_resource,
+		"create_doctype": create_doctype if can_create else "",
 	}
 
 
