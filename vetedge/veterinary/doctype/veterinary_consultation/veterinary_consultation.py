@@ -12,7 +12,7 @@ from vetedge.services.consultation_flow import (
 from vetedge.services.billing_core import get_consultation_payment_status
 
 
-SERVICE_ONLY_APPOINTMENT_TYPES = {"Grooming", "Boarding"}
+CONSULTATION_APPOINTMENT_TYPES = {"", "Consultation", "Follow Up"}
 
 
 def sync_follow_up_appointment_from_consultation(*args, **kwargs):
@@ -46,10 +46,12 @@ def validate_linked_appointment_service_type(doc) -> None:
 	appointment = doc.get("linked_appointment")
 	if not appointment:
 		return
-	appointment_type = frappe.db.get_value("Veterinary Appointment", appointment, "appointment_type")
-	if appointment_type in SERVICE_ONLY_APPOINTMENT_TYPES:
+	appointment_type = str(
+		frappe.db.get_value("Veterinary Appointment", appointment, "appointment_type") or ""
+	).strip()
+	if appointment_type not in CONSULTATION_APPOINTMENT_TYPES:
 		frappe.throw(
-			f"{appointment_type} appointments do not create Veterinary Consultations. Use the {appointment_type} service workflow instead.",
+			f"{appointment_type or 'This'} appointment does not create a Veterinary Consultation. Use its service-specific workflow instead.",
 			frappe.ValidationError,
 		)
 
