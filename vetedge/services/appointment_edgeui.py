@@ -11,13 +11,16 @@ from vetedge.services.guest_booking import get_default_customer_group, get_defau
 from vetedge.services.permissions import (
 	can_access_branch_data,
 	get_assigned_branches,
+	get_grooming_staff_users,
 	get_veterinary_doctor_users,
 	user_has_global_branch_access,
 	validate_doctor_user,
 )
 
 PAGE_LENGTH_MAX = 50
-APPOINTMENT_TYPES = ("Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other")
+# Boarding remains a valid historical appointment_type, but new Boarding work starts
+# from Pet Boarding Booking because that document owns the reservation/date-range truth.
+APPOINTMENT_TYPES = ("Consultation", "Follow Up", "Vaccination", "Grooming", "Other")
 SEARCH_FIELDS = {
 	"owner": {
 		"doctype": "Customer",
@@ -48,6 +51,12 @@ SEARCH_FIELDS = {
 		"fields": ["name", "breed_name", "species", "description"],
 		"search_fields": ["name", "breed_name", "species"],
 		"label_field": "breed_name",
+	},
+	"grooming_service": {
+		"doctype": "Pet Grooming Service",
+		"fields": ["name", "service_name", "service_code", "description", "default_rate", "is_active"],
+		"search_fields": ["name", "service_name", "service_code"],
+		"label_field": "service_name",
 	},
 }
 
@@ -117,6 +126,8 @@ def _search_standard(field: str, txt: str, context: dict[str, Any], start: int, 
 		filters["disabled"] = ["!=", 1]
 		if context.get("species"):
 			filters["species"] = context["species"]
+	if field == "grooming_service":
+		filters["is_active"] = 1
 
 	or_filters = None
 	if txt:
@@ -141,27 +152,42 @@ def _search_standard(field: str, txt: str, context: dict[str, Any], start: int, 
 			description = " · ".join(filter(None, [row.get("primary_owner"), row.get("species"), row.get("breed")]))
 		elif field == "breed":
 			description = " · ".join(filter(None, [row.get("species"), row.get("description")]))
+		elif field == "grooming_service":
+			description = " · ".join(
+				filter(None, [row.get("service_code"), row.get("description"), str(row.get("default_rate") or "")])
+			)
 		else:
 			description = row.get("description") or ""
 		options.append(_option(row.get("name"), row.get(config["label_field"]), description, raw=row))
 	return options
 
 
+def _branch_assigned_users(branch: str) -> set[str] | None:
+	if not branch or not frappe.db.exists("DocType", "Branch Practitioner Assignment"):
+		return None
+	meta = frappe.get_meta("Branch Practitioner Assignment")
+	filters: dict[str, Any] = {"branch": branch}
+	if meta.has_field("disabled"):
+		filters["disabled"] = ["!=", 1]
+	assigned = set(frappe.get_all("Branch Practitioner Assignment", filters=filters, pluck="practitioner"))
+	return assigned or None
+
+
 def _search_practitioners(txt: str, context: dict[str, Any], start: int, page_length: int) -> list[dict]:
 	rows = get_veterinary_doctor_users("User", txt, "name", start, page_length, {})
-	branch = _clean(context.get("branch"))
-	allowed: set[str] | None = None
-	if branch and frappe.db.exists("DocType", "Branch Practitioner Assignment"):
-		assignment_meta = frappe.get_meta("Branch Practitioner Assignment")
-		filters: dict[str, Any] = {"branch": branch}
-		if assignment_meta.has_field("disabled"):
-			filters["disabled"] = ["!=", 1]
-		assigned = set(frappe.get_all("Branch Practitioner Assignment", filters=filters, pluck="practitioner"))
-		if assigned:
-			allowed = assigned
-
+	allowed = _branch_assigned_users(_clean(context.get("branch")))
 	return [
 		_option(user, label, "Veterinary Doctor")
+		for user, label, *_rest in rows
+		if allowed is None or user in allowed
+	]
+
+
+def _search_groomers(txt: str, context: dict[str, Any], start: int, page_length: int) -> list[dict]:
+	rows = get_grooming_staff_users("User", txt, "name", start, page_length, {})
+	allowed = _branch_assigned_users(_clean(context.get("branch")))
+	return [
+		_option(user, label, "Grooming Staff")
 		for user, label, *_rest in rows
 		if allowed is None or user in allowed
 	]
@@ -197,6 +223,8 @@ def search_appointment_link(
 	context_values = _get_context(context)
 	if field == "practitioner":
 		return _search_practitioners(_clean(txt), context_values, start, page_length)
+	if field == "groomer":
+		return _search_groomers(_clean(txt), context_values, start, page_length)
 	if field not in SEARCH_FIELDS:
 		frappe.throw(_("This appointment field is not available for EdgeSuite search."), frappe.PermissionError)
 	return _search_standard(field, _clean(txt), context_values, start, page_length)
@@ -330,12 +358,20 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	patient = _clean(payload.get("patient"))
 	branch = _clean(payload.get("branch"))
 	practitioner = _clean(payload.get("practitioner"))
+	grooming_service = _clean(payload.get("grooming_service"))
+	groomer = _clean(payload.get("groomer"))
 	appointment_datetime = _clean(payload.get("appointment_datetime"))
 	appointment_type = _clean(payload.get("appointment_type") or "Consultation")
-	if not patient or not branch or not practitioner or not appointment_datetime:
-		frappe.throw(_("Patient, Branch, Practitioner and Appointment Date/Time are required."), frappe.ValidationError)
+	if not patient or not branch or not appointment_datetime:
+		frappe.throw(_("Patient, Branch and Appointment Date/Time are required."), frappe.ValidationError)
 	if appointment_type not in APPOINTMENT_TYPES:
 		frappe.throw(_("Appointment Type is invalid."), frappe.ValidationError)
+	if appointment_type == "Grooming":
+		if not grooming_service or not groomer:
+			frappe.throw(_("Grooming Service and Groomer are required for Grooming appointments."), frappe.ValidationError)
+	else:
+		if not practitioner:
+			frappe.throw(_("Veterinary Practitioner is required for this appointment type."), frappe.ValidationError)
 
 	patient_values = frappe.db.get_value(
 		"Veterinary Patient",
@@ -346,7 +382,8 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	if not patient_values or patient_values.status == "Deceased":
 		frappe.throw(_("Select an active Veterinary Patient."), frappe.ValidationError)
 	can_access_branch_data(frappe.session.user, branch, raise_exception=True)
-	validate_doctor_user(practitioner)
+	if practitioner:
+		validate_doctor_user(practitioner)
 	get_datetime(appointment_datetime)
 
 	doc = frappe.get_doc(
@@ -355,7 +392,9 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 			"patient": patient,
 			"primary_owner": patient_values.primary_owner,
 			"branch": branch,
-			"practitioner": practitioner,
+			"practitioner": practitioner or None,
+			"grooming_service": grooming_service or None,
+			"groomer": groomer or None,
 			"appointment_datetime": appointment_datetime,
 			"appointment_type": appointment_type,
 			"status": "Scheduled",
@@ -367,5 +406,6 @@ def create_edgeui_appointment(values: str | dict) -> dict[str, Any]:
 	return {
 		"name": doc.name,
 		"appointment_title": doc.appointment_title,
-		"full_form_route": f"/app/veterinary-appointment/{doc.name}",
+		"appointment_type": doc.appointment_type,
+		"full_form_route": f"/desk/veterinary-appointment/{doc.name}",
 	}
