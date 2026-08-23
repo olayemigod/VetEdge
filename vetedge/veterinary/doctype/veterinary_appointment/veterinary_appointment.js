@@ -6,12 +6,15 @@ frappe.ui.form.on("Veterinary Appointment", {
 			},
 		}));
 
-		frm.set_query("practitioner", () => ({
-			query:
-				normalized_appointment_type(frm) === "Vaccination"
-					? "vetedge.services.permissions.get_vaccination_staff_users"
-					: "vetedge.services.permissions.get_veterinary_doctor_users",
-		}));
+		frm.set_query("practitioner", () => {
+			if (normalized_appointment_type(frm) === "Vaccination") {
+				return {
+					query: "vetedge.services.appointment_vaccination_bridge.get_vaccination_appointment_staff",
+					filters: { branch: frm.doc.branch || "" },
+				};
+			}
+			return { query: "vetedge.services.permissions.get_veterinary_doctor_users" };
+		});
 
 		frm.set_query("consultation_type", () => ({
 			filters: { disabled: ["!=", 1] },
