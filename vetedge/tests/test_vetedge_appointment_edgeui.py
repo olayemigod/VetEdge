@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
 BRIDGE = ROOT / "vetedge" / "services" / "appointment_grooming_bridge.py"
+SMART_ACTIONS = ROOT / "vetedge" / "services" / "appointment_actions.py"
 PRACTITIONER_INTEGRITY = ROOT / "vetedge" / "services" / "practitioner_integrity.py"
 COMPONENT = (
 	ROOT
@@ -21,6 +22,7 @@ RESOURCE_COMPONENT = (
 	/ "VetEdgeResourceCenter.vue"
 )
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_resource_center.bundle.js"
+FRONT_DESK_BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_front_desk_action_center.bundle.js"
 SERVICE_COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -247,18 +249,49 @@ def test_grooming_appointment_bridge_preserves_legacy_records_but_uses_veterinar
 
 	assert 'doc.get("appointment_type") == "Grooming"' in appointment_controller
 	assert "validate_grooming_veterinary_appointment(doc)" in appointment_controller
-	assert 'appointment_type === "Grooming"' in appointment_client
-	assert "Create / Open Grooming Session" in appointment_client
-	assert "create_grooming_session_from_veterinary_appointment" in appointment_client
+	assert "appointment_actions.get_appointment_action_state" in appointment_client
+	assert "appointment_actions.perform_appointment_action" in appointment_client
+	assert "Create / Open Grooming Session" not in appointment_client
 	assert '"fieldname": "grooming_service"' in appointment_schema
 	assert '"fieldname": "groomer"' in appointment_schema
 	assert '"fieldname": "veterinary_appointment"' in session_schema
 	assert "Legacy Grooming Appointment" in session_schema
 	assert "validate_veterinary_appointment_grooming_session" in session_controller
-	assert 'SERVICE_ONLY_APPOINTMENT_TYPES = {"Grooming", "Boarding"}' in consultation_controller
+	assert 'CONSULTATION_APPOINTMENT_TYPES = {"", "Consultation", "Follow Up"}' in consultation_controller
+	assert "appointment_type not in CONSULTATION_APPOINTMENT_TYPES" in consultation_controller
 	assert "validate_linked_appointment_service_type(self)" in consultation_controller
 	assert 'doc.get("appointment_type") or ""' in practitioner_integrity
 	assert '== "Grooming"' in practitioner_integrity
+
+
+def test_smart_appointment_actions_are_type_and_status_aware_across_form_and_front_desk():
+	actions = read(SMART_ACTIONS)
+	appointment_client = read(APPOINTMENT_CLIENT)
+	front_desk_bundle = read(FRONT_DESK_BUNDLE)
+
+	for contract in (
+		'CONSULTATION_APPOINTMENT_TYPES = {"Consultation", "Follow Up"}',
+		'"start_consultation", label',
+		'appointment_type == "Grooming"',
+		'"start_grooming_session", "Create Grooming Session"',
+		'appointment_type == "Vaccination"',
+		'"vaccination_workflow", "Open Vaccination Workflow"',
+		'appointment_type == "Boarding"',
+		'"boarding_operations", "Open Boarding Operations"',
+		'appointment_type == "Other" and status == "Checked In"',
+		"Only Consultation and Follow Up appointments can start a Veterinary Consultation.",
+		"This action is no longer valid for the appointment type or status.",
+	):
+		assert contract in actions
+
+	assert "Start Consultation" not in appointment_client
+	assert "Create / Open Grooming Session" not in appointment_client
+	assert "get_appointment_action_state" in appointment_client
+	assert "perform_appointment_action" in appointment_client
+	assert "get_appointment_action_state" in front_desk_bundle
+	assert "perform_appointment_action" in front_desk_bundle
+	assert "loadSmartAppointmentState" in front_desk_bundle
+	assert "originalOpenQueueDetail" in front_desk_bundle
 
 
 def test_hospital_services_uses_business_documents_and_generic_veterinary_wording():
