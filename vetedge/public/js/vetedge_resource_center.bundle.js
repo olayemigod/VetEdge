@@ -7,6 +7,7 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 	'search',
 	'name',
 	'new',
+	'appointment_type',
 	'branch',
 	'status',
 	'registration_status',
@@ -59,6 +60,7 @@ export function mountVetEdgeResourceCenter(target) {
 	const requestedRoute = getRequestedRouteParams();
 	const requestedName = valueFrom(requestedRoute, 'name');
 	const requestedNew = requestedRoute.get('new') === '1';
+	const requestedAppointmentType = valueFrom(requestedRoute, 'appointment_type');
 
 	const flowHost = document.createElement('div');
 	flowHost.className = 'vetedge-appointment-flow-host';
@@ -125,6 +127,7 @@ export function mountVetEdgeResourceCenter(target) {
 			search: valueFrom(params, 'search'),
 			name: valueFrom(params, 'name'),
 			isNew: params.get('new') === '1',
+			appointmentType: valueFrom(params, 'appointment_type'),
 			branch: valueFrom(params, 'branch'),
 			status: valueFrom(params, 'status'),
 			registrationStatus: valueFrom(params, 'registration_status'),
@@ -191,7 +194,7 @@ export function mountVetEdgeResourceCenter(target) {
 	const openRequestedEditor = (state) => {
 		if (!state?.name && !state?.isNew) return;
 		if (state.isNew && isAppointments()) {
-			flowView?.open?.();
+			flowView?.open?.({ appointment_type: state.appointmentType || '' });
 			return;
 		}
 		if (isClinicalResource()) {
@@ -219,7 +222,11 @@ export function mountVetEdgeResourceCenter(target) {
 	if (requestedName || requestedNew) {
 		window.setTimeout(() => {
 			if (!resourceView) return;
-			openRequestedEditor({ name: requestedName, isNew: requestedNew });
+			openRequestedEditor({
+				name: requestedName,
+				isNew: requestedNew,
+				appointmentType: requestedAppointmentType,
+			});
 		}, 0);
 	}
 
@@ -259,5 +266,3 @@ if (typeof window !== 'undefined') {
 	window.VetEdgeResourceQuickEditor = VetEdgeResourceQuickEditor;
 	window.mountVetEdgeResourceCenter = mountVetEdgeResourceCenter;
 }
-
-export default VetEdgeResourceCenter;
