@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
 BRIDGE = ROOT / "vetedge" / "services" / "appointment_grooming_bridge.py"
 SMART_ACTIONS = ROOT / "vetedge" / "services" / "appointment_actions.py"
+SMART_INTELLIGENCE = ROOT / "vetedge" / "services" / "appointment_intelligence.py"
 PRACTITIONER_INTEGRITY = ROOT / "vetedge" / "services" / "practitioner_integrity.py"
 COMPONENT = (
 	ROOT
@@ -22,6 +23,7 @@ RESOURCE_COMPONENT = (
 	/ "VetEdgeResourceCenter.vue"
 )
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_resource_center.bundle.js"
+CLINICAL_EDITOR = ROOT / "vetedge" / "public" / "js" / "vetedge_clinical_record_editor.bundle.js"
 FRONT_DESK_BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_front_desk_action_center.bundle.js"
 SERVICE_COMPONENT = (
 	ROOT
@@ -104,8 +106,15 @@ def test_appointment_links_are_permission_context_and_service_aware():
 		"get_veterinary_doctor_users",
 		"get_grooming_staff_users",
 		"Branch Practitioner Assignment",
-		'filters["species"] = context["species"]',
-		'filters["is_active"] = 1',
+		'if field == "consultation_type"',
+		'filters["disabled"] = ["!=", 1]',
+		'def _search_vaccines(',
+		'"species": species',
+		'["is", "not set"]',
+		'def _search_follow_up_consultations(',
+		'{"patient": patient, "status": ["!=", "Cancelled"]}',
+		'if field == "vaccine"',
+		'if field == "follow_up_reference"',
 		'if field == "groomer"',
 		'if field == "grooming_service"',
 	):
@@ -124,10 +133,21 @@ def test_new_appointment_creation_uses_one_scheduler_without_boarding_duplicatio
 		"create_edgeui_appointment",
 		'frappe.has_permission("Veterinary Appointment", "create")',
 		"can_access_branch_data",
+		'PRACTITIONER_REQUIRED_TYPES = {"Consultation", "Follow Up", "Vaccination"}',
+		'if appointment_type == "Follow Up":',
+		"Originating Consultation is required for Follow Up appointments.",
+		"Originating Consultation must belong to the selected patient.",
+		'if appointment_type == "Vaccination":',
+		"Planned Vaccine is required for Vaccination appointments.",
 		'if appointment_type == "Grooming":',
 		"Grooming Service and Groomer are required for Grooming appointments.",
+		'if appointment_type == "Other" and not notes:',
+		"Reason / Notes is required for Other appointments.",
 		"Veterinary Practitioner is required for this appointment type.",
 		"validate_doctor_user(practitioner)",
+		'"consultation_type": consultation_type or None',
+		'"follow_up_reference": follow_up_reference or None',
+		'"vaccine": vaccine or None',
 		'"grooming_service": grooming_service or None',
 		'"groomer": groomer or None',
 		'"status": "Scheduled"',
@@ -141,7 +161,7 @@ def test_new_appointment_creation_uses_one_scheduler_without_boarding_duplicatio
 	assert "Payment Entry" not in content
 
 
-def test_appointment_flow_is_patient_first_and_switches_staff_fields_by_service():
+def test_appointment_flow_is_patient_first_and_switches_fields_by_service():
 	content = read(COMPONENT)
 
 	for contract in (
@@ -150,16 +170,24 @@ def test_appointment_flow_is_patient_first_and_switches_staff_fields_by_service(
 		"EdgeDropdown",
 		'label="Veterinary Patient"',
 		'label="Service Branch"',
-		'label="Veterinary Practitioner"',
+		'label="Consultation Type"',
+		'label="Originating Consultation"',
+		'label="Planned Vaccine"',
+		"requiresPractitioner ? 'Veterinary Practitioner' : 'Veterinary Practitioner (Optional)'",
 		'label="Grooming Service"',
 		'label="Groomer"',
+		'v-if="hasConsultationContext"',
+		'v-if="isFollowUp"',
+		'v-if="isVaccination"',
 		'v-if="!isGrooming"',
 		'v-if="isGrooming"',
 		"Populated from selected patient",
+		"patientSpecies",
+		"searchConsultationType",
+		"searchFollowUpReference",
+		"searchVaccine",
 		"searchGroomingService",
 		"searchGroomer",
-		"this.clearPractitioner()",
-		"this.clearGroomer()",
 		"create_edgeui_appointment",
 	):
 		assert contract in content
@@ -178,19 +206,59 @@ def test_appointment_submit_sends_only_fields_relevant_to_selected_service():
 		"patient: this.form.patient",
 		"branch: this.form.branch",
 		'practitioner: this.isGrooming ? "" : this.form.practitioner',
+		"consultation_type: this.hasConsultationContext ? this.form.consultation_type",
+		"follow_up_reference: this.isFollowUp ? this.form.follow_up_reference",
+		"vaccine: this.isVaccination ? this.form.vaccine",
 		"grooming_service: this.isGrooming ? this.form.grooming_service",
 		"groomer: this.isGrooming ? this.form.groomer",
+		"Consultation Type is required for Consultation and Follow Up appointments.",
+		"Originating Consultation is required for Follow Up appointments.",
+		"Planned Vaccine is required for Vaccination appointments.",
 		"Grooming Service and Groomer are required for Grooming appointments.",
 		"Veterinary Practitioner is required for this appointment type.",
+		"Reason / Notes is required for Other appointments.",
 	):
 		assert contract in content
 
 	assert "owner: this.form.owner" not in content
 
 
-def test_resource_center_uses_typed_appointment_deep_links_and_hides_legacy_scheduler():
+def test_smart_appointment_context_is_server_enforced_and_backward_compatible():
+	intelligence = read(SMART_INTELLIGENCE)
+	controller = read(APPOINTMENT_CONTROLLER)
+	schema = read(APPOINTMENT_SCHEMA)
+	consultation_controller = read(CONSULTATION_CONTROLLER)
+
+	for contract in (
+		'CONSULTATION_APPOINTMENT_TYPES = {"Consultation", "Follow Up"}',
+		'PRACTITIONER_REQUIRED_APPOINTMENT_TYPES = {"Consultation", "Follow Up", "Vaccination"}',
+		"prepare_appointment_service_context",
+		"validate_appointment_service_context",
+		"get_originating_consultation",
+		"resolve_appointment_vaccine",
+		"resolve_appointment_consultation_type",
+		"_is_new_or_type_changed",
+		"Originating Consultation is required for a new Follow Up appointment.",
+		"Vaccine is required for a new Vaccination appointment.",
+		"Reason / Notes is required for a new Other appointment.",
+	):
+		assert contract in intelligence
+
+	assert "prepare_appointment_service_context(doc)" in controller
+	assert "validate_appointment_service_context(doc)" in controller
+	assert '"fieldname": "consultation_type"' in schema
+	assert '"fieldname": "follow_up_reference"' in schema
+	assert '"fieldname": "vaccine"' in schema
+	assert '"label": "Reason / Notes"' in schema
+	assert "appointment.get(\"consultation_type\")" in consultation_controller
+	assert "appointment.follow_up_reference" in consultation_controller
+	assert 'doc.consultation_type = "General Consultation"' in consultation_controller
+
+
+def test_resource_center_uses_typed_appointment_deep_links_and_contextual_clinical_create():
 	bundle = read(BUNDLE)
 	resource_component = read(RESOURCE_COMPONENT)
+	clinical_editor = read(CLINICAL_EDITOR)
 	loader = read(LOADER)
 
 	for contract in (
@@ -203,8 +271,20 @@ def test_resource_center_uses_typed_appointment_deep_links_and_hides_legacy_sche
 		"flowView?.open?.({ appointment_type: state.appointmentType || '' })",
 		"LEGACY_GROOMING_RESOURCE = 'grooming'",
 		"filter((option) => option.value !== LEGACY_GROOMING_RESOURCE)",
+		"patient: this.clinicalFilters?.patient || ''",
+		"service_branch: this.clinicalFilters?.service_branch || ''",
+		"vaccine: this.resource === 'vaccinations'",
+		"editor.create(this.clinicalDoctype, () => this.loadPage(), defaults)",
 	):
 		assert contract in bundle
+
+	for contract in (
+		"withCreateDefaults",
+		"buildFieldSpecs(schema.fields || [], defaults)",
+		"openCreateModal({ doctype, onSaved, defaults })",
+		"create: (doctype, onSaved, defaults = {})",
+	):
+		assert contract in clinical_editor
 
 	for contract in (
 		'if (this.resource === "appointments") return "New Appointment";',
@@ -276,6 +356,8 @@ def test_smart_appointment_actions_are_type_and_status_aware_across_form_and_fro
 		'"start_grooming_session", "Create Grooming Session"',
 		'appointment_type == "Vaccination"',
 		'"vaccination_workflow", "Open Vaccination Workflow"',
+		"resolve_appointment_vaccine(doc)",
+		'params.append(f"vaccine={quote(cstr(vaccine))}")',
 		'appointment_type == "Boarding"',
 		'"boarding_operations", "Open Boarding Operations"',
 		'appointment_type == "Other" and status == "Checked In"',
@@ -288,6 +370,9 @@ def test_smart_appointment_actions_are_type_and_status_aware_across_form_and_fro
 	assert "Create / Open Grooming Session" not in appointment_client
 	assert "get_appointment_action_state" in appointment_client
 	assert "perform_appointment_action" in appointment_client
+	assert 'frm.set_query("consultation_type"' in appointment_client
+	assert 'frm.set_query("follow_up_reference"' in appointment_client
+	assert 'frm.set_query("vaccine"' in appointment_client
 	assert "get_appointment_action_state" in front_desk_bundle
 	assert "perform_appointment_action" in front_desk_bundle
 	assert "loadSmartAppointmentState" in front_desk_bundle
