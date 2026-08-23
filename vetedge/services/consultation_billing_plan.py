@@ -131,7 +131,6 @@ def sync_lab_order_to_consultation_plan(doc) -> None:
 
 	if changed:
 		_save_consultation(consultation)
-		_sync_active_consultation_billing_session(consultation)
 
 
 def sync_vaccination_to_consultation_plan(doc) -> None:
@@ -159,7 +158,6 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 	if existing_row:
 		if _update_plan_row_from_vaccination(existing_row, doc, item, vaccine.get("vaccine_name"), rate):
 			_save_consultation(consultation)
-			_sync_active_consultation_billing_session(consultation)
 		return
 
 	_add_plan_row(
@@ -175,7 +173,6 @@ def sync_vaccination_to_consultation_plan(doc) -> None:
 		notes=doc.get("notes"),
 	)
 	_save_consultation(consultation)
-	_sync_active_consultation_billing_session(consultation)
 
 
 def _has_source_row(consultation, source_type: str, source_document: str, source_detail_name: str | None) -> bool:
@@ -324,10 +321,9 @@ def _save_consultation(consultation) -> None:
 def _sync_active_consultation_billing_session(consultation) -> None:
 	"""Push source-linked charges into an already-open Consultation billing cycle.
 
-	Creating a Lab Order or Vaccination should not create a billing session on its own.
-	If billing has already started for the Consultation, source plan changes must be
-	reconciled immediately. Billing Core remains authoritative for draft updates,
-	new-draft creation after submission, and submitted-invoice immutability.
+	This helper is intentionally called by source controllers after plan projection.
+	The plan projection functions themselves must remain side-effect-safe because
+	Billing Core also invokes them while rebuilding consultation charge payloads.
 	"""
 	flags = getattr(frappe, "flags", None)
 	if getattr(flags, "vetedge_billing_core_syncing", False):
