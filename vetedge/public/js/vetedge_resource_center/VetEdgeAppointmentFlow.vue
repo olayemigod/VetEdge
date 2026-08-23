@@ -2,7 +2,7 @@
 	<EdgeModal
 		:open="openState"
 		title="New Veterinary Appointment"
-		subtitle="Select the patient first. VetEdge will derive the pet owner, then you can choose the service branch and practitioner."
+		subtitle="Select the patient and service branch, then choose the appointment type. VetEdge will show only the staff and service fields needed for that workflow."
 		size="lg"
 		:busy="saving"
 		@close="close"
@@ -49,7 +49,15 @@
 						@search-error="handleFieldError"
 					/>
 
+					<EdgeDropdown
+						v-model="form.appointment_type"
+						label="Appointment Type"
+						:options="appointmentTypeOptions"
+						placeholder="Select appointment type"
+					/>
+
 					<EdgeLinkField
+						v-if="!isGrooming"
 						v-model="form.practitioner"
 						:selected-label="labels.practitioner"
 						label="Veterinary Practitioner"
@@ -63,6 +71,34 @@
 						@search-error="handleFieldError"
 					/>
 
+					<EdgeLinkField
+						v-if="isGrooming"
+						v-model="form.grooming_service"
+						:selected-label="labels.groomingService"
+						label="Grooming Service"
+						placeholder="Search active grooming services"
+						:searcher="searchGroomingService"
+						required
+						@select="onGroomingServiceSelected"
+						@clear="clearGroomingService"
+						@search-error="handleFieldError"
+					/>
+
+					<EdgeLinkField
+						v-if="isGrooming"
+						v-model="form.groomer"
+						:selected-label="labels.groomer"
+						label="Groomer"
+						placeholder="Search grooming staff available for this branch"
+						:searcher="searchGroomer"
+						:context="{ branch: form.branch }"
+						:disabled="!form.branch"
+						required
+						@select="onGroomerSelected"
+						@clear="clearGroomer"
+						@search-error="handleFieldError"
+					/>
+
 					<label class="vetedge-appointment-flow-field">
 						<span class="vetedge-appointment-flow-label">Appointment Date/Time <b>*</b></span>
 						<input
@@ -72,13 +108,6 @@
 							required
 						/>
 					</label>
-
-					<EdgeDropdown
-						v-model="form.appointment_type"
-						label="Appointment Type"
-						:options="appointmentTypeOptions"
-						placeholder="Select appointment type"
-					/>
 				</div>
 
 				<label class="vetedge-appointment-flow-field vetedge-appointment-flow-field--wide">
@@ -109,6 +138,8 @@ function emptyForm() {
 		owner: "",
 		branch: "",
 		practitioner: "",
+		grooming_service: "",
+		groomer: "",
 		appointment_datetime: "",
 		appointment_type: "Consultation",
 		notes: "",
@@ -116,7 +147,14 @@ function emptyForm() {
 }
 
 function emptyLabels() {
-	return { patient: "", owner: "", branch: "", practitioner: "" };
+	return {
+		patient: "",
+		owner: "",
+		branch: "",
+		practitioner: "",
+		groomingService: "",
+		groomer: "",
+	};
 }
 
 export default {
@@ -130,7 +168,7 @@ export default {
 			error: "",
 			bootstrap: {
 				default_branch: "",
-				appointment_types: ["Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other"],
+				appointment_types: ["Consultation", "Follow Up", "Vaccination", "Grooming", "Other"],
 				can_create_appointment: false,
 			},
 			form: emptyForm(),
@@ -141,9 +179,23 @@ export default {
 		appointmentTypeOptions() {
 			return (this.bootstrap.appointment_types || []).map((type) => ({ value: type, label: type }));
 		},
+		isGrooming() {
+			return this.form.appointment_type === "Grooming";
+		},
+	},
+	watch: {
+		"form.appointment_type"(value, previous) {
+			if (value === previous) return;
+			this.error = "";
+			if (value === "Grooming") this.clearPractitioner();
+			else {
+				this.clearGroomingService();
+				this.clearGroomer();
+			}
+		},
 	},
 	methods: {
-		async open() {
+		async open(options = {}) {
 			this.form = emptyForm();
 			this.labels = emptyLabels();
 			this.error = "";
@@ -155,6 +207,10 @@ export default {
 				if (this.bootstrap.default_branch) {
 					this.form.branch = this.bootstrap.default_branch;
 					this.labels.branch = this.bootstrap.default_branch;
+				}
+				const requestedType = String(options?.appointment_type || "").trim();
+				if (requestedType && (this.bootstrap.appointment_types || []).includes(requestedType)) {
+					this.form.appointment_type = requestedType;
 				}
 				if (!this.bootstrap.can_create_appointment) {
 					this.error = __("You do not have permission to create Veterinary Appointments.");
@@ -187,6 +243,12 @@ export default {
 		},
 		searchPractitioner(query) {
 			return this.searchLink("practitioner", query, { branch: this.form.branch });
+		},
+		searchGroomingService(query) {
+			return this.searchLink("grooming_service", query);
+		},
+		searchGroomer(query) {
+			return this.searchLink("groomer", query, { branch: this.form.branch });
 		},
 		async onPatientSelected(option) {
 			const patient = String(option?.value || "").trim();
@@ -224,11 +286,13 @@ export default {
 			this.form.branch = option.value;
 			this.labels.branch = option.label;
 			this.clearPractitioner();
+			this.clearGroomer();
 		},
 		clearBranch() {
 			this.form.branch = "";
 			this.labels.branch = "";
 			this.clearPractitioner();
+			this.clearGroomer();
 		},
 		onPractitionerSelected(option) {
 			this.form.practitioner = option.value;
@@ -238,6 +302,22 @@ export default {
 			this.form.practitioner = "";
 			this.labels.practitioner = "";
 		},
+		onGroomingServiceSelected(option) {
+			this.form.grooming_service = option.value;
+			this.labels.groomingService = option.label;
+		},
+		clearGroomingService() {
+			this.form.grooming_service = "";
+			this.labels.groomingService = "";
+		},
+		onGroomerSelected(option) {
+			this.form.groomer = option.value;
+			this.labels.groomer = option.label;
+		},
+		clearGroomer() {
+			this.form.groomer = "";
+			this.labels.groomer = "";
+		},
 		handleFieldError(error) {
 			this.error = error?.message || __("A linked record could not be loaded.");
 		},
@@ -246,7 +326,9 @@ export default {
 			return {
 				patient: this.form.patient,
 				branch: this.form.branch,
-				practitioner: this.form.practitioner,
+				practitioner: this.isGrooming ? "" : this.form.practitioner,
+				grooming_service: this.isGrooming ? this.form.grooming_service : "",
+				groomer: this.isGrooming ? this.form.groomer : "",
 				appointment_datetime: datetime.length === 16 ? `${datetime}:00` : datetime,
 				appointment_type: this.form.appointment_type,
 				notes: this.form.notes,
@@ -258,8 +340,16 @@ export default {
 				this.error = __("You do not have permission to create Veterinary Appointments.");
 				return;
 			}
-			if (!this.form.patient || !this.form.branch || !this.form.practitioner || !this.form.appointment_datetime) {
-				this.error = __("Patient, Service Branch, Practitioner and Appointment Date/Time are required.");
+			if (!this.form.patient || !this.form.branch || !this.form.appointment_datetime) {
+				this.error = __("Patient, Service Branch and Appointment Date/Time are required.");
+				return;
+			}
+			if (this.isGrooming && (!this.form.grooming_service || !this.form.groomer)) {
+				this.error = __("Grooming Service and Groomer are required for Grooming appointments.");
+				return;
+			}
+			if (!this.isGrooming && !this.form.practitioner) {
+				this.error = __("Veterinary Practitioner is required for this appointment type.");
 				return;
 			}
 			this.saving = true;
