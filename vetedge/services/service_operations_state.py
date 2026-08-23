@@ -25,6 +25,37 @@ def _align_grooming_detail(detail: dict, session_name: str) -> dict:
         blocked_keys.add("cancel-grooming")
 
     actions = [action for action in detail.get("actions") or [] if action.get("key") not in blocked_keys]
+
+    veterinary_appointment = doc.get("veterinary_appointment")
+    legacy_appointment = doc.get("appointment")
+    actions = [action for action in actions if action.get("key") != "open-grooming-appointment"]
+    if veterinary_appointment:
+        detail.setdefault("fields", []).append(
+            {
+                "key": "veterinary_appointment",
+                "label": _("Veterinary Appointment"),
+                "type": "Link",
+                "value": veterinary_appointment,
+            }
+        )
+        actions.insert(
+            0,
+            {
+                "key": "open-veterinary-appointment",
+                "label": _("Open Appointment"),
+                "target_name": veterinary_appointment,
+            },
+        )
+    elif legacy_appointment:
+        actions.insert(
+            0,
+            {
+                "key": "open-legacy-grooming-appointment",
+                "label": _("Open Legacy Appointment"),
+                "target_name": legacy_appointment,
+            },
+        )
+
     if not gate.get("can_proceed"):
         billing = next((action for action in actions if action.get("key") == "billing"), None)
         if billing:
