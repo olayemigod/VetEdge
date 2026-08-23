@@ -20,68 +20,14 @@ frappe.ui.form.on("Veterinary Appointment", {
 	},
 
 	refresh(frm) {
-		const grooming = is_grooming_appointment(frm);
 		set_consultation_link_display(frm);
 
 		if (frm.is_new()) {
 			return;
 		}
 
-		if (!grooming) {
-			add_consultation_link_actions(frm);
-			if (has_service_consultation(frm)) {
-				return;
-			}
-		}
-
-		if (frm.doc.status === "Awaiting Registration") {
-			frm.dashboard.add_comment(
-				__("Complete the linked guest registration request before this appointment can be approved."),
-				"yellow",
-				true
-			);
-			if (frm.doc.guest_booking_request) {
-				frm.add_custom_button(__("Open Registration Request"), () => {
-					frappe.set_route("Form", "Veterinary Guest Booking Request", frm.doc.guest_booking_request);
-				}, __("Appointment"));
-			}
-			return;
-		}
-
-		if (frm.doc.status === "Owner Requested") {
-			frm.add_custom_button(__("Approve Appointment"), () => {
-				transition_appointment(frm, "Scheduled");
-			}, __("Appointment"));
-			frm.add_custom_button(__("Cancel Request"), () => {
-				transition_appointment(frm, "Cancelled");
-			}, __("Appointment"));
-			return;
-		}
-
-		if (frm.doc.status === "Scheduled") {
-			frm.add_custom_button(__("Confirm Appointment"), () => {
-				transition_appointment(frm, "Confirmed");
-			}, __("Appointment"));
-		}
-
-		if (frm.doc.status === "Confirmed") {
-			frm.add_custom_button(__("Check In"), () => {
-				transition_appointment(frm, "Checked In");
-			}, __("Appointment"));
-		}
-
-		if (grooming && ["Confirmed", "Checked In", "In Service"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Create / Open Grooming Session"), () => {
-				start_grooming_session(frm);
-			}, __("Appointment"));
-			return;
-		}
-
-		if (!grooming && ["Confirmed", "Checked In"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Start Consultation"), () => {
-				start_consultation(frm);
-			}, __("Appointment"));
-		}
+		add_reference_actions(frm);
+		load_smart_appointment_actions(frm);
 	},
 
 	patient(frm) {
@@ -138,102 +84,107 @@ frappe.ui.form.on("Veterinary Appointment", {
 	},
 });
 
+function normalized_appointment_type(frm) {
+	return String(frm.doc.appointment_type || "Consultation").trim() || "Consultation";
+}
+
 function is_grooming_appointment(frm) {
-	return frm.doc.appointment_type === "Grooming";
+	return normalized_appointment_type(frm) === "Grooming";
+}
+
+function is_consultation_appointment(frm) {
+	return ["Consultation", "Follow Up"].includes(normalized_appointment_type(frm));
 }
 
 function set_consultation_link_display(frm) {
-	const grooming = is_grooming_appointment(frm);
-	frm.toggle_display("follow_up_reference", !grooming && Boolean(frm.doc.is_follow_up || frm.doc.follow_up_reference));
-	frm.toggle_display("linked_consultation", !grooming && has_service_consultation(frm));
-}
-
-function add_consultation_link_actions(frm) {
-	if (has_service_consultation(frm)) {
-		frm.add_custom_button(__("Open Service Consultation"), () => {
-			frappe.set_route("Form", "Veterinary Consultation", frm.doc.linked_consultation);
-		}, __("Consultation"));
-	}
-
-	if (frm.doc.follow_up_reference) {
-		frm.add_custom_button(__("Open Originating Consultation"), () => {
-			frappe.set_route("Form", "Veterinary Consultation", frm.doc.follow_up_reference);
-		}, __("Consultation"));
-	}
-}
-
-function has_service_consultation(frm) {
-	return Boolean(
-		frm.doc.linked_consultation &&
-		frm.doc.linked_consultation !== frm.doc.follow_up_reference
+	const consultation = is_consultation_appointment(frm);
+	frm.toggle_display(
+		"follow_up_reference",
+		consultation && Boolean(frm.doc.is_follow_up || frm.doc.follow_up_reference)
 	);
+	frm.toggle_display("linked_consultation", consultation && Boolean(frm.doc.linked_consultation));
 }
 
-function transition_appointment(frm, status) {
-	frappe.call({
-		method: "vetedge.services.appointment_flow.transition_appointment_status",
-		args: {
-			appointment: frm.doc.name,
-			status,
-		},
-		freeze: true,
-		freeze_message: __("Updating appointment..."),
-		callback() {
-			frappe.show_alert({
-				message: __("Appointment updated"),
-				indicator: "green",
-			});
-			frm.reload_doc();
-		},
-	});
+function add_reference_actions(frm) {
+	if (!is_consultation_appointment(frm) || !frm.doc.follow_up_reference) {
+		return;
+	}
+	frm.add_custom_button(__("Open Originating Consultation"), () => {
+		open_vetedge_route(`/desk/vetedge-clinical-workspace?consultation=${encodeURIComponent(frm.doc.follow_up_reference)}`);
+	}, __("Consultation"));
 }
 
-function start_consultation(frm) {
-	frappe.call({
-		method: "vetedge.services.appointment_flow.create_consultation_from_appointment",
-		args: {
-			appointment: frm.doc.name,
-		},
-		freeze: true,
-		freeze_message: __("Starting consultation..."),
-		callback(result) {
-			const consultation = result.message;
-			if (!consultation?.name) {
-				return;
-			}
-
-			frappe.show_alert({
-				message: __("Consultation started"),
-				indicator: "green",
-			});
-			frm.reload_doc().then(() => {
-				frappe.set_route("Form", "Veterinary Consultation", consultation.name);
-			});
-		},
-	});
+async function load_smart_appointment_actions(frm) {
+	const appointment = frm.doc.name;
+	try {
+		const response = await frappe.call({
+			method: "vetedge.services.appointment_actions.get_appointment_action_state",
+			args: { appointment },
+		});
+		if (frm.doc.name !== appointment) return;
+		const state = response.message || {};
+		if (state.message) {
+			frm.dashboard.add_comment(__(state.message), "blue", true);
+		}
+		for (const action of state.actions || []) {
+			add_smart_action_button(frm, action);
+		}
+	} catch (error) {
+		frm.dashboard.add_comment(
+			__(error?.message || "Appointment actions could not be loaded. Refresh the appointment and try again."),
+			"red",
+			true
+		);
+	}
 }
 
-function start_grooming_session(frm) {
-	frappe.call({
-		method: "vetedge.services.appointment_grooming_bridge.create_grooming_session_from_veterinary_appointment",
-		args: {
-			appointment: frm.doc.name,
-		},
-		freeze: true,
-		freeze_message: __("Preparing grooming session..."),
-		callback(result) {
-			const session = result.message;
-			if (!session?.name) {
-				return;
-			}
+function add_smart_action_button(frm, action) {
+	if (!action?.key || !action?.label) return;
+	const label = __(action.label);
+	frm.add_custom_button(label, () => run_smart_appointment_action(frm, action), __("Appointment"));
+	if (action.primary) {
+		frm.change_custom_button_type(label, __("Appointment"), "primary");
+	}
+}
 
-			frappe.show_alert({
-				message: __(session.created ? "Grooming session created" : "Grooming session opened"),
-				indicator: "green",
-			});
-			frm.reload_doc().then(() => {
-				frappe.set_route("Form", "Pet Grooming Session", session.name);
-			});
-		},
-	});
+async function run_smart_appointment_action(frm, action) {
+	if (!action?.key || frm.__vetedge_appointment_action_busy) return;
+	frm.__vetedge_appointment_action_busy = true;
+	try {
+		const response = await frappe.call({
+			method: "vetedge.services.appointment_actions.perform_appointment_action",
+			args: {
+				appointment: frm.doc.name,
+				action: action.key,
+				expected_modified: frm.doc.modified,
+			},
+			freeze: Boolean(action.mutates),
+			freeze_message: action.mutates ? __(action.label) : undefined,
+		});
+		const result = response.message || {};
+		if (result.message) {
+			frappe.show_alert({ message: __(result.message), indicator: "green" });
+		}
+		if (result.mutated) {
+			await frm.reload_doc();
+		}
+		if (result.open?.route) {
+			open_vetedge_route(result.open.route);
+		}
+	} catch (error) {
+		frappe.msgprint({
+			title: __("Appointment action unavailable"),
+			message: error?.message || __("The appointment action could not be completed."),
+			indicator: "red",
+		});
+	} finally {
+		frm.__vetedge_appointment_action_busy = false;
+	}
+}
+
+function open_vetedge_route(route) {
+	if (!route) return;
+	const adapter = (window.EdgeSuiteUI || window.EdgeUI)?.getAdapter?.("navigation:vetedge");
+	if (adapter?.open?.(route) === true) return;
+	window.location.assign(route);
 }
