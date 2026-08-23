@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "vetedge" / "services" / "appointment_edgeui.py"
+BRIDGE = ROOT / "vetedge" / "services" / "appointment_grooming_bridge.py"
 COMPONENT = (
 	ROOT
 	/ "vetedge"
@@ -19,6 +20,62 @@ RESOURCE_COMPONENT = (
 	/ "VetEdgeResourceCenter.vue"
 )
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_resource_center.bundle.js"
+SERVICE_COMPONENT = (
+	ROOT
+	/ "vetedge"
+	/ "public"
+	/ "js"
+	/ "vetedge_service_operations"
+	/ "VetEdgeServiceOperations.vue"
+)
+APPOINTMENT_CONTROLLER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_appointment"
+	/ "veterinary_appointment.py"
+)
+APPOINTMENT_CLIENT = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_appointment"
+	/ "veterinary_appointment.js"
+)
+APPOINTMENT_SCHEMA = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_appointment"
+	/ "veterinary_appointment.json"
+)
+SESSION_CONTROLLER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "pet_grooming_session"
+	/ "pet_grooming_session.py"
+)
+SESSION_SCHEMA = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "pet_grooming_session"
+	/ "pet_grooming_session.json"
+)
+CONSULTATION_CONTROLLER = (
+	ROOT
+	/ "vetedge"
+	/ "veterinary"
+	/ "doctype"
+	/ "veterinary_consultation"
+	/ "veterinary_consultation.py"
+)
 LOADER = (
 	ROOT
 	/ "vetedge"
@@ -33,7 +90,7 @@ def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
-def test_appointment_links_are_permission_and_context_aware():
+def test_appointment_links_are_permission_context_and_service_aware():
 	content = read(API)
 
 	for contract in (
@@ -42,8 +99,12 @@ def test_appointment_links_are_permission_and_context_aware():
 		"frappe.get_list(",
 		"get_assigned_branches",
 		"get_veterinary_doctor_users",
+		"get_grooming_staff_users",
 		"Branch Practitioner Assignment",
 		'filters["species"] = context["species"]',
+		'filters["is_active"] = 1',
+		'if field == "groomer"',
+		'if field == "grooming_service"',
 	):
 		assert contract in content
 
@@ -51,15 +112,21 @@ def test_appointment_links_are_permission_and_context_aware():
 	assert "frappe.db.sql(" not in content
 
 
-def test_appointment_creation_reuses_existing_validation_and_permissions():
+def test_new_appointment_creation_uses_one_scheduler_without_boarding_duplication():
 	content = read(API)
 
+	assert 'APPOINTMENT_TYPES = ("Consultation", "Follow Up", "Vaccination", "Grooming", "Other")' in content
+	assert 'APPOINTMENT_TYPES = ("Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other")' not in content
 	for contract in (
 		"create_edgeui_appointment",
 		'frappe.has_permission("Veterinary Appointment", "create")',
 		"can_access_branch_data",
-		"validate_doctor_user",
-		"get_datetime(appointment_datetime)",
+		'if appointment_type == "Grooming":',
+		"Grooming Service and Groomer are required for Grooming appointments.",
+		"Veterinary Practitioner is required for this appointment type.",
+		"validate_doctor_user(practitioner)",
+		'"grooming_service": grooming_service or None',
+		'"groomer": groomer or None',
 		'"status": "Scheduled"',
 		'"created_from": "Manual"',
 		'"primary_owner": patient_values.primary_owner',
@@ -71,7 +138,7 @@ def test_appointment_creation_reuses_existing_validation_and_permissions():
 	assert "Payment Entry" not in content
 
 
-def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
+def test_appointment_flow_is_patient_first_and_switches_staff_fields_by_service():
 	content = read(COMPONENT)
 
 	for contract in (
@@ -80,50 +147,45 @@ def test_appointment_flow_is_patient_first_and_derives_owner_from_patient():
 		"EdgeDropdown",
 		'label="Veterinary Patient"',
 		'label="Service Branch"',
-		"vetedge-appointment-flow-readonly",
+		'label="Veterinary Practitioner"',
+		'label="Grooming Service"',
+		'label="Groomer"',
+		'v-if="!isGrooming"',
+		'v-if="isGrooming"',
 		"Populated from selected patient",
-		"this.searchLink(\"patient\", query)",
-		'const matches = await this.searchLink("patient", patient)',
-		'const exact = matches.find((row) => String(row?.value || "") === patient)',
-		"const patientRow = exact?.raw || {}",
-		"patientRow.primary_owner",
-		"this.form.owner = owner",
-		"this.labels.owner = owner",
+		"searchGroomingService",
+		"searchGroomer",
 		"this.clearPractitioner()",
+		"this.clearGroomer()",
 		"create_edgeui_appointment",
 	):
 		assert contract in content
 
-	patient_position = content.index('label="Veterinary Patient"')
-	owner_position = content.index('class="vetedge-appointment-flow-label">Pet Owner</span>')
-	branch_position = content.index('label="Service Branch"')
-	assert patient_position < owner_position < branch_position
-
-	assert ':disabled="!form.owner || !form.branch"' not in content
-	assert 'placeholder="Search the selected owner\'s patients"' not in content
-	assert "if (changed) this.clearPatient()" not in content
-	assert "this.clearPatient();\n\t\t},\n\t\tclearBranch" not in content
+	assert '["Consultation", "Follow Up", "Vaccination", "Grooming", "Other"]' in content
+	assert '"Boarding"' not in content
 	assert "frappe.ui.Dialog" not in content
 	assert "frappe.new_doc" not in content
 	assert "window.open" not in content
 
 
-def test_appointment_submit_uses_patient_service_branch_and_practitioner():
+def test_appointment_submit_sends_only_fields_relevant_to_selected_service():
 	content = read(COMPONENT)
 
 	for contract in (
 		"patient: this.form.patient",
 		"branch: this.form.branch",
-		"practitioner: this.form.practitioner",
-		"Patient, Service Branch, Practitioner and Appointment Date/Time are required.",
+		'practitioner: this.isGrooming ? "" : this.form.practitioner',
+		"grooming_service: this.isGrooming ? this.form.grooming_service",
+		"groomer: this.isGrooming ? this.form.groomer",
+		"Grooming Service and Groomer are required for Grooming appointments.",
+		"Veterinary Practitioner is required for this appointment type.",
 	):
 		assert contract in content
 
 	assert "owner: this.form.owner" not in content
-	assert "Owner, Patient, Branch, Practitioner" not in content
 
 
-def test_resource_center_exposes_new_appointment_action_without_dom_interception():
+def test_resource_center_uses_typed_appointment_deep_links_and_hides_legacy_scheduler():
 	bundle = read(BUNDLE)
 	resource_component = read(RESOURCE_COMPONENT)
 	loader = read(LOADER)
@@ -134,7 +196,10 @@ def test_resource_center_exposes_new_appointment_action_without_dom_interception
 		"flowApp.unmount()",
 		"flowHost.remove()",
 		"this.resource === 'appointments'",
-		"flowView?.open?.()",
+		"appointment_type",
+		"flowView?.open?.({ appointment_type: state.appointmentType || '' })",
+		"LEGACY_GROOMING_RESOURCE = 'grooming'",
+		"filter((option) => option.value !== LEGACY_GROOMING_RESOURCE)",
 	):
 		assert contract in bundle
 
@@ -156,3 +221,52 @@ def test_resource_center_exposes_new_appointment_action_without_dom_interception
 	assert "EdgeModal" in loader
 	assert "EdgeDropdown" in loader
 	assert "window.mountVetEdgeResourceCenter" in loader
+
+
+def test_grooming_appointment_bridge_preserves_legacy_records_but_uses_veterinary_appointment_for_new_sessions():
+	bridge = read(BRIDGE)
+	appointment_controller = read(APPOINTMENT_CONTROLLER)
+	appointment_client = read(APPOINTMENT_CLIENT)
+	appointment_schema = read(APPOINTMENT_SCHEMA)
+	session_controller = read(SESSION_CONTROLLER)
+	session_schema = read(SESSION_SCHEMA)
+	consultation_controller = read(CONSULTATION_CONTROLLER)
+
+	for contract in (
+		'GROOMING_APPOINTMENT_TYPE = "Grooming"',
+		"validate_grooming_veterinary_appointment",
+		"create_grooming_session_from_veterinary_appointment",
+		'filters={"veterinary_appointment": appointment_doc.name}',
+		'"veterinary_appointment": appointment_doc.name',
+		"can_access_branch_data(get_current_user(), appointment_doc.branch, raise_exception=True)",
+		"sync_veterinary_appointment_from_grooming_session",
+	):
+		assert contract in bridge
+
+	assert 'if getattr(args[0], "appointment_type", None) == "Grooming"' in appointment_controller
+	assert 'appointment_type === "Grooming"' in appointment_client
+	assert "Create / Open Grooming Session" in appointment_client
+	assert "create_grooming_session_from_veterinary_appointment" in appointment_client
+	assert '"fieldname": "grooming_service"' in appointment_schema
+	assert '"fieldname": "groomer"' in appointment_schema
+	assert '"fieldname": "veterinary_appointment"' in session_schema
+	assert "Legacy Grooming Appointment" in session_schema
+	assert "validate_veterinary_appointment_grooming_session" in session_controller
+	assert 'SERVICE_ONLY_APPOINTMENT_TYPES = {"Grooming", "Boarding"}' in consultation_controller
+	assert "validate_linked_appointment_service_type(self)" in consultation_controller
+
+
+def test_hospital_services_uses_business_documents_and_generic_veterinary_wording():
+	content = read(SERVICE_COMPONENT)
+
+	assert '{ value: "grooming-appointments"' not in content
+	assert '{ value: "grooming-sessions", label: "Grooming Sessions"' in content
+	assert 'if (["boarding-bookings", "boarding-stays"].includes(this.resource)) return "New Boarding Booking";' in content
+	assert 'if (this.resource === "grooming-sessions") return "New Grooming Appointment";' in content
+	assert "/desk/vetedge-resource-center?resource=appointments&new=1&appointment_type=Grooming" in content
+	assert "<strong>Veterinary</strong>" in content
+	assert "<strong>EdgeSuite</strong>" not in content
+	assert 'active-route="/desk/vetedge-service-operations"' in content
+	assert "`/desk/vetedge-service-operations?${params.toString()}`" in content
+	assert 'action.key === "open-veterinary-appointment"' in content
+	assert "/desk/pet-grooming-appointment/" in content
