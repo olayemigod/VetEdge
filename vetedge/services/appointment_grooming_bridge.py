@@ -240,6 +240,7 @@ def create_grooming_session_from_veterinary_appointment(appointment: str) -> dic
 		frappe.throw("Only Grooming Veterinary Appointments can create Grooming Sessions.", frappe.ValidationError)
 	if appointment_doc.status not in {"Confirmed", "Checked In", "In Service"}:
 		frappe.throw("Grooming appointment must be Confirmed or Checked In before creating its session.", frappe.ValidationError)
+	can_access_branch_data(get_current_user(), appointment_doc.branch, raise_exception=True)
 	can_create_grooming_session(get_current_user(), appointment_doc, raise_exception=True)
 
 	existing = frappe.get_all(
