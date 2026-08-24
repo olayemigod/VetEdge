@@ -51,7 +51,15 @@ def get_display_label(doctype: str | None, name: str | None) -> str:
     return name
 
 
-def enrich_link_display_values(rows: list, columns: list[dict]) -> None:
+def enrich_link_display_values(rows: list, columns: list[dict], replace_values: bool = True) -> None:
+    """Resolve Link labels for presentation rows while preserving raw Link IDs.
+
+    `_display` remains available to modern renderers. `replace_values=True` also
+    places the readable label into the visible field itself for older/current
+    EdgeSuite table components that render the raw row value directly. The
+    authoritative database Link value is retained in `_raw` and is never used
+    to mutate source documents from these read-only list payloads.
+    """
     link_columns = [column for column in columns or [] if column.get("fieldtype") == "Link"]
     if not rows or not link_columns:
         return
@@ -95,7 +103,15 @@ def enrich_link_display_values(rows: list, columns: list[dict]) -> None:
 
     for row in rows:
         display = row.setdefault("_display", {})
+        raw = row.setdefault("_raw", {}) if replace_values else None
         for fieldname, doctype in field_doctypes.items():
             value = str(row.get(fieldname) or "").strip()
-            if value:
-                display[fieldname] = caches.get(doctype, {}).get(value, value)
+            if not value:
+                continue
+            label = caches.get(doctype, {}).get(value, value)
+            display[fieldname] = label
+            if replace_values and label != value:
+                raw[fieldname] = value
+                row[fieldname] = label
+        if replace_values and raw is not None and not raw:
+            row.pop("_raw", None)
