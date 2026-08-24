@@ -3,9 +3,10 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, getdate
+from frappe.utils import cint, cstr, getdate
 
 from vetedge.install.custom_fields import BRANCH_NADIS_ADMIN_LEVEL_1_FIELD
+from vetedge.services.permissions import get_assigned_branches, get_current_user, user_has_global_branch_access
 
 
 COUNT_FIELDS = (
@@ -26,9 +27,24 @@ class VeterinaryDiseaseOutbreak(Document):
         self._derive_animal_species_mappings()
 
     def validate(self):
+        self._validate_branch_access()
         self._validate_follow_up()
         self._validate_counts()
         self._validate_timeline()
+
+    def _validate_branch_access(self):
+        user = get_current_user()
+        if user_has_global_branch_access(user):
+            return
+        allowed = {
+            cstr(branch).strip()
+            for branch in get_assigned_branches(user)
+            if cstr(branch).strip()
+        }
+        if not allowed:
+            frappe.throw(_("You do not have an assigned Veterinary Branch for disease-outbreak reporting."), frappe.PermissionError)
+        if cstr(self.service_branch).strip() not in allowed:
+            frappe.throw(_("You do not have access to the selected Reporting Branch."), frappe.PermissionError)
 
     def _derive_branch_context(self):
         if not self.service_branch:
