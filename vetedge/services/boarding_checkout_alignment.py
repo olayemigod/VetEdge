@@ -6,60 +6,30 @@ from frappe.utils import now_datetime, nowdate
 from vetedge.services.boarding import (
     PET_BOARDING_BOOKING_DOCTYPE,
     PET_BOARDING_STAY_DOCTYPE,
-    calculate_boarding_charges,
     emit_boarding_event,
     ensure_booking_transition_allowed,
     get_existing_active_stay,
-    use_billing_core_for_boarding,
-    validate_boarding_checkout_billing as validate_legacy_boarding_checkout_billing,
 )
+from vetedge.services.boarding_billing_release_safety import validate_boarding_checkout_release_safety
 
 
 def validate_boarding_checkout_billing_aligned(doc) -> None:
-    """Validate checkout against the billing authority used for this booking.
+    """Validate Boarding checkout against cumulative explicit invoice evidence.
 
-    Billing Core sessions are the authoritative charge/invoice ledger when they
-    are enabled. Re-scanning only the linked Sales Invoice item rows can produce
-    a false delta after the source charge has already been synchronized through
-    Billing Core. Legacy sites retain the existing invoice-item reconciliation.
+    PR #36 release safety intentionally does not resync Boarding into the generic
+    Billing Session charge engine here. Boarding charges are duration-based and
+    can change after a submitted invoice; resyncing the changed cumulative total
+    as a new Billing Session charge can duplicate the full stay amount.
+
+    The release-safety reconciler instead treats submitted Boarding invoices as
+    immutable historical billing, adds any Boarding adjustment invoices, and
+    requires their cumulative active total to equal the current stay charge.
     """
-    charges = calculate_boarding_charges(doc)
-    doc.daily_rate = charges["daily_rate"]
-    doc.billable_days = charges["billable_days"]
-    doc.total_boarding_charge = charges["total_boarding_charge"]
-
-    if not use_billing_core_for_boarding():
-        validate_legacy_boarding_checkout_billing(doc)
-        return
-
-    from vetedge.services.billing_core import (
-        get_source_payment_gate_status,
-        resolve_billing_session,
-        sync_source_to_billing_session,
-    )
-
-    # Always resynchronize the current stay charge before evaluating checkout.
-    # If a submitted invoice no longer matches the current charge, Billing Core
-    # will retain/create pending charge evidence and the gate will fail closed.
-    sync_source_to_billing_session(PET_BOARDING_BOOKING_DOCTYPE, doc.name)
-    session = resolve_billing_session(PET_BOARDING_BOOKING_DOCTYPE, doc.name)
-    status = get_source_payment_gate_status(PET_BOARDING_BOOKING_DOCTYPE, doc.name)
-
-    if not session and not status.get("invoices"):
-        frappe.throw(
-            "Create the boarding invoice before checking out this booking.",
-            frappe.ValidationError,
-        )
-    if not status.get("can_proceed"):
-        frappe.throw(
-            status.get("message")
-            or "Submit and fully pay the current boarding charges before checking out this booking.",
-            frappe.ValidationError,
-        )
+    validate_boarding_checkout_release_safety(doc)
 
 
 def check_out_boarding_booking_doc_aligned(doc) -> dict:
-    """Checkout using Billing Core truth without mutating submitted invoices."""
+    """Checkout only after cumulative Boarding billing is reconciled and paid."""
     ensure_booking_transition_allowed(doc.status, "Checked Out")
     if not doc.linked_stay and not get_existing_active_stay(doc.name):
         frappe.throw("Boarding stay must exist before check out.", frappe.ValidationError)
