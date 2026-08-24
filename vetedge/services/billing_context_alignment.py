@@ -5,6 +5,8 @@ from frappe.utils import cint
 
 from vetedge.services.portal_access import require_internal_user
 
+BOARDING_DOCTYPE = "Pet Boarding Booking"
+
 
 def _invoice_names(rows: list[dict] | None) -> set[str]:
     return {
@@ -183,6 +185,11 @@ def _normalize_payload(payload: dict | None) -> dict:
 @frappe.whitelist()
 def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
     require_internal_user()
+    if source_doctype == BOARDING_DOCTYPE:
+        from vetedge.services.boarding_billing_release_safety import get_boarding_billing_modal_state
+
+        return _normalize_state(get_boarding_billing_modal_state(source_name))
+
     from vetedge.services.billing_state_security import get_billing_modal_state as original
 
     return _normalize_state(original(source_doctype=source_doctype, source_name=source_name))
@@ -191,6 +198,23 @@ def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 @frappe.whitelist()
 def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dict:
     require_internal_user()
+    if source_doctype == BOARDING_DOCTYPE:
+        from vetedge.services.boarding_billing_release_safety import (
+            create_or_update_boarding_delta_invoice,
+            get_boarding_billing_modal_state,
+        )
+
+        result = create_or_update_boarding_delta_invoice(source_name)
+        return _normalize_payload(
+            {
+                "created": bool(result.get("created")),
+                "invoice": result.get("invoice"),
+                "open_invoice_name": result.get("open_invoice_name") or result.get("invoice"),
+                "result": result,
+                "state": get_boarding_billing_modal_state(source_name),
+            }
+        )
+
     from vetedge.services.billing_state_security import create_or_update_modal_invoice as original
 
     return _normalize_payload(original(source_doctype=source_doctype, source_name=source_name))
@@ -199,6 +223,11 @@ def create_or_update_modal_invoice(source_doctype: str, source_name: str) -> dic
 @frappe.whitelist()
 def submit_modal_invoice(source_doctype: str, source_name: str, invoice: str | None = None) -> dict:
     require_internal_user()
+    if source_doctype == BOARDING_DOCTYPE:
+        from vetedge.services.boarding_billing_release_safety import submit_boarding_modal_invoice
+
+        return _normalize_payload(submit_boarding_modal_invoice(source_name, invoice=invoice))
+
     from vetedge.services.billing_state_security import submit_modal_invoice as original
 
     return _normalize_payload(original(source_doctype=source_doctype, source_name=source_name, invoice=invoice))
@@ -218,6 +247,23 @@ def record_modal_invoice_payment(
     remarks: str | None = None,
 ) -> dict:
     require_internal_user()
+    if source_doctype == BOARDING_DOCTYPE:
+        from vetedge.services.boarding_billing_release_safety import record_boarding_modal_payment
+
+        return _normalize_payload(
+            record_boarding_modal_payment(
+                source_name,
+                invoice=invoice,
+                amount=amount,
+                mode_of_payment=mode_of_payment,
+                paid_to=paid_to,
+                posting_date=posting_date,
+                reference_no=reference_no,
+                reference_date=reference_date,
+                remarks=remarks,
+            )
+        )
+
     from vetedge.services.billing_state_security import record_modal_invoice_payment as original
 
     return _normalize_payload(
