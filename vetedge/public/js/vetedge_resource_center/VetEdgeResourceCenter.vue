@@ -217,6 +217,19 @@
 										>
 											View / Edit
 										</button>
+										<template v-if="isAppointments">
+											<button
+												v-for="action in appointmentActions(row)"
+												:key="`${row.name}:${action.key}`"
+												type="button"
+												class="edge-button edge-button--compact"
+												:class="appointmentActionClass(action)"
+												:disabled="isAppointmentActionBusy(row, action)"
+												@click="runAppointmentAction(row, action)"
+											>
+												{{ isAppointmentActionBusy(row, action) ? 'Processing…' : action.label }}
+											</button>
+										</template>
 										<button
 											v-if="!isClinicalResource && canEditRow(row)"
 											type="button"
@@ -300,6 +313,7 @@ export default {
 			resource: RESOURCE_OPTIONS.some((option) => option.value === requested) ? requested : "patients",
 			start: 0,
 			pageLength: 25,
+			appointmentActionBusy: "",
 			patientFilters: {
 				default_branch: parameters.get("branch") || "",
 				status: parameters.get("status") || "",
@@ -355,6 +369,9 @@ export default {
 		},
 		isPatients() {
 			return this.resource === "patients";
+		},
+		isAppointments() {
+			return this.resource === "appointments";
 		},
 		isLabOrders() {
 			return this.resource === "lab-orders";
@@ -555,6 +572,54 @@ export default {
 		registrationActionClass(row) {
 			return row?._registration_action?.tone === "primary" ? "edge-button--primary" : "";
 		},
+		appointmentActions(row) {
+			if (!this.isAppointments) return [];
+			return row?._appointment_action_state?.actions || [];
+		},
+		appointmentActionKey(row, action) {
+			return `${row?.name || ''}:${action?.key || ''}`;
+		},
+		isAppointmentActionBusy(row, action) {
+			return this.appointmentActionBusy === this.appointmentActionKey(row, action);
+		},
+		appointmentActionClass(action) {
+			return {
+				"edge-button--primary": Boolean(action?.primary),
+				"edge-button--danger": Boolean(action?.danger),
+			};
+		},
+		async runAppointmentAction(row, action) {
+			if (!row?.name || !action?.key || this.appointmentActionBusy) return;
+			this.appointmentActionBusy = this.appointmentActionKey(row, action);
+			try {
+				const response = await frappe.call("vetedge.services.appointment_actions.perform_appointment_action", {
+					appointment: row.name,
+					action: action.key,
+					expected_modified: row.modified,
+				});
+				const result = response.message || {};
+				if (result.message) {
+					frappe.show_alert({ message: __(result.message), indicator: "green" });
+				}
+				if (result.open?.route) {
+					this.openRoute(result.open.route);
+					return;
+				}
+				if (result.mutated) {
+					await this.loadPage();
+				} else if (result.state) {
+					row._appointment_action_state = result.state;
+				}
+			} catch (error) {
+				frappe.msgprint({
+					title: __("Appointment action unavailable"),
+					message: error?.message || __("The appointment action could not be completed."),
+					indicator: "red",
+				});
+			} finally {
+				this.appointmentActionBusy = "";
+			}
+		},
 		canEditRow(row) {
 			return Boolean(this.page.can_quick_edit && Number(row.docstatus || 0) === 0);
 		},
@@ -729,7 +794,7 @@ export default {
 }
 
 .vetedge-resource-table tbody tr:hover { background: var(--edge-color-brand-50, #eef7ff); }
-.vetedge-resource-actions-column { min-width: 19rem; }
+.vetedge-resource-actions-column { min-width: 24rem; }
 
 .vetedge-resource-row-actions,
 .vetedge-resource-pagination,
