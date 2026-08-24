@@ -157,6 +157,38 @@ def test_resource_center_page_uses_edgesuite_shell_and_same_tab_full_forms():
 	assert '"_blank", "noopener,noreferrer"' not in component
 
 
+def test_resource_center_appointment_rows_render_server_resolved_smart_actions():
+	api = read(RESOURCE_API)
+	component = read(RESOURCE_COMPONENT)
+
+	for contract in (
+		"_resource_query_fields",
+		"_with_appointment_action_states",
+		"build_appointment_action_state",
+		'row["_appointment_action_state"]',
+		"fields=query_fields",
+		"rows = _with_appointment_action_states(config, rows)",
+	):
+		assert contract in api
+
+	for contract in (
+		"isAppointments()",
+		'v-for="action in appointmentActions(row)"',
+		"appointmentActions(row)",
+		"appointmentActionClass(action)",
+		"isAppointmentActionBusy(row, action)",
+		"runAppointmentAction(row, action)",
+		"vetedge.services.appointment_actions.perform_appointment_action",
+		"expected_modified: row.modified",
+		"result.open?.route",
+		"Processing…",
+	):
+		assert contract in component
+
+	# The page payload already contains action state; do not add one HTTP request per row.
+	assert "get_appointment_action_state" not in component
+
+
 def test_resource_center_quick_edit_uses_shared_edgesuite_fields_not_local_native_controls():
 	quick_editor = read(RESOURCE_QUICK_EDITOR)
 	bundle = read(RESOURCE_BUNDLE)
