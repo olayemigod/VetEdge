@@ -193,6 +193,18 @@
 		],
 	});
 
+	const EXTRA_FILTER_KEYS = [...new Set(Object.values(DEFINITIONS).flatMap((definitions) => definitions.map((definition) => definition.field).filter(Boolean)))];
+	// The Report Center declares its base filter-key array before this asset is lazy-loaded.
+	// Mutating that array here keeps URL sharing and saved-view apply/save parity for every
+	// migrated report without duplicating a second report-state store.
+	try {
+		if (typeof REPORT_FILTER_KEYS !== "undefined" && Array.isArray(REPORT_FILTER_KEYS)) {
+			for (const key of EXTRA_FILTER_KEYS) if (!REPORT_FILTER_KEYS.includes(key)) REPORT_FILTER_KEYS.push(key);
+		}
+	} catch (_error) {
+		// The filter UI remains usable in isolated tests or pages without Report Center state.
+	}
+
 	function linkNode({ h, EdgeLinkField, reportName, filters, searcher, definition, onChange }) {
 		const field = definition.field;
 		return h(EdgeLinkField, {
@@ -218,7 +230,9 @@
 
 	function inputNode({ h, EdgeInput, filters, definition, onChange }) {
 		const field = definition.field;
-		return h(EdgeInput, {
+		const Input = EdgeInput || global.EdgeSuiteUI?.components?.EdgeInput || global.EdgeUI?.components?.EdgeInput;
+		if (!Input) return null;
+		return h(Input, {
 			modelValue: filters[field] ?? "",
 			label: __(definition.label),
 			type: definition.inputType || "text",
@@ -234,7 +248,7 @@
 			if (definition.type === "link") return linkNode({ ...context, definition });
 			if (definition.type === "input") return inputNode({ ...context, definition });
 			return selectNode({ ...context, definition });
-		});
+		}).filter(Boolean);
 	}
 
 	function filterKeys(reportName) {
@@ -248,6 +262,7 @@
 	global.VetEdgeReportFilterUI = Object.freeze({
 		extraNodes,
 		filterKeys,
+		extraFilterKeys: EXTRA_FILTER_KEYS,
 		hasSmartDefinition,
 		definitions: DEFINITIONS,
 	});
