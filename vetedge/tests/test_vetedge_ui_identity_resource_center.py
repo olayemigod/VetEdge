@@ -162,11 +162,11 @@ def test_resource_center_appointment_rows_render_server_resolved_smart_actions()
 	component = read(RESOURCE_COMPONENT)
 
 	for contract in (
-		"_resource_query_fields",
 		"_with_appointment_action_states",
 		"build_appointment_action_state",
+		'frappe.get_cached_doc("Veterinary Appointment", row.name)',
+		'doc.check_permission("read")',
 		'row["_appointment_action_state"]',
-		"fields=query_fields",
 		"rows = _with_appointment_action_states(config, rows)",
 	):
 		assert contract in api
