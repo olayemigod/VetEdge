@@ -52,8 +52,19 @@ class VeterinaryDiseaseOutbreak(Document):
         branch = frappe.get_doc("Branch", self.service_branch)
         branch.check_permission("read")
         meta = frappe.get_meta("Branch")
-        if meta.has_field("company") and not self.company:
-            self.company = branch.get("company")
+        branch_company = cstr(branch.get("company") if meta.has_field("company") else "").strip()
+        selected_company = cstr(self.company).strip()
+        if branch_company and selected_company and branch_company != selected_company:
+            frappe.throw(
+                _("Reporting Branch {0} belongs to Company {1}, not {2}.").format(
+                    self.service_branch,
+                    branch_company,
+                    selected_company,
+                ),
+                frappe.ValidationError,
+            )
+        if branch_company:
+            self.company = branch_company
         if meta.has_field(BRANCH_NADIS_ADMIN_LEVEL_1_FIELD):
             self.admin_level_1 = branch.get(BRANCH_NADIS_ADMIN_LEVEL_1_FIELD)
 
@@ -86,6 +97,21 @@ class VeterinaryDiseaseOutbreak(Document):
             frappe.throw(_("Original Outbreak is required for a follow-up outbreak."), frappe.ValidationError)
         if self.parent_outbreak and self.name and self.parent_outbreak == self.name:
             frappe.throw(_("An outbreak cannot reference itself as the Original Outbreak."), frappe.ValidationError)
+        if not self.parent_outbreak:
+            return
+        original = frappe.db.get_value(
+            "Veterinary Disease Outbreak",
+            self.parent_outbreak,
+            ["disease"],
+            as_dict=True,
+        )
+        if not original:
+            frappe.throw(_("Original Outbreak {0} does not exist.").format(self.parent_outbreak), frappe.ValidationError)
+        if self.disease and original.get("disease") and self.disease != original.get("disease"):
+            frappe.throw(
+                _("A follow-up outbreak must use the same Disease as the Original Outbreak."),
+                frappe.ValidationError,
+            )
 
     def _validate_counts(self):
         for fieldname in ("number_new_outbreaks", "total_outbreaks"):
@@ -98,6 +124,13 @@ class VeterinaryDiseaseOutbreak(Document):
                         _("{0} cannot be negative in Animals Affected row {1}.").format(row.meta.get_label(fieldname), row.idx),
                         frappe.ValidationError,
                     )
+            cases = cint(row.get("number_cases"))
+            deaths = cint(row.get("number_deaths"))
+            if cases and deaths > cases:
+                frappe.throw(
+                    _("Deaths cannot exceed Cases in Animals Affected row {0}.").format(row.idx),
+                    frappe.ValidationError,
+                )
 
     def _validate_timeline(self):
         ordered = [
