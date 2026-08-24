@@ -3,8 +3,9 @@ from __future__ import annotations
 """Authoritative NADIS workbook mapping captured from the supplied VCN templates.
 
 The constants in this module are a source-controlled contract for workbook names,
-field identifiers and visible columns. They were mapped from the two supplied
-workbooks rather than inferred from VetEdge field names.
+field identifiers, visible columns and release-critical binary workbook metadata.
+They were mapped from the two supplied workbooks rather than inferred from
+VetEdge field names.
 """
 
 VACCINATION_TEMPLATE_FILENAME = "Nadis Template Vaccination Report 1.xlsx"
@@ -67,6 +68,31 @@ VACCINATION_VACCINE_TYPES = (
     "Inactivated vaccines",
 )
 PANVAC_VALUES = ("No", "Yes")
+
+# Release-critical facts read from the supplied binary workbook. The regulatory
+# exporter must preserve these exactly or prove an equivalent Excel contract
+# before the file can be described as submission-template faithful.
+VACCINATION_BINARY_FIDELITY = {
+    "max_row": 851,
+    "max_column": 88,
+    "hidden_columns": ("A", "CD"),
+    "hidden_rows": (2,),
+    "row_4_markers": {"B4": 1, "O4": "u"},
+    "defined_names": {
+        "admin_division_level_1_4651": "Vaccinations!$CD$1:$CD$851",
+        "admin_division_level_2_3433": "Vaccinations!$CE$1:$CE$670",
+    },
+    "validations": (
+        {"range": "H5:H239", "formula1": "fd_3434_reason_for_the_vaccination", "allow_blank": False},
+        {"range": "I5:I239", "formula1": "fd_3435_species", "allow_blank": False},
+        {"range": "C5:C239", "formula1": "fd_4650_country", "allow_blank": False},
+        {"range": "P6:P15 P17:P239", "formula1": "fd_3442_vaccine_tested_at_panvac", "allow_blank": False},
+        {"range": "D5:D239", "formula1": "admin_division_level_1_4651", "allow_blank": False},
+        {"range": "E5:G239", "formula1": "admin_division_level_2_3433", "allow_blank": False},
+        {"range": "J5:J239", "formula1": "fd_3436_disease", "allow_blank": False},
+        {"range": "M5:M239", "formula1": "fd_3439_type_of_vaccine", "allow_blank": False},
+    ),
+}
 
 DISEASE_OUTBREAK_TEMPLATE_FILENAME = "NadisTemplate Disease Outbreak Report.xlsx"
 DISEASE_OUTBREAK_TEMPLATE_SHA256 = "8ea90b4b5c30a66029186905e9aab846bf897f40121d5ec7d7d69acf2964db94"
@@ -163,3 +189,65 @@ PRODUCTION_SYSTEMS = (
     "Mixed / semi-extensive / semi-intensive",
 )
 ANIMAL_SEX_VALUES = ("All", "Female", "Male", "Unknown")
+
+OUTBREAK_BINARY_FIDELITY = {
+    "defined_names": {
+        # The supplied workbook carries a malformed external-style sheet name in
+        # this defined-name formula. Preserve/verify the binary behavior rather
+        # than silently normalizing it in a regulatory export.
+        "admin_level_1_5518": "[1]Worksheet!$CB$1:$CB$780",
+    },
+    "sheets": {
+        "Outbreaks": {
+            "max_row": 931,
+            "max_column": 85,
+            "hidden_columns": ("A", "CA"),
+            "hidden_rows": (2,),
+            "date_hints": {"L4": "(dd/mm/yyyy)", "M4": "(dd/mm/yyyy)", "N4": "(dd/mm/yyyy)", "O4": "(dd/mm/yyyy)"},
+            "validations": (
+                {"range": "P7:P8", "formula1": "CU7:CU11"},
+                {"range": "P6", "formula1": "CU5:CU9"},
+                {"range": "P9:P10 P11", "formula1": "CU8:CU17"},
+                {"range": "P12:P252", "formula1": "CU10:CU19"},
+            ),
+        },
+        "Animals affected": {
+            "max_row": 191,
+            "max_column": 88,
+            "hidden_columns": ("A", "CH"),
+            "hidden_rows": (2,),
+            "validations": (
+                {"range": "D5:D236", "formula1": 'INDIRECT(SUBSTITUTE(C5," ","_"))'},
+            ),
+        },
+        "Bases of Diagnosis": {
+            "max_row": 5,
+            "max_column": 89,
+            "hidden_columns": ("A", "CK"),
+            "hidden_rows": (2,),
+            "validations": (),
+        },
+        "Disease Control Measures": {
+            "max_row": 141,
+            "max_column": 91,
+            "hidden_columns": ("A", "CL"),
+            "hidden_rows": (2,),
+            "validations": (
+                {"range": "D5:D11 D15:D251", "formula1": "CP5:CP8"},
+                {"range": "D12:D14", "formula1": "CP12:CP14"},
+            ),
+        },
+        "Locations": {
+            "max_row": 87,
+            "max_column": 93,
+            "hidden_columns": ("A", "CN"),
+            "hidden_rows": (2,),
+            "validations": (
+                {"range": "E5:E7", "formula1": "CS5:CS8"},
+                {"range": "E8", "formula1": "CS8:CS9"},
+                {"range": "E9:E10 E11", "formula1": "CS9:CS14"},
+                {"range": "E12:E252", "formula1": "CS11:CS16"},
+            ),
+        },
+    },
+}
