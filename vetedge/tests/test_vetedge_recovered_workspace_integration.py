@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from vetedge.services import resource_center_v3
 from vetedge.services.clinical_workspace import get_clinical_summary, get_consultations
 from vetedge.services.clinical_workspace_context import get_clinical_context_options
 from vetedge.services.front_desk_action_center import get_front_desk_summary, get_guest_requests
@@ -137,3 +140,47 @@ class TestRecoveredEdgeSuiteWorkspaces(FrappeTestCase):
 		self.assertEqual(listing["page_length"], 3)
 		self.assertIsInstance(get_clinical_context_options("practitioner", limit=3), list)
 		self.assertIsInstance(get_clinical_context_options("consultation_type", limit=3), list)
+
+	def test_hooked_resource_center_enriches_scheduled_appointment_with_confirm_action(self):
+		state = {
+			"resource": "appointments",
+			"doctype": "Veterinary Appointment",
+			"title": "Appointments",
+			"subtitle": "Appointments",
+			"columns": [],
+			"rows": [frappe._dict(name="VAPT-TEST", status="Scheduled", modified="2026-08-24 01:00:00")],
+			"start": 0,
+			"page_length": 1,
+			"total": 1,
+			"can_create": True,
+			"can_quick_edit": True,
+			"can_delete": False,
+			"context_branch": "",
+		}
+
+		def enrich(_config, rows):
+			rows[0]["_appointment_action_state"] = {
+				"appointment": "VAPT-TEST",
+				"appointment_type": "Consultation",
+				"status": "Scheduled",
+				"can_write": True,
+				"message": "",
+				"actions": [{"key": "confirm", "label": "Confirm Appointment", "primary": True}],
+			}
+			return rows
+
+		with (
+			patch.object(resource_center_v3.v2, "_resource_page", return_value=state),
+			patch.object(resource_center_v3.legacy, "_with_appointment_action_states", side_effect=enrich) as action_enricher,
+			patch.object(resource_center_v3, "enrich_link_display_values"),
+		):
+			result = resource_center_v3.get_resource_page("appointments", page_length=1)
+
+		action_enricher.assert_called_once()
+		self.assertEqual(action_enricher.call_args.args[0], {"key": "appointments"})
+		self.assertIs(action_enricher.call_args.args[1], state["rows"])
+		self.assertEqual(result["rows"][0]["_appointment_action_state"]["actions"][0]["key"], "confirm")
+		self.assertEqual(
+			result["rows"][0]["_appointment_action_state"]["actions"][0]["label"],
+			"Confirm Appointment",
+		)
