@@ -23,9 +23,6 @@ def _filters(value: str | dict | None) -> dict:
     cleaned = {key: item for key, item in parsed.items() if item not in (None, "")}
     if cleaned.get("customer") and not cleaned.get("owner"):
         cleaned["owner"] = cleaned.get("customer")
-    # Reuse the established Vaccination Report visibility contract until the
-    # authoritative NADIS workbook mapping is recovered and a dedicated public
-    # report name is exposed in the UI.
     return dict(normalize_report_filters("Vaccination Report", cleaned) or {})
 
 
@@ -38,9 +35,6 @@ def _require_permissions() -> None:
 
 
 def _query_filters(report_filters: dict) -> dict:
-    # Use the same date normalization as the established VetEdge report
-    # services so a selected end date includes the full reporting day for
-    # Datetime fields rather than stopping at midnight.
     filters = _date_filter_dict("administered_on", frappe._dict(report_filters))
     mappings = {
         "branch": "service_branch",
@@ -71,9 +65,6 @@ def _patient_map(patient_names: list[str]) -> dict[str, dict]:
 
 
 def _columns() -> list[dict]:
-    # This is a normalized regulatory source dataset, not the final official
-    # spreadsheet layout. Exact NADIS workbook headers/order remain a separate
-    # verified template-mapping layer.
     return [
         {"fieldname": "vaccination_record", "label": _("Vaccination Record"), "fieldtype": "Link", "options": VACCINATION_DOCTYPE},
         {"fieldname": "administered_on", "label": _("Administered On"), "fieldtype": "Datetime"},
@@ -85,6 +76,7 @@ def _columns() -> list[dict]:
         {"fieldname": "species", "label": _("Species"), "fieldtype": "Link", "options": "Veterinary Species"},
         {"fieldname": "breed", "label": _("Breed"), "fieldtype": "Link", "options": "Veterinary Breed"},
         {"fieldname": "vaccine", "label": _("Vaccine"), "fieldtype": "Link", "options": "Veterinary Vaccine"},
+        {"fieldname": "vaccination_reason", "label": _("Reason for Vaccination"), "fieldtype": "Data"},
         {"fieldname": "dose", "label": _("Dose"), "fieldtype": "Data"},
         {"fieldname": "route", "label": _("Route"), "fieldtype": "Data"},
         {"fieldname": "batch_no", "label": _("Batch No"), "fieldtype": "Link", "options": "Batch"},
@@ -114,11 +106,13 @@ def get_nadis_vaccination_source(
     start: int = 0,
     page_length: int = 50,
 ) -> dict:
-    """Return a branch-safe, paginated vaccination source for NADIS mapping.
+    """Return the branch-safe, paginated VetEdge source behind the mapped NADIS workbook.
 
-    The response is intentionally a normalized source dataset. It is not
-    represented as the final official NADIS workbook until the authoritative
-    spreadsheet headers/order/merges are verified against the supplied template.
+    The official workbook schema has now been verified against the supplied
+    `Nadis Template Vaccination Report 1.xlsx`. This endpoint remains an
+    operational source preview; final submission readiness is determined by
+    the dedicated validation/export service because required regulatory master
+    mappings may still be missing from historical records.
     """
     _require_permissions()
     report_filters = _filters(filters)
@@ -140,6 +134,7 @@ def get_nadis_vaccination_source(
             "vaccine",
             "administered_by",
             "administered_on",
+            "vaccination_reason",
             "dose",
             "route",
             "next_due_date",
@@ -168,6 +163,7 @@ def get_nadis_vaccination_source(
                 "species": patient.get("species"),
                 "breed": patient.get("breed"),
                 "vaccine": row.get("vaccine"),
+                "vaccination_reason": row.get("vaccination_reason"),
                 "dose": row.get("dose"),
                 "route": row.get("route"),
                 "batch_no": row.get("batch_no"),
@@ -179,8 +175,8 @@ def get_nadis_vaccination_source(
         )
 
     return {
-        "title": _("NADIS Vaccination Source"),
-        "subtitle": _("Normalized VetEdge vaccination data awaiting verified NADIS workbook column mapping."),
+        "title": _("NADIS Monthly Vaccination Report"),
+        "subtitle": _("VetEdge vaccination source data mapped to the supplied official NADIS workbook schema."),
         "columns": _columns(),
         "rows": rows,
         "summary": _summary(query_filters, total),
@@ -196,7 +192,9 @@ def get_nadis_vaccination_source(
             "detail_rows_materialized": False,
             "regulatory_family": "NADIS",
             "regulatory_report": "vaccination",
-            "template_mapping_verified": False,
+            "template_mapping_verified": True,
             "submission_ready": False,
+            "submission_readiness_endpoint": "vetedge.services.nadis_vaccination_export.validate_nadis_vaccination_export",
+            "official_export_endpoint": "vetedge.services.nadis_vaccination_export.download_nadis_vaccination_workbook",
         },
     }
