@@ -76,10 +76,11 @@
    "label": "NADIS Disease"
   },
   {
-   "description": "Exact Type of Vaccine value expected by NADIS, for example Inactivated vaccines.",
+   "description": "Controlled Type of Vaccine value from the supplied NADIS workbook.",
    "fieldname": "nadis_vaccine_type",
-   "fieldtype": "Data",
-   "label": "NADIS Vaccine Type"
+   "fieldtype": "Select",
+   "label": "NADIS Vaccine Type",
+   "options": "\nAnti-idiotype vaccines\nConjugate vaccines\nDNA vaccines\nInactivated vaccines"
   },
   {
    "description": "Source/manufacturer wording to place in the NADIS Source of Vaccine column.",
