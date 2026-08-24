@@ -19,6 +19,12 @@ def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_official_ex
         '__("NADIS Monthly Vaccination Report")',
         '__("NADIS Disease Outbreak Report")',
         '__("Download Official Excel")',
+        'label: __("Company")',
+        'doctype: "Company"',
+        'company: frappe.defaults?.get_user_default?.("Company")',
+        'canManageOutbreak: Boolean(',
+        'frappe.user?.has_role?.("VetEdge Administrator")',
+        '__("Administrator Managed")',
     ):
         assert expected in page
 
