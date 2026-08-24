@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
+import re
 from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cstr, now_datetime
+from frappe.utils import cstr, now_datetime, validate_email_address
 from frappe.utils.file_manager import save_file
 
 from vetedge.services.platform_access import require_vetedge_platform_access
@@ -17,13 +17,17 @@ OUTBREAK_REPORT = "NADIS Disease Outbreak Report"
 SUPPORTED_REPORTS = {VACCINATION_REPORT, OUTBREAK_REPORT}
 ADMIN_ROLES = {"System Manager", "VetEdge Administrator"}
 ALLOWED_SUBMISSION_STATUSES = {"Generated", "Sent", "Accepted", "Rejected", "Superseded"}
+MAX_EMAIL_RECIPIENTS = 20
 
 
 def _require_admin() -> None:
     require_internal_user()
     roles = set(frappe.get_roles(frappe.session.user) or [])
     if not roles.intersection(ADMIN_ROLES):
-        frappe.throw(_("Regulatory report history is currently restricted to Veterinary administrators."), frappe.PermissionError)
+        frappe.throw(
+            _("Regulatory report history is currently restricted to Veterinary administrators."),
+            frappe.PermissionError,
+        )
 
 
 def _parse_filters(filters: str | dict | None) -> dict:
@@ -35,6 +39,18 @@ def _parse_filters(filters: str | dict | None) -> dict:
     if not isinstance(parsed, dict):
         frappe.throw(_("Expected regulatory report filters as a JSON object."), frappe.ValidationError)
     return parsed
+
+
+def _normalize_effective_filters(report_type: str, filters: dict) -> dict:
+    if report_type == VACCINATION_REPORT:
+        from vetedge.services.nadis_reporting import _filters as normalize
+
+        return dict(normalize(filters) or {})
+    if report_type == OUTBREAK_REPORT:
+        from vetedge.services.nadis_outbreak_export import _filters as normalize
+
+        return dict(normalize(filters) or {})
+    frappe.throw(_("Unsupported regulatory report type."), frappe.ValidationError)
 
 
 def _report_payload(report_type: str, filters: dict) -> dict[str, Any]:
@@ -93,9 +109,55 @@ def _report_payload(report_type: str, filters: dict) -> dict[str, Any]:
     frappe.throw(_("Unsupported regulatory report type."), frappe.ValidationError)
 
 
-def _assert_report_run_access(doc) -> None:
-    if not doc.has_permission("read"):
-        frappe.throw(_("You do not have permission to access this regulatory report run."), frappe.PermissionError)
+def _get_report_run(name: str, permission_type: str = "read"):
+    name = cstr(name).strip()
+    if not name or not frappe.db.exists(REPORT_RUN_DOCTYPE, name):
+        frappe.throw(_("Regulatory report run could not be found."), frappe.DoesNotExistError)
+    run = frappe.get_doc(REPORT_RUN_DOCTYPE, name)
+    run.check_permission(permission_type)
+    return run
+
+
+def _get_attached_file(run):
+    if not run.export_file:
+        frappe.throw(_("This regulatory report run does not have a generated workbook attachment."), frappe.ValidationError)
+    file_name = frappe.db.get_value(
+        "File",
+        {
+            "attached_to_doctype": REPORT_RUN_DOCTYPE,
+            "attached_to_name": run.name,
+            "file_url": run.export_file,
+        },
+        "name",
+    )
+    if not file_name:
+        frappe.throw(_("The generated regulatory workbook attachment could not be found."), frappe.DoesNotExistError)
+    file_doc = frappe.get_doc("File", file_name)
+    file_doc.check_permission("read")
+    return file_doc
+
+
+def _parse_recipients(value: str | list[str] | tuple[str, ...]) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        candidates = value
+    else:
+        candidates = re.split(r"[,;\n]+", cstr(value))
+    recipients = []
+    for candidate in candidates:
+        address = cstr(candidate).strip()
+        if not address:
+            continue
+        validate_email_address(address, throw=True)
+        if address.lower() not in {item.lower() for item in recipients}:
+            recipients.append(address)
+    if not recipients:
+        frappe.throw(_("Enter at least one valid email recipient."), frappe.ValidationError)
+    if len(recipients) > MAX_EMAIL_RECIPIENTS:
+        frappe.throw(
+            _("A regulatory report can be sent to at most {0} recipients at once.").format(MAX_EMAIL_RECIPIENTS),
+            frappe.ValidationError,
+        )
+    return recipients
 
 
 @frappe.whitelist()
@@ -109,7 +171,10 @@ def generate_regulatory_report_run(report_type: str, filters: str | dict | None 
         action="generate_regulatory_report_run",
         reference_doctype=REPORT_RUN_DOCTYPE,
     )
-    report_filters = _parse_filters(filters)
+    raw_filters = _parse_filters(filters)
+    report_filters = _normalize_effective_filters(report_type, raw_filters)
+    if raw_filters.get("company") and not report_filters.get("company"):
+        report_filters["company"] = raw_filters["company"]
     payload = _report_payload(report_type, report_filters)
 
     run = frappe.new_doc(REPORT_RUN_DOCTYPE)
@@ -153,6 +218,7 @@ def generate_regulatory_report_run(report_type: str, filters: str | dict | None 
         "output_row_count": run.output_row_count,
         "warning_count": run.warning_count,
         "file_url": file_doc.file_url,
+        "effective_filters": report_filters,
     }
 
 
@@ -217,6 +283,60 @@ def get_regulatory_report_runs(
 
 
 @frappe.whitelist()
+def send_regulatory_report_run(
+    name: str,
+    recipients: str | list[str],
+    subject: str | None = None,
+    message: str | None = None,
+) -> dict:
+    """Send the frozen workbook attached to an existing Report Run.
+
+    The report is deliberately not regenerated here. This guarantees that the
+    file emailed externally is the same file retained in VetEdge report history.
+    """
+    _require_admin()
+    run = _get_report_run(name, "write")
+    if run.status in {"Accepted", "Superseded"}:
+        frappe.throw(
+            _("Accepted or Superseded regulatory reports cannot be emailed again. Generate a new report if a replacement is required."),
+            frappe.ValidationError,
+        )
+    require_vetedge_platform_access(
+        action="send_regulatory_report_run",
+        reference_doctype=REPORT_RUN_DOCTYPE,
+        reference_name=run.name,
+    )
+    recipient_list = _parse_recipients(recipients)
+    file_doc = _get_attached_file(run)
+    attachment_content = file_doc.get_content()
+    mail_subject = cstr(subject).strip() or _("{0} - {1}").format(run.report_type, run.name)
+    mail_message = cstr(message).strip() or _(
+        "Please find attached the Veterinary regulatory report generated from VetEdge."
+    )
+
+    frappe.sendmail(
+        recipients=recipient_list,
+        subject=mail_subject,
+        message=mail_message,
+        attachments=[{"fname": file_doc.file_name, "fcontent": attachment_content}],
+        now=True,
+    )
+
+    sent_on = now_datetime()
+    run.status = "Sent"
+    run.sent_to = ", ".join(recipient_list)
+    run.sent_on = sent_on
+    run.save()
+    return {
+        "name": run.name,
+        "status": run.status,
+        "sent_to": run.sent_to,
+        "sent_on": run.sent_on,
+        "file_url": run.export_file,
+    }
+
+
+@frappe.whitelist()
 def update_regulatory_submission_status(
     name: str,
     status: str,
@@ -224,24 +344,25 @@ def update_regulatory_submission_status(
     notes: str | None = None,
 ) -> dict:
     _require_admin()
-    name = cstr(name).strip()
     status = cstr(status).strip()
     if status not in ALLOWED_SUBMISSION_STATUSES:
         frappe.throw(_("Unsupported regulatory submission status."), frappe.ValidationError)
-    if not name or not frappe.db.exists(REPORT_RUN_DOCTYPE, name):
-        frappe.throw(_("Regulatory report run could not be found."), frappe.DoesNotExistError)
 
+    run = _get_report_run(name, "write")
     require_vetedge_platform_access(
         action="update_regulatory_submission_status",
         reference_doctype=REPORT_RUN_DOCTYPE,
-        reference_name=name,
+        reference_name=run.name,
     )
-    run = frappe.get_doc(REPORT_RUN_DOCTYPE, name)
-    run.check_permission("write")
     if status == "Generated" and run.status != "Generated":
         frappe.throw(_("A submitted regulatory report cannot be reset to Generated."), frappe.ValidationError)
     if status == "Sent" and not run.sent_on:
         frappe.throw(_("Use the explicit send action to mark a regulatory report as Sent."), frappe.ValidationError)
+    if status in {"Accepted", "Rejected"} and run.status not in {"Sent", "Accepted", "Rejected"}:
+        frappe.throw(
+            _("A regulatory report must be Sent before it can be marked Accepted or Rejected."),
+            frappe.ValidationError,
+        )
     run.status = status
     if submission_reference is not None:
         run.submission_reference = cstr(submission_reference).strip()
