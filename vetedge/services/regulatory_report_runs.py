@@ -143,12 +143,15 @@ def _parse_recipients(value: str | list[str] | tuple[str, ...]) -> list[str]:
     else:
         candidates = re.split(r"[,;\n]+", cstr(value))
     recipients = []
+    seen = set()
     for candidate in candidates:
         address = cstr(candidate).strip()
         if not address:
             continue
         validate_email_address(address, throw=True)
-        if address.lower() not in {item.lower() for item in recipients}:
+        key = address.lower()
+        if key not in seen:
+            seen.add(key)
             recipients.append(address)
     if not recipients:
         frappe.throw(_("Enter at least one valid email recipient."), frappe.ValidationError)
@@ -326,6 +329,7 @@ def send_regulatory_report_run(
     run.status = "Sent"
     run.sent_to = ", ".join(recipient_list)
     run.sent_on = sent_on
+    run.flags.vetedge_regulatory_send_action = True
     run.save()
     return {
         "name": run.name,
@@ -368,6 +372,7 @@ def update_regulatory_submission_status(
         run.submission_reference = cstr(submission_reference).strip()
     if notes is not None:
         run.notes = cstr(notes)
+    run.flags.vetedge_regulatory_status_action = True
     run.save()
     return {
         "name": run.name,
