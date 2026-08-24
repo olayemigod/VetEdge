@@ -10,8 +10,22 @@
 		"Lab Order Report": "Lab Order Report",
 		"Laboratory Report": "Lab Order Report",
 		"Vaccination Report": "Vaccination Report",
+		"Active Hospitalisations": "Active Hospitalisations",
+		"Hospitalisation Charge Summary": "Hospitalisation Charge Summary",
+		"Care Location Occupancy": "Care Location Occupancy",
+		"Hospitalisation Discharge Watch": "Hospitalisation Discharge Watch",
+		"Pending Hospitalisation Actions": "Pending Hospitalisation Actions",
+		"Grooming Report": "Grooming Report",
+		"Boarding Report": "Boarding Report",
+		"Kennel Availability Report": "Kennel Availability Report",
 		"Practitioner Performance Report": "Practitioner Performance Report",
 		"Branch Performance Report": "Branch Performance Report",
+		"Unpaid Invoice Report": "Unpaid Invoice Report",
+		"Revenue Summary": "Revenue Summary",
+		"Stock Usage Summary": "Stock Usage Summary",
+		"Stock Expiry Status": "Stock Expiry Status",
+		"Dispensary Activity Report": "Dispensary Activity Report",
+		"Veterinary Notification Event Registry": "Notification Event Registry",
 	});
 	const CARE_LOCATION_DOCTYPE = "Veterinary Care Location";
 	const CARE_LOCATION_ROUTE = "/desk/vetedge-care-locations";
@@ -204,8 +218,8 @@
 		const explicit = explicitTarget(candidate);
 		if (MIGRATED_REPORTS[explicit]) return explicit;
 		const text = itemLabel(candidate);
-		for (const reportName of Object.keys(MIGRATED_REPORTS)) {
-			if (text === reportName || text.startsWith(`${reportName}\n`) || text.includes(reportName)) return reportName;
+		for (const [reportName, label] of Object.entries(MIGRATED_REPORTS)) {
+			if (text === reportName || text === label || text.startsWith(`${reportName}\n`) || text.startsWith(`${label}\n`) || text.includes(reportName) || text.includes(label)) return reportName;
 		}
 		return "";
 	}
@@ -237,6 +251,38 @@
 		return "";
 	}
 
+	function targetForMenuItem(item) {
+		const linkType = String(item?.link_type || item?.linkType || "Page");
+		const linkTo = String(item?.link_to || item?.linkTo || "").trim();
+		const label = String(item?.label || "").trim();
+		if (linkType === "Report" && MIGRATED_REPORTS[linkTo]) return reportCenterTarget(linkTo);
+		if (linkType === "DocType" && linkTo === CARE_LOCATION_DOCTYPE) return CARE_LOCATION_ROUTE;
+		if (linkType === "DocType" && BRANCH_ACCESS_ROUTES[linkTo]) return BRANCH_ACCESS_ROUTES[linkTo];
+		if (linkTo === "Veterinary Settings" || label === "Settings") return SAME_TAB_PRODUCT_PAGES.Settings;
+		if (linkTo === "veterinary-training-centre" || label === "Training Centre") return SAME_TAB_PRODUCT_PAGES["Training Centre"];
+		return "";
+	}
+
+	function patchSharedProductMenuNavigation() {
+		const runtime = window.EdgeSuiteUI || window.EdgeUI;
+		if (!runtime?.registerProductMenu || !runtime?.getProductMenuConfig || runtime.__vetedgeDestinationCoveragePatched) return false;
+		const config = runtime.getProductMenuConfig();
+		const product = String(config?.product || "").trim().toLowerCase();
+		if (!config || !["vetedge", "veterinary"].includes(product)) return false;
+		const previousNavigate = typeof config.navigate === "function" ? config.navigate : null;
+		runtime.registerProductMenu({
+			...config,
+			navigate(item) {
+				const target = targetForMenuItem(item);
+				if (target && sameTab(target)) return;
+				previousNavigate?.(item);
+			},
+		});
+		runtime.__vetedgeDestinationCoveragePatched = true;
+		runtime.refreshProductMenu?.();
+		return true;
+	}
+
 	function focusForCurrentRoute() {
 		const path = normalizeDeskPath(window.location.pathname);
 		const params = new URLSearchParams(window.location.search || "");
@@ -262,6 +308,7 @@
 
 	function sync() {
 		redirectCurrentLegacyRoute();
+		patchSharedProductMenuNavigation();
 		const focus = focusForCurrentRoute();
 		document.querySelectorAll(".edge-app-shell[data-edge-product='vetedge'], .edge-app-shell[data-edge-product='veterinary']").forEach((shell) => {
 			movePlannedTreatmentToReports(shell);
@@ -327,6 +374,11 @@
 		resolveMigratedRoute: migratedTargetFromRoute,
 		navigateMigratedRoute(route) {
 			const target = migratedTargetFromRoute(route);
+			return target ? sameTab(target) : false;
+		},
+		resolveMenuItem: targetForMenuItem,
+		navigateMenuItem(item) {
+			const target = targetForMenuItem(item);
 			return target ? sameTab(target) : false;
 		},
 		sync,
