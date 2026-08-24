@@ -9,6 +9,8 @@ VETEDGE_LOGO = "/assets/vetedge/images/vetedge-app-icon.png"
 MEDICAL_HISTORY_PAGE = "veterinary-medical-history"
 EDGE_PAGE_DESTINATIONS = {
 	"Veterinary Care Location": "vetedge-care-locations",
+	"Branch User Assignment": "vetedge-branch-user-access",
+	"Branch Practitioner Assignment": "vetedge-practitioner-coverage",
 	"Veterinary Notification Preference": "vetedge-notification-preferences",
 	"Veterinary Notification Log": "vetedge-notification-delivery-log",
 	"Veterinary Notification Item": "vetedge-notification-items",
