@@ -109,11 +109,13 @@ def test_official_vaccination_template_mapping_matches_supplied_workbook_contrac
 
 def test_regulatory_fields_live_on_the_correct_operational_masters():
     species = (ROOT / "veterinary/doctype/veterinary_species/veterinary_species.json").read_text(encoding="utf-8")
+    diagnosis = (ROOT / "veterinary/doctype/veterinary_diagnosis/veterinary_diagnosis.json").read_text(encoding="utf-8")
     vaccine = (ROOT / "veterinary/doctype/veterinary_vaccine/veterinary_vaccine.json").read_text(encoding="utf-8")
     vaccination = (ROOT / "veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.json").read_text(encoding="utf-8")
     custom_fields = (ROOT / "install/custom_fields.py").read_text(encoding="utf-8")
 
     assert '"fieldname": "nadis_species"' in species
+    assert '"fieldname": "nadis_disease"' in diagnosis
     for fieldname in (
         "nadis_disease",
         "nadis_vaccine_type",
@@ -124,3 +126,84 @@ def test_regulatory_fields_live_on_the_correct_operational_masters():
     assert '"fieldname": "vaccination_reason"' in vaccination
     assert 'BRANCH_NADIS_ADMIN_LEVEL_1_FIELD = "vetedge_nadis_admin_level_1"' in custom_fields
     assert 'BRANCH_NADIS_ADMIN_LEVEL_2_FIELD = "vetedge_nadis_admin_level_2"' in custom_fields
+
+
+def test_disease_outbreak_model_matches_official_parent_child_workbook_shape():
+    outbreak = (ROOT / "veterinary/doctype/veterinary_disease_outbreak/veterinary_disease_outbreak.json").read_text(encoding="utf-8")
+    controller = (ROOT / "veterinary/doctype/veterinary_disease_outbreak/veterinary_disease_outbreak.py").read_text(encoding="utf-8")
+
+    for expected in (
+        '"name": "Veterinary Disease Outbreak"',
+        '"fieldname": "outbreak_type"',
+        '"fieldname": "number_new_outbreaks"',
+        '"fieldname": "date_investigated"',
+        '"fieldname": "date_final_diagnosis"',
+        '"fieldname": "source_of_infection"',
+        '"fieldname": "animals_affected"',
+        '"options": "Veterinary Outbreak Animal Group"',
+        '"fieldname": "diagnosis_bases"',
+        '"options": "Veterinary Outbreak Diagnosis Basis"',
+        '"fieldname": "control_measures"',
+        '"options": "Veterinary Outbreak Control Measure"',
+        '"fieldname": "locations"',
+        '"options": "Veterinary Outbreak Location"',
+    ):
+        assert expected in outbreak
+
+    for expected in (
+        "self._validate_branch_access()",
+        "user_has_global_branch_access(user)",
+        "get_assigned_branches(user)",
+        "self._derive_disease_mapping()",
+        "self._derive_animal_species_mappings()",
+        'self.outbreak_type == "Follow up outbreak"',
+        "_validate_counts",
+        "_validate_timeline",
+    ):
+        assert expected in controller
+
+
+def test_outbreak_workbook_export_uses_all_five_official_sheets_and_parent_links():
+    template = (ROOT / "services/nadis_templates.py").read_text(encoding="utf-8")
+    export = (ROOT / "services/nadis_outbreak_export.py").read_text(encoding="utf-8")
+
+    for sheet_name in (
+        "Outbreaks",
+        "Animals affected",
+        "Bases of Diagnosis",
+        "Disease Control Measures",
+        "Locations",
+    ):
+        assert f'"{sheet_name}"' in template
+        assert f'"{sheet_name}"' in export
+
+    for expected in (
+        'DISEASE_OUTBREAK_TEMPLATE_FILENAME = "NadisTemplate Disease Outbreak Report.xlsx"',
+        'DISEASE_OUTBREAK_TEMPLATE_SHA256 = "8ea90b4b5c30a66029186905e9aab846bf897f40121d5ec7d7d69acf2964db94"',
+        '"Date investigated * "',
+        '"Date of final diagnosis * "',
+        '"Number of cases * "',
+        '"Disease control measure * "',
+        '"Name of locality * "',
+    ):
+        assert expected in template
+
+    for expected in (
+        '@frappe.read_only()',
+        'normalize_report_filters("NADIS Disease Outbreak Report", cleaned)',
+        'MAX_TEMPLATE_ROWS = 248',
+        'row.get("parent")',
+        '"template_mapping_verified": True',
+        '"submission_ready": bool(parents) and not validation["errors"]',
+        'frappe.local.response.type = "binary"',
+    ):
+        assert expected in export
+
+    for forbidden in (
+        "ignore_permissions",
+        "frappe.db.set_value",
+        ".submit()",
+        ".cancel()",
+        "frappe.delete_doc",
+    ):
+        assert forbidden not in export
