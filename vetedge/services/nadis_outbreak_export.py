@@ -4,7 +4,7 @@ from io import BytesIO
 
 import frappe
 from frappe import _
-from frappe.utils import cint, cstr, getdate
+from frappe.utils import cint, cstr, flt, getdate
 
 from vetedge.services.nadis_templates import (
     ANIMAL_SEX_VALUES,
@@ -148,8 +148,6 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
             missing.append("Date Investigated")
         if not row.get("date_final_diagnosis"):
             missing.append("Date of Final Diagnosis")
-        if cint(row.get("number_new_outbreaks")) < 1:
-            missing.append("Number of New Outbreaks")
         if missing:
             errors.append({"record": name, "message": _("Missing required NADIS outbreak data: {0}").format(", ".join(missing))})
         if row.get("outbreak_type") not in OUTBREAK_TYPES:
@@ -158,6 +156,12 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
             errors.append({"record": name, "message": _("Outbreak Status must be Continuing or Resolved.")})
         if row.get("outbreak_type") == "Follow up outbreak" and not row.get("parent_outbreak"):
             errors.append({"record": name, "message": _("Follow-up outbreak is missing its Original Outbreak link.")})
+        if cint(row.get("number_new_outbreaks")) < 0:
+            errors.append({"record": name, "message": _("Number of New Outbreaks cannot be negative.")})
+        if row.get("outbreak_type") == "New outbreak" and cint(row.get("number_new_outbreaks")) < 1:
+            errors.append({"record": name, "message": _("A New outbreak must report at least one new outbreak; use Follow up outbreak when no new outbreak occurred.")})
+        if cint(row.get("total_outbreaks")) < 0:
+            errors.append({"record": name, "message": _("Total Number of Outbreaks cannot be negative.")})
         if not animals_by_parent.get(name):
             errors.append({"record": name, "message": _("At least one Animals Affected row is required for NADIS export.")})
         if not locations_by_parent.get(name):
@@ -176,6 +180,8 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
         for fieldname in ("number_susceptible", "number_cases", "number_deaths", "number_slaughtered", "number_destroyed", "number_vaccinated_around_outbreak"):
             if cint(row.get(fieldname)) < 0:
                 errors.append({"record": parent, "message": _("Animals Affected row {0} contains a negative count.").format(row.get("idx"))})
+        if cint(row.get("number_deaths")) > cint(row.get("number_cases")):
+            errors.append({"record": parent, "message": _("Animals Affected row {0} has more Deaths than Cases.").format(row.get("idx"))})
         if row.get("sex") and row.get("sex") not in ANIMAL_SEX_VALUES:
             errors.append({"record": parent, "message": _("Animals Affected row {0} has an unsupported Sex value.").format(row.get("idx"))})
 
@@ -186,12 +192,19 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
         if not row.get("control_measure") or row.get("flag") not in CONTROL_MEASURE_FLAGS:
             errors.append({"record": row.get("parent"), "message": _("Disease Control Measure row {0} is incomplete.").format(row.get("idx"))})
     for row in locations:
+        parent = row.get("parent")
         if not row.get("locality_name"):
-            errors.append({"record": row.get("parent"), "message": _("Location row {0} is missing Name of Locality.").format(row.get("idx"))})
+            errors.append({"record": parent, "message": _("Location row {0} is missing Name of Locality.").format(row.get("idx"))})
         if row.get("epidemiological_unit_type") and row.get("epidemiological_unit_type") not in EPIDEMIOLOGICAL_UNIT_TYPES:
-            errors.append({"record": row.get("parent"), "message": _("Location row {0} has an unsupported Epidemiological Unit Type.").format(row.get("idx"))})
+            errors.append({"record": parent, "message": _("Location row {0} has an unsupported Epidemiological Unit Type.").format(row.get("idx"))})
         if row.get("production_system") and row.get("production_system") not in PRODUCTION_SYSTEMS:
-            errors.append({"record": row.get("parent"), "message": _("Location row {0} has an unsupported Production System.").format(row.get("idx"))})
+            errors.append({"record": parent, "message": _("Location row {0} has an unsupported Production System.").format(row.get("idx"))})
+        latitude = row.get("latitude")
+        longitude = row.get("longitude")
+        if latitude not in (None, "") and not -90 <= flt(latitude) <= 90:
+            errors.append({"record": parent, "message": _("Location row {0} has Latitude outside -90 to 90.").format(row.get("idx"))})
+        if longitude not in (None, "") and not -180 <= flt(longitude) <= 180:
+            errors.append({"record": parent, "message": _("Location row {0} has Longitude outside -180 to 180.").format(row.get("idx"))})
 
     return {"errors": errors, "warnings": warnings}
 
@@ -290,7 +303,7 @@ def _build_workbook(data: dict) -> bytes:
             row.get("country") or "Nigeria",
             row.get("admin_level_1"),
             investigated.year,
-            investigated.strftime("%B").upper(),
+            investigated.strftime("%B"),
             row.get("nadis_disease"),
             row.get("serotype"),
             row.get("outbreak_type"),
