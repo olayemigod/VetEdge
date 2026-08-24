@@ -16,6 +16,8 @@ class TestEdgeSuiteDestinationCoverageContract(unittest.TestCase):
 		text = source("vetedge/ui_identity.py")
 		for doctype, page in {
 			"Veterinary Care Location": "vetedge-care-locations",
+			"Branch User Assignment": "vetedge-branch-user-access",
+			"Branch Practitioner Assignment": "vetedge-practitioner-coverage",
 			"Veterinary Notification Preference": "vetedge-notification-preferences",
 			"Veterinary Notification Log": "vetedge-notification-delivery-log",
 			"Veterinary Notification Item": "vetedge-notification-items",
@@ -28,9 +30,9 @@ class TestEdgeSuiteDestinationCoverageContract(unittest.TestCase):
 		self.assertIn('_align_edge_sidebar_destinations(bootinfo)', text)
 
 	def test_administration_page_uses_edgesuite_and_permission_aware_provider(self):
-	page = source("vetedge/veterinary/page/vetedge_administration/vetedge_administration.js")
-	provider = source("vetedge/services/administration_workspace.py")
-	for token in (
+		page = source("vetedge/veterinary/page/vetedge_administration/vetedge_administration.js")
+		provider = source("vetedge/services/administration_workspace.py")
+		for token in (
 			"EdgeAppShell",
 			"EdgeDataTable",
 			"EdgeDocumentForm",
@@ -45,8 +47,10 @@ class TestEdgeSuiteDestinationCoverageContract(unittest.TestCase):
 		self.assertIn('This administration resource is read-only.', provider)
 		self.assertIn("require_vetedge_platform_access", provider)
 
-	def test_administration_aliases_route_to_the_shared_workspace(self):
-	aliases = {
+	def test_configuration_aliases_route_router_first_to_shared_workspaces(self):
+		aliases = {
+			"vetedge_branch_user_access/vetedge_branch_user_access.js": "user-assignments",
+			"vetedge_practitioner_coverage/vetedge_practitioner_coverage.js": "practitioner-assignments",
 			"vetedge_notification_preferences/vetedge_notification_preferences.js": "notification-preferences",
 			"vetedge_notification_delivery_log/vetedge_notification_delivery_log.js": "notification-logs",
 			"vetedge_notification_items/vetedge_notification_items.js": "notification-items",
@@ -62,9 +66,9 @@ class TestEdgeSuiteDestinationCoverageContract(unittest.TestCase):
 				self.assertIn("frappe.router.route", text)
 
 	def test_sidebar_reports_have_edgesuite_provider_coverage(self):
-	registry = source("vetedge/public/js/vetedge_report_provider_registry.js")
-	alignment = source("vetedge/public/js/vetedge_sidebar_qa_alignment.js")
-	for report in (
+		registry = source("vetedge/public/js/vetedge_report_provider_registry.js")
+		alignment = source("vetedge/public/js/vetedge_sidebar_qa_alignment.js")
+		for report in (
 			"Owner Register",
 			"Patient Register",
 			"Consultation Register",
@@ -94,9 +98,9 @@ class TestEdgeSuiteDestinationCoverageContract(unittest.TestCase):
 		self.assertIn("materialize-then-slice", registry)
 
 	def test_report_filter_runtime_covers_specialist_fields_and_saved_view_state(self):
-	filters = source("vetedge/public/js/vetedge_report_filter_ui.js")
-	search = source("vetedge/services/report_filter_search.py")
-	for key in (
+		filters = source("vetedge/public/js/vetedge_report_filter_ui.js")
+		search = source("vetedge/services/report_filter_search.py")
+		for key in (
 			"cost_center",
 			"age_range",
 			"kennel",
