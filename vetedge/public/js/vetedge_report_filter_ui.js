@@ -5,6 +5,11 @@
 		{ value: "", label: allLabel },
 		...values.map((value) => ({ value, label: value })),
 	];
+	const booleanOptions = [
+		{ value: "", label: "All" },
+		{ value: "1", label: "Yes" },
+		{ value: "0", label: "No" },
+	];
 
 	const consultationStatuses = optionList(
 		["Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"],
@@ -32,6 +37,24 @@
 		["Consultation Service", "Treatment", "Registration", "Vaccination", "Lab", "Grooming", "Boarding", "Hospitalisation", "Dispensary / Pharmacy", "General / Other"],
 		"All Service Categories",
 	);
+	const revenueCategories = optionList(
+		["Consultation", "Lab", "Vaccination", "Boarding", "Grooming", "Dispensary", "Registration", "General"],
+		"All Service Categories",
+	);
+	const revenueStatuses = optionList(["Draft", "Paid", "Unpaid", "Overdue", "Cancelled"], "All Invoice States");
+	const ageRanges = optionList(["0-30", "31-60", "61-90", "90+"], "All Age Ranges");
+	const boardingStatuses = optionList(["Draft", "Reserved", "Checked In", "Checked Out", "Cancelled"], "All Boarding States");
+	const kennelStatuses = optionList(["Available", "Reserved", "Occupied", "Full", "Out of Service / Inactive"], "All Kennel States");
+	const groomingStatuses = optionList(["Draft", "Awaiting Payment", "Pending Grooming", "In Progress", "Completed", "Cancelled"], "All Grooming States");
+	const careLevels = optionList(["Standard", "Observation", "Intensive Care", "ICU", "Isolation", "Recovery"], "All Care Levels");
+	const hospitalStatuses = optionList(["Draft", "Admitted", "Under Care", "Ready for Discharge", "Discharged", "Cancelled"], "All Hospitalisation States");
+	const activeHospitalStatuses = optionList(["Admitted", "Under Care", "Ready for Discharge", "Discharged", "Cancelled"], "All Hospitalisation States");
+	const activeCareStatuses = optionList(["Admitted", "Under Care", "Ready for Discharge"], "All Active States");
+	const invoiceStatuses = optionList(["Not Invoiced", "Draft", "Unpaid", "Partly Paid", "Paid", "Overdue", "Cancelled"], "All Invoice States");
+	const careLocationTypes = optionList(["Ward", "Kennel", "Cage", "ICU", "Isolation", "Recovery", "General"], "All Location Types");
+	const careLocationStatuses = optionList(["Available", "Occupied", "Cleaning", "Maintenance", "Inactive"], "All Location States");
+	const dischargeIssueTypes = optionList(["Missing Price Charges", "Pending Charge Sync", "Pending Stock Posting", "Care Location Still Assigned", "Pending Discharge Summary"], "All Pending Issues");
+	const hospitalActionTypes = optionList(["Missing Price Charges", "Pending Charge Sync", "Pending Stock Posting", "Care Location Still Assigned", "No Recent Activity", "Pending Discharge Summary", "Pending Daily Charges"], "All Action Types");
 
 	const DEFINITIONS = Object.freeze({
 		"Consultation Register": [
@@ -84,6 +107,81 @@
 			{ field: "practitioner", type: "link", label: "Practitioner" },
 		],
 		"Branch Performance Report": [],
+		"Revenue Summary": [
+			{ field: "cost_center", type: "link", label: "Cost Center" },
+			{ field: "customer", type: "link", label: "Customer" },
+			{ field: "service_category", type: "select", label: "Service Category", options: revenueCategories },
+			{ field: "status", type: "select", label: "Invoice Status", options: revenueStatuses },
+		],
+		"Unpaid Invoice Report": [
+			{ field: "customer", type: "link", label: "Customer" },
+			{ field: "age_range", type: "select", label: "Age Range", options: ageRanges },
+		],
+		"Boarding Report": [
+			{ field: "kennel", type: "link", label: "Kennel" },
+			{ field: "status", type: "select", label: "Status", options: boardingStatuses },
+			{ field: "patient", type: "link", label: "Patient" },
+			{ field: "owner", type: "link", label: "Owner" },
+		],
+		"Kennel Availability Report": [
+			{ field: "kennel", type: "link", label: "Kennel" },
+			{ field: "status", type: "select", label: "Status", options: kennelStatuses },
+		],
+		"Grooming Report": [
+			{ field: "assigned_staff", type: "link", label: "Assigned Staff" },
+			{ field: "status", type: "select", label: "Status", options: groomingStatuses },
+			{ field: "patient", type: "link", label: "Patient" },
+			{ field: "owner", type: "link", label: "Owner" },
+		],
+		"Active Hospitalisations": [
+			{ field: "care_level", type: "select", label: "Care Level", options: careLevels },
+			{ field: "care_location", type: "link", label: "Care Location" },
+			{ field: "attending_veterinarian", type: "link", label: "Attending Veterinarian" },
+			{ field: "status", type: "select", label: "Status", options: activeHospitalStatuses },
+			{ field: "owner", type: "link", label: "Pet Owner" },
+			{ field: "patient", type: "link", label: "Patient" },
+		],
+		"Hospitalisation Charge Summary": [
+			{ field: "care_level", type: "select", label: "Care Level", options: careLevels },
+			{ field: "status", type: "select", label: "Status", options: hospitalStatuses },
+			{ field: "patient", type: "link", label: "Patient" },
+			{ field: "owner", type: "link", label: "Pet Owner" },
+			{ field: "invoice_status", type: "select", label: "Invoice Status", options: invoiceStatuses },
+			{ field: "missing_price_only", type: "select", label: "Missing Price Only", options: booleanOptions },
+			{ field: "pending_only", type: "select", label: "Pending Only", options: booleanOptions },
+		],
+		"Care Location Occupancy": [
+			{ field: "location_type", type: "select", label: "Location Type", options: careLocationTypes },
+			{ field: "status", type: "select", label: "Status", options: careLocationStatuses },
+			{ field: "include_inactive", type: "select", label: "Include Inactive", options: booleanOptions },
+			{ field: "occupied_only", type: "select", label: "Occupied Only", options: booleanOptions },
+		],
+		"Hospitalisation Discharge Watch": [
+			{ field: "care_level", type: "select", label: "Care Level", options: careLevels },
+			{ field: "attending_veterinarian", type: "link", label: "Attending Veterinarian" },
+			{ field: "status", type: "select", label: "Status", options: activeCareStatuses },
+			{ field: "discharge_ready_only", type: "select", label: "Discharge Ready Only", options: booleanOptions },
+			{ field: "pending_issue_type", type: "select", label: "Pending Issue Type", options: dischargeIssueTypes },
+		],
+		"Pending Hospitalisation Actions": [
+			{ field: "action_type", type: "select", label: "Action Type", options: hospitalActionTypes },
+			{ field: "status", type: "select", label: "Status", options: activeCareStatuses },
+			{ field: "attending_veterinarian", type: "link", label: "Assigned To / Attending Veterinarian" },
+		],
+		"Dispensary Activity Report": [
+			{ field: "item", type: "link", label: "Item" },
+			{ field: "warehouse", type: "link", label: "Warehouse" },
+		],
+		"Stock Usage Summary": [
+			{ field: "item", type: "link", label: "Item" },
+			{ field: "warehouse", type: "link", label: "Warehouse" },
+		],
+		"Stock Expiry Status": [
+			{ field: "company", type: "link", label: "Company" },
+			{ field: "warehouse", type: "link", label: "Warehouse" },
+			{ field: "item_group", type: "link", label: "Item Group" },
+			{ field: "include_zero_qty", type: "select", label: "Include Zero Qty", options: booleanOptions },
+		],
 		"Service Revenue Breakdown": [
 			{ field: "service_category", type: "select", label: "Service Category", options: serviceCategories },
 			{ field: "practitioner", type: "link", label: "Practitioner" },
@@ -110,7 +208,7 @@
 			modelValue: filters[field] || "",
 			label: __(definition.label),
 			options: definition.options || [],
-			"onUpdate:modelValue": (value) => onChange(field, value || ""),
+			"onUpdate:modelValue": (value) => onChange(field, value ?? ""),
 		});
 	}
 
