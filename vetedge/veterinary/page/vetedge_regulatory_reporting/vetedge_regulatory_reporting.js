@@ -4,19 +4,24 @@ const NADIS_VACCINATION_DOWNLOAD = "vetedge.services.nadis_vaccination_export.do
 const NADIS_OUTBREAK_VALIDATE = "vetedge.services.nadis_outbreak_export.validate_nadis_outbreak_export";
 const NADIS_OUTBREAK_DOWNLOAD = "vetedge.services.nadis_outbreak_export.download_nadis_outbreak_workbook";
 const REPORT_FILTER_SEARCH = "vetedge.services.report_filter_search.search_report_filter_options";
+const REPORT_RUN_GENERATE = "vetedge.services.regulatory_report_runs.generate_regulatory_report_run";
+const REPORT_RUN_HISTORY = "vetedge.services.regulatory_report_runs.get_regulatory_report_runs";
+const REPORT_RUN_SEND = "vetedge.services.regulatory_report_runs.send_regulatory_report_run";
+const VACCINATION_REPORT = "NADIS Monthly Vaccination Report";
+const OUTBREAK_REPORT = "NADIS Disease Outbreak Report";
 
 function ensureRegulatoryStyles() {
 	if (document.getElementById(VETEDGE_REGULATORY_STYLE_ID)) return;
 	const style = document.createElement("style");
 	style.id = VETEDGE_REGULATORY_STYLE_ID;
 	style.textContent = `
-		.vetedge-regulatory-root{width:100%;max-width:none}
+		.vetedge-regulatory-root{width:100%;max-width:none;display:grid;gap:18px}
 		.vetedge-regulatory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 		.vetedge-regulatory-card{border:1px solid var(--edge-color-border,#d9dce1);border-radius:14px;background:var(--edge-color-surface,#fff);padding:18px;display:grid;gap:16px;min-width:0}
 		.vetedge-regulatory-card h3{margin:0;color:var(--edge-color-ink-950,#1f2937);font-size:1.05rem}
 		.vetedge-regulatory-card p{margin:0;color:var(--edge-color-ink-500,#667085)}
 		.vetedge-regulatory-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-		.vetedge-regulatory-actions{display:flex;gap:8px;flex-wrap:wrap}
+		.vetedge-regulatory-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 		.vetedge-regulatory-button{appearance:none;border:1px solid var(--edge-color-border,#d0d5dd);background:var(--edge-color-surface,#fff);color:var(--edge-color-ink-900,#344054);border-radius:9px;padding:8px 12px;font-weight:600;cursor:pointer}
 		.vetedge-regulatory-button.primary{background:var(--edge-color-brand-600,#2563eb);border-color:var(--edge-color-brand-600,#2563eb);color:#fff}
 		.vetedge-regulatory-button:disabled{opacity:.55;cursor:not-allowed}
@@ -30,9 +35,13 @@ function ensureRegulatoryStyles() {
 		.vetedge-regulatory-stat{padding:10px;border-radius:10px;background:var(--edge-color-surface-muted,#f2f4f7)}
 		.vetedge-regulatory-stat strong{display:block;font-size:1.15rem;color:var(--edge-color-ink-950,#101828)}
 		.vetedge-regulatory-stat span{font-size:.75rem;color:var(--edge-color-ink-500,#667085)}
-		@media(max-width:1100px){.vetedge-regulatory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		.vetedge-regulatory-history{display:grid;gap:10px}
+		.vetedge-regulatory-run{display:grid;grid-template-columns:minmax(12rem,2fr) minmax(8rem,1fr) minmax(8rem,1fr) auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--edge-color-border,#e4e7ec);border-radius:10px}
+		.vetedge-regulatory-run-main{display:grid;gap:3px;min-width:0}.vetedge-regulatory-run-main strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vetedge-regulatory-run small{color:var(--edge-color-ink-500,#667085)}
+		.vetedge-regulatory-send-grid{display:grid;grid-template-columns:minmax(16rem,1fr) auto;gap:10px;align-items:end}
+		@media(max-width:1100px){.vetedge-regulatory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.vetedge-regulatory-run{grid-template-columns:1fr 1fr}}
 		@media(max-width:1000px){.vetedge-regulatory-grid{grid-template-columns:1fr}}
-		@media(max-width:576px){.vetedge-regulatory-filters,.vetedge-regulatory-meta{grid-template-columns:1fr}.vetedge-regulatory-actions .vetedge-regulatory-button{width:100%}}
+		@media(max-width:576px){.vetedge-regulatory-filters,.vetedge-regulatory-meta,.vetedge-regulatory-run,.vetedge-regulatory-send-grid{grid-template-columns:1fr}.vetedge-regulatory-actions .vetedge-regulatory-button{width:100%}}
 	`;
 	document.head.appendChild(style);
 }
@@ -56,6 +65,10 @@ function profile() {
 		branchName: frappe.defaults?.get_user_default?.("branch") || "All Branches",
 		userName: info.fullname || info.full_name || user,
 	};
+}
+
+function isRegulatoryAdmin() {
+	return Boolean(frappe.user?.has_role?.("System Manager") || frappe.user?.has_role?.("VetEdge Administrator"));
 }
 
 frappe.pages["vetedge-regulatory-reporting"].on_page_load = function (wrapper) {
@@ -95,24 +108,24 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 						from_date: "",
 						to_date: "",
 					},
-					canManageOutbreak: Boolean(frappe.user?.has_role?.("System Manager") || frappe.user?.has_role?.("VetEdge Administrator")),
-					vaccination: { loading: false, result: null, error: "" },
-					outbreak: { loading: false, result: null, error: "" },
+					canManageOutbreak: isRegulatoryAdmin(),
+					canManageRuns: isRegulatoryAdmin(),
+					vaccination: { loading: false, generating: false, result: null, error: "" },
+					outbreak: { loading: false, generating: false, result: null, error: "" },
+					history: { loading: false, rows: [], total: 0, error: "" },
+					emailRecipients: "",
+					sendingRun: "",
 				};
+			},
+			async mounted() {
+				if (this.canManageRuns) await this.loadHistory();
 			},
 			methods: {
 				async searchCompanies(term) {
 					try {
-						const response = await apiCall("frappe.desk.search.search_link", {
-							doctype: "Company",
-							txt: term || "",
-							page_length: 20,
-							ignore_user_permissions: 0,
-						});
+						const response = await apiCall("frappe.desk.search.search_link", { doctype: "Company", txt: term || "", page_length: 20, ignore_user_permissions: 0 });
 						return Array.isArray(response) ? response : [];
-					} catch (_error) {
-						return [];
-					}
+					} catch (_error) { return []; }
 				},
 				async searchBranches(term) {
 					try {
@@ -125,9 +138,7 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 							filters: JSON.stringify(this.filters),
 						});
 						return Array.isArray(response) ? response : [];
-					} catch (_error) {
-						return [];
-					}
+					} catch (_error) { return []; }
 				},
 				setFilter(key, value) {
 					this.filters[key] = value || "";
@@ -135,37 +146,73 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 					this.outbreak.result = null;
 				},
 				async validateVaccination() {
-					this.vaccination.loading = true;
-					this.vaccination.error = "";
+					this.vaccination.loading = true; this.vaccination.error = "";
 					try { this.vaccination.result = await apiCall(NADIS_VACCINATION_VALIDATE, { filters: this.filters }); }
 					catch (error) { this.vaccination.error = error?.message || __("Vaccination report validation failed."); }
 					finally { this.vaccination.loading = false; }
 				},
 				async validateOutbreak() {
 					if (!this.canManageOutbreak) return;
-					this.outbreak.loading = true;
-					this.outbreak.error = "";
+					this.outbreak.loading = true; this.outbreak.error = "";
 					try { this.outbreak.result = await apiCall(NADIS_OUTBREAK_VALIDATE, { filters: this.filters }); }
 					catch (error) { this.outbreak.error = error?.message || __("Disease Outbreak report validation failed."); }
 					finally { this.outbreak.loading = false; }
 				},
 				downloadVaccination() { if (this.vaccination.result?.submission_ready) downloadEndpoint(NADIS_VACCINATION_DOWNLOAD, this.filters); },
 				downloadOutbreak() { if (this.canManageOutbreak && this.outbreak.result?.submission_ready) downloadEndpoint(NADIS_OUTBREAK_DOWNLOAD, this.filters); },
+				async generateRun(kind) {
+					if (!this.canManageRuns) return;
+					const state = kind === "vaccination" ? this.vaccination : this.outbreak;
+					const reportType = kind === "vaccination" ? VACCINATION_REPORT : OUTBREAK_REPORT;
+					if (!state.result?.submission_ready) return;
+					state.generating = true;
+					try {
+						const result = await apiCall(REPORT_RUN_GENERATE, { report_type: reportType, filters: this.filters });
+						frappe.show_alert?.({ message: __("Regulatory report {0} saved to history.", [result.name]), indicator: "green" });
+						await this.loadHistory();
+					} catch (error) {
+						frappe.msgprint({ title: __("Report Generation Failed"), message: error?.message || __("The regulatory report could not be saved."), indicator: "red" });
+					} finally { state.generating = false; }
+				},
+				async loadHistory() {
+					if (!this.canManageRuns) return;
+					this.history.loading = true; this.history.error = "";
+					try {
+						const result = await apiCall(REPORT_RUN_HISTORY, { company: this.filters.company || "", branch: this.filters.branch || "", start: 0, page_length: 10 });
+						this.history.rows = result.rows || [];
+						this.history.total = Number(result.total || 0);
+					} catch (error) {
+						this.history.error = error?.message || __("Regulatory report history could not be loaded.");
+						this.history.rows = [];
+					} finally { this.history.loading = false; }
+				},
+				async sendRun(run) {
+					if (!this.canManageRuns || !run?.name || !String(this.emailRecipients || "").trim()) {
+						frappe.msgprint({ title: __("Recipient Required"), message: __("Enter at least one recipient email address before sending."), indicator: "orange" });
+						return;
+					}
+					this.sendingRun = run.name;
+					try {
+						const result = await apiCall(REPORT_RUN_SEND, { name: run.name, recipients: this.emailRecipients });
+						frappe.show_alert?.({ message: __("Regulatory report sent to {0}.", [result.sent_to]), indicator: "green" });
+						await this.loadHistory();
+					} catch (error) {
+						frappe.msgprint({ title: __("Send Failed"), message: error?.message || __("The regulatory report could not be sent."), indicator: "red" });
+					} finally { this.sendingRun = ""; }
+				},
 				newOutbreak() { if (this.canManageOutbreak) frappe.new_doc?.("Veterinary Disease Outbreak"); },
 				openOutbreaks() { if (this.canManageOutbreak) frappe.set_route?.("List", "Veterinary Disease Outbreak"); },
 				renderStats(result, kind) {
 					if (!result) return null;
 					const stats = kind === "vaccination"
-						? [[result.source_count || 0, __("Vaccinations")], [result.grouped_row_count || 0, __("Workbook Rows")], [result.error_count || 0, __("Blocking Issues")]]
+						? [[result.distinct_animal_count || 0, __("Animals Vaccinated")], [result.grouped_row_count || 0, __("Workbook Rows")], [result.error_count || 0, __("Blocking Issues")]]
 						: [[result.outbreak_count || 0, __("Outbreaks")], [result.animal_group_count || 0, __("Animal Groups")], [result.error_count || 0, __("Blocking Issues")]];
 					return h("div", { class: "vetedge-regulatory-meta" }, stats.map(([value, label]) => h("div", { class: "vetedge-regulatory-stat" }, [h("strong", String(value)), h("span", label)])));
 				},
 				renderIssues(result, error, kind) {
-					if (kind === "outbreak" && !this.canManageOutbreak) {
-						return h("div", { class: "vetedge-regulatory-issue" }, __("Disease Outbreak regulatory entry and export are currently restricted to Veterinary administrators until the native outbreak Branch-read permission hooks complete QA."));
-					}
+					if (kind === "outbreak" && !this.canManageOutbreak) return h("div", { class: "vetedge-regulatory-issue" }, __("Disease Outbreak regulatory entry and export are currently restricted to Veterinary administrators until the native outbreak Branch-read permission hooks complete QA."));
 					if (error) return h("div", { class: "alert alert-danger" }, error);
-					if (!result) return h("p", __("Validate the selected reporting period before downloading the official workbook."));
+					if (!result) return h("p", __("Validate the selected reporting period before downloading or saving a regulatory workbook."));
 					const issues = [...(result.errors || []).map((item) => ({ ...item, kind: "error" })), ...(result.warnings || []).map((item) => ({ ...item, kind: "warning" }))];
 					if (!issues.length) return h("div", { class: "vetedge-regulatory-issue" }, __("No blocking validation issues found."));
 					return h("div", { class: "vetedge-regulatory-issues" }, issues.slice(0, 20).map((item) => h("div", { class: "vetedge-regulatory-issue" }, `${item.kind === "error" ? "Blocked" : "Warning"}${item.record ? ` · ${item.record}` : ""}: ${item.message || ""}`)));
@@ -184,15 +231,38 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 						this.renderIssues(result, state.error, kind),
 						h("div", { class: "vetedge-regulatory-actions" }, [
 							h("button", { class: "vetedge-regulatory-button", disabled: restricted || state.loading, onClick: validateAction }, state.loading ? __("Validating...") : __("Validate")),
-							h("button", { class: "vetedge-regulatory-button primary", disabled: restricted || !ready || state.loading, onClick: downloadAction }, __("Download Official Excel")),
+							h("button", { class: "vetedge-regulatory-button primary", disabled: restricted || !ready || state.loading, onClick: downloadAction }, __("Download Excel")),
+							this.canManageRuns && !restricted ? h("button", { class: "vetedge-regulatory-button", disabled: !ready || state.generating, onClick: () => this.generateRun(kind) }, state.generating ? __("Saving...") : __("Generate & Save")) : null,
 							kind === "outbreak" && this.canManageOutbreak ? h("button", { class: "vetedge-regulatory-button", onClick: this.openOutbreaks }, __("Outbreak Register")) : null,
 							kind === "outbreak" && this.canManageOutbreak ? h("button", { class: "vetedge-regulatory-button", onClick: this.newOutbreak }, __("New Outbreak")) : null,
 						]),
 					]);
 				},
+				renderHistory() {
+					if (!this.canManageRuns) return null;
+					const rows = this.history.rows || [];
+					return h("section", { class: "vetedge-regulatory-card" }, [
+						h("div", [h("h3", __("Submission History")), h("p", __("Saved workbooks are private, immutable report evidence. Email sends use the saved attachment and do not regenerate clinical data."))]),
+						h("div", { class: "vetedge-regulatory-send-grid" }, [
+							h(EdgeInput, { modelValue: this.emailRecipients, label: __("Recipient Email(s)"), placeholder: __("vcn@example.gov.ng, officer@example.gov.ng"), "onUpdate:modelValue": (value) => { this.emailRecipients = value || ""; } }),
+							h("button", { class: "vetedge-regulatory-button", disabled: this.history.loading, onClick: this.loadHistory }, this.history.loading ? __("Refreshing...") : __("Refresh History")),
+					]),
+					this.history.error ? h("div", { class: "alert alert-danger" }, this.history.error) : null,
+					!rows.length && !this.history.loading ? h("div", { class: "vetedge-regulatory-issue" }, __("No saved regulatory report runs match the current Company/Branch scope.")) : null,
+					rows.length ? h("div", { class: "vetedge-regulatory-history" }, rows.map((run) => h("div", { class: "vetedge-regulatory-run", key: run.name }, [
+							h("div", { class: "vetedge-regulatory-run-main" }, [h("strong", run.report_type || run.name), h("small", `${run.name} · ${frappe.datetime?.str_to_user?.(run.generated_on) || run.generated_on || ""}`)]),
+							h("div", [h("span", { class: `vetedge-regulatory-pill ${run.status === "Accepted" ? "ready" : ""}` }, run.status || __("Generated")), h("small", { style: "display:block;margin-top:4px" }, run.service_branch || run.company || "")]),
+							h("div", [h("small", __("Template SHA-256")), h("div", { title: run.template_sha256 || "", style: "font-family:monospace;font-size:.72rem;overflow:hidden;text-overflow:ellipsis" }, run.template_sha256 || "—")]),
+							h("div", { class: "vetedge-regulatory-actions" }, [
+								run.export_file ? h("button", { class: "vetedge-regulatory-button", onClick: () => window.open(run.export_file, "_blank", "noopener") }, __("Open File")) : null,
+								h("button", { class: "vetedge-regulatory-button primary", disabled: this.sendingRun === run.name || ["Accepted", "Superseded"].includes(run.status), onClick: () => this.sendRun(run) }, this.sendingRun === run.name ? __("Sending...") : __("Send")),
+							]),
+						])) ) : null,
+					]);
+				},
 			},
 			render() {
-				const filterPanel = h("div", { class: "vetedge-regulatory-card" }, [
+				const filterPanel = h("section", { class: "vetedge-regulatory-card" }, [
 					h("h3", __("Reporting Scope")),
 					h("div", { class: "vetedge-regulatory-filters" }, [
 						h(EdgeLinkField, { modelValue: this.filters.company, label: __("Company"), placeholder: __("Search Company"), searchable: true, search: this.searchCompanies, "onUpdate:modelValue": (value) => this.setFilter("company", value) }),
@@ -204,14 +274,14 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 				]);
 				return h(EdgeAppShell, { productKey: "vetedge", profile: userProfile }, {
 					default: () => h(EdgePageLayout, {}, {
-						header: () => h(EdgePageHeader, { title: __("Regulatory Reporting"), description: __("Prepare VCN / NADIS vaccination and disease-outbreak submissions from Veterinary operational records.") }),
+						header: () => h(EdgePageHeader, { title: __("Regulatory Reporting"), description: __("Prepare, retain and send VCN / NADIS vaccination and disease-outbreak submissions from Veterinary operational records.") }),
 						default: () => h("main", { class: "vetedge-regulatory-root" }, [
 							filterPanel,
-							h("div", { style: "height:18px" }),
 							h("div", { class: "vetedge-regulatory-grid" }, [
-								this.renderCard("vaccination", __("NADIS Monthly Vaccination Report"), __("Aggregates administered vaccination records into the official NADIS vaccination workbook columns."), this.vaccination, this.validateVaccination, this.downloadVaccination),
-								this.renderCard("outbreak", __("NADIS Disease Outbreak Report"), __("Exports outbreak records and their animal groups, diagnosis bases, control measures and locations across the five official workbook sheets."), this.outbreak, this.validateOutbreak, this.downloadOutbreak),
+								this.renderCard("vaccination", __("NADIS Monthly Vaccination Report"), __("Counts distinct vaccinated animals and aggregates administered records into the mapped NADIS vaccination workbook."), this.vaccination, this.validateVaccination, this.downloadVaccination),
+								this.renderCard("outbreak", __("NADIS Disease Outbreak Report"), __("Exports outbreak records and their animal groups, diagnosis bases, control measures and locations across the five mapped workbook sheets."), this.outbreak, this.validateOutbreak, this.downloadOutbreak),
 							]),
+							this.renderHistory(),
 						]),
 					}),
 				});
