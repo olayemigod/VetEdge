@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import cint
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.services.display_labels import get_display_label
 from vetedge.services.permissions import can_access_branch_data, get_current_user
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
@@ -69,18 +70,28 @@ def _enforce_operational_branch_save(doctype: str, payload: dict, name: str | No
         can_access_branch_data(get_current_user(), requested_branch, raise_exception=True)
 
 
-def _display_label(doctype: str, value: str | None) -> str:
-    if not value:
-        return ""
-    if doctype == "Customer":
-        return frappe.db.get_value("Customer", value, "customer_name") or value
-    if doctype == "Veterinary Species":
-        return frappe.db.get_value(doctype, value, "species_name") or value
-    if doctype == "Veterinary Breed":
-        return frappe.db.get_value(doctype, value, "breed_name") or value
-    if doctype == "Veterinary Patient":
-        return frappe.db.get_value(doctype, value, "patient_name") or value
-    return value
+def _normalize_link_schema(state: dict) -> dict:
+    """Attach readable selected labels to Link fields for create and existing-record editors."""
+    values = state.setdefault("values", {})
+    fields = []
+    for source in state.get("fields") or []:
+        field = dict(source)
+        if field.get("fieldtype") == "Link":
+            target = str(field.get("options") or "").strip()
+            fieldname = str(field.get("fieldname") or "").strip()
+            value = values.get(fieldname)
+            if target and value:
+                field["selected_label"] = get_display_label(target, value)
+            else:
+                field["selected_label"] = ""
+            field["can_create"] = bool(
+                target in INLINE_CREATE_DOCTYPES and frappe.has_permission(target, "create")
+            )
+            if target == "Veterinary Breed":
+                field["create_context_field"] = "species"
+        fields.append(field)
+    state["fields"] = fields
+    return state
 
 
 def _normalize_patient_schema(state: dict, name: str | None) -> dict:
@@ -101,15 +112,6 @@ def _normalize_patient_schema(state: dict, name: str | None) -> dict:
             value = state.setdefault("values", {}).get(fieldname, field.get("default", 0))
             state["values"][fieldname] = 1 if cint(value) else 0
             field["default"] = 1 if cint(field.get("default")) else 0
-        if field.get("fieldtype") == "Link":
-            target = str(field.get("options") or "")
-            value = state.setdefault("values", {}).get(fieldname)
-            field["selected_label"] = _display_label(target, value)
-            field["can_create"] = bool(
-                target in INLINE_CREATE_DOCTYPES and frappe.has_permission(target, "create")
-            )
-            if target == "Veterinary Breed":
-                field["create_context_field"] = "species"
         fields.append(field)
     state["fields"] = fields
     if not name:
@@ -128,6 +130,7 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 
     state = original(resource=resource, name=name)
     state = _enforce_operational_branch_state(state, name)
+    state = _normalize_link_schema(state)
     if resource == "patients":
         return _normalize_patient_schema(state, name)
     return state
