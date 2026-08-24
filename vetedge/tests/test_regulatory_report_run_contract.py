@@ -29,13 +29,14 @@ def test_regulatory_report_run_captures_generation_and_submission_evidence():
         assert expected in doctype
 
 
-def test_generation_uses_validated_report_data_and_private_file_attachment():
+def test_generation_uses_normalized_validated_data_and_private_file_attachment():
     service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
 
     for expected in (
         'generate_regulatory_report_run',
         'require_vetedge_platform_access(',
         'action="generate_regulatory_report_run"',
+        '_normalize_effective_filters(report_type, raw_filters)',
         '_official_rows(filters)',
         '_dataset(filters)',
         'if not result["submission_ready"]',
@@ -45,6 +46,7 @@ def test_generation_uses_validated_report_data_and_private_file_attachment():
         'run.generated_by = frappe.session.user',
         'run.generated_on = now_datetime()',
         'run.db_set("export_file", file_doc.file_url, update_modified=False)',
+        '"effective_filters": report_filters',
     ):
         assert expected in service
 
@@ -53,9 +55,9 @@ def test_generation_uses_validated_report_data_and_private_file_attachment():
         "ignore_permissions=1",
         ".submit()",
         ".cancel()",
-        "frappe.db.set_value(\"Sales Invoice\"",
-        "frappe.db.set_value(\"Payment Entry\"",
-        "frappe.db.set_value(\"Stock Entry\"",
+        'frappe.db.set_value("Sales Invoice"',
+        'frappe.db.set_value("Payment Entry"',
+        'frappe.db.set_value("Stock Entry"',
     ):
         assert forbidden not in service
 
@@ -69,13 +71,53 @@ def test_regulatory_report_history_is_bounded_and_admin_only():
     assert '"has_next": start + len(rows) < total' in service
 
 
-def test_submission_status_cannot_fake_sent_state():
+def test_send_uses_frozen_private_attachment_and_does_not_regenerate_report():
+    service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
+    send_section = service.split("def send_regulatory_report_run", 1)[1].split("def update_regulatory_submission_status", 1)[0]
+
+    for expected in (
+        'action="send_regulatory_report_run"',
+        '_get_attached_file(run)',
+        'attachment_content = file_doc.get_content()',
+        'attachments=[{"fname": file_doc.file_name, "fcontent": attachment_content}]',
+        'now=True',
+        'run.status = "Sent"',
+        'run.sent_to = ", ".join(recipient_list)',
+        'run.sent_on = sent_on',
+        'Accepted or Superseded regulatory reports cannot be emailed again.',
+    ):
+        assert expected in send_section
+
+    for forbidden in (
+        "_official_rows(",
+        "_dataset(",
+        "_build_workbook(",
+        "save_file(",
+    ):
+        assert forbidden not in send_section
+
+
+def test_recipient_validation_is_bounded():
+    service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
+
+    for expected in (
+        "MAX_EMAIL_RECIPIENTS = 20",
+        "validate_email_address(address, throw=True)",
+        "Enter at least one valid email recipient.",
+        "A regulatory report can be sent to at most {0} recipients at once.",
+    ):
+        assert expected in service
+
+
+def test_submission_status_cannot_fake_sent_or_skip_send_state():
     service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
 
     for expected in (
         'if status == "Generated" and run.status != "Generated"',
         'if status == "Sent" and not run.sent_on',
         'Use the explicit send action to mark a regulatory report as Sent.',
+        'status in {"Accepted", "Rejected"} and run.status not in {"Sent", "Accepted", "Rejected"}',
+        'A regulatory report must be Sent before it can be marked Accepted or Rejected.',
         'action="update_regulatory_submission_status"',
     ):
         assert expected in service
