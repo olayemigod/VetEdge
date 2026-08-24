@@ -10,6 +10,8 @@
 		"Lab Order Report": "Lab Order Report",
 		"Laboratory Report": "Lab Order Report",
 		"Vaccination Report": "Vaccination Report",
+		"Practitioner Performance Report": "Practitioner Performance Report",
+		"Branch Performance Report": "Branch Performance Report",
 	});
 	const CARE_LOCATION_DOCTYPE = "Veterinary Care Location";
 	const CARE_LOCATION_ROUTE = "/desk/vetedge-care-locations";
