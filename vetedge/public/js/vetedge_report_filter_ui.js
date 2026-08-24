@@ -138,6 +138,8 @@
 			{ field: "care_location", type: "link", label: "Care Location" },
 			{ field: "attending_veterinarian", type: "link", label: "Attending Veterinarian" },
 			{ field: "status", type: "select", label: "Status", options: activeHospitalStatuses },
+			{ field: "admission_date_from", type: "input", inputType: "date", label: "Admission Date From" },
+			{ field: "admission_date_to", type: "input", inputType: "date", label: "Admission Date To" },
 			{ field: "owner", type: "link", label: "Pet Owner" },
 			{ field: "patient", type: "link", label: "Patient" },
 		],
@@ -159,6 +161,7 @@
 		"Hospitalisation Discharge Watch": [
 			{ field: "care_level", type: "select", label: "Care Level", options: careLevels },
 			{ field: "attending_veterinarian", type: "link", label: "Attending Veterinarian" },
+			{ field: "minimum_days_admitted", type: "input", inputType: "number", min: 0, label: "Minimum Days Admitted" },
 			{ field: "status", type: "select", label: "Status", options: activeCareStatuses },
 			{ field: "discharge_ready_only", type: "select", label: "Discharge Ready Only", options: booleanOptions },
 			{ field: "pending_issue_type", type: "select", label: "Pending Issue Type", options: dischargeIssueTypes },
@@ -180,6 +183,7 @@
 			{ field: "company", type: "link", label: "Company" },
 			{ field: "warehouse", type: "link", label: "Warehouse" },
 			{ field: "item_group", type: "link", label: "Item Group" },
+			{ field: "expiry_buckets", type: "input", inputType: "text", label: "Expiry Buckets", placeholder: "30,60,90" },
 			{ field: "include_zero_qty", type: "select", label: "Include Zero Qty", options: booleanOptions },
 		],
 		"Service Revenue Breakdown": [
@@ -205,20 +209,36 @@
 	function selectNode({ h, EdgeDropdown, filters, definition, onChange }) {
 		const field = definition.field;
 		return h(EdgeDropdown, {
-			modelValue: filters[field] || "",
+			modelValue: filters[field] ?? "",
 			label: __(definition.label),
 			options: definition.options || [],
 			"onUpdate:modelValue": (value) => onChange(field, value ?? ""),
 		});
 	}
 
+	function inputNode({ h, EdgeInput, filters, definition, onChange }) {
+		const field = definition.field;
+		return h(EdgeInput, {
+			modelValue: filters[field] ?? "",
+			label: __(definition.label),
+			type: definition.inputType || "text",
+			min: definition.min,
+			placeholder: definition.placeholder ? __(definition.placeholder) : "",
+			"onUpdate:modelValue": (value) => onChange(field, value ?? ""),
+		});
+	}
+
 	function extraNodes(context) {
 		const definitions = DEFINITIONS[context.reportName] || [];
-		return definitions.map((definition) =>
-			definition.type === "link"
-				? linkNode({ ...context, definition })
-				: selectNode({ ...context, definition }),
-		);
+		return definitions.map((definition) => {
+			if (definition.type === "link") return linkNode({ ...context, definition });
+			if (definition.type === "input") return inputNode({ ...context, definition });
+			return selectNode({ ...context, definition });
+		});
+	}
+
+	function filterKeys(reportName) {
+		return [...new Set((DEFINITIONS[reportName] || []).map((definition) => definition.field).filter(Boolean))];
 	}
 
 	function hasSmartDefinition(reportName) {
@@ -227,6 +247,7 @@
 
 	global.VetEdgeReportFilterUI = Object.freeze({
 		extraNodes,
+		filterKeys,
 		hasSmartDefinition,
 		definitions: DEFINITIONS,
 	});
