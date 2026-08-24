@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_official_exports():
+def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_regulatory_exports():
     page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
 
     for expected in (
@@ -18,12 +18,10 @@ def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_official_ex
         'download_nadis_outbreak_workbook',
         '__("NADIS Monthly Vaccination Report")',
         '__("NADIS Disease Outbreak Report")',
-        '__("Download Official Excel")',
         'label: __("Company")',
         'doctype: "Company"',
         'company: frappe.defaults?.get_user_default?.("Company")',
-        'canManageOutbreak: Boolean(',
-        'frappe.user?.has_role?.("VetEdge Administrator")',
+        'isRegulatoryAdmin()',
         '__("Administrator Managed")',
     ):
         assert expected in page
@@ -35,6 +33,33 @@ def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_official_ex
         "Stock Entry",
     ):
         assert forbidden not in page
+
+
+def test_workbench_admin_submission_flow_uses_saved_report_runs():
+    page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
+
+    for expected in (
+        'REPORT_RUN_GENERATE = "vetedge.services.regulatory_report_runs.generate_regulatory_report_run"',
+        'REPORT_RUN_HISTORY = "vetedge.services.regulatory_report_runs.get_regulatory_report_runs"',
+        'REPORT_RUN_SEND = "vetedge.services.regulatory_report_runs.send_regulatory_report_run"',
+        '__("Generate & Save")',
+        '__("Submission History")',
+        '__("Recipient Email(s)")',
+        'apiCall(REPORT_RUN_GENERATE',
+        'apiCall(REPORT_RUN_HISTORY',
+        'apiCall(REPORT_RUN_SEND',
+        'window.open(run.export_file, "_blank", "noopener")',
+        'Saved workbooks are private, immutable report evidence.',
+        'Email sends use the saved attachment and do not regenerate clinical data.',
+    ):
+        assert expected in page
+
+
+def test_vaccination_workbench_surfaces_distinct_animal_count_not_raw_record_count():
+    page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
+
+    assert 'result.distinct_animal_count' in page
+    assert '__("Animals Vaccinated")' in page
 
 
 def test_regulatory_navigation_is_idempotent_and_runs_after_standard_sidebar_sync():
