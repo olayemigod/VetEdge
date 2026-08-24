@@ -158,6 +158,15 @@ def _clinical_page(
     }
 
 
+def _with_runtime_appointment_actions(resource: str, state: dict) -> dict:
+    """Enrich the actual hooked Resource Center response with smart appointment actions."""
+    if resource != "appointments":
+        return state
+    rows = state.get("rows") or []
+    legacy._with_appointment_action_states({"key": "appointments"}, rows)
+    return state
+
+
 @frappe.whitelist()
 def get_resource_page(
     resource: str,
@@ -200,6 +209,7 @@ def get_resource_page(
         registration_status=registration_status,
         species=species,
     )
+    _with_runtime_appointment_actions(resource, state)
     state["unsupported_required_fields"] = []
     state["summary_label"] = "Branch Scope"
     state["summary_value"] = state.get("context_branch") or "All permitted branches"
