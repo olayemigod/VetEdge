@@ -31,6 +31,7 @@ class VeterinaryRegulatoryReportRun(Document):
     def validate(self):
         self._protect_generation_evidence()
         self._validate_status_evidence()
+        self._validate_controlled_status_transition()
 
     def _protect_generation_evidence(self):
         if self.is_new():
@@ -71,3 +72,27 @@ class VeterinaryRegulatoryReportRun(Document):
                 _("A regulatory report must be Sent before it can be marked Accepted or Rejected."),
                 frappe.ValidationError,
             )
+
+    def _validate_controlled_status_transition(self):
+        if self.is_new():
+            return
+        previous = self.get_doc_before_save()
+        if not previous or previous.status == self.status:
+            return
+        if self.status == "Generated":
+            frappe.throw(_("A submitted regulatory report cannot be reset to Generated."), frappe.ValidationError)
+        if self.status == "Sent":
+            if not self.flags.get("vetedge_regulatory_send_action"):
+                frappe.throw(
+                    _("Use the Regulatory Reporting send action to mark a report as Sent."),
+                    frappe.ValidationError,
+                )
+            return
+        if self.status in {"Accepted", "Rejected", "Superseded"}:
+            if not self.flags.get("vetedge_regulatory_status_action"):
+                frappe.throw(
+                    _("Use the Regulatory Reporting status action to change submission status."),
+                    frappe.ValidationError,
+                )
+            return
+        frappe.throw(_("Unsupported regulatory report status transition."), frappe.ValidationError)
