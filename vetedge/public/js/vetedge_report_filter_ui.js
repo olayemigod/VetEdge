@@ -80,6 +80,10 @@
 			{ field: "customer", type: "link", label: "Owner" },
 			{ field: "outstanding_only", type: "select", label: "Receivables", options: outstandingOptions },
 		],
+		"Practitioner Performance Report": [
+			{ field: "practitioner", type: "link", label: "Practitioner" },
+		],
+		"Branch Performance Report": [],
 		"Service Revenue Breakdown": [
 			{ field: "service_category", type: "select", label: "Service Category", options: serviceCategories },
 			{ field: "practitioner", type: "link", label: "Practitioner" },
