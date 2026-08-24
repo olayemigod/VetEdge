@@ -107,7 +107,7 @@ def test_branch_access_workspace_is_an_edgesuite_page():
 	}
 
 
-def test_known_migrated_reports_and_configuration_do_not_stay_on_native_routes():
+def test_complete_veterinary_report_navigation_routes_to_edgesuite():
 	source = _text("public/js/vetedge_sidebar_qa_alignment.js")
 
 	for report in (
@@ -116,11 +116,38 @@ def test_known_migrated_reports_and_configuration_do_not_stay_on_native_routes()
 		"Owner Register",
 		"Lab Order Report",
 		"Vaccination Report",
+		"Active Hospitalisations",
+		"Hospitalisation Charge Summary",
+		"Care Location Occupancy",
+		"Hospitalisation Discharge Watch",
+		"Pending Hospitalisation Actions",
+		"Grooming Report",
+		"Boarding Report",
+		"Kennel Availability Report",
+		"Practitioner Performance Report",
+		"Branch Performance Report",
+		"Unpaid Invoice Report",
+		"Revenue Summary",
+		"Stock Usage Summary",
+		"Stock Expiry Status",
+		"Dispensary Activity Report",
+		"Veterinary Notification Event Registry",
 	):
 		assert f'"{report}"' in source
 
 	assert "/desk/query-report/" in source
 	assert "/desk/vetedge-report-center" in source
+	assert "reportCenterTarget" in source
+	assert "reportFromNativePath" in source
+	assert "patchSharedProductMenuNavigation" in source
+	assert "resolveMenuItem" in source
+	assert "navigateMenuItem" in source
+	assert "event.stopImmediatePropagation" in source
+	assert "window.open" not in source
+
+
+def test_configuration_and_training_routes_do_not_fall_back_to_native_vetedge_pages():
+	source = _text("public/js/vetedge_sidebar_qa_alignment.js")
 	assert 'const CARE_LOCATION_DOCTYPE = "Veterinary Care Location"' in source
 	assert 'const CARE_LOCATION_ROUTE = "/desk/vetedge-care-locations"' in source
 	assert '"Branch User Assignment": "/desk/vetedge-branch-access?resource=user-assignments"' in source
@@ -130,8 +157,6 @@ def test_known_migrated_reports_and_configuration_do_not_stay_on_native_routes()
 	assert "careLocationTargetFromNativePath" in source
 	assert "branchAccessTargetFromNativePath" in source
 	assert "navigationCandidate" in source
-	assert "event.stopImmediatePropagation" in source
-	assert "window.open" not in source
 
 
 def test_navigation_alignment_preserves_existing_planned_treatment_edgesuite_route():
