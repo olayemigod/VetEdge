@@ -10,58 +10,35 @@ def test_vaccination_template_fidelity_contract_is_recorded():
         'VACCINATION_TEMPLATE_SHA256 = "458e7af8b47c491f5245f5fc6cc8bbe754bbc23ab63829e88bb2083b813c05ba"',
         'VACCINATION_SHEET = "Vaccinations"',
         'VACCINATION_DATA_START_ROW = 5',
+        'VACCINATION_BINARY_FIDELITY = {',
+        '"hidden_columns": ("A", "CD")',
+        '"hidden_rows": (2,)',
+        '"row_4_markers": {"B4": 1, "O4": "u"}',
+        '"admin_division_level_1_4651": "Vaccinations!$CD$1:$CD$851"',
+        '"admin_division_level_2_3433": "Vaccinations!$CE$1:$CE$670"',
+        '"range": "H5:H239", "formula1": "fd_3434_reason_for_the_vaccination"',
+        '"range": "P6:P15 P17:P239", "formula1": "fd_3442_vaccine_tested_at_panvac"',
+        '"range": "E5:G239", "formula1": "admin_division_level_2_3433"',
     ):
         assert expected in templates
-
-    # These values come from the supplied binary workbook and are release QA
-    # requirements, not optional presentation details.
-    expected_binary_metadata = {
-        "hidden_columns": ("A", "CD"),
-        "hidden_rows": (2,),
-        "defined_names": {
-            "admin_division_level_1_4651": "Vaccinations!$CD$1:$CD$851",
-            "admin_division_level_2_3433": "Vaccinations!$CE$1:$CE$670",
-        },
-        "row_4_markers": {"B4": 1, "O4": "u"},
-        "validation_count": 8,
-        "validation_ranges": (
-            "H5:H239",
-            "I5:I239",
-            "C5:C239",
-            "P6:P15 P17:P239",
-            "D5:D239",
-            "E5:G239",
-            "J5:J239",
-            "M5:M239",
-        ),
-    }
-    assert expected_binary_metadata["validation_count"] == 8
-    assert expected_binary_metadata["row_4_markers"]["B4"] == 1
 
 
 def test_outbreak_template_fidelity_contract_is_recorded():
     templates = (ROOT / "services/nadis_templates.py").read_text(encoding="utf-8")
 
-    assert 'DISEASE_OUTBREAK_TEMPLATE_SHA256 = "8ea90b4b5c30a66029186905e9aab846bf897f40121d5ec7d7d69acf2964db94"' in templates
-    for sheet_name in (
-        "Outbreaks",
-        "Animals affected",
-        "Bases of Diagnosis",
-        "Disease Control Measures",
-        "Locations",
+    for expected in (
+        'DISEASE_OUTBREAK_TEMPLATE_SHA256 = "8ea90b4b5c30a66029186905e9aab846bf897f40121d5ec7d7d69acf2964db94"',
+        'OUTBREAK_BINARY_FIDELITY = {',
+        '"admin_level_1_5518": "[1]Worksheet!$CB$1:$CB$780"',
+        '"hidden_columns": ("A", "CA")',
+        '"date_hints": {"L4": "(dd/mm/yyyy)", "M4": "(dd/mm/yyyy)", "N4": "(dd/mm/yyyy)", "O4": "(dd/mm/yyyy)"}',
+        '"range": "D5:D236", "formula1": \'INDIRECT(SUBSTITUTE(C5," ","_"))\'',
+        '"hidden_columns": ("A", "CL")',
+        '"range": "D5:D11 D15:D251", "formula1": "CP5:CP8"',
+        '"hidden_columns": ("A", "CN")',
+        '"range": "E12:E252", "formula1": "CS11:CS16"',
     ):
-        assert f'"{sheet_name}"' in templates
-
-    # Supplied workbook fidelity facts captured during binary inspection.
-    expected = {
-        "Outbreaks": {"hidden_columns": ("A", "CA"), "validation_count": 4},
-        "Animals affected": {"hidden_columns": ("A", "CH"), "validation_count": 1},
-        "Bases of Diagnosis": {"hidden_columns": ("A", "CK"), "validation_count": 0},
-        "Disease Control Measures": {"hidden_columns": ("A", "CL"), "validation_count": 2},
-        "Locations": {"hidden_columns": ("A", "CN"), "validation_count": 4},
-    }
-    assert sum(item["validation_count"] for item in expected.values()) == 11
-    assert expected["Outbreaks"]["hidden_columns"] == ("A", "CA")
+        assert expected in templates
 
 
 def test_current_exporters_do_not_claim_binary_template_preservation():
