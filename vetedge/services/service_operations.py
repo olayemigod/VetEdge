@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
+from vetedge.services.display_labels import enrich_link_display_values, get_display_label
 from vetedge.services.permissions import (
 	can_access_branch_data,
 	get_assigned_branches,
@@ -152,7 +153,21 @@ def _count(doctype: str, filters: dict, or_filters: list | None = None) -> int:
 
 
 def _columns(config: dict[str, Any]) -> list[dict]:
-	return [{"key": key, "label": label, "type": fieldtype} for key, label, fieldtype in config["columns"]]
+	meta = frappe.get_meta(config["doctype"])
+	columns = []
+	for key, label, fieldtype in config["columns"]:
+		column = {
+			"key": key,
+			"fieldname": key,
+			"label": label,
+			"type": fieldtype,
+			"fieldtype": fieldtype,
+		}
+		field = meta.get_field(key)
+		if field and field.fieldtype == "Link":
+			column["options"] = field.options or ""
+		columns.append(column)
+	return columns
 
 
 def _detail_fields(doc, config: dict[str, Any]) -> list[dict]:
@@ -168,13 +183,29 @@ def _detail_fields(doc, config: dict[str, Any]) -> list[dict]:
 		field = meta.get_field(fieldname)
 		if not field:
 			continue
-		fields.append({
+		value = doc.get(fieldname)
+		payload = {
 			"key": fieldname,
 			"label": field.label or fieldname.replace("_", " ").title(),
 			"type": field.fieldtype,
-			"value": doc.get(fieldname),
-		})
+			"value": value,
+		}
+		if field.fieldtype == "Link" and field.options and value:
+			payload["raw_value"] = value
+			payload["value"] = get_display_label(field.options, value)
+		fields.append(payload)
 	return fields
+
+
+def _document_title(doc) -> str:
+	title_field = getattr(doc.meta, "title_field", "") or ""
+	value = doc.get(title_field) if title_field else None
+	if not value:
+		return doc.name
+	field = doc.meta.get_field(title_field)
+	if field and field.fieldtype == "Link" and field.options:
+		return get_display_label(field.options, value)
+	return str(value)
 
 
 def _has_billing_core_evidence(source_doctype: str, source_name: str) -> bool:
@@ -317,6 +348,8 @@ def get_service_operations_page(
 		start=start,
 		page_length=page_length,
 	)
+	columns = _columns(config)
+	enrich_link_display_values(rows, columns)
 	editor_resource = config.get("editor_resource") or config.get("entry_editor_resource") or ""
 	create_doctype = config.get("entry_doctype") or doctype
 	can_create = bool(editor_resource and create_doctype and frappe.has_permission(create_doctype, "create"))
@@ -324,7 +357,7 @@ def get_service_operations_page(
 		"resource": config["key"],
 		"title": config["title"],
 		"subtitle": config["subtitle"],
-		"columns": _columns(config),
+		"columns": columns,
 		"rows": rows,
 		"total": _count(doctype, filters, or_filters),
 		"start": start,
@@ -348,7 +381,7 @@ def get_service_operation_detail(resource: str, name: str) -> dict:
 		"resource": config["key"],
 		"doctype": config["doctype"],
 		"name": doc.name,
-		"title": doc.get(getattr(doc.meta, "title_field", "")) or doc.name,
+		"title": _document_title(doc),
 		"status": doc.get("status") or doc.get("record_status") or "",
 		"modified": doc.modified,
 		"editor_resource": config.get("editor_resource") or "",
@@ -372,14 +405,14 @@ def transition_boarding_booking(booking: str, action: str) -> dict:
 	from vetedge.services.boarding import (
 		cancel_boarding_booking_doc,
 		check_in_boarding_booking_doc,
-		check_out_boarding_booking_doc,
 		reserve_boarding_booking_doc,
 	)
+	from vetedge.services.boarding_checkout_alignment import check_out_boarding_booking_doc_aligned
 
 	handlers = {
 		"reserve": reserve_boarding_booking_doc,
 		"check-in": check_in_boarding_booking_doc,
-		"check-out": check_out_boarding_booking_doc,
+		"check-out": check_out_boarding_booking_doc_aligned,
 		"cancel": cancel_boarding_booking_doc,
 	}
 	handler = handlers.get(str(action or "").strip())
