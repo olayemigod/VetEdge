@@ -20,6 +20,7 @@
   "vaccination_title",
   "linked_consultation",
   "clinical_section",
+  "vaccination_reason",
   "dose",
   "route",
   "next_due_date",
@@ -56,14 +57,14 @@
    "search_index": 1
   },
   {
+   "fetch_from": "patient.primary_owner",
+   "fetch_if_empty": 1,
    "fieldname": "primary_owner",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Primary Owner",
    "options": "Customer",
-   "read_only": 1,
-   "fetch_from": "patient.primary_owner",
-   "fetch_if_empty": 1
+   "read_only": 1
   },
   {
    "default": "Draft",
@@ -121,19 +122,19 @@
   {
    "fieldname": "vaccination_id",
    "fieldtype": "Data",
-   "label": "Vaccination ID",
-   "read_only": 1,
-   "no_copy": 1,
    "in_standard_filter": 1,
+   "label": "Vaccination ID",
+   "no_copy": 1,
+   "read_only": 1,
    "search_index": 1
   },
   {
    "fieldname": "vaccination_title",
    "fieldtype": "Data",
-   "label": "Vaccination Title",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Vaccination Title",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "linked_consultation",
@@ -146,6 +147,13 @@
    "fieldname": "clinical_section",
    "fieldtype": "Section Break",
    "label": "Clinical Details"
+  },
+  {
+   "description": "Regulatory classification used by the official NADIS vaccination report. Existing records may remain blank until reviewed for reporting.",
+   "fieldname": "vaccination_reason",
+   "fieldtype": "Select",
+   "label": "Reason for Vaccination",
+   "options": "\nControl/Emergency vaccination\nPreventive/Routine vaccination"
   },
   {
    "fieldname": "dose",
@@ -245,78 +253,18 @@
  "name": "Veterinary Vaccination Record",
  "naming_rule": "By \"Naming Series\" field",
  "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Administrator",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Doctor",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Veterinary Nurse",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Front Desk",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Branch Manager",
-   "share": 1
-  }
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Veterinary Nurse", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Branch Manager", "share": 1}
  ],
  "quick_entry": 1,
  "search_fields": "vaccination_id,patient,primary_owner,vaccine,service_branch,linked_consultation,status",
  "show_title_field_in_link": 1,
  "sort_field": "administered_on",
  "sort_order": "DESC",
- "track_changes": 1,
- "title_field": "vaccination_title"
+ "title_field": "vaccination_title",
+ "track_changes": 1
 }
