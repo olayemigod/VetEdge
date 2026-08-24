@@ -52,6 +52,21 @@ def _columns(meta, fields: list[str]) -> list[dict]:
     return columns
 
 
+def _hydrate_link_column_options(state: dict) -> dict:
+    """Ensure generic Resource Center columns carry Link targets for display-label enrichment."""
+    doctype = str(state.get("doctype") or "").strip()
+    if not doctype:
+        return state
+    meta = frappe.get_meta(doctype)
+    for column in state.get("columns") or []:
+        if column.get("fieldtype") != "Link" or column.get("options"):
+            continue
+        field = meta.get_field(column.get("fieldname"))
+        if field and field.fieldtype == "Link":
+            column["options"] = field.options or ""
+    return state
+
+
 def _clinical_page(
     resource: str,
     search: str,
@@ -213,5 +228,6 @@ def get_resource_page(
     state["unsupported_required_fields"] = []
     state["summary_label"] = "Branch Scope"
     state["summary_value"] = state.get("context_branch") or "All permitted branches"
+    _hydrate_link_column_options(state)
     enrich_link_display_values(state.get("rows") or [], state.get("columns") or [])
     return state
