@@ -45,6 +45,7 @@ def test_generation_uses_normalized_validated_data_and_private_file_attachment()
         'run.template_sha256 = payload["template_sha256"]',
         'run.generated_by = frappe.session.user',
         'run.generated_on = now_datetime()',
+        'run.flags.vetedge_regulatory_generation_action = True',
         'run.db_set("export_file", file_doc.file_url, update_modified=False)',
         '"effective_filters": report_filters',
     ):
@@ -60,6 +61,21 @@ def test_generation_uses_normalized_validated_data_and_private_file_attachment()
         'frappe.db.set_value("Stock Entry"',
     ):
         assert forbidden not in service
+
+
+def test_report_run_controller_rejects_manual_creation_and_evidence_changes():
+    controller = (ROOT / "veterinary/doctype/veterinary_regulatory_report_run/veterinary_regulatory_report_run.py").read_text(encoding="utf-8")
+
+    for expected in (
+        'if not self.flags.get("vetedge_regulatory_generation_action")',
+        'Regulatory Report Runs must be created from the Regulatory Reporting Generate & Save action.',
+        'self.export_file = None',
+        'GENERATED_EVIDENCE_FIELDS = (',
+        'Generated regulatory evidence field {0} cannot be changed after the report run is created.',
+        'if previous_file != current_file',
+        'The generated regulatory workbook attachment cannot be changed from the Report Run form.',
+    ):
+        assert expected in controller
 
 
 def test_regulatory_report_history_is_bounded_and_admin_only():
@@ -84,6 +100,7 @@ def test_send_uses_frozen_private_attachment_and_does_not_regenerate_report():
         'run.status = "Sent"',
         'run.sent_to = ", ".join(recipient_list)',
         'run.sent_on = sent_on',
+        'run.flags.vetedge_regulatory_send_action = True',
         'Accepted or Superseded regulatory reports cannot be emailed again.',
     ):
         assert expected in send_section
@@ -111,6 +128,7 @@ def test_recipient_validation_is_bounded():
 
 def test_submission_status_cannot_fake_sent_or_skip_send_state():
     service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
+    controller = (ROOT / "veterinary/doctype/veterinary_regulatory_report_run/veterinary_regulatory_report_run.py").read_text(encoding="utf-8")
 
     for expected in (
         'if status == "Generated" and run.status != "Generated"',
@@ -118,6 +136,15 @@ def test_submission_status_cannot_fake_sent_or_skip_send_state():
         'Use the explicit send action to mark a regulatory report as Sent.',
         'status in {"Accepted", "Rejected"} and run.status not in {"Sent", "Accepted", "Rejected"}',
         'A regulatory report must be Sent before it can be marked Accepted or Rejected.',
+        'run.flags.vetedge_regulatory_status_action = True',
         'action="update_regulatory_submission_status"',
     ):
         assert expected in service
+
+    for expected in (
+        'self.flags.get("vetedge_regulatory_send_action")',
+        'self.flags.get("vetedge_regulatory_status_action")',
+        'Use the Regulatory Reporting send action to mark a report as Sent.',
+        'Use the Regulatory Reporting status action to change submission status.',
+    ):
+        assert expected in controller
