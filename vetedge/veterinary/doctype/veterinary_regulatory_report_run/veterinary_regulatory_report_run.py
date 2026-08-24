@@ -24,9 +24,15 @@ FINAL_STATUSES = {"Accepted", "Superseded"}
 
 class VeterinaryRegulatoryReportRun(Document):
     def before_insert(self):
+        if not self.flags.get("vetedge_regulatory_generation_action"):
+            frappe.throw(
+                _("Regulatory Report Runs must be created from the Regulatory Reporting Generate & Save action."),
+                frappe.PermissionError,
+            )
         self.status = "Generated"
         self.generated_on = self.generated_on or now_datetime()
         self.generated_by = self.generated_by or frappe.session.user
+        self.export_file = None
 
     def validate(self):
         self._protect_generation_evidence()
@@ -49,9 +55,9 @@ class VeterinaryRegulatoryReportRun(Document):
                 )
         previous_file = cstr(previous.get("export_file")).strip()
         current_file = cstr(self.get("export_file")).strip()
-        if previous_file and previous_file != current_file:
+        if previous_file != current_file:
             frappe.throw(
-                _("The generated regulatory workbook attachment cannot be replaced on an existing Report Run."),
+                _("The generated regulatory workbook attachment cannot be changed from the Report Run form."),
                 frappe.ValidationError,
             )
 
