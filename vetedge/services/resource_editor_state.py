@@ -11,6 +11,7 @@ from vetedge.services.portal_access import require_internal_user
 
 
 INLINE_CREATE_DOCTYPES = {"Customer", "Veterinary Species", "Veterinary Breed"}
+IMMUTABLE_EXISTING_PATIENT_DOCTYPES = {"Pet Boarding Booking", "Pet Grooming Appointment"}
 
 
 def _current_branch() -> str:
@@ -70,9 +71,10 @@ def _enforce_operational_branch_save(doctype: str, payload: dict, name: str | No
         can_access_branch_data(get_current_user(), requested_branch, raise_exception=True)
 
 
-def _normalize_link_schema(state: dict) -> dict:
+def _normalize_link_schema(state: dict, name: str | None = None) -> dict:
     """Attach readable selected labels to Link fields for create and existing-record editors."""
     values = state.setdefault("values", {})
+    doctype = str(state.get("doctype") or "").strip()
     fields = []
     for source in state.get("fields") or []:
         field = dict(source)
@@ -89,6 +91,19 @@ def _normalize_link_schema(state: dict) -> dict:
             )
             if target == "Veterinary Breed":
                 field["create_context_field"] = "species"
+
+            # Existing Boarding/Grooming service records must keep their Patient
+            # identity stable. Rendering Patient read-only also avoids exposing
+            # the internal VP-* series when the shared Link component chooses
+            # modelValue over selected_label during initial edit hydration.
+            if (
+                name
+                and fieldname == "patient"
+                and target == "Veterinary Patient"
+                and doctype in IMMUTABLE_EXISTING_PATIENT_DOCTYPES
+            ):
+                field["read_only"] = 1
+                field["description"] = "Patient identity is fixed after this service record is created."
         fields.append(field)
     state["fields"] = fields
     return state
@@ -130,7 +145,7 @@ def get_resource_editor(resource: str, name: str | None = None) -> dict:
 
     state = original(resource=resource, name=name)
     state = _enforce_operational_branch_state(state, name)
-    state = _normalize_link_schema(state)
+    state = _normalize_link_schema(state, name)
     if resource == "patients":
         return _normalize_patient_schema(state, name)
     return state
