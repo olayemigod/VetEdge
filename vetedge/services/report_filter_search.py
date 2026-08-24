@@ -26,6 +26,8 @@ REPORT_FIELDS = {
     "Vaccination Report": {"branch", "patient", "customer", "practitioner", "vaccine"},
     "Patient Register": {"branch", "customer", "species", "breed"},
     "Owner Register": {"branch", "customer"},
+    "Practitioner Performance Report": {"branch", "practitioner"},
+    "Branch Performance Report": {"branch"},
     "Service Revenue Breakdown": {"branch", "practitioner", "item"},
 }
 
