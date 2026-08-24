@@ -51,7 +51,7 @@ RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
 	"appointments": {
 		"doctype": "Veterinary Appointment",
 		"title": _("Appointments"),
-		"subtitle": _("Review and maintain appointment records. Workflow actions still use the dedicated appointment flow."),
+		"subtitle": _("Review appointments and use context-aware workflow actions without leaving the Veterinary workspace."),
 		"allow_create": True,
 		"allow_edit": True,
 		"allow_delete": False,
@@ -237,6 +237,41 @@ def _list_fields(meta) -> list[str]:
 	return fields
 
 
+def _resource_query_fields(config: dict[str, Any], meta, list_fields: list[str]) -> list[str]:
+	fields = list(list_fields)
+	if config["key"] != "appointments":
+		return fields
+	for fieldname in (
+		"owner",
+		"appointment_type",
+		"status",
+		"branch",
+		"patient",
+		"linked_consultation",
+		"guest_booking_request",
+		"vaccine",
+	):
+		if fieldname == "owner" or meta.has_field(fieldname):
+			if fieldname not in fields:
+				fields.append(fieldname)
+	return fields
+
+
+def _with_appointment_action_states(config: dict[str, Any], rows: list) -> list:
+	if config["key"] != "appointments" or not rows:
+		return rows
+	from vetedge.services.appointment_actions import build_appointment_action_state
+
+	for row in rows:
+		payload = {
+			"doctype": "Veterinary Appointment",
+			**{key: value for key, value in dict(row).items() if not str(key).startswith("_")},
+		}
+		doc = frappe.get_doc(payload)
+		row["_appointment_action_state"] = build_appointment_action_state(doc)
+	return rows
+
+
 def _search_fields(meta, list_fields: list[str]) -> list[str]:
 	fields = ["name"]
 	for fieldname in list_fields:
@@ -312,6 +347,7 @@ def get_resource_page(
 
 	meta = frappe.get_meta(doctype)
 	fields = _list_fields(meta)
+	query_fields = _resource_query_fields(config, meta, fields)
 	filters = _branch_filters(meta)
 	or_filters = None
 	query = str(search or "").strip()
@@ -322,13 +358,14 @@ def get_resource_page(
 	start = max(cint(start), 0)
 	rows = frappe.get_list(
 		doctype,
-		fields=fields,
+		fields=query_fields,
 		filters=filters,
 		or_filters=or_filters,
 		order_by="modified desc",
 		start=start,
 		page_length=page_length,
 	)
+	rows = _with_appointment_action_states(config, rows)
 	total = _permission_aware_count(doctype, filters, or_filters)
 	unsupported = _unsupported_required_fields(meta)
 	can_create = bool(config["allow_create"] and frappe.has_permission(doctype, "create") and not unsupported)
