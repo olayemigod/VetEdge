@@ -194,6 +194,7 @@ def generate_regulatory_report_run(report_type: str, filters: str | dict | None 
     run.source_count = payload["source_count"]
     run.output_row_count = payload["output_row_count"]
     run.warning_count = payload["warning_count"]
+    run.flags.vetedge_regulatory_generation_action = True
     run.insert()
 
     file_doc = save_file(
