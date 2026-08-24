@@ -12,6 +12,17 @@
 		const style = document.createElement("style");
 		style.id = STYLE_ID;
 		style.textContent = `
+			.vetedge-edge-modal-presenter-host {
+				position: relative;
+				z-index: 2140;
+			}
+			.vetedge-edge-modal-presenter-host .edge-modal-backdrop {
+				z-index: 2140 !important;
+			}
+			.vetedge-edge-modal-presenter-host [role='dialog'],
+			.vetedge-edge-modal-presenter-host .edge-modal {
+				z-index: 2150 !important;
+			}
 			.vetedge-edge-modal-presenter-host .vetedge-edge-inline-table-wrap {
 				overflow-x: auto;
 				max-width: 100%;
@@ -86,6 +97,21 @@
 		return [...document.querySelectorAll(".vetedge-edge-modal-presenter-host [role='dialog'], .vetedge-edge-modal-presenter-host .edge-modal")].some(isVisible);
 	}
 
+	function elevateEdgeBillingPresenter() {
+		const host = document.querySelector(".vetedge-edge-modal-presenter-host");
+		if (!host || !edgeBillingVisible()) return false;
+		const zIndex = Math.max(2140, highestLayer(host) + 20);
+		host.style.position = "relative";
+		host.style.zIndex = String(zIndex);
+		for (const backdrop of host.querySelectorAll(".edge-modal-backdrop")) {
+			if (isVisible(backdrop)) backdrop.style.zIndex = String(zIndex);
+		}
+		for (const dialog of host.querySelectorAll("[role='dialog'], .edge-modal")) {
+			if (isVisible(dialog)) dialog.style.zIndex = String(zIndex + 10);
+		}
+		return true;
+	}
+
 	function elevate(wrapper, force = false) {
 		if (!wrapper || (!force && !BILLING_TITLES.has(dialogTitle(wrapper)))) return false;
 		const zIndex = highestLayer(wrapper) + 20;
@@ -101,6 +127,7 @@
 	}
 
 	function elevateBillingDialogs() {
+		elevateEdgeBillingPresenter();
 		const dialogs = [...document.querySelectorAll(".modal")].filter(isVisible);
 		const hasEdgeBilling = edgeBillingVisible();
 		for (const dialog of dialogs) {
@@ -133,5 +160,10 @@
 	wrapSharedModal();
 	window.setTimeout(wrapSharedModal, 0);
 	window.setTimeout(wrapSharedModal, 250);
-	window.VetEdgeBillingModalLayering = { elevateBillingDialogs, wrapSharedModal, installCompactBillingStyle };
+	window.VetEdgeBillingModalLayering = {
+		elevateBillingDialogs,
+		elevateEdgeBillingPresenter,
+		wrapSharedModal,
+		installCompactBillingStyle,
+	};
 })();
