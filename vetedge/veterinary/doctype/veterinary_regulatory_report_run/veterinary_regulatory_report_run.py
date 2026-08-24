@@ -73,6 +73,11 @@ class VeterinaryRegulatoryReportRun(Document):
                 _("A regulatory report marked {0} cannot be moved to another status.").format(previous.status),
                 frappe.ValidationError,
             )
+        if previous and previous.status == "Rejected" and self.status == "Sent":
+            frappe.throw(
+                _("A Rejected regulatory report cannot be resent unchanged. Generate a corrected replacement and mark the rejected run Superseded."),
+                frappe.ValidationError,
+            )
         if previous and self.status in {"Accepted", "Rejected"} and previous.status != "Sent":
             frappe.throw(
                 _("Only a Sent regulatory report can be marked Accepted or Rejected."),
