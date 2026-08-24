@@ -12,6 +12,11 @@
   "is_active",
   "species",
   "description",
+  "regulatory_section",
+  "nadis_disease",
+  "nadis_vaccine_type",
+  "nadis_source_of_vaccine",
+  "nadis_panvac_tested",
   "billing_section",
   "default_item",
   "price_list",
@@ -57,6 +62,36 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "regulatory_section",
+   "fieldtype": "Section Break",
+   "label": "NADIS / Regulatory Reporting"
+  },
+  {
+   "description": "Exact Disease value expected by the official NADIS vaccination template for this vaccine. Leave blank until the approved mapping is known.",
+   "fieldname": "nadis_disease",
+   "fieldtype": "Data",
+   "label": "NADIS Disease"
+  },
+  {
+   "description": "Exact Type of Vaccine value expected by NADIS, for example Inactivated vaccines.",
+   "fieldname": "nadis_vaccine_type",
+   "fieldtype": "Data",
+   "label": "NADIS Vaccine Type"
+  },
+  {
+   "description": "Source/manufacturer wording to place in the NADIS Source of Vaccine column.",
+   "fieldname": "nadis_source_of_vaccine",
+   "fieldtype": "Data",
+   "label": "NADIS Source of Vaccine"
+  },
+  {
+   "fieldname": "nadis_panvac_tested",
+   "fieldtype": "Select",
+   "label": "Vaccine Tested at PANVAC",
+   "options": "\nNo\nYes"
   },
   {
    "collapsible": 1,
