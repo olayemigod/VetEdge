@@ -99,17 +99,32 @@ class VeterinaryDiseaseOutbreak(Document):
             frappe.throw(_("An outbreak cannot reference itself as the Original Outbreak."), frappe.ValidationError)
         if not self.parent_outbreak:
             return
-        original = frappe.db.get_value(
-            "Veterinary Disease Outbreak",
-            self.parent_outbreak,
-            ["disease"],
-            as_dict=True,
-        )
-        if not original:
+
+        if not frappe.db.exists("Veterinary Disease Outbreak", self.parent_outbreak):
             frappe.throw(_("Original Outbreak {0} does not exist.").format(self.parent_outbreak), frappe.ValidationError)
-        if self.disease and original.get("disease") and self.disease != original.get("disease"):
+
+        original = frappe.get_doc("Veterinary Disease Outbreak", self.parent_outbreak)
+        original.check_permission("read")
+
+        if self.disease and original.disease and self.disease != original.disease:
             frappe.throw(
                 _("A follow-up outbreak must use the same Disease as the Original Outbreak."),
+                frappe.ValidationError,
+            )
+
+        current_company = cstr(self.company).strip()
+        original_company = cstr(original.company).strip()
+        if current_company and original_company and current_company != original_company:
+            frappe.throw(
+                _("A follow-up outbreak must belong to the same Company as the Original Outbreak."),
+                frappe.ValidationError,
+            )
+
+        current_branch = cstr(self.service_branch).strip()
+        original_branch = cstr(original.service_branch).strip()
+        if current_branch and original_branch and current_branch != original_branch:
+            frappe.throw(
+                _("A follow-up outbreak must use the same Reporting Branch as the Original Outbreak."),
                 frappe.ValidationError,
             )
 
