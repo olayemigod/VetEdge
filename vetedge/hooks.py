@@ -46,6 +46,7 @@ app_include_js = [
 	"/assets/vetedge/js/vetedge_resource_center_action_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/vetedge_resource_center_hardening.js?v=20260815-1",
 	"/assets/vetedge/js/vetedge_lab_order_add_tests.js?v=20260815-1",
+	"/assets/vetedge/js/vetedge_clinical_consultation_context.js?v=20260819-1",
 	"/assets/vetedge/js/vetedge_sidebar_qa_alignment.js?v=20260814-1",
 	"/assets/vetedge/js/report_pdf_patch.js",
 	"/assets/vetedge/js/report_visibility.js",
@@ -108,6 +109,7 @@ override_whitelisted_methods = {
 	"vetedge.services.billing_modal.submit_modal_invoice": "vetedge.services.billing_context_alignment.submit_modal_invoice",
 	"vetedge.services.billing_modal.record_modal_invoice_payment": "vetedge.services.billing_context_alignment.record_modal_invoice_payment",
 	"vetedge.services.clinical_record_editor.get_clinical_record_editor": "vetedge.services.clinical_record_state_v2.get_clinical_record_editor",
+	"vetedge.services.clinical_record_editor.get_clinical_record_create_schema": "vetedge.services.clinical_consultation_context.get_clinical_record_create_schema",
 	"vetedge.services.clinical_record_editor.get_lab_result_editor": "vetedge.services.clinical_record_state_v2.get_lab_result_editor",
 	"vetedge.services.clinical_record_editor.create_clinical_record": "vetedge.services.mutation_security.create_clinical_record",
 	"vetedge.services.clinical_record_editor.save_clinical_record_editor": "vetedge.services.mutation_security.save_clinical_record_editor",
@@ -115,6 +117,9 @@ override_whitelisted_methods = {
 	"vetedge.services.clinical_record_editor.save_lab_result_editor": "vetedge.services.mutation_security.save_lab_result_editor",
 	"vetedge.services.clinical_record_editor.save_lab_test_rate": "vetedge.services.mutation_security.save_lab_test_rate",
 	"vetedge.services.lab.transition_lab_order_status": "vetedge.services.mutation_security.transition_lab_order_status",
+	"vetedge.services.medical_history.get_patient_medical_history_view": "vetedge.services.medical_history_integrity.get_patient_medical_history_view",
+	"vetedge.services.medical_history.get_patient_medical_history": "vetedge.services.medical_history_integrity.get_patient_medical_history",
+	"vetedge.services.medical_history_lazy.get_patient_medical_history_section": "vetedge.services.medical_history_integrity.get_patient_medical_history_section",
 	"vetedge.services.registration_billing.create_manual_registration_invoice": "vetedge.services.mutation_security.create_manual_registration_invoice",
 	"vetedge.services.grooming.transition_grooming_session_status": "vetedge.services.grooming_payment_workflow.transition_grooming_session_status",
 	"vetedge.services.service_operations.get_service_operation_detail": "vetedge.services.service_operations_state.get_service_operation_detail",
@@ -191,7 +196,10 @@ doc_events = {
 		"before_save": "vetedge.services.clinical_workspace_context.enforce_vitals_consultation_ownership",
 	},
 	"Veterinary Lab Order": {
-		"before_validate": "vetedge.services.patient_service_guard.enforce_patient_service_guard",
+		"before_validate": [
+			"vetedge.services.patient_service_guard.enforce_patient_service_guard",
+			"vetedge.services.clinical_consultation_context.enforce_lab_consultation_context",
+		],
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
 			"vetedge.services.practitioner_integrity.enforce_practitioner_integrity",
@@ -202,6 +210,7 @@ doc_events = {
 		"before_validate": [
 			"vetedge.services.vaccination_state_alignment.align_vaccination_administration_metadata",
 			"vetedge.services.patient_service_guard.enforce_patient_service_guard",
+			"vetedge.services.clinical_consultation_context.enforce_vaccination_consultation_context",
 		],
 		"before_save": [
 			"vetedge.services.branch_integrity.enforce_branch_integrity",
