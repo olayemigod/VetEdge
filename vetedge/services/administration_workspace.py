@@ -8,6 +8,7 @@ from frappe.utils import cint, cstr
 
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
+from vetedge.services.role_bundle_security import search_assignable_role_options
 
 PAGE_LENGTH_MAX = 100
 ADMIN_ROLES = {"System Manager", "VetEdge Administrator"}
@@ -436,17 +437,4 @@ def search_administration_link(resource: str, fieldname: str, query: str = "", p
 	config = _resource(resource)
 	if config["mode"] != "role_bundle" or cstr(fieldname).strip() != "role":
 		return []
-	if not frappe.has_permission("Role", "read"):
-		return []
-	query = cstr(query).strip()
-	filters = {"disabled": 0} if frappe.get_meta("Role").has_field("disabled") else {}
-	or_filters = [["Role", "name", "like", f"%{query}%"]] if query else None
-	rows = frappe.get_list(
-		"Role",
-		fields=["name"],
-		filters=filters,
-		or_filters=or_filters,
-		order_by="name asc",
-		page_length=min(max(cint(page_length) or 20, 1), 50),
-	)
-	return [{"value": row.name, "label": row.name, "description": ""} for row in rows]
+	return search_assignable_role_options(query=query, page_length=page_length)
