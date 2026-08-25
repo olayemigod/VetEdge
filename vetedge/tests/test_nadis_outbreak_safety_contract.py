@@ -20,7 +20,11 @@ def test_outbreak_source_model_rejects_cross_company_branch_and_bad_follow_up_di
         'branch_company = cstr(branch.get("company")',
         'branch_company != selected_company',
         'Reporting Branch {0} belongs to Company {1}, not {2}.',
+        'original = frappe.get_doc("Veterinary Disease Outbreak", self.parent_outbreak)',
+        'original.check_permission("read")',
         'A follow-up outbreak must use the same Disease as the Original Outbreak.',
+        'A follow-up outbreak must belong to the same Company as the Original Outbreak.',
+        'A follow-up outbreak must use the same Reporting Branch as the Original Outbreak.',
         'Deaths cannot exceed Cases in Animals Affected row {0}.',
     ):
         assert expected in controller
