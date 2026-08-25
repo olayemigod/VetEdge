@@ -144,21 +144,31 @@ frappe.pages["vetedge-care-locations"].on_page_show = function (wrapper) {
 				pageFilters() {
 					return Object.fromEntries(Object.entries(this.filters).filter(([, value]) => value !== undefined && value !== null && String(value) !== ""));
 				},
-				async refresh() {
-					this.loading = true;
-					this.error = "";
+				async refresh({ silent = false } = {}) {
+					if (!silent) {
+						this.loading = true;
+						this.error = "";
+					}
 					try {
-						this.list = await this.call(VETEDGE_CARE_LOCATION_API.page, {
+						const nextList = await this.call(VETEDGE_CARE_LOCATION_API.page, {
 							search: this.search || "",
 							filters: JSON.stringify(this.pageFilters()),
 							start: this.pageStart,
 							page_length: this.pageLength,
 						});
+						this.list = nextList;
 						this.pageStart = Number(this.list.start || 0);
+						if (!silent) this.error = "";
 					} catch (error) {
-						this.error = this.message(error, __("Care Locations could not be loaded."));
+						const message = this.message(error, __("Care Locations could not be loaded."));
+						if (silent) {
+							console.warn("Care Locations background refresh failed:", error);
+							frappe.show_alert({ message: __("Care Location saved, but the list could not refresh."), indicator: "orange" });
+						} else {
+							this.error = message;
+						}
 					} finally {
-						this.loading = false;
+						if (!silent) this.loading = false;
 					}
 				},
 				async applyFilters() { this.pageStart = 0; await this.refresh(); },
@@ -213,20 +223,25 @@ frappe.pages["vetedge-care-locations"].on_page_show = function (wrapper) {
 				onModelUpdate(value) { this.editor.model = value || {}; this.editor.dirty = true; },
 				async saveDocument() {
 					if (!this.canEdit || this.editor.saving) return;
+					const wasNew = Boolean(this.editor.document?.is_new);
 					this.editor.saving = true;
 					this.editor.error = "";
 					try {
 						const doc = await this.call(VETEDGE_CARE_LOCATION_API.save, {
-							name: this.editor.document?.is_new ? null : this.editor.document?.name,
+							name: wasNew ? null : this.editor.document?.name,
 							modified: this.editor.document?.modified || null,
 							values: JSON.stringify(this.editor.model || {}),
 						});
 						this.editor.document = doc;
 						this.editor.model = JSON.parse(JSON.stringify(doc?.values || {}));
 						this.editor.dirty = false;
-						this.setEditorRoute(doc);
+						this.editor.saving = false;
+						this.editor.open = false;
+						this.confirmDeleteOpen = false;
+						this.clearEditorRoute();
+						if (wasNew) this.pageStart = 0;
 						frappe.show_alert({ message: __("Care Location saved"), indicator: "green" });
-						await this.refresh();
+						await this.refresh({ silent: true });
 					} catch (error) {
 						this.editor.error = this.message(error, __("Care Location could not be saved."));
 					} finally {
@@ -245,7 +260,7 @@ frappe.pages["vetedge-care-locations"].on_page_show = function (wrapper) {
 						this.editor.open = false;
 						this.clearEditorRoute();
 						this.pageStart = 0;
-						await this.refresh();
+						await this.refresh({ silent: true });
 					} catch (error) {
 						this.editor.error = this.message(error, __("Care Location could not be deleted."));
 						this.confirmDeleteOpen = false;
