@@ -5,20 +5,23 @@ import pytest
 from vetedge.services.regulatory_report_state import assert_sendable, assert_transition
 
 
-def test_generated_and_sent_reports_are_sendable():
+def test_only_generated_report_is_sendable():
     assert_sendable("Generated")
-    assert_sendable("Sent")
-
-
-@pytest.mark.parametrize("status", ["Rejected", "Accepted", "Superseded"])
-def test_non_sendable_reports_are_blocked_before_email(status):
-    with pytest.raises(ValueError):
-        assert_sendable(status)
+    for status in ("Sent", "Rejected", "Accepted", "Superseded"):
+        with pytest.raises(ValueError):
+            assert_sendable(status)
 
 
 def test_sent_report_can_be_accepted_or_rejected():
     assert_transition("Sent", "Accepted", has_sent_evidence=True)
     assert_transition("Sent", "Rejected", has_sent_evidence=True)
+
+
+def test_sent_report_cannot_be_sent_again():
+    with pytest.raises(ValueError):
+        assert_transition("Sent", "Sent", has_sent_evidence=True)
+    with pytest.raises(ValueError):
+        assert_sendable("Sent")
 
 
 def test_rejected_report_must_not_be_resent_or_accepted():
