@@ -10,6 +10,7 @@ from frappe.utils.file_manager import save_file
 
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
+from vetedge.services.regulatory_report_state import assert_sendable, assert_transition
 
 REPORT_RUN_DOCTYPE = "Veterinary Regulatory Report Run"
 VACCINATION_REPORT = "NADIS Monthly Vaccination Report"
@@ -163,6 +164,10 @@ def _parse_recipients(value: str | list[str] | tuple[str, ...]) -> list[str]:
     return recipients
 
 
+def _throw_state_error(exc: ValueError) -> None:
+    frappe.throw(_(str(exc)), frappe.ValidationError)
+
+
 @frappe.whitelist()
 def generate_regulatory_report_run(report_type: str, filters: str | dict | None = None) -> dict:
     _require_admin()
@@ -293,18 +298,14 @@ def send_regulatory_report_run(
     subject: str | None = None,
     message: str | None = None,
 ) -> dict:
-    """Send the frozen workbook attached to an existing Report Run.
-
-    The report is deliberately not regenerated here. This guarantees that the
-    file emailed externally is the same file retained in VetEdge report history.
-    """
+    """Send the exact frozen workbook attached to an existing Report Run."""
     _require_admin()
     run = _get_report_run(name, "write")
-    if run.status in {"Accepted", "Superseded"}:
-        frappe.throw(
-            _("Accepted or Superseded regulatory reports cannot be emailed again. Generate a new report if a replacement is required."),
-            frappe.ValidationError,
-        )
+    try:
+        assert_sendable(cstr(run.status).strip())
+    except ValueError as exc:
+        _throw_state_error(exc)
+
     require_vetedge_platform_access(
         action="send_regulatory_report_run",
         reference_doctype=REPORT_RUN_DOCTYPE,
@@ -318,6 +319,13 @@ def send_regulatory_report_run(
         "Please find attached the Veterinary regulatory report generated from VetEdge."
     )
 
+    # Validate the state change before the irreversible external side effect.
+    sent_on = now_datetime()
+    try:
+        assert_transition(cstr(run.status).strip(), "Sent", has_sent_evidence=True)
+    except ValueError as exc:
+        _throw_state_error(exc)
+
     frappe.sendmail(
         recipients=recipient_list,
         subject=mail_subject,
@@ -326,7 +334,6 @@ def send_regulatory_report_run(
         now=True,
     )
 
-    sent_on = now_datetime()
     run.status = "Sent"
     run.sent_to = ", ".join(recipient_list)
     run.sent_on = sent_on
@@ -359,15 +366,15 @@ def update_regulatory_submission_status(
         reference_doctype=REPORT_RUN_DOCTYPE,
         reference_name=run.name,
     )
-    if status == "Generated" and run.status != "Generated":
-        frappe.throw(_("A submitted regulatory report cannot be reset to Generated."), frappe.ValidationError)
-    if status == "Sent" and not run.sent_on:
-        frappe.throw(_("Use the explicit send action to mark a regulatory report as Sent."), frappe.ValidationError)
-    if status in {"Accepted", "Rejected"} and run.status not in {"Sent", "Accepted", "Rejected"}:
-        frappe.throw(
-            _("A regulatory report must be Sent before it can be marked Accepted or Rejected."),
-            frappe.ValidationError,
+    try:
+        assert_transition(
+            cstr(run.status).strip(),
+            status,
+            has_sent_evidence=bool(run.sent_on and cstr(run.sent_to).strip()),
         )
+    except ValueError as exc:
+        _throw_state_error(exc)
+
     run.status = status
     if submission_reference is not None:
         run.submission_reference = cstr(submission_reference).strip()
