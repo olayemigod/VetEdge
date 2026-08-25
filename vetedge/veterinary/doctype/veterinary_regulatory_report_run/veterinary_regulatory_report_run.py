@@ -5,6 +5,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cstr, now_datetime
 
+from vetedge.services.regulatory_report_state import assert_transition
+
 GENERATED_EVIDENCE_FIELDS = (
     "report_type",
     "company",
@@ -19,7 +21,6 @@ GENERATED_EVIDENCE_FIELDS = (
     "output_row_count",
     "warning_count",
 )
-FINAL_STATUSES = {"Accepted", "Superseded"}
 
 
 class VeterinaryRegulatoryReportRun(Document):
@@ -67,22 +68,6 @@ class VeterinaryRegulatoryReportRun(Document):
                 _("Sent status requires the explicit send evidence (Sent To and Sent On)."),
                 frappe.ValidationError,
             )
-        previous = None if self.is_new() else self.get_doc_before_save()
-        if previous and previous.status in FINAL_STATUSES and self.status != previous.status:
-            frappe.throw(
-                _("A regulatory report marked {0} cannot be moved to another status.").format(previous.status),
-                frappe.ValidationError,
-            )
-        if previous and previous.status == "Rejected" and self.status == "Sent":
-            frappe.throw(
-                _("A Rejected regulatory report cannot be resent unchanged. Generate a corrected replacement and mark the rejected run Superseded."),
-                frappe.ValidationError,
-            )
-        if previous and self.status in {"Accepted", "Rejected"} and previous.status != "Sent":
-            frappe.throw(
-                _("Only a Sent regulatory report can be marked Accepted or Rejected."),
-                frappe.ValidationError,
-            )
 
     def _validate_controlled_status_transition(self):
         if self.is_new():
@@ -90,20 +75,25 @@ class VeterinaryRegulatoryReportRun(Document):
         previous = self.get_doc_before_save()
         if not previous or previous.status == self.status:
             return
-        if self.status == "Generated":
-            frappe.throw(_("A submitted regulatory report cannot be reset to Generated."), frappe.ValidationError)
-        if self.status == "Sent":
-            if not self.flags.get("vetedge_regulatory_send_action"):
-                frappe.throw(
-                    _("Use the Regulatory Reporting send action to mark a report as Sent."),
-                    frappe.ValidationError,
-                )
-            return
-        if self.status in {"Accepted", "Rejected", "Superseded"}:
-            if not self.flags.get("vetedge_regulatory_status_action"):
-                frappe.throw(
-                    _("Use the Regulatory Reporting status action to change submission status."),
-                    frappe.ValidationError,
-                )
-            return
-        frappe.throw(_("Unsupported regulatory report status transition."), frappe.ValidationError)
+
+        if self.status == "Sent" and not self.flags.get("vetedge_regulatory_send_action"):
+            frappe.throw(
+                _("Use the Regulatory Reporting send action to mark a report as Sent."),
+                frappe.ValidationError,
+            )
+        if self.status in {"Accepted", "Rejected", "Superseded"} and not self.flags.get(
+            "vetedge_regulatory_status_action"
+        ):
+            frappe.throw(
+                _("Use the Regulatory Reporting status action to change submission status."),
+                frappe.ValidationError,
+            )
+
+        try:
+            assert_transition(
+                cstr(previous.status).strip(),
+                cstr(self.status).strip(),
+                has_sent_evidence=bool(self.sent_on and cstr(self.sent_to).strip()),
+            )
+        except ValueError as exc:
+            frappe.throw(_(str(exc)), frappe.ValidationError)
