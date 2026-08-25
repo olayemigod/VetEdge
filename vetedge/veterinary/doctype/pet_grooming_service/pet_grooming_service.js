@@ -3,6 +3,6 @@ frappe.ui.form.on('Pet Grooming Service', {
 		const query = frm.is_new()
 			? 'resource=grooming-services&new=1'
 			: `resource=grooming-services&name=${encodeURIComponent(frm.doc.name)}`;
-		window.location.replace(`/app/vetedge-pricing-master-workspace?${query}`);
+		window.location.replace(`/desk/vetedge-pricing-master-workspace?${query}`);
 	}
 });

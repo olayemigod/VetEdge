@@ -80,6 +80,46 @@
 		return window.EdgeSuiteUI || window.EdgeUI || null;
 	}
 
+	function installCanonicalRuntimeRequireBridge() {
+		const frappeRuntime = window.frappe;
+		const currentRequire = frappeRuntime?.require;
+		if (typeof currentRequire !== "function") return false;
+		if (currentRequire.__vetedgeCanonicalEdgeSuiteBridge) return true;
+
+		const originalRequire = currentRequire.bind(frappeRuntime);
+		const wrappedRequire = function (items, callback) {
+			const requested = typeof items === "string" ? [items] : Array.isArray(items) ? [...items] : null;
+			if (!requested || !requested.includes("edgeui.bundle.js")) {
+				return originalRequire(items, callback);
+			}
+
+			const remaining = requested.filter((item) => item !== "edgeui.bundle.js");
+			if (!runtime()?.createEdgeApp && !remaining.includes("edgesuite_ui.bundle.js")) {
+				remaining.unshift("edgesuite_ui.bundle.js");
+			}
+
+			if (!remaining.length) {
+				return Promise.resolve().then(() => callback?.());
+			}
+
+			const nextItems = typeof items === "string" && remaining.length === 1 ? remaining[0] : remaining;
+			return originalRequire(nextItems, callback);
+		};
+
+		Object.defineProperty(wrappedRequire, "__vetedgeCanonicalEdgeSuiteBridge", {
+			value: true,
+			configurable: false,
+			enumerable: false,
+		});
+		Object.defineProperty(wrappedRequire, "__vetedgeOriginalRequire", {
+			value: currentRequire,
+			configurable: false,
+			enumerable: false,
+		});
+		frappeRuntime.require = wrappedRequire;
+		return true;
+	}
+
 	function versionSupportsProfessionalUI(version) {
 		const parts = String(version || "0.0.0").split(".").map((value) => Number.parseInt(value, 10) || 0);
 		return parts[0] > 0 || (parts[0] === 0 && parts[1] >= 2);
@@ -87,7 +127,7 @@
 
 	function canonicalSidebar() {
 		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
-		return sidebars && (sidebars.veterinary || sidebars.vetedge);
+		return sidebars && (sidebars.vetedge || sidebars.veterinary);
 	}
 
 	function slug(value) {
@@ -108,13 +148,28 @@
 		return ICON_ALIASES[normalized] || normalized || fallback;
 	}
 
+	function deskRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		try {
+			const url = new URL(raw, window.location.origin);
+			if (url.origin !== window.location.origin) return raw;
+			if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+				url.pathname = `/desk${url.pathname.slice(4)}`;
+			}
+			return `${url.pathname}${url.search}${url.hash}`;
+		} catch (_error) {
+			return raw.replace(/^\/app(?=\/|$)/, "/desk");
+		}
+	}
+
 	function shellRoute(item) {
-		if (item.route) return item.route;
+		if (item.route) return deskRoute(item.route);
 		const target = String(item.link_to || "").trim();
 		if (!target) return "";
-		if (item.link_type === "Report") return `/app/query-report/${encodeURIComponent(target)}`;
-		if (item.link_type === "DocType") return `/app/${slug(target)}`;
-		return `/app/${target.replace(/^\/+/, "")}`;
+		if (item.link_type === "Report") return `/desk/query-report/${encodeURIComponent(target)}`;
+		if (item.link_type === "DocType") return `/desk/${slug(target)}`;
+		return `/desk/${target.replace(/^\/+/, "")}`;
 	}
 
 	function itemDescription(item) {
@@ -129,8 +184,8 @@
 				icon: "home",
 				description: "Veterinary operations and inventory overview",
 				items: [
-					{ label: "Executive Dashboard", route: "/app/vetedge-executive-dashboard", icon: "chart", description: ITEM_META["Executive Dashboard"].description, link_type: "Page", link_to: "vetedge-executive-dashboard" },
-					{ label: "Stock Expiry Monitor", route: "/app/stock-expiry-monitor", icon: "layers", description: ITEM_META["Stock Expiry Monitor"].description, link_type: "Page", link_to: "stock-expiry-monitor" },
+					{ label: "Executive Dashboard", route: "/desk/vetedge-executive-dashboard", icon: "chart", description: ITEM_META["Executive Dashboard"].description, link_type: "Page", link_to: "vetedge-executive-dashboard" },
+					{ label: "Stock Expiry Monitor", route: "/desk/stock-expiry-monitor", icon: "layers", description: ITEM_META["Stock Expiry Monitor"].description, link_type: "Page", link_to: "stock-expiry-monitor" },
 				],
 			},
 			{
@@ -140,7 +195,7 @@
 				description: "Veterinary configuration and controls",
 				defaultCollapsed: true,
 				items: [
-					{ label: "Veterinary Settings", route: "/app/veterinary-settings", icon: "settings", description: ITEM_META["Veterinary Settings"].description, link_type: "DocType", link_to: "Veterinary Settings" },
+					{ label: "Veterinary Settings", route: "/desk/veterinary-settings-center", icon: "settings", description: ITEM_META["Veterinary Settings"].description, link_type: "Page", link_to: "veterinary-settings-center" },
 				],
 			},
 		];
@@ -222,10 +277,81 @@
 		}));
 	}
 
-	function openRoute(route) {
+	function menuItemForRoute(route) {
 		const target = String(route || "").trim();
-		if (!target) return;
+		if (!target) return null;
+		let pathname = target;
+		try {
+			pathname = new URL(deskRoute(target), window.location.origin).pathname;
+		} catch (_error) {
+			// Keep the raw route and compare it below.
+		}
+		const normalized = String(pathname || "").replace(/\/+$/, "") || "/";
+		for (const group of state.menuGroups) {
+			for (const item of group.items || []) {
+				let itemPath = String(item.route || "").replace(/\/+$/, "") || "/";
+				try {
+					itemPath = new URL(deskRoute(item.route), window.location.origin).pathname.replace(/\/+$/, "") || "/";
+				} catch (_error) {
+					// Keep deterministic string comparison.
+				}
+				if (itemPath === normalized) return item;
+			}
+		}
+		return null;
+	}
+
+	function applyFrappeRoute(item, url) {
+		if (typeof window.frappe?.set_route !== "function") return false;
+		window.frappe.route_options = {};
+		for (const [key, value] of url.searchParams) {
+			window.frappe.route_options[key] = value;
+		}
+		window.frappe.route_hash = url.hash || null;
+
+		if (item?.link_type === "Report" && item.link_to) {
+			window.frappe.set_route("query-report", item.link_to);
+			return true;
+		}
+		if (item?.link_type === "DocType" && item.link_to) {
+			window.frappe.set_route("List", item.link_to);
+			return true;
+		}
+		if (item?.link_type === "Page" && item.link_to) {
+			window.frappe.set_route(item.link_to);
+			return true;
+		}
+
+		const parts = url.pathname
+			.replace(/^\/(?:app|desk)(?:\/|$)/, "")
+			.split("/")
+			.filter(Boolean)
+			.map(decodeURIComponent);
+		if (!parts.length) return false;
+		window.frappe.set_route(...parts);
+		return true;
+	}
+
+	function openRoute(route) {
+		const target = deskRoute(route);
+		if (!target) return false;
+
+		try {
+			const url = new URL(target, window.location.origin);
+			const isSameOrigin = url.origin === window.location.origin;
+			const isDeskRoute = /^\/desk(?:\/|$)/.test(url.pathname);
+			if (isSameOrigin && isDeskRoute && typeof window.frappe?.set_route === "function") {
+				const item = menuItemForRoute(url.pathname);
+				if (applyFrappeRoute(item, url)) return true;
+			}
+		} catch (error) {
+			if (window.frappe?.boot?.developer_mode) {
+				console.warn("[VetEdgeProfessionalUI] Unable to use Desk routing", error);
+			}
+		}
+
 		window.location.assign(target);
+		return true;
 	}
 
 	function injectStyles() {
@@ -276,12 +402,10 @@
 						let handled = false;
 						const listeners = Array.isArray(suppliedNavigate) ? suppliedNavigate : [suppliedNavigate];
 						listeners.forEach((listener) => {
-							if (typeof listener === "function") {
-								listener(route);
-								handled = true;
-							}
+							if (typeof listener === "function" && listener(route) === true) handled = true;
 						});
-						if (!handled) openRoute(route);
+						if (!handled) return openRoute(route);
+						return true;
 					};
 					return Vue.h(
 						OriginalShell,
@@ -338,6 +462,7 @@
 
 	function install() {
 		state.lastError = null;
+		installCanonicalRuntimeRequireBridge();
 		injectStyles();
 		const edgeUI = runtime();
 		if (!edgeUI) {
@@ -410,9 +535,12 @@
 		openRoute,
 	});
 
+	installCanonicalRuntimeRequireBridge();
 	bindLifecycle();
-	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", () => scheduleInstall("asset-ready"));
+	if (runtime()?.createEdgeApp) {
+		scheduleInstall("asset-ready");
+	} else if (window.frappe?.require) {
+		window.frappe.require("edgesuite_ui.bundle.js", () => scheduleInstall("asset-ready"));
 	} else if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", () => scheduleInstall("dom-ready"), { once: true });
 	} else {

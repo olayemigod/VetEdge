@@ -1,3 +1,15 @@
+const VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS = 15000;
+
+function clearStalePatientCreateRouteOption() {
+	const params = new URLSearchParams(window.location.search || '');
+	const resource = String(params.get('resource') || 'patients').trim() || 'patients';
+	if (resource !== 'patients' || params.get('new') === '1') return;
+	const routeOptions = window.frappe?.route_options;
+	if (routeOptions && String(routeOptions.new || '') === '1') {
+		delete routeOptions.new;
+	}
+}
+
 frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -8,12 +20,30 @@ frappe.pages['vetedge-resource-center'].on_page_load = function(wrapper) {
 };
 
 frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
+	clearStalePatientCreateRouteOption();
+	window.VetEdgeUIBridge?.install?.();
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
 
+	if (wrapper.vue_app?.refresh) {
+		Promise.resolve(
+			wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_RESOURCE_CENTER_REFRESH_MAX_AGE_MS })
+		).then(() => {
+			window.VetEdgeResourceClinicalBridge?.install?.();
+			window.VetEdgeLabOrderAddTests?.install?.();
+		}).catch((error) => {
+			console.error('Error refreshing Veterinary Resource Center:', error);
+		});
+		return;
+	}
+
 	if (wrapper.vue_app) {
-		wrapper.vue_app.unmount();
+		try {
+			wrapper.vue_app.unmount?.();
+		} catch (error) {
+			console.error('Error unmounting Veterinary Resource Center:', error);
+		}
 		wrapper.vue_app = null;
 	}
 
@@ -46,7 +76,8 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 			'EdgeDropdown',
 			'EdgeInput',
 			'EdgeTextarea',
-			'EdgeCheckbox'
+			'EdgeCheckbox',
+			'EdgeDataTable'
 		];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
 		if (!runtime?.createEdgeApp || missing.length) {
@@ -70,6 +101,25 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 				return;
 			}
 
+			const loadClinicalEnhancements = (root) => {
+				// The canonical Consultation Billing & Payment modal is already loaded
+				// globally from hooks.py. Clinical record editing is only a caller of
+				// that shared modal; it must not install a second billing renderer.
+				frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+					frappe.require('vetedge_clinical_record_editor.bundle.js', () => {
+						window.VetEdgeLabOrderAddTests?.install?.();
+						frappe.require('/assets/vetedge/js/vetedge_lab_order_picker_patch.js', () => {
+							window.VetEdgeLabOrderPickerPatch?.install?.();
+							frappe.require('/assets/vetedge/js/vetedge_resource_center_clinical_bridge.js', () => {
+								if (wrapper.current_visit_id !== visitId) return;
+								window.VetEdgeResourceClinicalBridge?.install?.(root);
+								window.VetEdgeLabOrderAddTests?.install?.();
+							});
+						});
+					});
+				});
+			};
+
 			frappe.require('vetedge_resource_center.bundle.js', () => {
 				if (wrapper.current_visit_id !== visitId) return;
 				if (!window.mountVetEdgeResourceCenter) {
@@ -82,6 +132,7 @@ frappe.pages['vetedge-resource-center'].on_page_show = function(wrapper) {
 					const root = $('<div class="vetedge-resource-center-root" data-edge-product="vetedge"></div>')
 						.appendTo(page.body);
 					wrapper.vue_app = window.mountVetEdgeResourceCenter(root[0]);
+					loadClinicalEnhancements(root[0]);
 				} catch (error) {
 					console.error('Error mounting Veterinary Resource Center:', error);
 					showFailure(__('Error mounting Veterinary Resource Center: {0}', [error.message || String(error)]));

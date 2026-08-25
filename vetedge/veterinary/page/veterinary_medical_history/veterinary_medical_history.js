@@ -1,3 +1,5 @@
+const VETEDGE_MEDICAL_HISTORY_REFRESH_MAX_AGE_MS = 15000;
+
 frappe.pages['veterinary-medical-history'].on_page_load = function(wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Medical History'), single_column: true });
 	wrapper.page = page;
@@ -7,6 +9,20 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
+
+	if (wrapper.vue_app?.refresh) {
+		try {
+			Promise.resolve(
+				wrapper.vue_app.refresh({ maxAgeMs: VETEDGE_MEDICAL_HISTORY_REFRESH_MAX_AGE_MS })
+			).catch((error) => {
+				console.error('Error refreshing Veterinary Medical History:', error);
+			});
+			return;
+		} catch (error) {
+			console.error('Error reusing Veterinary Medical History:', error);
+		}
+	}
+
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
 	$(page.body).empty();
@@ -31,6 +47,9 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 			'EdgeFilterBar',
 			'EdgeLinkField',
 			'EdgeInput',
+			'EdgeDropdown',
+			'EdgeTextarea',
+			'EdgeModal',
 			'EdgeDataTable',
 			'EdgeLoadingState',
 			'EdgeErrorState',
@@ -55,16 +74,31 @@ frappe.pages['veterinary-medical-history'].on_page_show = function(wrapper) {
 				showFailure(professional?.message || __('The VetEdge professional shell is unavailable.'));
 				return;
 			}
-			frappe.require('veterinary_medical_history.bundle.js', () => {
-				if (wrapper.current_visit_id !== visitId || !window.mountVeterinaryMedicalHistory) return;
-				try {
-					$loading.remove();
-					const root = $('<div class="veterinary-medical-history-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-					wrapper.vue_app = window.mountVeterinaryMedicalHistory(root[0]);
-				} catch (error) {
-					console.error('Error mounting Veterinary Medical History:', error);
-					showFailure(__('Error mounting Veterinary Medical History: {0}', [error.message || String(error)]));
-				}
+
+			const mountHistoryBundle = () => {
+				frappe.require('/assets/vetedge/css/vetedge_medical_history_qa.css', () => {
+					frappe.require('veterinary_medical_history.bundle.js', () => {
+						if (wrapper.current_visit_id !== visitId || !window.mountVeterinaryMedicalHistory) return;
+						frappe.require('/assets/vetedge/js/vetedge_medical_history_qa_patch.js', () => {
+							if (wrapper.current_visit_id !== visitId) return;
+							window.VetEdgeMedicalHistoryQaPatch?.install?.();
+							try {
+								$loading.remove();
+								const root = $('<div class="veterinary-medical-history-root" data-edge-product="vetedge"></div>').appendTo(page.body);
+								wrapper.vue_app = window.mountVeterinaryMedicalHistory(root[0]);
+							} catch (error) {
+								console.error('Error mounting Veterinary Medical History:', error);
+								showFailure(__('Error mounting Veterinary Medical History: {0}', [error.message || String(error)]));
+							}
+						});
+					});
+				});
+			};
+
+			// Clinical records call the globally shared Consultation Billing & Payment
+			// modal. Only the EdgeSuite record presenter/editor is page-specific.
+			frappe.require('vetedge_edge_modal_presenter.bundle.js', () => {
+				frappe.require('vetedge_clinical_record_editor.bundle.js', mountHistoryBundle);
 			});
 		};
 

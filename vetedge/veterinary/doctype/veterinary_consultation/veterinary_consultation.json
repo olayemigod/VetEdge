@@ -70,7 +70,7 @@
   {"fieldname": "treatment_section", "fieldtype": "Section Break", "label": "Treatment Plan"},
   {"fieldname": "planned_treatments", "fieldtype": "Table", "label": "Planned Treatments", "options": "Planned Treatment Item"},
   {"fieldname": "treatment_plan_summary", "fieldtype": "Text Editor", "label": "Treatment Plan"},
-  {"fieldname": "follow_up_date", "fieldtype": "Date", "label": "Follow Up Date"},
+  {"description": "Date and time for the automatically generated follow-up appointment.", "fieldname": "follow_up_date", "fieldtype": "Datetime", "label": "Follow Up Date/Time"},
   {"collapsible": 1, "fieldname": "dispensary_section", "fieldtype": "Section Break", "label": "Dispensary Fulfillment"},
   {"default": "Not Required", "fieldname": "dispensary_status", "fieldtype": "Select", "label": "Dispensary Status", "no_copy": 1, "options": "Not Required\nPending Dispensary\nDispensary Confirmed", "read_only": 1},
   {"fieldname": "dispensed_treatments", "fieldtype": "Table", "label": "Dispensed Treatments", "no_copy": 1, "options": "Dispensed Treatment Item"},

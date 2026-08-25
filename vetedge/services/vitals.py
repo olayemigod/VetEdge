@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
 from frappe.utils import flt
+from frappe.utils import now_datetime
 
+from vetedge.services.clinical_consultation_context import CLOSED_CONSULTATION_STATUSES
 from vetedge.services.feature_flags import is_enabled
 from vetedge.services.permissions import can_access_branch_data, can_access_consultation
 from vetedge.services.portal_access import require_internal_user
@@ -17,6 +18,13 @@ def validate_vital_signs(doc) -> None:
 	validate_vitals_values(doc)
 
 
+def _consultation_link_is_new_or_changed(doc) -> bool:
+	if not doc.get("consultation"):
+		return False
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	return not previous or previous.get("consultation") != doc.get("consultation")
+
+
 def resolve_vitals_context(doc) -> None:
 	if not doc.consultation and not doc.patient:
 		frappe.throw("Patient is required for Veterinary Vital Signs.", frappe.ValidationError)
@@ -25,7 +33,7 @@ def resolve_vitals_context(doc) -> None:
 		consultation = frappe.db.get_value(
 			"Veterinary Consultation",
 			doc.consultation,
-			["patient", "service_branch"],
+			["patient", "service_branch", "status"],
 			as_dict=True,
 		)
 		if not consultation:
@@ -36,6 +44,9 @@ def resolve_vitals_context(doc) -> None:
 
 		if doc.service_branch and doc.service_branch != consultation.service_branch:
 			frappe.throw("Vitals Service Branch must match the linked Consultation Service Branch.", frappe.ValidationError)
+
+		if _consultation_link_is_new_or_changed(doc) and consultation.get("status") in CLOSED_CONSULTATION_STATUSES:
+			frappe.throw("Only an open Consultation for this patient can be linked.", frappe.ValidationError)
 
 		doc.patient = consultation.patient
 		doc.service_branch = consultation.service_branch

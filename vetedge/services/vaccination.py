@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import frappe
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime
 
-from vetedge.services.appointment_flow import emit_appointment_event
 from vetedge.services.billing import (
 	PAID_STATUS,
 	build_invoice_item,
@@ -114,6 +113,13 @@ def is_vaccination_payment_enforcement_enabled() -> bool:
 	return bool(
 		frappe.db.get_single_value("Veterinary Settings", "vaccination_requires_payment_before_administration")
 	)
+
+
+def is_vaccination_stock_control_enabled() -> bool:
+	"""Return whether VetEdge should enforce dispensary stock control for vaccination."""
+	if not frappe.db.exists("DocType", "Veterinary Settings"):
+		return False
+	return is_enabled("dispensary_flow")
 
 
 def validate_status(doc, previous=None) -> None:
@@ -398,6 +404,8 @@ def validate_duplicate_same_day(doc) -> None:
 
 
 def validate_stock_batch(doc) -> None:
+	if not is_vaccination_stock_control_enabled():
+		return
 	vaccine = get_vaccine_defaults(doc.vaccine)
 	if not doc.batch_no:
 		if doc.expiry_date:
@@ -421,7 +429,7 @@ def calculate_next_due_date(doc) -> None:
 	defaults = get_vaccine_defaults(doc.vaccine)
 	default_days = defaults.default_next_due_days or defaults.default_validity_days
 	if default_days:
-		doc.next_due_date = add_days(getdate(doc.administered_on), default_days)
+		doc.next_due_date = add_days(get_datetime(doc.administered_on), default_days)
 
 
 def get_vaccine_defaults(vaccine: str) -> VaccineDefaults:
@@ -444,7 +452,6 @@ def get_vaccine_defaults(vaccine: str) -> VaccineDefaults:
 	)
 
 
-
 def parse_vaccination_values(values: dict | str | None = None, **overrides) -> dict:
 	parser = getattr(frappe, "parse_json", None)
 	payload = parser(values) if parser and values is not None else values
@@ -457,14 +464,12 @@ def parse_vaccination_values(values: dict | str | None = None, **overrides) -> d
 	return payload
 
 
-
 def vaccination_requires_payment_before_administration(doc) -> bool:
 	settings = get_consultation_billing_settings()
 	if doc.linked_consultation and settings.enabled and settings.requires_payment_before_treatment:
 		return True
 	vaccine = get_vaccine_defaults(doc.vaccine) if getattr(doc, "vaccine", None) else VaccineDefaults()
 	return bool(vaccine.default_item and is_vaccination_payment_enforcement_enabled())
-
 
 
 def enforce_vaccination_payment_before_administration(doc, user: str | None = None) -> None:
@@ -496,7 +501,6 @@ def enforce_vaccination_payment_before_administration(doc, user: str | None = No
 		)
 
 
-
 def get_vaccination_workflow_status(doc) -> str:
 	if doc.status == "Cancelled":
 		return "Cancelled"
@@ -512,7 +516,6 @@ def get_vaccination_workflow_status(doc) -> str:
 			return "Awaiting Payment"
 		return "Pending Administration"
 	return "Pending Administration"
-
 
 
 def finalize_administered_vaccination(doc, create_invoice: int = 1, post_stock: int = 1) -> dict:
@@ -783,45 +786,12 @@ def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str, r
 	return invoice.name
 
 
-
 def create_next_due_vaccination_appointment(doc) -> str | None:
 	if not doc.next_due_date or not is_appointment_creation_enabled():
 		return None
+	from vetedge.services.appointment_flow import sync_next_vaccination_appointment_from_record
 
-	appointment_datetime = f"{getdate(doc.next_due_date)} 09:00:00"
-	existing = frappe.get_all(
-		"Veterinary Appointment",
-		filters={
-			"patient": doc.patient,
-			"branch": doc.service_branch,
-			"appointment_type": "Vaccination",
-			"appointment_datetime": appointment_datetime,
-			"status": ["not in", ["Cancelled", "No Show"]],
-		},
-		pluck="name",
-		limit=1,
-	)
-	if existing:
-		return existing[0]
-
-	appointment = frappe.get_doc(
-		{
-			"doctype": "Veterinary Appointment",
-			"patient": doc.patient,
-			"primary_owner": doc.primary_owner,
-			"branch": doc.service_branch,
-			"practitioner": doc.administered_by,
-			"appointment_datetime": appointment_datetime,
-			"status": "Scheduled",
-			"appointment_type": "Vaccination",
-			"created_from": "Consultation" if doc.linked_consultation else "Manual",
-			"notes": f"Vaccination due follow-up for {doc.vaccine} from {doc.name}",
-		}
-	)
-	appointment.insert(ignore_permissions=True)
-	emit_appointment_event(appointment, "appointment_created", previous_status=None)
-	return appointment.name
-
+	return sync_next_vaccination_appointment_from_record(doc)
 
 
 def is_appointment_creation_enabled() -> bool:
@@ -831,6 +801,8 @@ def is_appointment_creation_enabled() -> bool:
 
 
 def create_vaccination_stock_entry(doc) -> str | None:
+	if not is_vaccination_stock_control_enabled():
+		return None
 	if doc.stock_entry_reference and is_active_stock_entry(doc.stock_entry_reference):
 		return doc.stock_entry_reference
 
@@ -898,7 +870,6 @@ def is_draft_sales_invoice(invoice: str | None) -> bool:
 	return bool(invoice and cint(frappe.db.get_value("Sales Invoice", invoice, "docstatus")) == 0)
 
 
-
 def sync_vaccination_workflow_status(record_name: str) -> None:
 	record = frappe.get_doc(VACCINATION_RECORD_DOCTYPE, record_name)
 	if record.status in {"Administered", "Cancelled"}:
@@ -908,7 +879,6 @@ def sync_vaccination_workflow_status(record_name: str) -> None:
 		frappe.db.set_value(VACCINATION_RECORD_DOCTYPE, record.name, "status", status, update_modified=False)
 
 
-
 def update_vaccination_status_from_invoice(doc, method: str | None = None) -> None:
 	for row in frappe.get_all(
 		VACCINATION_RECORD_DOCTYPE,
@@ -916,7 +886,6 @@ def update_vaccination_status_from_invoice(doc, method: str | None = None) -> No
 		fields=["name"],
 	):
 		sync_vaccination_workflow_status(row.name)
-
 
 
 def update_vaccination_status_from_payment_entry(doc, method: str | None = None) -> None:
@@ -1033,7 +1002,6 @@ def get_consultation_vaccinations(consultation: str, limit: int = 50) -> list[di
 		serialize_vaccination_history_row(row, invoice_map.get(row.linked_invoice), user_map.get(row.administered_by))
 		for row in rows
 	]
-
 
 
 def serialize_vaccination_history_row(row, invoice=None, administered_by_name: str | None = None) -> dict:

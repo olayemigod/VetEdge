@@ -37,9 +37,14 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_owner_register_efficiency_contract.py \
+            vetedge/tests/test_resource_center_loading_regression.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
+            vetedge/tests/test_sidebar_target_integrity.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_performance_page_reuse.py \
             vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_recovered_workspace_integration.py \
@@ -49,9 +54,13 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_owner_register_efficiency_contract.py \
+            vetedge/tests/test_resource_center_loading_regression.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
             vetedge/tests/test_vetedge_appointment_edgeui.py \
             vetedge/tests/test_vetedge_edgesuite_migration_recovery.py \
             vetedge/tests/test_vetedge_executive_dashboard_edgeui.py \
+            vetedge/tests/test_vetedge_performance_page_reuse.py \
             vetedge/tests/test_vetedge_product_menu_navigation.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py \
             vetedge/tests/test_vetedge_ui_identity_resource_center.py
@@ -72,8 +81,11 @@ jobs:
           node --check vetedge/public/js/edgesuite_product_menu.js
           node --check vetedge/public/js/vetedge_professional_ui.js
           node --check vetedge/public/js/vetedge_ui_bridge.js
+          node --check vetedge/public/js/vetedge_navigation_recovery.js
           node --check vetedge/public/js/vetedge_clinical_route.js
           node --check vetedge/public/js/vetedge_workspace_safety.js
+          node --check vetedge/public/js/vetedge_billing_modal_layering.js
+          node --check vetedge/public/js/vetedge_resource_center_action_alignment.js
 
           node --check vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js
           node --check vetedge/public/js/vetedge_stock_expiry_monitor.bundle.js
@@ -81,17 +93,19 @@ jobs:
           node --check vetedge/public/js/vetedge_executive_dashboard.bundle.js
           node --check vetedge/veterinary/page/vetedge_resource_center/vetedge_resource_center.js
           node --check vetedge/public/js/vetedge_resource_center.bundle.js
+          node --check vetedge/public/js/vetedge_resource_center_clinical_bridge.js
+          node --check vetedge/public/js/vetedge_lab_order_picker_patch.js
+          node --check vetedge/public/js/vetedge_billing_edgesuite.bundle.js
 
           node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
           node --check vetedge/public/js/veterinary_settings_center.bundle.js
           node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
           node --check vetedge/public/js/vetedge_master_workspace.bundle.js
           node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
-          node --check vetedge/public/js/vetedge_pricing_master_workspace.bundle.js
-          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
           node --check vetedge/public/js/vetedge_front_desk_action_center.bundle.js
-          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
+          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
           node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
           node --check vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js
           node --check vetedge/public/js/veterinary_medical_history.bundle.js
           node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
@@ -220,6 +234,10 @@ jobs:
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_professional_ui_contract
 
+      - name: Verify published sidebar target integrity
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_sidebar_target_integrity
+
       - name: Run recovered EdgeSuite migration contracts
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_edgesuite_migration_recovery
@@ -243,3 +261,11 @@ jobs:
       - name: Run Executive Dashboard migration tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_executive_dashboard_edgeui
+
+      - name: Run Service Revenue tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_service_revenue
+
+      - name: Run Owner Register performance tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_owner_register_performance

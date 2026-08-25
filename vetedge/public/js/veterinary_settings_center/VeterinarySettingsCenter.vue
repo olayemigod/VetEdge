@@ -50,6 +50,11 @@
 					</div>
 				</section>
 
+				<section v-if="!canWrite" class="settings-readonly-note" role="status">
+					<strong>Veterinary Settings is read-only for this account.</strong>
+					<span>Editing requires {{ writeRoleText }}. The page will not bypass Frappe permissions.</span>
+				</section>
+
 				<nav class="settings-tabs" aria-label="Veterinary Settings sections">
 					<button
 						v-for="tab in schema"
@@ -136,27 +141,42 @@
 																v-if="child.fieldtype === 'Check'"
 																:model-value="Boolean(Number(row[child.fieldname]))"
 																:label="child.label"
+																:disabled="isChildReadOnly(field, child, row)"
 																@update:model-value="setChildValue(field.fieldname, rowIndex, child.fieldname, $event ? 1 : 0)"
 															/>
 															<EdgeDropdown
 																v-else-if="child.fieldtype === 'Select'"
 																:model-value="row[child.fieldname] || ''"
 																:options="selectOptions(child).filter(Boolean).map((option) => ({ value: option, label: option }))"
+																:required="isChildRequired(child, row)"
+																:disabled="isChildReadOnly(field, child, row)"
+																@update:model-value="setChildValue(field.fieldname, rowIndex, child.fieldname, $event)"
+															/>
+															<EdgeLinkField
+																v-else-if="child.fieldtype === 'Link'"
+																:model-value="row[child.fieldname] || ''"
+																:selected-label="row[child.fieldname] || ''"
+																:placeholder="`Search ${child.options}`"
+																:required="isChildRequired(child, row)"
+																:disabled="isChildReadOnly(field, child, row)"
+																:searcher="(term) => searchChildLink(field, child, term)"
 																@update:model-value="setChildValue(field.fieldname, rowIndex, child.fieldname, $event)"
 															/>
 															<EdgeInput
 																v-else
 																:model-value="row[child.fieldname] || ''"
 																:type="inputType(child)"
+																:required="isChildRequired(child, row)"
+																:disabled="isChildReadOnly(field, child, row)"
 																@update:model-value="setChildValue(field.fieldname, rowIndex, child.fieldname, $event)"
 															/>
 														</td>
-														<td><button type="button" class="edge-button" @click="removeRow(field.fieldname, rowIndex)">Remove</button></td>
+														<td><button type="button" class="edge-button" :disabled="isReadOnly(field)" @click="removeRow(field, rowIndex)">Remove</button></td>
 													</tr>
 												</tbody>
 											</table>
 										</div>
-										<button type="button" class="edge-button" @click="addRow(field)">Add Row</button>
+										<button type="button" class="edge-button" :disabled="isReadOnly(field)" @click="addRow(field)">Add Row</button>
 									</div>
 
 									<EdgeInput
@@ -203,7 +223,7 @@ export default {
 	data() {
 		return {
 			loading: true, saving: false, error: "", schema: [], values: {}, original: {}, modified: "",
-			activeTab: "", canWrite: false,
+			activeTab: "", canWrite: false, writeRoles: [],
 			identity: {
 				tenant_name: window.frappe?.boot?.vetedge_ui_identity?.tenant_name || "Veterinary Clinic",
 				tenant_logo: window.frappe?.boot?.vetedge_ui_identity?.tenant_logo || "",
@@ -215,6 +235,7 @@ export default {
 	computed: {
 		activeTabData() { return this.schema.find((tab) => tab.fieldname === this.activeTab) || this.schema[0] || null; },
 		dirty() { return JSON.stringify(this.values) !== JSON.stringify(this.original); },
+		writeRoleText() { return this.writeRoles.length ? this.writeRoles.join(" or ") : "an account with write permission"; },
 	},
 	mounted() { this.load(); },
 	methods: {
@@ -228,6 +249,7 @@ export default {
 				this.original = JSON.parse(JSON.stringify(this.values));
 				this.modified = payload.modified || "";
 				this.canWrite = Boolean(payload.can_write);
+				this.writeRoles = payload.write_roles || [];
 				if (!this.activeTab || !this.schema.some((tab) => tab.fieldname === this.activeTab)) this.activeTab = this.schema[0]?.fieldname || "";
 			} catch (error) { this.error = error?.message || __("Veterinary Settings could not be loaded."); }
 			finally { this.loading = false; }
@@ -278,11 +300,15 @@ export default {
 			this.setValue(fieldname, rows);
 		},
 		addRow(field) {
+			if (this.isReadOnly(field)) return;
 			const row = {};
 			(field.child_fields || []).forEach((child) => { row[child.fieldname] = child.fieldtype === "Check" ? 0 : ""; });
 			this.setValue(field.fieldname, [...(this.values[field.fieldname] || []), row]);
 		},
-		removeRow(fieldname, index) { this.setValue(fieldname, (this.values[fieldname] || []).filter((_, rowIndex) => rowIndex !== index)); },
+		removeRow(field, index) {
+			if (this.isReadOnly(field)) return;
+			this.setValue(field.fieldname, (this.values[field.fieldname] || []).filter((_, rowIndex) => rowIndex !== index));
+		},
 		selectOptions(field) { return String(field.options || "").split("\n"); },
 		inputType(field) {
 			if (["Int", "Float", "Currency", "Percent"].includes(field.fieldtype)) return "number";
@@ -294,8 +320,20 @@ export default {
 		isVisible(field) { return evaluateCondition(field.depends_on, this.values); },
 		isRequired(field) { return Boolean(field.reqd) || (field.mandatory_depends_on && evaluateCondition(field.mandatory_depends_on, this.values)); },
 		isReadOnly(field) { return !this.canWrite || Boolean(field.read_only) || (field.read_only_depends_on && evaluateCondition(field.read_only_depends_on, this.values)); },
+		isChildRequired(field, row) { return Boolean(field.reqd) || (field.mandatory_depends_on && evaluateCondition(field.mandatory_depends_on, row || {})); },
+		isChildReadOnly(parentField, field, row) {
+			return this.isReadOnly(parentField) || Boolean(field.read_only) || (field.read_only_depends_on && evaluateCondition(field.read_only_depends_on, row || {}));
+		},
 		async searchLink(field, term) {
 			const response = await frappe.call("vetedge.services.settings_page.search_veterinary_settings_link", { fieldname: field.fieldname, txt: term });
+			return response.message || [];
+		},
+		async searchChildLink(parentField, childField, term) {
+			const response = await frappe.call("vetedge.services.settings_page.search_veterinary_settings_link", {
+				fieldname: parentField.fieldname,
+				child_fieldname: childField.fieldname,
+				txt: term,
+			});
 			return response.message || [];
 		},
 		upload(field) {
@@ -311,5 +349,5 @@ export default {
 </script>
 
 <style scoped>
-.settings-status-bar,.settings-section-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem)}.settings-status-bar{align-items:center;display:flex;gap:1rem;justify-content:space-between;padding:1rem}.settings-status-copy,.settings-status-actions{align-items:center;display:flex;gap:.75rem}.settings-status-copy>div:last-child{display:grid;gap:.15rem}.settings-status-copy small,.settings-section-card header p{color:var(--edge-color-ink-500,#617589)}.settings-brand-preview{align-items:center;background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:.7rem;display:flex;font-weight:800;height:3rem;justify-content:center;overflow:hidden;width:3rem}.settings-brand-preview img{height:100%;object-fit:contain;width:100%}.settings-tabs{display:flex;gap:.4rem;margin:1rem 0;overflow-x:auto;padding-bottom:.25rem}.settings-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:999px;cursor:pointer;padding:.5rem .9rem;white-space:nowrap}.settings-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87);font-weight:700}.settings-sections{display:grid;gap:1rem}.settings-section-card{padding:1.1rem}.settings-section-card header{margin-bottom:1rem}.settings-section-card h2{font-size:1.05rem;margin:0 0 .25rem}.settings-section-card p{margin:0}.settings-field-grid{display:grid;gap:1rem;grid-template-columns:repeat(2,minmax(0,1fr))}.settings-field{display:grid;gap:.35rem;min-width:0}.settings-field--wide{grid-column:1/-1}.settings-attachment{align-items:center;display:flex;flex-wrap:wrap;gap:.5rem}.settings-attachment-label{color:var(--edge-color-ink-700,#334b61);font-size:.75rem;font-weight:700;width:100%}.settings-attachment img{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:.5rem;height:4rem;object-fit:contain;width:4rem}.settings-table-editor{display:grid;gap:.65rem}.settings-table-scroll{overflow-x:auto}.settings-table-editor table{border-collapse:collapse;min-width:100%;width:max-content}.settings-table-editor th,.settings-table-editor td{border:1px solid var(--edge-color-border,#dfe6ec);padding:.45rem;vertical-align:top}.settings-table-editor th{background:var(--edge-color-surface-muted,#f6f8fa);font-size:.75rem;text-align:left}.settings-table-editor td{min-width:10rem}@media(max-width:48rem){.settings-status-bar,.settings-status-actions{align-items:flex-start;flex-direction:column}.settings-field-grid{grid-template-columns:1fr}.settings-field--wide{grid-column:auto}}
+.settings-status-bar,.settings-section-card{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-lg,1rem)}.settings-status-bar{align-items:center;display:flex;gap:1rem;justify-content:space-between;padding:1rem}.settings-status-copy,.settings-status-actions{align-items:center;display:flex;gap:.75rem}.settings-status-copy>div:last-child{display:grid;gap:.15rem}.settings-status-copy small,.settings-section-card header p{color:var(--edge-color-ink-500,#617589)}.settings-brand-preview{align-items:center;background:var(--edge-color-surface-muted,#f6f8fa);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:.7rem;display:flex;font-weight:800;height:3rem;justify-content:center;overflow:hidden;width:3rem}.settings-brand-preview img{height:100%;object-fit:contain;width:100%}.settings-readonly-note{background:var(--edge-color-warning-50,#fff8e6);border:1px solid var(--edge-color-warning-200,#f3d28c);border-radius:var(--edge-radius-md,.75rem);display:grid;gap:.2rem;margin-top:1rem;padding:.8rem 1rem}.settings-readonly-note span{color:var(--edge-color-ink-600,#52677a);font-size:.85rem}.settings-tabs{display:flex;gap:.4rem;margin:1rem 0;overflow-x:auto;padding-bottom:.25rem}.settings-tab{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:999px;cursor:pointer;padding:.5rem .9rem;white-space:nowrap}.settings-tab.is-active{background:var(--edge-color-brand-50,#eef7ff);border-color:var(--edge-color-brand-500,#1677c8);color:var(--edge-color-brand-700,#0c4f87);font-weight:700}.settings-sections{display:grid;gap:1rem}.settings-section-card{padding:1.1rem}.settings-section-card header{margin-bottom:1rem}.settings-section-card h2{font-size:1.05rem;margin:0 0 .25rem}.settings-section-card p{margin:0}.settings-field-grid{display:grid;gap:1rem;grid-template-columns:repeat(2,minmax(0,1fr))}.settings-field{display:grid;gap:.35rem;min-width:0}.settings-field--wide{grid-column:1/-1}.settings-attachment{align-items:center;display:flex;flex-wrap:wrap;gap:.5rem}.settings-attachment-label{color:var(--edge-color-ink-700,#334b61);font-size:.75rem;font-weight:700;width:100%}.settings-attachment img{border:1px solid var(--edge-color-border,#dfe6ec);border-radius:.5rem;height:4rem;object-fit:contain;width:4rem}.settings-table-editor{display:grid;gap:.65rem}.settings-table-scroll{overflow-x:auto}.settings-table-editor table{border-collapse:collapse;min-width:100%;width:max-content}.settings-table-editor th,.settings-table-editor td{border:1px solid var(--edge-color-border,#dfe6ec);padding:.45rem;vertical-align:top}.settings-table-editor th{background:var(--edge-color-surface-muted,#f6f8fa);font-size:.75rem;text-align:left}.settings-table-editor td{min-width:10rem}@media(max-width:48rem){.settings-status-bar,.settings-status-actions{align-items:flex-start;flex-direction:column}.settings-field-grid{grid-template-columns:1fr}.settings-field--wide{grid-column:auto}}
 </style>

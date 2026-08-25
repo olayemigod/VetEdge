@@ -1,0 +1,131 @@
+name: VetEdge Clinical Workflow Hardening
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: clinical-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    name: Clinical workflow contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile hardened Python services
+        run: |
+          python -m py_compile \
+            vetedge/services/inline_master.py \
+            vetedge/services/resource_editor_state.py \
+            vetedge/services/patient_service_guard.py \
+            vetedge/services/display_labels.py \
+            vetedge/services/clinical_consultation_context.py \
+            vetedge/services/clinical_payment_gate.py \
+            vetedge/services/clinical_record_state.py \
+            vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/clinical_workflow_ui.py \
+            vetedge/services/vaccination.py \
+            vetedge/services/vaccination_payment_workflow.py \
+            vetedge/services/vaccination_state_alignment.py \
+            vetedge/services/lab_order_extensions.py \
+            vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_cancellation.py \
+            vetedge/services/lab_payment_workflow.py \
+            vetedge/services/medical_history_lazy.py \
+            vetedge/services/medical_history_integrity.py \
+            vetedge/services/billing_context_alignment.py \
+            vetedge/services/resource_center_v3.py \
+            vetedge/services/mutation_security.py \
+            vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
+            vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py
+
+      - name: Check hardened EdgeSuite JavaScript
+        run: |
+          node --check vetedge/public/js/vetedge_inline_master_creator.bundle.js
+          node --check vetedge/public/js/vetedge_shared_billing_edgesuite.js
+          node --check vetedge/public/js/vetedge_resource_center_hardening.js
+          node --check vetedge/public/js/vetedge_lab_order_add_tests.js
+          node --check vetedge/public/js/vetedge_billing_modal_layering.js
+          node --check vetedge/public/js/vetedge_clinical_record_editor.bundle.js
+          node --check vetedge/public/js/vetedge_clinical_consultation_context.js
+          node --check vetedge/public/js/vetedge_medical_history_qa_patch.js
+          node --check vetedge/public/js/vetedge_clinical_workspace.bundle.js
+          node --check vetedge/veterinary/page/vetedge_clinical_workspace/vetedge_clinical_workspace.js
+          node --check vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js
+          node --check vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js
+          node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
+          node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
+          node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
+
+      - name: Ruff hardened contracts
+        # The canonical Fast Validation gate owns repository import-order style.
+        # This supplemental gate focuses on substantive F/E/W/UP/B/RUF defects
+        # in the new workflow/security and warm-navigation contracts.
+        run: |
+          ruff check --ignore I001 \
+            vetedge/services/inline_master.py \
+            vetedge/services/resource_editor_state.py \
+            vetedge/services/patient_service_guard.py \
+            vetedge/services/display_labels.py \
+            vetedge/services/clinical_consultation_context.py \
+            vetedge/services/clinical_payment_gate.py \
+            vetedge/services/clinical_record_state.py \
+            vetedge/services/clinical_record_state_v2.py \
+            vetedge/services/clinical_workflow_ui.py \
+            vetedge/services/vaccination.py \
+            vetedge/services/vaccination_payment_workflow.py \
+            vetedge/services/vaccination_state_alignment.py \
+            vetedge/services/lab_order_extensions.py \
+            vetedge/services/lab_billing_context.py \
+            vetedge/services/lab_cancellation.py \
+            vetedge/services/lab_payment_workflow.py \
+            vetedge/services/medical_history_lazy.py \
+            vetedge/services/medical_history_integrity.py \
+            vetedge/services/billing_context_alignment.py \
+            vetedge/services/resource_center_v3.py \
+            vetedge/services/mutation_security.py \
+            vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
+            vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py \
+            vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
+            vetedge/tests/test_medical_history_and_consultation_context_contract.py \
+            vetedge/tests/test_medical_history_clinical_truth_contract.py \
+            vetedge/tests/test_vaccination_administration_regressions.py \
+            vetedge/tests/test_vaccination_and_lab_gate_integrity.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
+            vetedge/tests/test_vetedge_warm_navigation_reuse.py \
+            vetedge/tests/test_veterinary_settings_first_load_contract.py
+
+      - name: Run hardening contracts
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_clinical_workflow_hardening_contract.py \
+            vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
+            vetedge/tests/test_medical_history_and_consultation_context_contract.py \
+            vetedge/tests/test_medical_history_clinical_truth_contract.py \
+            vetedge/tests/test_vaccination_administration_regressions.py \
+            vetedge/tests/test_vaccination_and_lab_gate_integrity.py \
+            vetedge/tests/test_shared_billing_workflow_contract.py \
+            vetedge/tests/test_vetedge_warm_navigation_reuse.py \
+            vetedge/tests/test_veterinary_settings_first_load_contract.py

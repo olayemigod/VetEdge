@@ -84,11 +84,20 @@ def _priority_to_severity(priority: str | None) -> str:
 	return "info"
 
 
+def _desk_route(route: str | None) -> str | None:
+	value = str(route or "").strip()
+	if not value:
+		return None
+	if value == "/app" or value.startswith("/app/"):
+		return f"/desk{value[4:]}"
+	return value
+
+
 def _notification_route(action_url: str | None, reference_doctype: str | None, reference_name: str | None) -> str | None:
 	if action_url:
-		return action_url
+		return _desk_route(action_url)
 	if reference_doctype and reference_name:
-		return f"/app/{frappe.scrub(reference_doctype)}/{reference_name}"
+		return f"/desk/{frappe.scrub(reference_doctype)}/{reference_name}"
 	return None
 
 

@@ -25,12 +25,16 @@
 					<EdgeLinkField
 						v-else-if="field.fieldtype === 'Link'"
 						v-model="values[field.fieldname]"
-						:selected-label="linkLabels[field.fieldname] || values[field.fieldname] || ''"
+						:selected-label="linkLabels[field.fieldname] || field.selected_label || values[field.fieldname] || ''"
 						:label="field.label"
 						:placeholder="`Search ${field.label}`"
 						:description="field.description || ''"
 						:required="Boolean(field.reqd)"
 						:searcher="(query) => searchLink(field, query)"
+						:can-create="Boolean(field.can_create)"
+						:creator="field.can_create ? (term) => createLinkedMaster(field, term) : null"
+						:create-label="`Create ${field.label}`"
+						:context="linkContext(field)"
 						@select="(option) => onLinkSelected(field, option)"
 						@clear="() => clearLink(field)"
 						@search-error="handleFieldError"
@@ -93,6 +97,11 @@
 <script>
 const TEXTAREA_TYPES = new Set(["Small Text", "Text", "Long Text"]);
 const NUMBER_TYPES = new Set(["Int", "Float", "Currency", "Percent"]);
+const INLINE_SEARCH_FIELDS = Object.freeze({
+	Customer: "owner",
+	"Veterinary Species": "species",
+	"Veterinary Breed": "breed",
+});
 
 function blankSchema() {
 	return {
@@ -105,6 +114,10 @@ function blankSchema() {
 		can_save: false,
 		full_form_route: "",
 	};
+}
+
+function checkValue(value) {
+	return value === true || value === 1 || value === "1" ? 1 : 0;
 }
 
 export default {
@@ -130,21 +143,16 @@ export default {
 			this.openState = true;
 			this.loading = true;
 			try {
-				const response = await frappe.call("vetedge.services.resource_center.get_resource_editor", {
-					resource,
-					name,
-				});
+				const response = await frappe.call("vetedge.services.resource_center.get_resource_editor", { resource, name });
 				const schema = response.message || {};
 				this.schema = { ...blankSchema(), ...schema };
 				this.values = this.normalizeValues(schema.fields || [], schema.values || {});
 				this.linkLabels = Object.fromEntries(
 					(schema.fields || [])
-						.filter((field) => field.fieldtype === "Link" && !field.read_only)
-						.map((field) => [field.fieldname, String(this.values[field.fieldname] || "")]),
+						.filter((field) => field.fieldtype === "Link")
+						.map((field) => [field.fieldname, String(field.selected_label || this.values[field.fieldname] || "")]),
 				);
-				if (!this.schema.can_save) {
-					this.error = __("This record is read-only in Quick Edit. Use Open Full Form if you need to inspect it.");
-				}
+				if (!this.schema.can_save) this.error = __("This record is read-only for your current workflow state or permissions.");
 			} catch (error) {
 				this.error = error?.message || __("Quick Edit could not load this record.");
 			} finally {
@@ -152,16 +160,17 @@ export default {
 			}
 		},
 		close() {
-			if (this.saving) return;
-			this.openState = false;
+			if (!this.saving) this.openState = false;
 		},
 		normalizeValues(fields, rawValues) {
 			const normalized = { ...(rawValues || {}) };
 			for (const field of fields || []) {
-				const value = normalized[field.fieldname];
+				let value = normalized[field.fieldname];
 				if ((value === undefined || value === null || value === "") && field.default !== undefined && field.default !== null) {
-					normalized[field.fieldname] = field.default;
+					value = field.default;
+					normalized[field.fieldname] = value;
 				}
+				if (field.fieldtype === "Check") normalized[field.fieldname] = checkValue(value);
 				if (field.fieldtype === "Datetime" && normalized[field.fieldname]) {
 					normalized[field.fieldname] = String(normalized[field.fieldname]).replace(" ", "T").slice(0, 16);
 				}
@@ -170,6 +179,7 @@ export default {
 		},
 		readOnlyValue(field) {
 			const value = this.values[field.fieldname];
+			if (field.fieldtype === "Link" && field.selected_label) return field.selected_label;
 			return value === undefined || value === null || value === "" ? "—" : String(value);
 		},
 		selectOptions(field) {
@@ -179,9 +189,7 @@ export default {
 				.filter(Boolean)
 				.map((value) => ({ value, label: value }));
 		},
-		isTextArea(field) {
-			return TEXTAREA_TYPES.has(field.fieldtype);
-		},
+		isTextArea(field) { return TEXTAREA_TYPES.has(field.fieldtype); },
 		inputType(field) {
 			if (field.fieldtype === "Date") return "date";
 			if (field.fieldtype === "Datetime") return "datetime-local";
@@ -193,11 +201,29 @@ export default {
 		},
 		inputStep(field) {
 			if (field.fieldtype === "Int") return "1";
-			if (NUMBER_TYPES.has(field.fieldtype)) return "any";
-			return undefined;
+			return NUMBER_TYPES.has(field.fieldtype) ? "any" : undefined;
+		},
+		linkContext(field) {
+			if (field.options === "Veterinary Breed") {
+				return {
+					species: this.values.species || "",
+					species_label: this.linkLabels.species || this.values.species || "",
+				};
+			}
+			return {};
 		},
 		async searchLink(field, query) {
 			if (!field?.options) return [];
+			const inlineKind = INLINE_SEARCH_FIELDS[field.options];
+			if (inlineKind) {
+				const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", {
+					field: inlineKind,
+					txt: query || "",
+					context: this.linkContext(field),
+					page_length: 20,
+				});
+				return response.message || [];
+			}
 			const response = await frappe.call("frappe.desk.search.search_link", {
 				doctype: field.options,
 				txt: query || "",
@@ -207,46 +233,54 @@ export default {
 			});
 			return response.message || [];
 		},
+		async ensureInlineCreator() {
+			if (window.VetEdgeInlineMasterCreator?.create) return window.VetEdgeInlineMasterCreator;
+			await new Promise((resolve) => frappe.require("vetedge_inline_master_creator.bundle.js", resolve));
+			if (!window.VetEdgeInlineMasterCreator?.create) throw new Error(__("Inline linked-record creation is unavailable."));
+			return window.VetEdgeInlineMasterCreator;
+		},
+		async createLinkedMaster(field, term) {
+			const creator = await this.ensureInlineCreator();
+			const created = await creator.create({ doctype: field.options, term, context: this.linkContext(field) });
+			if (created && field.options === "Veterinary Species") {
+				this.values.breed = "";
+				this.linkLabels.breed = "";
+			}
+			return created;
+		},
 		async onLinkSelected(field, option) {
 			this.values[field.fieldname] = option?.value || "";
 			this.linkLabels[field.fieldname] = option?.label || option?.value || "";
-			if (this.schema.resource === "appointments" && field.fieldname === "patient") {
-				await this.refreshAppointmentOwner(option?.value || "");
+			if (field.fieldname === "species") {
+				this.values.breed = "";
+				this.linkLabels.breed = "";
 			}
+			if (this.schema.resource === "appointments" && field.fieldname === "patient") await this.refreshAppointmentOwner(option?.value || "");
 		},
 		clearLink(field) {
 			this.values[field.fieldname] = "";
 			this.linkLabels[field.fieldname] = "";
-			if (this.schema.resource === "appointments" && field.fieldname === "patient") {
-				this.values.primary_owner = "";
+			if (field.fieldname === "species") {
+				this.values.breed = "";
+				this.linkLabels.breed = "";
 			}
+			if (this.schema.resource === "appointments" && field.fieldname === "patient") this.values.primary_owner = "";
 		},
 		async refreshAppointmentOwner(patient) {
-			if (!patient) {
-				this.values.primary_owner = "";
-				return;
-			}
+			if (!patient) { this.values.primary_owner = ""; return; }
 			try {
-				const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", {
-					field: "patient",
-					txt: patient,
-					page_length: 20,
-				});
+				const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", { field: "patient", txt: patient, page_length: 20 });
 				const options = response.message || [];
 				const exact = options.find((row) => String(row?.value || "") === String(patient)) || null;
 				const patientRow = exact?.raw?.raw || exact?.raw || {};
 				this.values.primary_owner = patientRow.primary_owner || "";
-				if (!this.values.primary_owner) {
-					this.error = __("The selected patient does not have a Pet Owner configured.");
-				}
+				if (!this.values.primary_owner) this.error = __("The selected patient does not have a Pet Owner configured.");
 			} catch (error) {
 				this.values.primary_owner = "";
 				this.error = error?.message || __("The Pet Owner could not be verified from the selected patient.");
 			}
 		},
-		handleFieldError(error) {
-			this.error = error?.message || __("A linked record could not be loaded.");
-		},
+		handleFieldError(error) { this.error = error?.message || __("A linked record could not be loaded or created."); },
 		serializedValues() {
 			const payload = {};
 			for (const field of this.schema.fields || []) {
@@ -256,7 +290,7 @@ export default {
 					value = String(value).replace("T", " ");
 					if (value.length === 16) value = `${value}:00`;
 				}
-				if (field.fieldtype === "Check") value = value ? 1 : 0;
+				if (field.fieldtype === "Check") value = checkValue(value);
 				payload[field.fieldname] = value ?? "";
 			}
 			return payload;
@@ -284,10 +318,7 @@ export default {
 					values: this.serializedValues(),
 				});
 				const saved = response.message || {};
-				frappe.show_alert({
-					message: this.schema.name ? __("Record updated") : __("Record created"),
-					indicator: "green",
-				});
+				frappe.show_alert({ message: this.schema.name ? __("Record updated") : __("Record created"), indicator: "green" });
 				this.$emit("saved", saved);
 				this.openState = false;
 			} catch (error) {
@@ -301,39 +332,5 @@ export default {
 </script>
 
 <style scoped>
-.vetedge-quick-editor-surface,
-.vetedge-quick-editor-form {
-	display: grid;
-	gap: 1rem;
-}
-
-.vetedge-quick-editor-form {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.vetedge-quick-editor-field--wide {
-	grid-column: 1 / -1;
-	min-width: 0;
-}
-
-.vetedge-quick-editor-error {
-	background: color-mix(in srgb, var(--edge-color-danger, #c53a3a) 10%, white);
-	border: 1px solid color-mix(in srgb, var(--edge-color-danger, #c53a3a) 25%, white);
-	border-radius: .7rem;
-	color: var(--edge-color-danger, #a92f2f);
-	font-size: .8rem;
-	padding: .75rem .85rem;
-}
-
-.vetedge-quick-editor-state {
-	color: var(--edge-color-ink-500, #6b7d90);
-	padding: 2rem;
-	text-align: center;
-}
-
-@media (max-width: 47.99rem) {
-	.vetedge-quick-editor-form {
-		grid-template-columns: minmax(0, 1fr);
-	}
-}
+.vetedge-quick-editor-surface,.vetedge-quick-editor-form{display:grid;gap:1rem}.vetedge-quick-editor-form{grid-template-columns:repeat(2,minmax(0,1fr))}.vetedge-quick-editor-field--wide{grid-column:1/-1;min-width:0}.vetedge-quick-editor-error{background:color-mix(in srgb,var(--edge-color-danger,#c53a3a) 10%,var(--edge-color-surface,#fff));border:1px solid color-mix(in srgb,var(--edge-color-danger,#c53a3a) 25%,var(--edge-color-surface,#fff));border-radius:.7rem;color:var(--edge-color-danger,#a92f2f);font-size:.8rem;padding:.75rem .85rem}.vetedge-quick-editor-state{color:var(--edge-color-ink-500,#6b7d90);padding:2rem;text-align:center}@media(max-width:47.99rem){.vetedge-quick-editor-form{grid-template-columns:minmax(0,1fr)}}
 </style>

@@ -546,7 +546,7 @@ def _find_existing_frappe_notification_log(item, document_type: str | None, docu
 def _build_notification_log_link(document_type: str | None, document_name: str | None) -> str | None:
 	if not document_type or not document_name:
 		return None
-	return "/app/{0}/{1}".format(
+	return "/desk/{0}/{1}".format(
 		frappe.scrub(document_type).replace("_", "-"),
 		document_name,
 	)
@@ -1312,7 +1312,7 @@ def hydrate_reference_context(
 			"service_branch",
 			"vaccine",
 			"administered_by",
-			"vaccination_date",
+			"administered_on",
 			"next_due_date",
 			"linked_invoice",
 			"linked_consultation",

@@ -8,7 +8,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
-VETEDGE_DESK_ROUTE = "/app/vetedge"
+VETEDGE_DESK_ROUTE = "/desk/vetedge"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -17,6 +17,12 @@ OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Access Decision Log",
 	"CoreEdge Branch Session",
 	"CoreEdge Context Switch Log",
+}
+
+SIDEBAR_TARGET_DOCTYPES = {
+	"DocType": "DocType",
+	"Page": "Page",
+	"Report": "Report",
 }
 
 REMOVED_STANDARD_PAGES = {
@@ -51,6 +57,18 @@ def _can_link_doctype(doctype: str) -> bool:
 	return _doctype_exists(doctype)
 
 
+def _sidebar_target_exists(link_type: str | None, link_to: str | None) -> bool:
+	if not link_to:
+		return True
+	target_doctype = SIDEBAR_TARGET_DOCTYPES.get(str(link_type or ""))
+	if not target_doctype:
+		return True
+	try:
+		return bool(frappe.db.exists(target_doctype, str(link_to)))
+	except Exception:
+		return False
+
+
 def _coreedge_available() -> bool:
 	return "coreedge" in _installed_apps()
 
@@ -68,7 +86,7 @@ def _should_keep_sidebar_item(item) -> bool:
 		if not (_coreedge_available() and _doctype_exists(link_to)):
 			return False
 
-	return True
+	return _sidebar_target_exists(link_type, link_to)
 
 
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
@@ -183,6 +201,7 @@ def ensure_vetedge_desktop_icon() -> None:
 		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	from vetedge.services.branding import get_branding
+
 	branding = get_branding()
 	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
 

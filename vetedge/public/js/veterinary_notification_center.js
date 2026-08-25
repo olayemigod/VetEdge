@@ -230,8 +230,8 @@
 				renderDrawer(state.items);
 			})
 			.catch(() => {
-				renderDrawerError();
-			});
+					renderDrawerError();
+				});
 	}
 
 	function ensureDialog() {
@@ -300,26 +300,37 @@
 			});
 	}
 
+	function normalizeDeskActionUrl(actionUrl) {
+		const raw = String(actionUrl || "").trim();
+		if (!raw) return "";
+		if (raw === "/app" || raw.indexOf("/app/") === 0) return `/desk${raw.slice(4)}`;
+		return raw;
+	}
+
 	function openActionUrl(actionUrl) {
-		if (!actionUrl) {
+		const target = normalizeDeskActionUrl(actionUrl);
+		if (!target) {
 			return;
 		}
-		if (actionUrl.indexOf("/app/") === 0 && window.frappe && frappe.set_route) {
-			const route = actionUrl.replace(/^\/app\//, "").split("/").filter(Boolean).map(decodeURIComponent);
-			frappe.set_route(route);
+		if ((target === "/desk" || target.indexOf("/desk/") === 0) && window.frappe && frappe.set_route) {
+			const url = new URL(target, window.location.origin);
+			const route = url.pathname.replace(/^\/desk\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+			frappe.route_options = {};
+			for (const [key, value] of url.searchParams) frappe.route_options[key] = value;
+			if (route.length) frappe.set_route(...route);
 			if (state.dialog) {
 				state.dialog.hide();
 			}
 			return;
 		}
-		if (actionUrl[0] === "#" && window.frappe && frappe.set_route) {
-			frappe.set_route(actionUrl.slice(1).split("/").filter(Boolean));
+		if (target[0] === "#" && window.frappe && frappe.set_route) {
+			frappe.set_route(target.slice(1).split("/").filter(Boolean));
 			if (state.dialog) {
 				state.dialog.hide();
 			}
 			return;
 		}
-		window.location.href = actionUrl;
+		window.location.href = target;
 	}
 
 	function bindRealtime() {

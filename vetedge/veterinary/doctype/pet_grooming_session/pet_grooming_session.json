@@ -13,6 +13,7 @@
   "primary_owner",
   "status",
   "service_branch",
+  "veterinary_appointment",
   "appointment",
   "column_break_session",
   "grooming_service",
@@ -26,197 +27,39 @@
   "linked_invoice"
  ],
  "fields": [
-  {
-   "default": "PGSE-.YYYY.-.#####",
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "PGSE-.YYYY.-.#####",
-   "reqd": 1
-  },
-  {
-   "fieldname": "grooming_session_title",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Grooming Session Title",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "session_section",
-   "fieldtype": "Section Break",
-   "label": "Grooming Session"
-  },
-  {
-   "fieldname": "patient",
-   "fieldtype": "Link",
-   "in_global_search": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Patient",
-   "options": "Veterinary Patient",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "fieldname": "primary_owner",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Primary Owner",
-   "options": "Customer",
-   "read_only": 1
-  },
-  {
-   "default": "Draft",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Draft\nAwaiting Payment\nPending Grooming\nIn Progress\nCompleted\nCancelled",
-   "reqd": 1
-  },
-  {
-   "fieldname": "service_branch",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Service Branch",
-   "options": "Branch",
-   "reqd": 1
-  },
-  {
-   "fieldname": "appointment",
-   "fieldtype": "Link",
-   "label": "Appointment",
-   "options": "Pet Grooming Appointment"
-  },
-  {
-   "fieldname": "column_break_session",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "grooming_service",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Grooming Service",
-   "options": "Pet Grooming Service",
-   "reqd": 1
-  },
-  {
-   "fieldname": "groomer",
-   "fieldtype": "Link",
-   "label": "Groomer",
-   "options": "User",
-   "reqd": 1
-  },
-  {
-   "fieldname": "groomer_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Groomer Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "start_time",
-   "fieldtype": "Datetime",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Start Time"
-  },
-  {
-   "fieldname": "end_time",
-   "fieldtype": "Datetime",
-   "label": "End Time"
-  },
-  {
-   "fieldname": "pre_grooming_notes",
-   "fieldtype": "Small Text",
-   "label": "Pre Grooming Notes"
-  },
-  {
-   "fieldname": "post_grooming_notes",
-   "fieldtype": "Small Text",
-   "label": "Post Grooming Notes"
-  },
-  {
-   "fieldname": "billing_section",
-   "fieldtype": "Section Break",
-   "label": "Billing"
-  },
-  {
-   "fieldname": "linked_invoice",
-   "fieldtype": "Link",
-   "label": "Linked Invoice",
-   "no_copy": 1,
-   "options": "Sales Invoice",
-   "read_only": 1
-  }
+  {"default": "PGSE-.YYYY.-.#####", "fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "PGSE-.YYYY.-.#####", "reqd": 1},
+  {"fieldname": "grooming_session_title", "fieldtype": "Data", "hidden": 1, "label": "Grooming Session Title", "no_copy": 1, "read_only": 1},
+  {"fieldname": "session_section", "fieldtype": "Section Break", "label": "Grooming Session"},
+  {"fieldname": "patient", "fieldtype": "Link", "in_global_search": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Patient", "options": "Veterinary Patient", "reqd": 1, "search_index": 1},
+  {"fieldname": "primary_owner", "fieldtype": "Link", "in_list_view": 1, "label": "Primary Owner", "options": "Customer", "read_only": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nAwaiting Payment\nPending Grooming\nIn Progress\nCompleted\nCancelled", "reqd": 1},
+  {"fieldname": "service_branch", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Service Branch", "options": "Branch", "reqd": 1},
+  {"fieldname": "veterinary_appointment", "fieldtype": "Link", "in_standard_filter": 1, "label": "Veterinary Appointment", "no_copy": 1, "options": "Veterinary Appointment", "read_only": 1},
+  {"description": "Legacy link retained for Grooming Sessions created from the former separate Grooming Appointment workflow.", "fieldname": "appointment", "fieldtype": "Link", "label": "Legacy Grooming Appointment", "no_copy": 1, "options": "Pet Grooming Appointment", "read_only": 1},
+  {"fieldname": "column_break_session", "fieldtype": "Column Break"},
+  {"fieldname": "grooming_service", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Grooming Service", "options": "Pet Grooming Service", "reqd": 1},
+  {"fieldname": "groomer", "fieldtype": "Link", "label": "Groomer", "options": "User", "reqd": 1},
+  {"fieldname": "groomer_name", "fieldtype": "Data", "in_list_view": 1, "label": "Groomer Name", "read_only": 1},
+  {"fieldname": "start_time", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Start Time"},
+  {"fieldname": "end_time", "fieldtype": "Datetime", "label": "End Time"},
+  {"fieldname": "pre_grooming_notes", "fieldtype": "Small Text", "label": "Pre Grooming Notes"},
+  {"fieldname": "post_grooming_notes", "fieldtype": "Small Text", "label": "Post Grooming Notes"},
+  {"fieldname": "billing_section", "fieldtype": "Section Break", "label": "Billing"},
+  {"fieldname": "linked_invoice", "fieldtype": "Link", "label": "Linked Invoice", "no_copy": 1, "options": "Sales Invoice", "read_only": 1}
  ],
  "module": "Veterinary",
  "name": "Pet Grooming Session",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Administrator",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Groomer",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "VetEdge Front Desk",
-   "share": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Branch Manager",
-   "share": 1,
-   "write": 1
-  }
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Administrator", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Groomer", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Front Desk", "share": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Branch Manager", "share": 1, "write": 1}
  ],
  "quick_entry": 1,
- "search_fields": "patient,primary_owner,service_branch,grooming_service,appointment,groomer,status",
+ "search_fields": "patient,primary_owner,service_branch,grooming_service,veterinary_appointment,appointment,groomer,status",
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",

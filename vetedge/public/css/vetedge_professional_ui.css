@@ -96,3 +96,218 @@ body.edge-suite-product-vetedge .edge-product-menu__trigger:focus-visible {
 		padding-inline: 0.75rem;
 	}
 }
+
+/* EdgeSuite Theme System V1 compatibility.
+   This section intentionally comes last so theme semantic tokens win over the
+   older VetEdge light-only aliases in dashboard_shell.css and the defaults above. */
+:root[data-edge-palette] {
+	--edge-primary: var(--edge-color-brand-600);
+	--edge-primary-strong: var(--edge-color-brand-700);
+	--edge-primary-soft: var(--edge-color-brand-50);
+	--edge-accent: var(--edge-color-accent);
+	--edge-accent-soft: var(--edge-color-accent-soft);
+	--edge-success: var(--edge-color-success);
+	--edge-warning: var(--edge-color-warning);
+	--edge-danger: var(--edge-color-danger);
+	--edge-text: var(--edge-color-ink-950);
+	--edge-text-muted: var(--edge-color-ink-500);
+	--edge-border: var(--edge-color-border);
+	--edge-bg: var(--edge-color-surface-muted);
+	--edge-surface: var(--edge-color-surface);
+	--edge-focus-ring: color-mix(in srgb, var(--edge-color-brand-600) 34%, transparent);
+}
+
+:root[data-edge-palette] body.edge-suite-product-vetedge,
+:root[data-edge-palette] .vetedge-executive-dashboard-root,
+:root[data-edge-palette] .vetedge-expiry-monitor-root {
+	--edge-primary: var(--edge-color-brand-600);
+	--edge-primary-strong: var(--edge-color-brand-700);
+	--edge-primary-soft: var(--edge-color-brand-50);
+	--edge-accent: var(--edge-color-accent);
+	--edge-accent-soft: var(--edge-color-accent-soft);
+	--edge-success: var(--edge-color-success);
+	--edge-warning: var(--edge-color-warning);
+	--edge-danger: var(--edge-color-danger);
+	--edge-text: var(--edge-color-ink-950);
+	--edge-text-muted: var(--edge-color-ink-500);
+	--edge-border: var(--edge-color-border);
+	--edge-bg: var(--edge-color-surface-muted);
+	--edge-surface: var(--edge-color-surface);
+}
+
+:root[data-edge-palette] .vetedge-dashboard-root,
+:root[data-edge-palette] .vetedge-revenue-composition-panel,
+:root[data-edge-palette] .vetedge-revenue-composition-empty,
+:root[data-edge-palette] .vetedge-product-menu-panel,
+:root[data-edge-palette] .vetedge-product-menu-slot--floating {
+	background-color: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root,
+:root[data-edge-palette] .vetedge-expiry-monitor-root {
+	background: linear-gradient(
+		180deg,
+		var(--edge-color-brand-50) 0,
+		var(--edge-color-surface-soft) 180px,
+		var(--edge-color-surface-muted) 420px
+	);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-topbar,
+:root[data-edge-palette] .vetedge-expiry-monitor-root .edge-topbar {
+	background: color-mix(in srgb, var(--edge-color-surface) 94%, transparent);
+	border-bottom-color: var(--edge-color-border);
+}
+
+:root[data-edge-palette] .vetedge-revenue-composition-panel,
+:root[data-edge-palette] .vetedge-revenue-composition-empty {
+	border-color: var(--edge-color-border);
+}
+
+:root[data-edge-palette] .vetedge-revenue-composition-progress {
+	background: var(--edge-color-surface-muted);
+}
+
+:root[data-edge-palette] .edge-alerts-container .alert-danger {
+	background-color: color-mix(in srgb, var(--edge-color-danger) 12%, var(--edge-color-surface));
+	border-color: color-mix(in srgb, var(--edge-color-danger) 38%, var(--edge-color-border));
+	color: var(--edge-color-danger);
+}
+
+:root[data-edge-palette] .edge-alerts-container .alert-warning {
+	background-color: color-mix(in srgb, var(--edge-color-warning) 12%, var(--edge-color-surface));
+	border-color: color-mix(in srgb, var(--edge-color-warning) 38%, var(--edge-color-border));
+	color: var(--edge-color-warning);
+}
+
+:root[data-edge-palette] .edge-alerts-container .alert-info {
+	background-color: color-mix(in srgb, var(--edge-color-info) 12%, var(--edge-color-surface));
+	border-color: color-mix(in srgb, var(--edge-color-info) 38%, var(--edge-color-border));
+	color: var(--edge-color-info);
+}
+
+:root[data-edge-palette] .body-sidebar[data-title="VetEdge"],
+:root[data-edge-palette] .body-sidebar[data-title="Veterinary"] {
+	--vetedge-sidebar-active: var(--edge-color-brand-50);
+	--vetedge-sidebar-hover: var(--edge-color-surface-muted);
+}
+
+:root[data-edge-palette] #edge-product-menu-dropdown .vetedge-product-menu-active {
+	background: var(--edge-color-brand-50);
+	color: var(--edge-color-brand-700);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-trigger {
+	background: var(--edge-color-surface-soft);
+	border-color: var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-trigger:hover,
+:root[data-edge-palette] .vetedge-product-menu-trigger:focus-visible,
+:root[data-edge-palette] .vetedge-product-menu-link:hover,
+:root[data-edge-palette] .vetedge-product-menu-link:focus-visible {
+	background: var(--edge-color-brand-50);
+	border-color: var(--edge-color-brand-200);
+	color: var(--edge-color-brand-700);
+	outline-color: var(--edge-color-brand-500);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-panel {
+	background: var(--edge-color-surface);
+	border-color: var(--edge-color-border);
+	box-shadow: var(--edge-shadow-lg, 0 24px 64px rgb(18 32 51 / 16%));
+}
+
+:root[data-edge-palette] .vetedge-product-menu-profile {
+	background:
+		linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--edge-color-brand-600) 13%, var(--edge-color-surface)),
+			var(--edge-color-surface) 62%
+		),
+		var(--edge-color-surface);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-quick-access {
+	background: var(--edge-color-surface-muted);
+	border-color: var(--edge-color-border);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-link {
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-product-menu-link-icon,
+:root[data-edge-palette] .vetedge-product-menu-section h3,
+:root[data-edge-palette] .vetedge-product-menu-section-heading span {
+	color: var(--edge-color-ink-500);
+}
+
+/* Executive Dashboard browser-QA fixes. The page bundle injects its own legacy
+   light styles after this stylesheet, so these selectors intentionally carry
+   higher specificity and use only shared EdgeSuite semantic tokens. */
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid .edge-control {
+	background: var(--edge-color-surface);
+	border-color: var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-xs, 0 1px 2px rgb(15 23 42 / 8%));
+	color-scheme: light dark;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid .edge-control:disabled {
+	background: var(--edge-color-surface-muted);
+	color: var(--edge-color-ink-500);
+	opacity: 1;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-filter-grid select.edge-control option {
+	background: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart-card {
+	background: var(--edge-color-surface);
+	border-color: var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 8%));
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section-heading h2,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart-card h3,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table td,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .edge-dashboard-table th {
+	color: var(--edge-color-ink-950);
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-section-heading small,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg text,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart .chart-container text {
+	color: var(--edge-color-ink-500) !important;
+	fill: var(--edge-color-ink-500) !important;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .line-vertical,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .line-horizontal,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg .axis-line,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg line.domain,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .vetedge-executive-chart svg path.domain {
+	stroke: var(--edge-color-border) !important;
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip {
+	background: var(--edge-color-surface);
+	border: 1px solid var(--edge-color-border);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(0 0 0 / 20%));
+}
+
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip .title,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip ul,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip li,
+:root[data-edge-palette] .vetedge-executive-dashboard-root .graph-svg-tip .value {
+	color: var(--edge-color-ink-950);
+}

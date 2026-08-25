@@ -40,7 +40,7 @@
   {"default": "1", "description": "Allow doctors to enter this test result when Veterinary Settings permits doctor result entry.", "fieldname": "allows_doctor_result_entry", "fieldtype": "Check", "label": "Allows Doctor Result Entry"},
   {"default": "1", "description": "Require clinical review before the result is treated as final when Veterinary Settings requires lab result review.", "fieldname": "requires_result_review", "fieldtype": "Check", "label": "Requires Result Review"},
   {"collapsible": 1, "fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Pricing"},
-  {"fieldname": "linked_item", "fieldtype": "Link", "label": "Linked Billing Item", "options": "Item"},
+  {"description": "Required ERPNext Item used as accounting and billing truth for this Lab Test.", "fieldname": "linked_item", "fieldtype": "Link", "label": "Linked Billing Item", "options": "Item", "reqd": 1},
   {"fieldname": "price_list", "fieldtype": "Link", "label": "Price List", "options": "Price List"},
   {"fieldname": "default_rate", "fieldtype": "Currency", "label": "Default Price"}
  ],

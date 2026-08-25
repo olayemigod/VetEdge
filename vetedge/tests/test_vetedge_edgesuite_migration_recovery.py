@@ -163,48 +163,43 @@ def test_settings_brand_identity_is_restored_for_standalone_edgesuite_shell():
 		assert contract in identity
 	assert '"fieldname": "portal_brand_name"' in settings
 	assert '"fieldname": "portal_logo"' in settings
-	assert "/app/veterinary-settings-center" in settings_client
+	assert "/desk/veterinary-settings-center" in settings_client
+	assert "/app/veterinary-settings-center" not in settings_client
 
 
 def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	bridge = read(APP / "public/js/vetedge_ui_bridge.js")
-	route_alignment = read(APP / "public/js/vetedge_clinical_route.js")
+	recovery = read(APP / "public/js/vetedge_navigation_recovery.js")
 	home = read(APP / "veterinary/page/vetedge/vetedge.js")
 
 	for route in (
-		"/app/veterinary-settings-center",
-		"/app/vetedge-master-workspace",
-		"/app/vetedge-pricing-master-workspace",
-		"/app/vetedge-front-desk-action-center",
-		"/app/vetedge-clinical-workspace",
-		"/app/veterinary-medical-history",
-		"/app/vetedge-service-operations",
+		"/desk/veterinary-settings-center",
+		"/desk/vetedge-master-workspace",
+		"/desk/vetedge-pricing-master-workspace",
+		"/desk/vetedge-front-desk-action-center",
+		"/desk/vetedge-clinical-workspace",
+		"/desk/veterinary-medical-history",
+		"/desk/vetedge-service-operations",
 	):
 		assert route in bridge
-	assert '"/app/veterinary-consultation"' in bridge
-	assert 'path === "/app/veterinary-vital-signs"' in bridge
+	assert '"/desk/veterinary-consultation"' in bridge
+	assert 'path === "/desk/veterinary-vital-signs"' in bridge
 	assert "return openSameTab(route)" in bridge
 	for contract in (
-		'"/app/kennel-availability-board": "availability"',
-		'"/app/pet-boarding-stay": "boarding-stays"',
-		'"/app/pet-boarding-care-record": "boarding-care-records"',
-		'"/app/pet-grooming-session": "grooming-sessions"',
+		'"/desk/kennel-availability-board": "availability"',
+		'"/desk/pet-boarding-stay": "boarding-stays"',
+		'"/desk/pet-boarding-care-record": "boarding-care-records"',
+		'"/desk/pet-grooming-session": "grooming-sessions"',
 	):
 		assert contract in bridge
-	assert 'CLINICAL_WORKSPACE_PATH = "/app/vetedge-clinical-workspace"' in route_alignment
-	assert 'MEDICAL_HISTORY_PATH = "/app/veterinary-medical-history"' in route_alignment
-	assert 'SERVICE_WORKSPACE_PATH = "/app/vetedge-service-operations"' in route_alignment
-	assert '"Veterinary Patient": "patients"' in route_alignment
-	assert '"Veterinary Appointment": "appointments"' in route_alignment
-	assert '"Veterinary Species": "species"' in route_alignment
-	assert '"Consultation Type": "consultation-types"' in route_alignment
-	assert '"Pet Boarding Stay": "boarding-stays"' in route_alignment
-	assert '"Pet Boarding Care Record": "boarding-care-records"' in route_alignment
-	assert '"Pet Grooming Session": "grooming-sessions"' in route_alignment
-	assert 'doctype === "Veterinary Vital Signs"' in route_alignment
-	assert 'path === "/app/veterinary-vital-signs"' not in route_alignment
-	assert "__vetedgeAcceptedRouteAlignment" in route_alignment
-	assert "/app/vetedge-resource-center" in home
+	for contract in (
+		'"DocType:Veterinary Patient": "/desk/vetedge-resource-center?resource=patients"',
+		'"DocType:Veterinary Consultation": "/desk/vetedge-clinical-workspace"',
+		'"DocType:Pet Boarding Stay": "/desk/vetedge-service-operations?resource=boarding-stays"',
+		'if (doctype === "Veterinary Vital Signs") return "";',
+	):
+		assert contract in recovery
+	assert "/desk/vetedge-resource-center" in home
 
 	guest_form = read(APP / "veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request.js")
 	guest_list = read(APP / "veterinary/doctype/veterinary_guest_booking_request/veterinary_guest_booking_request_list.js")
@@ -212,7 +207,14 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	missed_list = read(APP / "veterinary/doctype/veterinary_missed_appointment/veterinary_missed_appointment_list.js")
 	queue = read(APP / "veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js")
 	for content in (guest_form, guest_list, missed_form, missed_list, queue):
-		assert "/app/vetedge-front-desk-action-center" in content
+		assert "/desk/vetedge-front-desk-action-center" in content
+		assert "/app/vetedge-front-desk-action-center" not in content
+
+
+def test_resource_center_publishes_frappe_v16_desk_full_form_routes():
+	provider = read(APP / "services/resource_center.py")
+	assert 'return f"/desk/{slug}/{name}" if name else f"/desk/{slug}"' in provider
+	assert 'return f"/app/{slug}/{name}"' not in provider
 
 
 def test_hospital_services_workspace_preserves_operational_actions_and_existing_service_authority():
@@ -264,7 +266,8 @@ def test_pricing_master_native_routes_are_redirected_to_edgesuite_workspace():
 			path = directory / f"{folder}{suffix}"
 			assert path.exists(), path
 			content = read(path)
-			assert "/app/vetedge-pricing-master-workspace" in content
+			assert "/desk/vetedge-pricing-master-workspace" in content
+			assert "/app/vetedge-pricing-master-workspace" not in content
 			assert f"resource={resource}" in content
 
 
@@ -291,7 +294,8 @@ def test_clinical_workspace_safety_followups_are_restored_and_wired_into_ui():
 	stage3 = read(APP / "services/clinical_workspace_stage3.py")
 	component = read(MIGRATED_PAGES["clinical"]["component"])
 
-	assert "vetedge_clinical_route.js" in hooks
+	assert "vetedge_navigation_recovery.js" in hooks
+	assert "vetedge_clinical_route.js" not in hooks
 	assert "enforce_consultation_practitioner_ownership" in hooks
 	assert "enforce_pending_dispensary_completion_invariant" in hooks
 	assert "enforce_vitals_consultation_ownership" in hooks

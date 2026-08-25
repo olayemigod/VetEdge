@@ -3,6 +3,6 @@ frappe.ui.form.on('Veterinary Vaccine', {
 		const query = frm.is_new()
 			? 'resource=vaccines&new=1'
 			: `resource=vaccines&name=${encodeURIComponent(frm.doc.name)}`;
-		window.location.replace(`/app/vetedge-pricing-master-workspace?${query}`);
+		window.location.replace(`/desk/vetedge-pricing-master-workspace?${query}`);
 	}
 });

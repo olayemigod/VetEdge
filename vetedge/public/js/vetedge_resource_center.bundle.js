@@ -2,6 +2,108 @@ import VetEdgeAppointmentFlow from './vetedge_resource_center/VetEdgeAppointment
 import VetEdgeResourceCenter from './vetedge_resource_center/VetEdgeResourceCenter.vue';
 import VetEdgeResourceQuickEditor from './vetedge_resource_center/VetEdgeResourceQuickEditor.vue';
 
+const RESOURCE_ROUTE_KEYS = Object.freeze([
+	'resource',
+	'search',
+	'name',
+	'new',
+	'appointment_type',
+	'branch',
+	'status',
+	'registration_status',
+	'species',
+	'patient',
+	'service_branch',
+	'from_date',
+	'to_date',
+	'vaccine',
+	'lab_test',
+]);
+
+const CLINICAL_RESOURCES = new Set(['lab-orders', 'vaccinations']);
+const LEGACY_GROOMING_RESOURCE = 'grooming';
+
+function getRequestedRouteParams() {
+	const params = new URLSearchParams(window.location.search || '');
+	const routeOptions = window.frappe?.route_options || {};
+	const consumed = [];
+
+	for (const key of RESOURCE_ROUTE_KEYS) {
+		const value = routeOptions[key];
+		if (value === undefined || value === null || String(value) === '') continue;
+		if (!params.has(key)) params.set(key, String(value));
+		consumed.push(key);
+	}
+
+	if (consumed.length && window.location.pathname === '/desk/vetedge-resource-center') {
+		const query = params.toString();
+		const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`;
+		window.history.replaceState(window.history.state, '', nextUrl);
+		for (const key of consumed) delete routeOptions[key];
+	}
+
+	return params;
+}
+
+function valueFrom(params, key, fallback = '') {
+	return String(params.get(key) ?? fallback ?? '').trim();
+}
+
+function vaccinationAwareAppointmentFlow() {
+	const originalMethods = VetEdgeAppointmentFlow.methods || {};
+	const originalSearchPractitioner = originalMethods.searchPractitioner;
+	const originalSubmitAppointment = originalMethods.submitAppointment;
+	return {
+		...VetEdgeAppointmentFlow,
+		methods: {
+			...originalMethods,
+			searchPractitioner(query) {
+				if (!this.isVaccination) return originalSearchPractitioner?.call(this, query) || [];
+				return frappe.call('vetedge.services.appointment_vaccination_bridge.search_vaccination_practitioners', {
+					txt: query,
+					branch: this.form.branch,
+					start: 0,
+					page_length: 20,
+				}).then((response) => response.message || []);
+			},
+			async submitAppointment() {
+				if (!this.isVaccination) return originalSubmitAppointment?.call(this);
+				this.error = '';
+				if (!this.bootstrap.can_create_appointment) {
+					this.error = __('You do not have permission to create Veterinary Appointments.');
+					return;
+				}
+				if (!this.form.patient || !this.form.branch || !this.form.appointment_datetime) {
+					this.error = __('Patient, Service Branch and Appointment Date/Time are required.');
+					return;
+				}
+				if (!this.form.vaccine) {
+					this.error = __('Planned Vaccine is required for Vaccination appointments.');
+					return;
+				}
+				if (!this.form.practitioner) {
+					this.error = __('Veterinary Practitioner is required for this appointment type.');
+					return;
+				}
+				this.saving = true;
+				try {
+					const response = await frappe.call('vetedge.services.appointment_vaccination_bridge.create_edgeui_vaccination_appointment', {
+						values: this.appointmentPayload(),
+					});
+					const created = response.message || {};
+					frappe.show_alert({ message: __('Veterinary Appointment created'), indicator: 'green' });
+					this.$emit('created', created);
+					this.openState = false;
+				} catch (error) {
+					this.error = error?.message || __('The Veterinary Appointment could not be created.');
+				} finally {
+					this.saving = false;
+				}
+			},
+		},
+	};
+}
+
 export function mountVetEdgeResourceCenter(target) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') {
@@ -11,9 +113,10 @@ export function mountVetEdgeResourceCenter(target) {
 		throw new Error('VetEdge Resource Center requires the EdgeSuite UI 0.6.2 form runtime.');
 	}
 
-	const requestedRoute = new URLSearchParams(window.location.search || '');
-	const requestedName = String(requestedRoute.get('name') || '').trim();
+	const requestedRoute = getRequestedRouteParams();
+	const requestedName = valueFrom(requestedRoute, 'name');
 	const requestedNew = requestedRoute.get('new') === '1';
+	const requestedAppointmentType = valueFrom(requestedRoute, 'appointment_type');
 
 	const flowHost = document.createElement('div');
 	flowHost.className = 'vetedge-appointment-flow-host';
@@ -24,12 +127,12 @@ export function mountVetEdgeResourceCenter(target) {
 	document.body.appendChild(quickEditorHost);
 
 	let resourceView = null;
-	let syncActionLabels = () => {};
+	let lastRefreshAt = Date.now();
 
-	const flowApp = runtime.createEdgeApp(VetEdgeAppointmentFlow, {
+	const flowApp = runtime.createEdgeApp(vaccinationAwareAppointmentFlow(), {
 		onCreated: async () => {
 			await resourceView?.loadPage?.();
-			syncActionLabels();
+			lastRefreshAt = Date.now();
 		},
 	});
 	const flowView = flowApp.mount(flowHost);
@@ -37,14 +140,31 @@ export function mountVetEdgeResourceCenter(target) {
 	const quickEditorApp = runtime.createEdgeApp(VetEdgeResourceQuickEditor, {
 		onSaved: async () => {
 			await resourceView?.loadPage?.();
-			syncActionLabels();
+			lastRefreshAt = Date.now();
 		},
 	});
 	const quickEditorView = quickEditorApp.mount(quickEditorHost);
+	const originalData = VetEdgeResourceCenter.data;
 
 	const ResourceCenterRoot = {
 		...VetEdgeResourceCenter,
 		components: { ...runtime.components, ...(VetEdgeResourceCenter.components || {}) },
+		data() {
+			const state = typeof originalData === 'function' ? originalData.call(this) : {};
+			state.resourceOptions = (state.resourceOptions || []).filter((option) => option.value !== LEGACY_GROOMING_RESOURCE);
+			if (state.resource === LEGACY_GROOMING_RESOURCE) state.resource = 'appointments';
+			return state;
+		},
+		computed: {
+			...(VetEdgeResourceCenter.computed || {}),
+			primaryActionLabel() {
+				if (!this.page?.can_create) return '';
+				if (this.resource === 'appointments') return 'New Appointment';
+				if (this.resource === 'lab-orders') return 'New Lab Order';
+				if (this.resource === 'vaccinations') return 'New Vaccination';
+				return 'Add Record';
+			},
+		},
 		methods: {
 			...(VetEdgeResourceCenter.methods || {}),
 			openEditor(name = null) {
@@ -54,6 +174,19 @@ export function mountVetEdgeResourceCenter(target) {
 				}
 				quickEditorView?.open?.({ resource: this.resource, name });
 			},
+			async openClinicalCreate() {
+				try {
+					const editor = await this.ensureClinicalEditor();
+					const defaults = Object.fromEntries(Object.entries({
+						patient: this.clinicalFilters?.patient || '',
+						service_branch: this.clinicalFilters?.service_branch || '',
+						vaccine: this.resource === 'vaccinations' ? (this.clinicalFilters?.vaccine || '') : '',
+					}).filter(([, value]) => Boolean(value)));
+					await editor.create(this.clinicalDoctype, () => this.loadPage(), defaults);
+				} catch (error) {
+					frappe.msgprint(error?.message || __('The clinical record creator is unavailable.'));
+				}
+			},
 		},
 	};
 
@@ -61,37 +194,104 @@ export function mountVetEdgeResourceCenter(target) {
 	resourceView = app.mount(target);
 
 	const isAppointments = () => resourceView?.resource === 'appointments';
-	const actionButtonSelector = '.edge-page-header__actions button, .edge-state button';
+	const isClinicalResource = () => CLINICAL_RESOURCES.has(resourceView?.resource);
 
-	syncActionLabels = () => {
-		target.querySelectorAll(actionButtonSelector).forEach((button) => {
-			const label = String(button.textContent || '').trim();
-			if (isAppointments() && label === 'Add Record') {
-				button.textContent = 'New Appointment';
-				button.setAttribute('data-vetedge-appointment-action', '1');
-			} else if (!isAppointments() && label === 'New Appointment') {
-				button.textContent = 'Add Record';
-				button.removeAttribute('data-vetedge-appointment-action');
+	const getRequestedState = () => {
+		const params = getRequestedRouteParams();
+		const requestedResource = valueFrom(params, 'resource', 'patients') || 'patients';
+		return {
+			resource: requestedResource === LEGACY_GROOMING_RESOURCE ? 'appointments' : requestedResource,
+			search: valueFrom(params, 'search'),
+			name: valueFrom(params, 'name'),
+			isNew: params.get('new') === '1',
+			appointmentType: valueFrom(params, 'appointment_type'),
+			branch: valueFrom(params, 'branch'),
+			status: valueFrom(params, 'status'),
+			registrationStatus: valueFrom(params, 'registration_status'),
+			species: valueFrom(params, 'species'),
+			patient: valueFrom(params, 'patient'),
+			serviceBranch: valueFrom(params, 'service_branch') || valueFrom(params, 'branch'),
+			fromDate: valueFrom(params, 'from_date'),
+			toDate: valueFrom(params, 'to_date'),
+			vaccine: valueFrom(params, 'vaccine'),
+			labTest: valueFrom(params, 'lab_test'),
+		};
+	};
+
+	const setField = (targetState, fieldname, value) => {
+		if (!targetState || String(targetState[fieldname] || '') === String(value || '')) return false;
+		targetState[fieldname] = value || '';
+		return true;
+	};
+
+	const setLinkField = (values, labels, fieldname, value) => {
+		const changed = setField(values, fieldname, value);
+		if (labels && (changed || String(labels[fieldname] || '') !== String(value || ''))) {
+			labels[fieldname] = value || '';
+		}
+		return changed;
+	};
+
+	const applyRequestedState = () => {
+		if (!resourceView) return { routeChanged: false, state: getRequestedState() };
+		const state = getRequestedState();
+		let routeChanged = false;
+		const allowedResources = resourceView.resourceOptions || [];
+		const resourceIsValid = allowedResources.some((option) => option.value === state.resource);
+		if (resourceIsValid && resourceView.resource !== state.resource) {
+			resourceView.resource = state.resource;
+			resourceView.start = 0;
+			routeChanged = true;
+		}
+		if (resourceView.search !== state.search) {
+			resourceView.search = state.search;
+			resourceView.start = 0;
+			routeChanged = true;
+		}
+
+		if (state.resource === 'patients') {
+			routeChanged = setLinkField(resourceView.patientFilters, resourceView.patientFilterLabels, 'default_branch', state.branch) || routeChanged;
+			routeChanged = setField(resourceView.patientFilters, 'status', state.status) || routeChanged;
+			routeChanged = setField(resourceView.patientFilters, 'registration_status', state.registrationStatus) || routeChanged;
+			routeChanged = setLinkField(resourceView.patientFilters, resourceView.patientFilterLabels, 'species', state.species) || routeChanged;
+		} else if (CLINICAL_RESOURCES.has(state.resource)) {
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'patient', state.patient) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'service_branch', state.serviceBranch) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'status', state.status) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'from_date', state.fromDate) || routeChanged;
+			routeChanged = setField(resourceView.clinicalFilters, 'to_date', state.toDate) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'vaccine', state.vaccine) || routeChanged;
+			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'lab_test', state.labTest) || routeChanged;
+		}
+
+		if (routeChanged) resourceView.start = 0;
+		return { routeChanged, state };
+	};
+
+	const openRequestedEditor = (state) => {
+		if (!state?.name && !state?.isNew) return;
+		if (state.isNew && isAppointments()) {
+			flowView?.open?.({ appointment_type: state.appointmentType || '' });
+			return;
+		}
+		if (isClinicalResource()) {
+			if (state.isNew) {
+				resourceView.openClinicalCreate?.();
+				return;
 			}
+			if (state.name) {
+				resourceView.openClinicalRecord?.({ name: state.name });
+				return;
+			}
+		}
+		quickEditorView?.open?.({
+			resource: resourceView.resource,
+			name: state.name || null,
 		});
 	};
 
-	const interceptAppointmentAction = (event) => {
-		const button = event.target?.closest?.('button');
-		if (!button || !target.contains(button) || !isAppointments()) return;
-		const label = String(button.textContent || '').trim();
-		if (label !== 'Add Record' && label !== 'New Appointment') return;
-		if (button.closest('.vetedge-resource-row-actions')) return;
-		event.preventDefault();
-		event.stopPropagation();
-		event.stopImmediatePropagation?.();
-		flowView?.open?.();
-	};
-
-	target.addEventListener('click', interceptAppointmentAction, true);
-	const observer = new MutationObserver(syncActionLabels);
-	observer.observe(target, { childList: true, subtree: true });
-	syncActionLabels();
+	// `interceptAppointmentAction` is intentionally retired: the Vue component's
+	// primaryActionLabel/runPrimaryAction path now owns New Appointment directly.
 
 	// Route alignment captures `name` / `new` before the Resource Center normalizes
 	// its list URL so bookmarks, sidebar links and notification deep links can open
@@ -99,21 +299,35 @@ export function mountVetEdgeResourceCenter(target) {
 	if (requestedName || requestedNew) {
 		window.setTimeout(() => {
 			if (!resourceView) return;
-			if (requestedNew && isAppointments()) {
-				flowView?.open?.();
-				return;
-			}
-			quickEditorView?.open?.({
-				resource: resourceView.resource,
-				name: requestedName || null,
+			openRequestedEditor({
+				name: requestedName,
+				isNew: requestedNew,
+				appointmentType: requestedAppointmentType,
 			});
 		}, 0);
 	}
 
 	return {
+		async refresh(options = {}) {
+			if (!resourceView) return false;
+			const maxAgeMs = Math.max(Number(options.maxAgeMs || 0), 0);
+			const force = options.force === true;
+			const { routeChanged, state } = applyRequestedState();
+			const hasDeepLink = Boolean(state.name || state.isNew);
+			const isFresh = maxAgeMs > 0 && Date.now() - lastRefreshAt < maxAgeMs;
+
+			if (!force && !routeChanged && !hasDeepLink && isFresh) {
+				return false;
+			}
+
+			await resourceView.loadPage?.();
+			lastRefreshAt = Date.now();
+			if (hasDeepLink) {
+				window.setTimeout(() => openRequestedEditor(state), 0);
+			}
+			return true;
+		},
 		unmount() {
-			observer.disconnect();
-			target.removeEventListener('click', interceptAppointmentAction, true);
 			app.unmount();
 			flowApp.unmount();
 			quickEditorApp.unmount();
@@ -129,5 +343,3 @@ if (typeof window !== 'undefined') {
 	window.VetEdgeResourceQuickEditor = VetEdgeResourceQuickEditor;
 	window.mountVetEdgeResourceCenter = mountVetEdgeResourceCenter;
 }
-
-export default VetEdgeResourceCenter;

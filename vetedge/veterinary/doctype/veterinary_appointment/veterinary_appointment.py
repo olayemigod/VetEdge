@@ -4,6 +4,10 @@ import frappe
 from frappe.model.document import Document
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
+from vetedge.services.appointment_intelligence import (
+	prepare_appointment_service_context,
+	validate_appointment_service_context,
+)
 from vetedge.services.appointment_notifications import (
 	notify_appointment_checked_in,
 	notify_appointment_completed,
@@ -12,8 +16,23 @@ from vetedge.services.notifications import notify_appointment_event
 
 
 def validate_appointment(*args, **kwargs):
+	doc = args[0] if args else kwargs.get("doc")
+	if doc and doc.get("appointment_type") == "Grooming":
+		from vetedge.services.appointment_grooming_bridge import validate_grooming_veterinary_appointment
+
+		return validate_grooming_veterinary_appointment(doc)
+	if doc and doc.get("appointment_type") == "Vaccination":
+		from vetedge.services.appointment_vaccination_bridge import validate_vaccination_veterinary_appointment
+
+		return validate_vaccination_veterinary_appointment(doc)
+	if doc:
+		prepare_appointment_service_context(doc)
 	from vetedge.services.appointment_flow import validate_appointment as _validate_appointment
-	return _validate_appointment(*args, **kwargs)
+
+	result = _validate_appointment(*args, **kwargs)
+	if doc:
+		validate_appointment_service_context(doc)
+	return result
 
 
 def sync_missed_appointment_from_source(*args, **kwargs):

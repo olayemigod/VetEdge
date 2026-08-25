@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
+from vetedge.services.display_labels import enrich_link_display_values, get_display_label
 from vetedge.services.permissions import (
 	can_access_branch_data,
 	get_assigned_branches,
@@ -18,10 +19,31 @@ from vetedge.services.portal_access import require_internal_user
 PAGE_LENGTH_MAX = 100
 
 RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
+	"boarding-bookings": {
+		"doctype": "Pet Boarding Booking",
+		"title": _("Boarding Bookings"),
+		"subtitle": _("Create and manage boarding reservations, billing, check-in and check-out from the Veterinary workspace."),
+		"editor_resource": "boarding",
+		"fields": [
+			"name", "patient", "primary_owner", "service_branch", "kennel", "check_in_date",
+			"expected_check_out_date", "actual_check_out_date", "status", "billing_item", "daily_rate",
+			"billable_days", "total_boarding_charge", "linked_invoice", "linked_stay", "feeding_instructions",
+			"special_notes", "modified",
+		],
+		"columns": [
+			("name", _("Booking"), "Data"), ("patient", _("Patient"), "Link"),
+			("service_branch", _("Branch"), "Link"), ("kennel", _("Kennel"), "Link"),
+			("check_in_date", _("Check In"), "Date"), ("expected_check_out_date", _("Expected Check-Out"), "Date"),
+			("status", _("Status"), "status"),
+		],
+		"search_fields": ["name", "patient", "primary_owner", "service_branch", "kennel", "status", "linked_invoice"],
+	},
 	"boarding-stays": {
 		"doctype": "Pet Boarding Stay",
 		"title": _("Boarding Stays"),
 		"subtitle": _("Review active and completed boarding stays, kennel assignment and care-record activity."),
+		"entry_editor_resource": "boarding",
+		"entry_doctype": "Pet Boarding Booking",
 		"fields": [
 			"name", "booking", "patient", "primary_owner", "service_branch", "kennel",
 			"check_in_datetime", "check_out_datetime", "status", "feeding_instructions", "special_notes", "modified",
@@ -50,10 +72,28 @@ RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
 		],
 		"search_fields": ["name", "stay", "booking", "patient", "kennel", "care_type", "record_status", "recorded_by"],
 	},
+	"grooming-appointments": {
+		"doctype": "Pet Grooming Appointment",
+		"title": _("Grooming Appointments"),
+		"subtitle": _("Create and maintain grooming appointments before progressing into the grooming session workflow."),
+		"editor_resource": "grooming",
+		"fields": [
+			"name", "patient", "primary_owner", "status", "scheduled_datetime", "service_branch",
+			"grooming_service", "groomer", "groomer_name", "notes", "linked_invoice", "modified",
+		],
+		"columns": [
+			("name", _("Appointment"), "Data"), ("patient", _("Patient"), "Link"),
+			("grooming_service", _("Service"), "Link"), ("groomer_name", _("Groomer"), "Data"),
+			("scheduled_datetime", _("Scheduled"), "Datetime"), ("status", _("Status"), "status"),
+		],
+		"search_fields": ["name", "patient", "primary_owner", "status", "grooming_service", "groomer", "groomer_name"],
+	},
 	"grooming-sessions": {
 		"doctype": "Pet Grooming Session",
 		"title": _("Grooming Sessions"),
 		"subtitle": _("Run grooming sessions and keep their workflow and billing state visible inside the Veterinary workspace."),
+		"entry_editor_resource": "grooming",
+		"entry_doctype": "Pet Grooming Appointment",
 		"fields": [
 			"name", "patient", "primary_owner", "status", "service_branch", "appointment",
 			"grooming_service", "groomer", "groomer_name", "start_time", "end_time",
@@ -113,7 +153,21 @@ def _count(doctype: str, filters: dict, or_filters: list | None = None) -> int:
 
 
 def _columns(config: dict[str, Any]) -> list[dict]:
-	return [{"key": key, "label": label, "type": fieldtype} for key, label, fieldtype in config["columns"]]
+	meta = frappe.get_meta(config["doctype"])
+	columns = []
+	for key, label, fieldtype in config["columns"]:
+		column = {
+			"key": key,
+			"fieldname": key,
+			"label": label,
+			"type": fieldtype,
+			"fieldtype": fieldtype,
+		}
+		field = meta.get_field(key)
+		if field and field.fieldtype == "Link":
+			column["options"] = field.options or ""
+		columns.append(column)
+	return columns
 
 
 def _detail_fields(doc, config: dict[str, Any]) -> list[dict]:
@@ -129,22 +183,125 @@ def _detail_fields(doc, config: dict[str, Any]) -> list[dict]:
 		field = meta.get_field(fieldname)
 		if not field:
 			continue
-		fields.append({
+		value = doc.get(fieldname)
+		payload = {
 			"key": fieldname,
 			"label": field.label or fieldname.replace("_", " ").title(),
 			"type": field.fieldtype,
-			"value": doc.get(fieldname),
-		})
+			"value": value,
+		}
+		if field.fieldtype == "Link" and field.options and value:
+			payload["raw_value"] = value
+			payload["value"] = get_display_label(field.options, value)
+		fields.append(payload)
 	return fields
+
+
+def _document_title(doc) -> str:
+	title_field = getattr(doc.meta, "title_field", "") or ""
+	value = doc.get(title_field) if title_field else None
+	if not value:
+		return doc.name
+	field = doc.meta.get_field(title_field)
+	if field and field.fieldtype == "Link" and field.options:
+		return get_display_label(field.options, value)
+	return str(value)
+
+
+def _has_billing_core_evidence(source_doctype: str, source_name: str) -> bool:
+	if not frappe.db.exists("DocType", "Veterinary Billing Session Charge"):
+		return False
+	return bool(
+		frappe.get_all(
+			"Veterinary Billing Session Charge",
+			filters={"source_doctype": source_doctype, "source_name": source_name},
+			fields=["name"],
+			limit=1,
+		)
+	)
+
+
+def _has_financial_evidence(doc) -> bool:
+	if doc.get("linked_invoice"):
+		return True
+	if doc.doctype == "Pet Boarding Booking" and doc.get("booking_invoices"):
+		return True
+	return _has_billing_core_evidence(doc.doctype, doc.name)
+
+
+def _can_delete_service_order(resource: str, doc) -> bool:
+	if resource not in {"boarding-bookings", "grooming-appointments"}:
+		return False
+	if not doc.has_permission("delete") or _has_financial_evidence(doc):
+		return False
+	if resource == "boarding-bookings":
+		return doc.status == "Draft" and not doc.get("linked_stay")
+	if doc.status != "Scheduled":
+		return False
+	return not frappe.db.exists("Pet Grooming Session", {"appointment": doc.name})
+
+
+def _archive_and_detach_notifications(reference_doctype: str, reference_name: str) -> None:
+	if not frappe.db.exists("DocType", "Veterinary Notification Item"):
+		return
+	meta = frappe.get_meta("Veterinary Notification Item")
+	filters = {"reference_doctype": reference_doctype, "reference_name": reference_name}
+	for row in frappe.get_all("Veterinary Notification Item", filters=filters, fields=["name"]):
+		values = {}
+		if meta.has_field("status"):
+			values["status"] = "Archived"
+		if meta.has_field("reference_doctype"):
+			values["reference_doctype"] = None
+		if meta.has_field("reference_name"):
+			values["reference_name"] = None
+		if values:
+			frappe.db.set_value("Veterinary Notification Item", row.name, values, update_modified=False)
 
 
 def _actions(resource: str, doc) -> list[dict]:
 	actions: list[dict] = []
+	can_write = bool(doc.has_permission("write"))
+
+	if resource == "boarding-bookings":
+		if can_write and doc.status in {"Draft", "Reserved"}:
+			actions.append({"key": "edit-guided", "label": _("Edit Booking")})
+		if can_write and doc.status != "Cancelled":
+			actions.append({"key": "billing", "label": _("Billing / Payment")})
+		if can_write and doc.status == "Draft":
+			actions.append({"key": "reserve-boarding", "label": _("Reserve"), "primary": True})
+		if can_write and doc.status == "Reserved":
+			actions.append({"key": "check-in-boarding", "label": _("Check In"), "primary": True})
+		if can_write and doc.status == "Checked In":
+			actions.append({"key": "check-out-boarding", "label": _("Check Out"), "primary": True})
+		if can_write and doc.status in {"Draft", "Reserved"} and not _has_financial_evidence(doc):
+			actions.append({"key": "cancel-boarding", "label": _("Cancel Booking"), "danger": True})
+		if doc.get("linked_stay"):
+			actions.append({"key": "open-stay", "label": _("Open Stay"), "target_name": doc.linked_stay})
+		if _can_delete_service_order(resource, doc):
+			actions.append({"key": "delete-order", "label": _("Delete Draft"), "danger": True})
+
 	if resource == "boarding-stays":
 		actions.append({"key": "care-records", "label": _("View Care Records")})
+		if doc.get("booking"):
+			actions.append({"key": "open-booking", "label": _("Open Booking"), "target_name": doc.booking})
+			actions.append({
+				"key": "billing-target", "label": _("Billing / Payment"),
+				"target_doctype": "Pet Boarding Booking", "target_name": doc.booking,
+			})
 		if doc.status == "Active" and frappe.has_permission("Pet Boarding Care Record", "create"):
 			actions.append({"key": "add-care-record", "label": _("Add Care Record"), "primary": True})
-	if resource == "grooming-sessions" and doc.has_permission("write"):
+
+	if resource == "grooming-appointments":
+		if can_write and doc.status not in {"Completed", "Cancelled", "No Show"}:
+			actions.append({"key": "edit-guided", "label": _("Edit Appointment")})
+		if doc.status not in {"Completed", "Cancelled", "No Show"} and frappe.has_permission("Pet Grooming Session", "create"):
+			actions.append({"key": "create-grooming-session", "label": _("Create / Open Session"), "primary": True})
+		if _can_delete_service_order(resource, doc):
+			actions.append({"key": "delete-order", "label": _("Delete Appointment"), "danger": True})
+
+	if resource == "grooming-sessions" and can_write:
+		if doc.get("appointment"):
+			actions.append({"key": "open-grooming-appointment", "label": _("Open Appointment"), "target_name": doc.appointment})
 		if doc.status in {"Draft", "Awaiting Payment", "Pending Grooming"}:
 			actions.append({"key": "start-grooming", "label": _("Start Grooming"), "primary": True})
 		if doc.status == "In Progress":
@@ -191,15 +348,23 @@ def get_service_operations_page(
 		start=start,
 		page_length=page_length,
 	)
+	columns = _columns(config)
+	enrich_link_display_values(rows, columns)
+	editor_resource = config.get("editor_resource") or config.get("entry_editor_resource") or ""
+	create_doctype = config.get("entry_doctype") or doctype
+	can_create = bool(editor_resource and create_doctype and frappe.has_permission(create_doctype, "create"))
 	return {
 		"resource": config["key"],
 		"title": config["title"],
 		"subtitle": config["subtitle"],
-		"columns": _columns(config),
+		"columns": columns,
 		"rows": rows,
 		"total": _count(doctype, filters, or_filters),
 		"start": start,
 		"page_length": page_length,
+		"can_create": can_create,
+		"editor_resource": editor_resource,
+		"create_doctype": create_doctype if can_create else "",
 	}
 
 
@@ -216,12 +381,88 @@ def get_service_operation_detail(resource: str, name: str) -> dict:
 		"resource": config["key"],
 		"doctype": config["doctype"],
 		"name": doc.name,
-		"title": doc.get(getattr(doc.meta, "title_field", "")) or doc.name,
+		"title": _document_title(doc),
 		"status": doc.get("status") or doc.get("record_status") or "",
 		"modified": doc.modified,
+		"editor_resource": config.get("editor_resource") or "",
 		"fields": _detail_fields(doc, config),
 		"actions": _actions(config["key"], doc),
 	}
+
+
+@frappe.whitelist()
+def transition_boarding_booking(booking: str, action: str) -> dict:
+	require_internal_user()
+	require_vetedge_platform_access(
+		action=f"boarding_{action}",
+		reference_doctype="Pet Boarding Booking",
+		reference_name=booking,
+	)
+	doc = frappe.get_doc("Pet Boarding Booking", booking)
+	doc.check_permission("write")
+	can_access_branch_data(get_current_user(), doc.service_branch, raise_exception=True)
+
+	from vetedge.services.boarding import (
+		cancel_boarding_booking_doc,
+		check_in_boarding_booking_doc,
+		reserve_boarding_booking_doc,
+	)
+	from vetedge.services.boarding_checkout_alignment import check_out_boarding_booking_doc_aligned
+
+	handlers = {
+		"reserve": reserve_boarding_booking_doc,
+		"check-in": check_in_boarding_booking_doc,
+		"check-out": check_out_boarding_booking_doc_aligned,
+		"cancel": cancel_boarding_booking_doc,
+	}
+	handler = handlers.get(str(action or "").strip())
+	if not handler:
+		frappe.throw(_("This boarding action is not available."), frappe.ValidationError)
+	if action == "cancel" and _has_financial_evidence(doc):
+		frappe.throw(
+			_("This boarding booking already has billing history. Resolve or cancel its billing safely before cancelling the booking."),
+			frappe.ValidationError,
+		)
+	handler(doc)
+	return get_service_operation_detail("boarding-bookings", booking)
+
+
+@frappe.whitelist()
+def create_or_open_grooming_session(appointment: str) -> dict:
+	require_internal_user()
+	from vetedge.services.grooming import create_grooming_session_from_appointment
+
+	result = create_grooming_session_from_appointment(appointment, create_invoice=0)
+	return {
+		**(result or {}),
+		"detail": get_service_operation_detail("grooming-sessions", result.get("name")) if result and result.get("name") else None,
+	}
+
+
+@frappe.whitelist()
+def delete_service_order(resource: str, name: str) -> dict:
+	require_internal_user()
+	config = _config(resource)
+	if resource not in {"boarding-bookings", "grooming-appointments"}:
+		frappe.throw(_("Deletion is not available for this service record."), frappe.PermissionError)
+	require_vetedge_platform_access(
+		action="delete_service_order",
+		reference_doctype=config["doctype"],
+		reference_name=name,
+	)
+	doc = frappe.get_doc(config["doctype"], name)
+	doc.check_permission("delete")
+	branch = doc.get("service_branch")
+	if branch:
+		can_access_branch_data(get_current_user(), branch, raise_exception=True)
+	if not _can_delete_service_order(resource, doc):
+		frappe.throw(
+			_("This record cannot be deleted because it has progressed into service delivery or has billing history. Use the appropriate workflow action instead."),
+			frappe.ValidationError,
+		)
+	_archive_and_detach_notifications(doc.doctype, doc.name)
+	frappe.delete_doc(doc.doctype, doc.name)
+	return {"deleted": True, "name": name, "resource": resource}
 
 
 @frappe.whitelist()

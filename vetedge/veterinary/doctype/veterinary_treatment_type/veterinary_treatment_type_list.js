@@ -1,5 +1,5 @@
 frappe.listview_settings['Veterinary Treatment Type'] = {
 	onload() {
-		window.location.replace('/app/vetedge-pricing-master-workspace?resource=treatment-types');
+		window.location.replace('/desk/vetedge-pricing-master-workspace?resource=treatment-types');
 	}
 };

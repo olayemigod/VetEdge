@@ -1,0 +1,366 @@
+/* VetEdge dashboard consumer styles. Component structure and theme authority are
+   owned by EdgeSuite UI; this file only composes the dashboard-specific layout. */
+
+.vetedge-shared-dashboard-root {
+	min-width: 0;
+}
+
+.vetedge-shared-dashboard-filter-grid {
+	display: grid;
+	grid-template-columns: minmax(13rem, 1.4fr) repeat(3, minmax(10rem, 1fr));
+	gap: 1rem;
+	align-items: end;
+}
+
+.vetedge-shared-dashboard-filter-actions {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	flex-wrap: wrap;
+}
+
+.vetedge-dashboard-quick-reports {
+	position: relative;
+}
+
+.vetedge-dashboard-quick-reports-menu {
+	position: absolute;
+	top: calc(100% + .5rem);
+	right: 0;
+	z-index: 50;
+	display: grid;
+	min-width: 16rem;
+	max-width: min(24rem, 82vw);
+	padding: .45rem;
+	gap: .2rem;
+	border: 1px solid var(--edge-color-border);
+	border-radius: var(--edge-radius-lg, .75rem);
+	background: var(--edge-color-surface);
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(15 23 42 / 18%));
+}
+
+.vetedge-dashboard-quick-report-item {
+	width: 100%;
+	padding: .65rem .75rem;
+	border: 0;
+	border-radius: var(--edge-radius-md, .5rem);
+	background: transparent;
+	color: var(--edge-color-ink-950);
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+
+.vetedge-dashboard-quick-report-item:hover,
+.vetedge-dashboard-quick-report-item:focus-visible {
+	background: var(--edge-color-brand-50);
+	color: var(--edge-color-brand-700);
+	outline: none;
+}
+
+.vetedge-edge-dashboard-content {
+	display: grid;
+	gap: 1.35rem;
+	padding-top: 1rem;
+}
+
+.vetedge-edge-dashboard-section {
+	min-width: 0;
+	padding: clamp(1rem, 2vw, 1.35rem);
+	border: 1px solid var(--edge-color-border);
+	border-radius: var(--edge-radius-xl, 1rem);
+	background: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+	box-shadow: var(--edge-shadow-sm, 0 8px 24px rgb(18 32 51 / 8%));
+}
+
+.vetedge-edge-dashboard-section__heading {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.vetedge-edge-dashboard-section__heading span {
+	display: block;
+	margin-bottom: .2rem;
+	color: var(--edge-color-brand-600);
+	font-size: .72rem;
+	font-weight: 800;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.vetedge-edge-dashboard-section__heading h2,
+.vetedge-edge-dashboard-section__heading h3 {
+	margin: 0;
+	color: var(--edge-color-ink-950);
+}
+
+.vetedge-edge-dashboard-section__heading h2 {
+	font-size: 1.08rem;
+}
+
+.vetedge-edge-dashboard-section__heading p {
+	margin: .35rem 0 0;
+	color: var(--edge-color-ink-500);
+	font-size: .86rem;
+}
+
+.vetedge-edge-stat-action {
+	display: block;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.vetedge-edge-stat-action:focus-visible {
+	outline: 3px solid color-mix(in srgb, var(--edge-color-brand-600) 28%, transparent);
+	outline-offset: 3px;
+	border-radius: var(--edge-radius-lg, .75rem);
+}
+
+.vetedge-edge-stat-wrap {
+	display: grid;
+	gap: .55rem;
+	min-width: 0;
+}
+
+/* Number cards deliberately use the same EdgeStatCard surface as Executive.
+   Financial percentage helpers do not add a second visual progress control. */
+.vetedge-shared-dashboard-root .edge-progress {
+	display: none;
+}
+
+.vetedge-shared-dashboard-root .edge-stat-card {
+	min-width: 0;
+}
+
+.edge-progress {
+	height: .4rem;
+	overflow: hidden;
+	border-radius: 999px;
+	background: var(--edge-color-surface-muted);
+}
+
+.edge-progress__bar {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--edge-color-brand-600);
+	transition: width .2s ease;
+}
+
+.vetedge-edge-alerts {
+	display: grid;
+	gap: .65rem;
+}
+
+.vetedge-edge-alert {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: .9rem 1rem;
+	border: 1px solid var(--edge-color-border);
+	border-radius: var(--edge-radius-lg, .75rem);
+	background: var(--edge-color-surface);
+}
+
+.vetedge-edge-alert.is-danger {
+	border-color: color-mix(in srgb, var(--edge-color-danger) 35%, var(--edge-color-border));
+	background: color-mix(in srgb, var(--edge-color-danger) 8%, var(--edge-color-surface));
+}
+
+.vetedge-edge-alert.is-warning {
+	border-color: color-mix(in srgb, var(--edge-color-warning) 35%, var(--edge-color-border));
+	background: color-mix(in srgb, var(--edge-color-warning) 8%, var(--edge-color-surface));
+}
+
+.vetedge-edge-alert.is-info {
+	border-color: color-mix(in srgb, var(--edge-color-info) 30%, var(--edge-color-border));
+	background: color-mix(in srgb, var(--edge-color-info) 7%, var(--edge-color-surface));
+}
+
+.vetedge-edge-alert__copy strong {
+	color: var(--edge-color-ink-950);
+}
+
+.vetedge-edge-alert__copy p {
+	margin: .2rem 0 0;
+	color: var(--edge-color-ink-500);
+}
+
+.vetedge-edge-alert__actions {
+	display: flex;
+	align-items: center;
+	gap: .65rem;
+	flex: 0 0 auto;
+}
+
+.vetedge-edge-chart-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.vetedge-edge-chart-card,
+.vetedge-edge-table-card {
+	min-width: 0;
+	padding: 1rem;
+	border: 1px solid var(--edge-color-border);
+	border-radius: var(--edge-radius-lg, .75rem);
+	background: var(--edge-color-surface-soft, var(--edge-color-surface));
+}
+
+.vetedge-edge-chart-card header h3,
+.vetedge-edge-table-card h3 {
+	margin: 0 0 .75rem;
+	color: var(--edge-color-ink-950);
+	font-size: .95rem;
+}
+
+.vetedge-edge-chart {
+	min-height: 280px;
+	color: var(--edge-color-ink-950);
+}
+
+.vetedge-edge-chart svg text,
+.vetedge-edge-chart .chart-container text {
+	fill: var(--edge-color-ink-500) !important;
+	color: var(--edge-color-ink-500) !important;
+}
+
+.vetedge-edge-chart svg .line-vertical,
+.vetedge-edge-chart svg .line-horizontal,
+.vetedge-edge-chart svg .axis-line,
+.vetedge-edge-chart svg path.domain,
+.vetedge-edge-chart svg line.domain {
+	stroke: var(--edge-color-border) !important;
+}
+
+/* Frappe Charts renders donut legends as a flex row that can truncate labels.
+   Wrap every legend entry so each status label/value remains visible and keeps
+   the exact colour marker assigned to its slice. */
+.vetedge-shared-dashboard-root .graph-stats-container {
+	display: grid !important;
+	grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+	gap: .55rem 1rem;
+	width: 100% !important;
+	height: auto !important;
+	max-height: none !important;
+	padding-top: .75rem;
+	overflow: visible !important;
+}
+
+.vetedge-shared-dashboard-root .graph-stats-container .stats {
+	min-width: 0;
+	margin: 0 !important;
+	color: var(--edge-color-ink-500) !important;
+	white-space: normal !important;
+}
+
+.vetedge-shared-dashboard-root .graph-stats-container .stats .stat-label,
+.vetedge-shared-dashboard-root .graph-stats-container .stats .stat-value,
+.vetedge-shared-dashboard-root .graph-stats-container .stats span {
+	color: var(--edge-color-ink-500) !important;
+}
+
+.vetedge-edge-composition-grid {
+	display: grid;
+	grid-template-columns: minmax(20rem, .9fr) minmax(24rem, 1.1fr);
+	gap: 1rem;
+	align-items: start;
+}
+
+.vetedge-edge-table-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.vetedge-shared-dashboard-root .edge-data-table-card,
+.vetedge-shared-dashboard-root .edge-data-table,
+.vetedge-shared-dashboard-root .edge-data-table th,
+.vetedge-shared-dashboard-root .edge-data-table td {
+	border-color: var(--edge-color-border);
+}
+
+.vetedge-shared-dashboard-root .edge-data-table th {
+	background: var(--edge-color-surface-muted);
+	color: var(--edge-color-ink-500);
+}
+
+.vetedge-shared-dashboard-root .edge-data-table td {
+	background: var(--edge-color-surface);
+	color: var(--edge-color-ink-950);
+}
+
+/* graph-svg-tip is appended outside the dashboard root by Frappe Charts, so
+   tooltip theming must be scoped from the document theme rather than the page. */
+:root[data-edge-palette] .graph-svg-tip,
+:root[data-edge-appearance] .graph-svg-tip {
+	background: var(--edge-color-surface) !important;
+	border: 1px solid var(--edge-color-border) !important;
+	color: var(--edge-color-ink-950) !important;
+	box-shadow: var(--edge-shadow-lg, 0 18px 48px rgb(0 0 0 / 20%));
+}
+
+:root[data-edge-palette] .graph-svg-tip .title,
+:root[data-edge-palette] .graph-svg-tip ul,
+:root[data-edge-palette] .graph-svg-tip li,
+:root[data-edge-palette] .graph-svg-tip .value,
+:root[data-edge-palette] .graph-svg-tip span,
+:root[data-edge-palette] .graph-svg-tip strong,
+:root[data-edge-appearance] .graph-svg-tip .title,
+:root[data-edge-appearance] .graph-svg-tip ul,
+:root[data-edge-appearance] .graph-svg-tip li,
+:root[data-edge-appearance] .graph-svg-tip .value,
+:root[data-edge-appearance] .graph-svg-tip span,
+:root[data-edge-appearance] .graph-svg-tip strong {
+	color: var(--edge-color-ink-950) !important;
+	fill: var(--edge-color-ink-950) !important;
+	opacity: 1 !important;
+}
+
+@media (max-width: 1100px) {
+	.vetedge-shared-dashboard-filter-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.vetedge-edge-chart-grid,
+	.vetedge-edge-composition-grid,
+	.vetedge-edge-table-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 640px) {
+	.vetedge-shared-dashboard-filter-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.vetedge-shared-dashboard-filter-actions,
+	.vetedge-dashboard-quick-reports,
+	.vetedge-dashboard-quick-reports > .edge-button {
+		width: 100%;
+	}
+
+	.vetedge-dashboard-quick-reports-menu {
+		left: 0;
+		right: auto;
+		min-width: min(18rem, 88vw);
+	}
+
+	.vetedge-edge-alert {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+}

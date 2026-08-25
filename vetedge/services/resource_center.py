@@ -51,7 +51,7 @@ RESOURCE_CONFIG: dict[str, dict[str, Any]] = {
 	"appointments": {
 		"doctype": "Veterinary Appointment",
 		"title": _("Appointments"),
-		"subtitle": _("Review and maintain appointment records. Workflow actions still use the dedicated appointment flow."),
+		"subtitle": _("Review appointments and use context-aware workflow actions without leaving the Veterinary workspace."),
 		"allow_create": True,
 		"allow_edit": True,
 		"allow_delete": False,
@@ -237,6 +237,18 @@ def _list_fields(meta) -> list[str]:
 	return fields
 
 
+def _with_appointment_action_states(config: dict[str, Any], rows: list) -> list:
+	if config["key"] != "appointments" or not rows:
+		return rows
+	from vetedge.services.appointment_actions import build_appointment_action_state
+
+	for row in rows:
+		doc = frappe.get_cached_doc("Veterinary Appointment", row.name)
+		doc.check_permission("read")
+		row["_appointment_action_state"] = build_appointment_action_state(doc)
+	return rows
+
+
 def _search_fields(meta, list_fields: list[str]) -> list[str]:
 	fields = ["name"]
 	for fieldname in list_fields:
@@ -260,7 +272,7 @@ def _branch_filters(meta) -> dict:
 
 def _full_form_route(doctype: str, name: str | None = None) -> str:
 	slug = frappe.scrub(doctype).replace("_", "-")
-	return f"/app/{slug}/{name}" if name else f"/app/{slug}"
+	return f"/desk/{slug}/{name}" if name else f"/desk/{slug}"
 
 
 def _column_schema(meta, fields: list[str]) -> list[dict]:
@@ -329,6 +341,7 @@ def get_resource_page(
 		start=start,
 		page_length=page_length,
 	)
+	rows = _with_appointment_action_states(config, rows)
 	total = _permission_aware_count(doctype, filters, or_filters)
 	unsupported = _unsupported_required_fields(meta)
 	can_create = bool(config["allow_create"] and frappe.has_permission(doctype, "create") and not unsupported)

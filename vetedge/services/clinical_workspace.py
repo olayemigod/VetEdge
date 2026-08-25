@@ -12,6 +12,7 @@ from vetedge.services.consultation_flow import (
 	ensure_consultations_enabled,
 	transition_consultation_status,
 )
+from vetedge.services.dispensary import consultation_requires_dispensary
 from vetedge.services.feature_flags import is_enabled
 from vetedge.services.medical_history import get_patient_medical_history_view
 from vetedge.services.permissions import (
@@ -161,7 +162,9 @@ def _status_actions(doc) -> list[dict[str, Any]]:
 		"Completed": _("Complete Consultation"),
 		"Cancelled": _("Cancel Consultation"),
 	}
-	allowed = VALID_CONSULTATION_STATUS_TRANSITIONS.get(doc.status, set())
+	allowed = set(VALID_CONSULTATION_STATUS_TRANSITIONS.get(doc.status, set()))
+	if not consultation_requires_dispensary(doc):
+		allowed.discard("Pending Dispensary")
 	return [
 		{"key": f"status:{target}", "label": labels.get(target, target), "primary": target in {"In Progress", "Completed"}, "danger": target == "Cancelled"}
 		for target in STATUS_ACTION_ORDER if target in allowed

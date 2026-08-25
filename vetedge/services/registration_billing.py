@@ -257,27 +257,11 @@ def validate_registration_payment_before_first_consultation(
 		return
 
 	if use_billing_core_for_registration():
-		from vetedge.services.billing_core import get_source_payment_gate_status, get_billing_group_invoice_history, get_payment_gate_status, resolve_billing_session, sync_source_to_billing_session
-
-		source_status = get_source_payment_gate_status("Veterinary Patient", patient_doc.name)
-		if source_status.get("can_proceed"):
-			return
-		if get_billing_group_invoice_history("Veterinary Patient", patient_doc.name):
-			frappe.throw(
-				_(source_status.get("message") or "A registration invoice must be paid before the first consultation can proceed."),
-				frappe.ValidationError,
-			)
-
-		if not resolve_billing_session("Veterinary Patient", patient_doc.name):
-			sync_source_to_billing_session("Veterinary Patient", patient_doc.name)
-		session = resolve_billing_session("Veterinary Patient", patient_doc.name)
-		status = get_payment_gate_status(session) if session else {"can_proceed": False}
-		if status.get("can_proceed"):
-			return
-		frappe.throw(
-			_(status.get("message") or "A registration invoice must be created and paid before the first consultation can proceed."),
-			frappe.ValidationError,
-		)
+		# Billing Core intentionally carries the registration-origin session into
+		# the first consultation. Do not block Start Consultation here: any draft,
+		# submitted or unpaid registration invoice remains part of the shared
+		# billing group and is evaluated later by the consultation payment gate.
+		return
 
 	active_invoice_name = get_active_registration_invoice_name(patient_doc.name)
 	if active_invoice_name:

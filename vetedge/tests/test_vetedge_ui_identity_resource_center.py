@@ -80,8 +80,8 @@ def test_vetedge_registers_shared_notification_and_navigation_adapters():
 		"mark_my_notification_done",
 		"dismiss_my_notification",
 		"archive_my_notification",
-		'window.open(route, "_blank", "noopener,noreferrer")',
-		"/app/vetedge-resource-center?resource=",
+		'window.open(deskRoute(route), "_blank", "noopener,noreferrer")',
+		"/desk/vetedge-resource-center?resource=",
 	):
 		assert contract in content
 
@@ -89,19 +89,20 @@ def test_vetedge_registers_shared_notification_and_navigation_adapters():
 def test_api_driven_resources_stay_in_shell_and_other_desk_views_open_new_tab():
 	content = read(BRIDGE)
 	for route in (
-		"/app/veterinary-patient",
-		"/app/veterinary-appointment",
-		"/app/veterinary-consultation",
-		"/app/veterinary-lab-order",
-		"/app/veterinary-vaccination-record",
+		"/desk/veterinary-patient",
+		"/desk/veterinary-appointment",
+		"/desk/veterinary-consultation",
+		"/desk/veterinary-lab-order",
+		"/desk/veterinary-vaccination-record",
 	):
 		assert route in content
-	assert 'if (path.startsWith("/app/")) return openNewTab(route)' in content
+	assert 'if (path.startsWith("/desk/")) return openNewTab(route)' in content
 	assert "PRODUCT_ROUTES.has(path)" in content
 	assert "patchProductMenu" in content
 	assert "menuItemRoute" in content
 	assert "__vetedgeProductMenuNavigationPatched" in content
 	assert "productMenuPatched" in content
+	assert 'return `/desk/${route.replace(/^\\/+/, "")}`;' in content
 
 
 def test_resource_center_uses_permission_aware_crud_and_protects_workflows():
@@ -136,22 +137,56 @@ def test_resource_center_count_uses_frappe_v16_aggregate_field_syntax():
 	assert 'count(name) as total' not in content
 
 
-def test_resource_center_page_uses_edgesuite_shell_and_full_form_new_tabs():
+def test_resource_center_page_uses_edgesuite_shell_and_same_tab_full_forms():
 	for path in (RESOURCE_PAGE, RESOURCE_LOADER, RESOURCE_BUNDLE, RESOURCE_COMPONENT, RESOURCE_QUICK_EDITOR):
 		assert path.exists(), path
 
 	loader = read(RESOURCE_LOADER)
 	component = read(RESOURCE_COMPONENT)
+	quick_editor = read(RESOURCE_QUICK_EDITOR)
 	assert "edgeui.bundle.js" in loader
 	assert "vetedge_professional_ui.js" in loader
 	assert "vetedge_resource_center.bundle.js" in loader
 	assert loader.index("edgeui.bundle.js") < loader.index("vetedge_resource_center.bundle.js")
 	assert "EdgeAppShell" in component
 	assert "get_resource_page" in component
-	assert "get_resource_editor" in component
-	assert "save_resource_record" in component
+	assert "get_resource_editor" in quick_editor
+	assert "save_resource_record" in quick_editor
 	assert "delete_resource_record" in component
-	assert '"_blank", "noopener,noreferrer"' in component
+	assert 'active-route="/desk/vetedge-resource-center"' in component
+	assert '"_blank", "noopener,noreferrer"' not in component
+
+
+def test_resource_center_appointment_rows_render_server_resolved_smart_actions():
+	api = read(RESOURCE_API)
+	component = read(RESOURCE_COMPONENT)
+
+	for contract in (
+		"_with_appointment_action_states",
+		"build_appointment_action_state",
+		'frappe.get_cached_doc("Veterinary Appointment", row.name)',
+		'doc.check_permission("read")',
+		'row["_appointment_action_state"]',
+		"rows = _with_appointment_action_states(config, rows)",
+	):
+		assert contract in api
+
+	for contract in (
+		"isAppointments()",
+		'v-for="action in appointmentActions(row)"',
+		"appointmentActions(row)",
+		"appointmentActionClass(action)",
+		"isAppointmentActionBusy(row, action)",
+		"runAppointmentAction(row, action)",
+		"vetedge.services.appointment_actions.perform_appointment_action",
+		"expected_modified: row.modified",
+		"result.open?.route",
+		"Processing…",
+	):
+		assert contract in component
+
+	# The page payload already contains action state; do not add one HTTP request per row.
+	assert "get_appointment_action_state" not in component
 
 
 def test_resource_center_quick_edit_uses_shared_edgesuite_fields_not_local_native_controls():
@@ -282,10 +317,12 @@ def test_appointment_flow_uses_shared_links_and_server_safety():
 	assert "EdgeDropdown" in loader
 
 
-def test_hooks_load_bridge_after_professional_adapter_and_expose_identity():
+def test_hooks_load_bridge_then_canonical_desk_navigation_and_expose_identity():
 	content = read(HOOKS)
 	assert "vetedge.ui_identity.extend_bootinfo" in content
 	assert "edgesuite_product_menu.js?v=20260810-2" in content
-	assert "vetedge_clinical_route.js?v=20260810-2" in content
 	assert "vetedge_ui_bridge.js?v=20260810-2" in content
+	assert "vetedge_navigation_recovery.js?v=20260812-2" in content
+	assert "vetedge_clinical_route.js" not in content
 	assert content.index("vetedge_professional_ui.js") < content.index("vetedge_ui_bridge.js")
+	assert content.index("vetedge_ui_bridge.js") < content.index("vetedge_navigation_recovery.js")

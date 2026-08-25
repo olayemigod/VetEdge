@@ -56,7 +56,7 @@ function addBoardingBookingActions(frm) {
 		frm.add_custom_button(__("Check In"), () => transitionBoardingBooking(frm, "vetedge.services.boarding.check_in_boarding_booking", __("Checking in boarding booking...")), __("Workflow"));
 	}
 	if (frm.doc.status === "Checked In") {
-		frm.add_custom_button(__("Check Out"), () => transitionBoardingBooking(frm, "vetedge.services.boarding.check_out_boarding_booking", __("Checking out boarding booking...")), __("Workflow"));
+		frm.add_custom_button(__("Check Out"), () => transitionBoardingBooking(frm, "vetedge.services.boarding_checkout_release_safety.check_out_boarding_booking", __("Checking out boarding booking...")), __("Workflow"));
 	}
 	if (["Draft", "Reserved"].includes(frm.doc.status)) {
 		frm.add_custom_button(__("Cancel"), () => transitionBoardingBooking(frm, "vetedge.services.boarding.cancel_boarding_booking", __("Cancelling boarding booking...")), __("Workflow"));
