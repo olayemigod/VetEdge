@@ -22,7 +22,6 @@ def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_regulatory_
         'doctype: "Company"',
         'company: frappe.defaults?.get_user_default?.("Company")',
         'isRegulatoryAdmin()',
-        '__("Administrator Managed")',
     ):
         assert expected in page
 
@@ -62,16 +61,19 @@ def test_vaccination_workbench_surfaces_distinct_animal_count_not_raw_record_cou
     assert '__("Animals Vaccinated")' in page
 
 
-def test_regulatory_navigation_is_idempotent_and_runs_after_standard_sidebar_sync():
+def test_regulatory_navigation_is_idempotent_and_exposes_outbreak_register():
     navigation = (ROOT / "install/regulatory_reporting.py").read_text(encoding="utf-8")
     install = (ROOT / "install/__init__.py").read_text(encoding="utf-8")
 
     for expected in (
         'REGULATORY_PAGE = "vetedge-regulatory-reporting"',
+        'OUTBREAK_DOCTYPE = "Veterinary Disease Outbreak"',
         'SECTION_LABEL = "Regulatory Reporting"',
         'LINK_LABEL = "VCN / NADIS Reports"',
+        'OUTBREAK_LINK_LABEL = "Disease Outbreak Register"',
         'getattr(item, "link_type", None) == "Page"',
         'getattr(item, "link_to", None) == REGULATORY_PAGE',
+        'getattr(item, "link_to", None) == OUTBREAK_DOCTYPE',
         'getattr(item, "label", None) == "Configuration"',
         'frappe.cache.delete_key("bootinfo")',
     ):
@@ -104,11 +106,14 @@ def test_vaccination_reason_extends_existing_guarded_edgesuite_editor():
         assert protected in mutations
 
 
-def test_outbreak_native_access_is_admin_only_until_fail_closed_read_hooks_are_added():
+def test_outbreak_native_access_is_branch_safe_for_clinical_roles():
     outbreak = (ROOT / "veterinary/doctype/veterinary_disease_outbreak/veterinary_disease_outbreak.json").read_text(encoding="utf-8")
+    hooks = (ROOT / "hooks.py").read_text(encoding="utf-8")
 
     assert '"role": "System Manager"' in outbreak
     assert '"role": "VetEdge Administrator"' in outbreak
-    assert '"role": "VetEdge Doctor"' not in outbreak
-    assert '"role": "Veterinary Nurse"' not in outbreak
-    assert '"role": "Branch Manager"' not in outbreak
+    assert '"role": "VetEdge Doctor"' in outbreak
+    assert '"role": "Veterinary Nurse"' in outbreak
+    assert '"role": "Branch Manager"' in outbreak
+    assert '"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.get_outbreak_query"' in hooks
+    assert '"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.has_outbreak_permission"' in hooks
