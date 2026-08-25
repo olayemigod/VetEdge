@@ -118,6 +118,10 @@ def _populate_responsible_user(doc, fieldname: str) -> None:
 def _can_skip_practitioner_requirement(doc) -> bool:
 	if doc.doctype != "Veterinary Appointment":
 		return False
+	# Grooming uses the dedicated Groomer field and is validated by the unified
+	# Grooming appointment bridge. It must never require or auto-populate a doctor.
+	if cstr(doc.get("appointment_type") or "").strip() == "Grooming":
+		return True
 	return cstr(doc.get("status") or "").strip() in APPOINTMENT_PRACTITIONER_OPTIONAL_STATUSES
 
 
