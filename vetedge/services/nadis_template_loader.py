@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -20,53 +21,62 @@ _TEMPLATE_HASHES = {
     VACCINATION_TEMPLATE_FILENAME: VACCINATION_TEMPLATE_SHA256,
     DISEASE_OUTBREAK_TEMPLATE_FILENAME: DISEASE_OUTBREAK_TEMPLATE_SHA256,
 }
+_PART_SUFFIX = re.compile(r"\.part(\d+)$")
 
 
 def _asset_directory() -> Path:
     return Path(frappe.get_app_path("vetedge", "templates", "nadis"))
 
 
-def _raw_asset_path(filename: str) -> Path:
-    return _asset_directory() / filename
-
-
-def _base64_asset_path(filename: str) -> Path:
+def _single_asset_path(filename: str) -> Path:
     return _asset_directory() / f"{filename}.b64"
 
 
-def _multipart_base64_paths(filename: str) -> list[Path]:
+def _multipart_asset_paths(filename: str) -> list[Path]:
     directory = _asset_directory()
-    return sorted(directory.glob(f"{filename}.b64.part*")) if directory.exists() else []
+    prefix = f"{filename}.b64.part"
+    return sorted(path for path in directory.glob(f"{filename}.b64.part*") if path.name.startswith(prefix))
 
 
-def _decode_base64_payload(encoded: bytes, filename: str) -> bytes:
-    try:
-        return base64.b64decode(encoded, validate=True)
-    except Exception:
+def _encoded_template_payload(filename: str) -> bytes:
+    single = _single_asset_path(filename)
+    parts = _multipart_asset_paths(filename)
+
+    if single.exists() and parts:
         frappe.throw(
-            _("Packaged NADIS template {0} is not valid base64. Regulatory export is blocked.").format(filename),
+            _("Packaged NADIS template {0} has both single-file and multipart assets. Regulatory export is blocked.").format(filename),
             frappe.ValidationError,
         )
 
+    if single.exists():
+        return single.read_bytes().strip()
 
-def _read_packaged_bytes(filename: str) -> bytes:
-    raw_path = _raw_asset_path(filename)
-    if raw_path.exists():
-        return raw_path.read_bytes()
+    if not parts:
+        frappe.throw(
+            _("Packaged NADIS template {0} is missing. Regulatory export is blocked.").format(filename),
+            frappe.ValidationError,
+        )
 
-    base64_path = _base64_asset_path(filename)
-    if base64_path.exists():
-        return _decode_base64_payload(base64_path.read_bytes(), filename)
+    indexed_parts: list[tuple[int, Path]] = []
+    for path in parts:
+        match = _PART_SUFFIX.search(path.name)
+        if not match:
+            frappe.throw(
+                _("Packaged NADIS template {0} contains an invalid multipart filename. Regulatory export is blocked.").format(filename),
+                frappe.ValidationError,
+            )
+        indexed_parts.append((int(match.group(1)), path))
 
-    parts = _multipart_base64_paths(filename)
-    if parts:
-        encoded = b"".join(path.read_bytes() for path in parts)
-        return _decode_base64_payload(encoded, filename)
+    indexed_parts.sort(key=lambda item: item[0])
+    indexes = [index for index, _path in indexed_parts]
+    expected = list(range(len(indexed_parts)))
+    if indexes != expected:
+        frappe.throw(
+            _("Packaged NADIS template {0} has missing or out-of-sequence multipart assets. Regulatory export is blocked.").format(filename),
+            frappe.ValidationError,
+        )
 
-    frappe.throw(
-        _("Packaged NADIS template {0} is missing. Regulatory export is blocked.").format(filename),
-        frappe.ValidationError,
-    )
+    return b"".join(path.read_bytes().strip() for _index, path in indexed_parts)
 
 
 def load_verified_template_bytes(filename: str) -> bytes:
@@ -74,7 +84,16 @@ def load_verified_template_bytes(filename: str) -> bytes:
     if not expected_hash:
         frappe.throw(_("Unsupported NADIS template: {0}").format(filename), frappe.ValidationError)
 
-    payload = _read_packaged_bytes(filename)
+    encoded = _encoded_template_payload(filename)
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        frappe.throw(
+            _("Packaged NADIS template {0} is not valid base64. Regulatory export is blocked.").format(filename),
+            frappe.ValidationError,
+        )
+        raise exc
+
     digest = hashlib.sha256(payload).hexdigest()
     if digest != expected_hash:
         frappe.throw(
@@ -88,6 +107,6 @@ def load_verified_workbook(filename: str):
     try:
         from openpyxl import load_workbook
     except ImportError:
-        frappe.throw(_("openpyxl is required to generate NADIS regulatory workbooks."))
+        frappe.throw(_("openpyxl is required to inspect NADIS regulatory workbooks."))
 
     return load_workbook(BytesIO(load_verified_template_bytes(filename)), keep_links=True)
