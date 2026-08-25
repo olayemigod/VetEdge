@@ -28,14 +28,12 @@
 							'is-clinical-filters': isClinicalResource,
 						}"
 					>
-						<label class="vetedge-resource-field">
-							<span>Resource</span>
-							<select v-model="resource" class="form-control" @change="changeResource">
-								<option v-for="option in resourceOptions" :key="option.value" :value="option.value">
-									{{ option.label }}
-								</option>
-							</select>
-						</label>
+						<EdgeDropdown
+							v-model="resource"
+							label="Resource"
+							:options="resourceOptions"
+							@change="changeResource"
+						/>
 
 						<label class="vetedge-resource-field vetedge-resource-field--search">
 							<span>Search</span>
