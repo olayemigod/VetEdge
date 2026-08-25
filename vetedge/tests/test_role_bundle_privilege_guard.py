@@ -59,6 +59,24 @@ class TestRoleBundlePrivilegeGuard(unittest.TestCase):
 		self.assertIn("ROLE_BUNDLE_SAFE_ASSIGNABLE_ROLES", text)
 		self.assertIn("page_length=min(max(cint(page_length) or 20, 1), 50)", text.replace("\n", ""))
 
+	def test_edgesuite_role_editor_routes_search_through_delegation_guard(self):
+		provider = (ROOT / "vetedge/services/administration_workspace.py").read_text(encoding="utf-8")
+		page = (
+			ROOT
+			/ "vetedge/veterinary/page/vetedge_administration/vetedge_administration.js"
+		).read_text(encoding="utf-8")
+		self.assertIn(
+			"from vetedge.services.role_bundle_security import search_assignable_role_options",
+			provider,
+		)
+		self.assertIn("return search_assignable_role_options(query=query, page_length=page_length)", provider)
+		self.assertIn(
+			'link: "vetedge.services.administration_workspace.search_administration_link"',
+			page,
+		)
+		self.assertIn("VETEDGE_ADMIN_API.link", page)
+		self.assertIn('fieldname: "role"', page)
+
 
 if __name__ == "__main__":
 	unittest.main()
