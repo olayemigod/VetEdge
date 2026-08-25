@@ -9,6 +9,7 @@ BRANCH_REQUIRED_DOCTYPES = {
     "Veterinary Consultation": "service_branch",
     "Veterinary Lab Order": "service_branch",
     "Veterinary Vaccination Record": "service_branch",
+    "Veterinary Hospitalisation": "service_branch",
     "Veterinary Appointment": "branch",
     "Pet Grooming Appointment": "service_branch",
     "Pet Grooming Session": "service_branch",
