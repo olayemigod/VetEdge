@@ -56,7 +56,7 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("search_stock_expiry_filter_options", component)
 		self.assertIn("page_length: 20", component)
 		reuse_start = loader.index("if (wrapper.vue_app && wrapper.vue_view)")
-		reuse_end = loader.index("// Backward-compatible cleanup", reuse_start)
+		reuse_end = loader.index("if (wrapper.vue_app) {", reuse_start + 1)
 		reuse_block = loader[reuse_start:reuse_end]
 		self.assertNotIn("frappe.require(", reuse_block)
 		self.assertNotIn("unmount()", reuse_block)
