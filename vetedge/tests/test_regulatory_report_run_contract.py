@@ -155,7 +155,7 @@ def test_submission_status_uses_shared_state_machine():
         assert expected in controller
 
     for expected in (
-        'SENDABLE_STATUSES = {"Generated", "Sent"}',
+        'SENDABLE_STATUSES = {"Generated"}',
         'FINAL_STATUSES = {"Accepted", "Superseded"}',
         'Rejected reports must be corrected, regenerated, and then marked Superseded.',
         'Only a Sent regulatory report can be marked Accepted or Rejected.',
