@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-SENDABLE_STATUSES = {"Generated", "Sent"}
+SENDABLE_STATUSES = {"Generated"}
 FINAL_STATUSES = {"Accepted", "Superseded"}
 ALLOWED_STATUSES = {"Generated", "Sent", "Accepted", "Rejected", "Superseded"}
 
@@ -8,8 +8,8 @@ ALLOWED_STATUSES = {"Generated", "Sent", "Accepted", "Rejected", "Superseded"}
 def assert_sendable(current_status: str) -> None:
     if current_status not in SENDABLE_STATUSES:
         raise ValueError(
-            "Only Generated or Sent regulatory reports can be emailed. "
-            "Rejected reports must be corrected, regenerated, and then marked Superseded."
+            "Only a Generated regulatory report can be emailed. "
+            "A Sent report already has frozen send evidence; Rejected reports must be corrected, regenerated, and then marked Superseded."
         )
 
 
@@ -27,10 +27,8 @@ def assert_transition(current_status: str, target_status: str, *, has_sent_evide
         raise ValueError("A submitted regulatory report cannot be reset to Generated.")
 
     if target_status == "Sent":
-        if current_status not in SENDABLE_STATUSES:
-            raise ValueError(
-                "A Rejected, Accepted, or Superseded regulatory report cannot be moved to Sent."
-            )
+        if current_status != "Generated":
+            raise ValueError("Only a Generated regulatory report can be moved to Sent.")
         if not has_sent_evidence:
             raise ValueError("Sent status requires Sent To and Sent On evidence.")
         return
