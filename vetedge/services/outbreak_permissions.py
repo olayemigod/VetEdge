@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe import _
 from frappe.utils import cstr
 
 from vetedge.services.permissions import (
@@ -59,6 +60,43 @@ def _role_allowed(user: str | None, permission_type: str | None) -> bool:
     if permission_type in {"create", "write", "delete", "cancel", "submit"}:
         return bool(roles & WRITE_ROLES)
     return bool(roles & READ_ROLES)
+
+
+def normalize_outbreak_report_filters(filters: dict | None, user: str | None = None) -> dict:
+    """Apply fail-closed role and Branch scope for NADIS outbreak reporting."""
+    user = user or get_current_user()
+    if (
+        not user
+        or user == "Guest"
+        or is_portal_owner_user(user)
+        or not is_internal_staff_user(user)
+        or not _role_allowed(user, "read")
+    ):
+        frappe.throw(_("You are not permitted to access Disease Outbreak regulatory reporting."), frappe.PermissionError)
+
+    result = dict(filters or {})
+    allowed = _allowed_branches(user)
+    if allowed is None:
+        return result
+    if not allowed:
+        frappe.throw(
+            _("No Veterinary Branch is assigned to this user. Disease Outbreak reporting is blocked until a Branch is assigned."),
+            frappe.PermissionError,
+        )
+
+    selected = cstr(result.get("branch") or "").strip()
+    if selected:
+        if selected not in allowed:
+            frappe.throw(_("You are not permitted to report Disease Outbreak data for Branch {0}.").format(selected), frappe.PermissionError)
+        return result
+
+    default_branch = ""
+    try:
+        default_branch = cstr(frappe.defaults.get_user_default("Branch") or "").strip()
+    except Exception:
+        default_branch = ""
+    result["branch"] = default_branch if default_branch in allowed else sorted(allowed)[0]
+    return result
 
 
 def get_outbreak_query(user: str | None = None) -> str | None:
