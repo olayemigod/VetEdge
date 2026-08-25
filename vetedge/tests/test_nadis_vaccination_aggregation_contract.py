@@ -17,20 +17,22 @@ def test_vaccination_export_counts_distinct_patients_per_nadis_group():
         assert expected in export
 
 
-def test_vaccination_export_preserves_known_row4_markers_and_controlled_dropdowns():
+def test_vaccination_export_populates_verified_official_template_instead_of_rebuilding_it():
     export = (ROOT / "services/nadis_vaccination_export.py").read_text(encoding="utf-8")
 
     for expected in (
-        'sheet.row_dimensions[2].hidden = True',
-        'sheet["B4"] = 1',
-        'sheet["O4"] = "u"',
-        'sheet.column_dimensions["CD"].hidden = True',
-        'Anti-idiotype vaccines,Conjugate vaccines,DNA vaccines,Inactivated vaccines',
-        'reason_validation.add(f"H{VACCINATION_DATA_START_ROW}:H239")',
-        'vaccine_type_validation.add(f"M{VACCINATION_DATA_START_ROW}:M239")',
-        'panvac_validation.add(f"P{VACCINATION_DATA_START_ROW}:P239")',
+        "load_verified_template_bytes",
+        "populate_official_template",
+        'sheet_rows={VACCINATION_SHEET: _template_rows(rows)}',
+        'visible_column_counts={VACCINATION_SHEET: VISIBLE_COLUMN_COUNT}',
+        "clear_through_row=VACCINATION_DATA_START_ROW + MAX_TEMPLATE_DATA_ROWS - 1",
     ):
         assert expected in export
+
+    assert "Workbook()" not in export
+    assert "DataValidation(" not in export
+    assert 'sheet["B4"] = 1' not in export
+    assert 'sheet["O4"] = "u"' not in export
 
 
 def test_vaccine_master_uses_controlled_nadis_vaccine_type():
