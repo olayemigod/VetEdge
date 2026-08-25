@@ -41,12 +41,17 @@ def test_outbreak_template_fidelity_contract_is_recorded():
         assert expected in templates
 
 
-def test_current_exporters_do_not_claim_binary_template_preservation():
+def test_both_exporters_populate_sha256_verified_official_templates_without_rebuilding_workbooks():
     vaccination = (ROOT / "services/nadis_vaccination_export.py").read_text(encoding="utf-8")
     outbreak = (ROOT / "services/nadis_outbreak_export.py").read_text(encoding="utf-8")
 
-    # Until the exact binary templates are packaged/populated, generated files
-    # must not be described in source as byte-for-byte copies of the originals.
-    for source in (vaccination, outbreak):
-        assert "byte-for-byte" not in source.lower()
-        assert "exact binary template" not in source.lower()
+    for source, filename_constant in (
+        (vaccination, "VACCINATION_TEMPLATE_FILENAME"),
+        (outbreak, "DISEASE_OUTBREAK_TEMPLATE_FILENAME"),
+    ):
+        assert "load_verified_template_bytes" in source
+        assert f"load_verified_template_bytes({filename_constant})" in source
+        assert "populate_official_template" in source
+        assert "Workbook()" not in source
+        assert "create_sheet(" not in source
+        assert "DataValidation(" not in source
