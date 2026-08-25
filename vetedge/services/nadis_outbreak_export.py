@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from io import BytesIO
-
 import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt, getdate
 
+from vetedge.services.nadis_template_loader import load_verified_template_bytes
 from vetedge.services.nadis_templates import (
     ANIMAL_SEX_VALUES,
     CONTROL_MEASURE_FLAGS,
@@ -20,6 +19,7 @@ from vetedge.services.nadis_templates import (
     OUTBREAK_TYPES,
     PRODUCTION_SYSTEMS,
 )
+from vetedge.services.nadis_xlsx_template_writer import populate_official_template
 from vetedge.services.portal_access import require_internal_user
 from vetedge.services.report_visibility import normalize_report_filters
 
@@ -77,24 +77,10 @@ def _fetch_parents(query_filters: dict) -> list[dict]:
         OUTBREAK_DOCTYPE,
         filters=query_filters,
         fields=[
-            "name",
-            "country",
-            "admin_level_1",
-            "disease",
-            "nadis_disease",
-            "serotype",
-            "outbreak_type",
-            "parent_outbreak",
-            "number_new_outbreaks",
-            "total_outbreaks",
-            "date_outbreak_started",
-            "date_reported_to_vet",
-            "date_investigated",
-            "date_final_diagnosis",
-            "source_of_infection",
-            "outbreak_status",
-            "service_branch",
-            "company",
+            "name", "country", "admin_level_1", "disease", "nadis_disease", "serotype",
+            "outbreak_type", "parent_outbreak", "number_new_outbreaks", "total_outbreaks",
+            "date_outbreak_started", "date_reported_to_vet", "date_investigated",
+            "date_final_diagnosis", "source_of_infection", "outbreak_status", "service_branch", "company",
         ],
         order_by="date_investigated asc, name asc",
         page_length=max(total, 1),
@@ -127,10 +113,8 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
     controls_by_parent: dict[str, list[dict]] = {}
     locations_by_parent: dict[str, list[dict]] = {}
     for collection, target in (
-        (animals, animals_by_parent),
-        (diagnoses, diagnoses_by_parent),
-        (controls, controls_by_parent),
-        (locations, locations_by_parent),
+        (animals, animals_by_parent), (diagnoses, diagnoses_by_parent),
+        (controls, controls_by_parent), (locations, locations_by_parent),
     ):
         for row in collection:
             target.setdefault(row.get("parent"), []).append(row)
@@ -177,7 +161,10 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
             errors.append({"record": parent, "message": _("Animals Affected row {0} is missing its NADIS Species mapping.").format(row.get("idx"))})
         if cint(row.get("number_cases")) < 1:
             errors.append({"record": parent, "message": _("Animals Affected row {0} must have at least one case.").format(row.get("idx"))})
-        for fieldname in ("number_susceptible", "number_cases", "number_deaths", "number_slaughtered", "number_destroyed", "number_vaccinated_around_outbreak"):
+        for fieldname in (
+            "number_susceptible", "number_cases", "number_deaths", "number_slaughtered",
+            "number_destroyed", "number_vaccinated_around_outbreak",
+        ):
             if cint(row.get(fieldname)) < 0:
                 errors.append({"record": parent, "message": _("Animals Affected row {0} contains a negative count.").format(row.get("idx"))})
         if cint(row.get("number_deaths")) > cint(row.get("number_cases")):
@@ -205,7 +192,6 @@ def _validation(parent_rows: list[dict], animals: list[dict], diagnoses: list[di
             errors.append({"record": parent, "message": _("Location row {0} has Latitude outside -90 to 90.").format(row.get("idx"))})
         if longitude not in (None, "") and not -180 <= flt(longitude) <= 180:
             errors.append({"record": parent, "message": _("Location row {0} has Longitude outside -180 to 180.").format(row.get("idx"))})
-
     return {"errors": errors, "warnings": warnings}
 
 
@@ -259,45 +245,11 @@ def validate_nadis_outbreak_export(filters: str | dict | None = None) -> dict:
     }
 
 
-def _style_sheet(sheet, definition: dict):
-    from openpyxl.styles import Alignment, Font, PatternFill
-
-    sheet["B1"] = definition["title"]
-    sheet["B1"].font = Font(bold=True, size=14)
-    for column, field_id in enumerate(definition.get("field_ids") or (), start=1):
-        sheet.cell(row=2, column=column, value=field_id)
-    for column, header in enumerate(definition.get("headers") or (), start=1):
-        cell = sheet.cell(row=3, column=column, value=header)
-        if header:
-            cell.font = Font(bold=True)
-            cell.fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
-    for column, subheader in enumerate(definition.get("subheaders") or (), start=1):
-        if subheader:
-            sheet.cell(row=4, column=column, value=subheader).font = Font(italic=True)
-    for column in definition.get("date_hint_columns") or ():
-        sheet.cell(row=4, column=column, value="(dd/mm/yyyy)").font = Font(italic=True)
-    sheet.column_dimensions["A"].hidden = True
-
-
-def _build_workbook(data: dict) -> bytes:
-    try:
-        from openpyxl import Workbook
-    except ImportError:
-        frappe.throw(_("openpyxl is required to generate the official NADIS workbook."))
-
-    workbook = Workbook()
-    workbook.remove(workbook.active)
-    sheets = {}
-    for sheet_name in OUTBREAK_SHEETS:
-        sheet = workbook.create_sheet(sheet_name)
-        sheets[sheet_name] = sheet
-        _style_sheet(sheet, OUTBREAK_SHEET_DEFINITIONS[sheet_name])
-
-    for offset, row in enumerate(data["parents"]):
-        excel_row = OUTBREAK_DATA_START_ROW + offset
+def _sheet_rows(data: dict) -> dict[str, list[list]]:
+    outbreak_rows: list[list] = []
+    for row in data["parents"]:
         investigated = getdate(row.get("date_investigated"))
-        values = (
+        outbreak_rows.append([
             None,
             row.get("name"),
             row.get("country") or "Nigeria",
@@ -315,49 +267,37 @@ def _build_workbook(data: dict) -> bytes:
             getdate(row.get("date_final_diagnosis")),
             row.get("source_of_infection"),
             row.get("outbreak_status"),
-        )
-        for column, value in enumerate(values, start=1):
-            cell = sheets["Outbreaks"].cell(row=excel_row, column=column, value=value)
-            if column in (12, 13, 14, 15) and value:
-                cell.number_format = "DD/MM/YYYY"
+        ])
 
-    child_specs = (
-        (
-            "Animals affected",
-            data["animals"],
-            lambda row: (
-                None,
-                row.get("parent"),
-                row.get("nadis_species"),
-                row.get("age_group"),
-                row.get("sex"),
-                cint(row.get("number_susceptible")),
-                cint(row.get("number_cases")),
-                cint(row.get("number_deaths")),
-                cint(row.get("number_slaughtered")),
-                cint(row.get("number_destroyed")),
-                cint(row.get("number_vaccinated_around_outbreak")),
-            ),
-        ),
-        ("Bases of Diagnosis", data["diagnoses"], lambda row: (None, row.get("parent"), row.get("basis_of_diagnosis"))),
-        ("Disease Control Measures", data["controls"], lambda row: (None, row.get("parent"), row.get("control_measure"), row.get("flag"))),
-        (
-            "Locations",
-            data["locations"],
-            lambda row: (None, row.get("parent"), row.get("locality_name"), row.get("epidemiological_unit_type"), row.get("production_system"), row.get("latitude"), row.get("longitude")),
-        ),
+    return {
+        "Outbreaks": outbreak_rows,
+        "Animals affected": [[
+            None, row.get("parent"), row.get("nadis_species"), row.get("age_group"), row.get("sex"),
+            cint(row.get("number_susceptible")), cint(row.get("number_cases")), cint(row.get("number_deaths")),
+            cint(row.get("number_slaughtered")), cint(row.get("number_destroyed")), cint(row.get("number_vaccinated_around_outbreak")),
+        ] for row in data["animals"]],
+        "Bases of Diagnosis": [[None, row.get("parent"), row.get("basis_of_diagnosis")] for row in data["diagnoses"]],
+        "Disease Control Measures": [[None, row.get("parent"), row.get("control_measure"), row.get("flag")] for row in data["controls"]],
+        "Locations": [[
+            None, row.get("parent"), row.get("locality_name"), row.get("epidemiological_unit_type"),
+            row.get("production_system"), row.get("latitude"), row.get("longitude"),
+        ] for row in data["locations"]],
+    }
+
+
+def _build_workbook(data: dict) -> bytes:
+    template_bytes = load_verified_template_bytes(DISEASE_OUTBREAK_TEMPLATE_FILENAME)
+    column_counts = {
+        sheet_name: len(OUTBREAK_SHEET_DEFINITIONS[sheet_name].get("field_ids") or ())
+        for sheet_name in OUTBREAK_SHEETS
+    }
+    return populate_official_template(
+        template_bytes,
+        sheet_rows=_sheet_rows(data),
+        start_row=OUTBREAK_DATA_START_ROW,
+        visible_column_counts=column_counts,
+        clear_through_row=OUTBREAK_DATA_START_ROW + MAX_TEMPLATE_ROWS - 1,
     )
-    for sheet_name, rows, serializer in child_specs:
-        for offset, row in enumerate(rows):
-            excel_row = OUTBREAK_DATA_START_ROW + offset
-            for column, value in enumerate(serializer(row), start=1):
-                sheets[sheet_name].cell(row=excel_row, column=column, value=value)
-
-    workbook.properties.title = "NADIS Disease Outbreak Report"
-    workbook.properties.subject = "VCN / NADIS disease outbreak report generated by VetEdge"
-    buffer = BytesIO()
-    workbook.save(buffer)
-    return buffer.getvalue()
 
 
 @frappe.whitelist()
