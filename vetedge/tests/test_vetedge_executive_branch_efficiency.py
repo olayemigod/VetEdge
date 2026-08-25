@@ -95,7 +95,7 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 		for age_range in ("0-30", "31-60", "61-90", "90+"):
 			self.assertIn(f'age_range == "{age_range}"', metrics)
 
-	def test_shared_v5_rpc_routes_through_optimized_dashboard_host_adapter(self):
+	def test_shared_v5_rpc_routes_through_executive_optimized_adapter(self):
 		hooks = self.read(HOOKS)
 		adapter = self.read(SHARED_HOST_PAYLOAD)
 
@@ -103,21 +103,10 @@ class TestVetEdgeExecutiveBranchEfficiency(TestCase):
 			'"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload"',
 			hooks,
 		)
-		for contract in (
-			'if key == "executive":',
-			"return _executive_payload(normalized)",
-			'if key == "clinical":',
-			"return _clinical_payload(normalized)",
-			'if key == "lab":',
-			"return _lab_payload(normalized)",
-			'if key == "vaccination":',
-			"return _vaccination_payload(normalized)",
-			'if key in {"branch_performance", "practitioner_performance"}:',
-			"return v5.get_dashboard_payload(key, normalized)",
-			"validate_dashboard_access(key)",
-			"normalize_dashboard_filters(key, v4._to_dict(filters))",
-		):
-			self.assertIn(contract, adapter)
+		self.assertIn('if key != "executive":', adapter)
+		self.assertIn("return v5.get_dashboard_payload(key, filters)", adapter)
+		self.assertIn("validate_dashboard_access(key)", adapter)
+		self.assertIn("normalize_dashboard_filters(key, v4._to_dict(filters))", adapter)
 
 	def test_shared_executive_preserves_v5_range_semantics_without_unpaid_report_rows(self):
 		adapter = self.read(SHARED_HOST_PAYLOAD)

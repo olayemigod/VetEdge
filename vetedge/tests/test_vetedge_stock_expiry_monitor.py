@@ -105,14 +105,16 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
 		)
 
-		# The migrated Vue page should consume the canonical reporting shell and
-		# only the controls it owns directly. EdgeReportShell owns the lower-level
-		# page/header/filter/stat/table/loading/empty/error composition.
 		for component in (
 			"EdgeAppShell",
-			"EdgeReportShell",
-			"EdgeLinkField",
-			"EdgeDropdown",
+			"EdgePageLayout",
+			"EdgePageHeader",
+			"EdgeFilterBar",
+			"EdgeStatCard",
+			"EdgeStatusBadge",
+			"EdgeLoadingState",
+			"EdgeEmptyState",
+			"EdgeErrorState",
 			"EdgeNotificationBell",
 			"EdgeNotificationDrawer",
 		):
@@ -128,15 +130,14 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
 		)
 		self.assertNotIn(':menuItems="menuItems"', content)
-		self.assertIn("EdgeNotificationBell", content)
-		self.assertIn("EdgeNotificationDrawer", content)
+		self.assertIn("vetedge-notification-icon", content)
 		self.assertIn("syncShellContext", content)
 		self.assertIn("'All Branches'", content)
 		self.assertIn("tenantName", content)
 		self.assertIn("branchName", content)
 		self.assertIn("userName", content)
-		self.assertIn("grid-template-columns: repeat(3, minmax(12rem, 1fr))", content)
-		self.assertIn("grid-template-columns: repeat(2, minmax(10rem, 1fr))", content)
+		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", content)
+		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", content)
 		self.assertIn("grid-template-columns: minmax(0, 1fr)", content)
 		self.assertNotIn("frappe.realtime", content)
 		self.assertNotIn("coreedge/", content.lower())

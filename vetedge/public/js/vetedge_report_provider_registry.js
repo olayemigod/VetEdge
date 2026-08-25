@@ -14,25 +14,6 @@
 		{ fieldname: "branch", label: "Branch", fieldtype: "Link", options: "Branch", sortable: false },
 	];
 
-	const LEGACY_EDGE_REPORTS = Object.freeze([
-		"Practitioner Performance Report",
-		"Branch Performance Report",
-		"Revenue Summary",
-		"Unpaid Invoice Report",
-		"Dispensary Activity Report",
-		"Stock Usage Summary",
-		"Stock Expiry Status",
-		"Boarding Report",
-		"Kennel Availability Report",
-		"Grooming Report",
-		"Active Hospitalisations",
-		"Hospitalisation Charge Summary",
-		"Care Location Occupancy",
-		"Hospitalisation Discharge Watch",
-		"Pending Hospitalisation Actions",
-		"Veterinary Notification Event Registry",
-	]);
-
 	function call(method, args = {}) {
 		return new Promise((resolve, reject) => {
 			if (!global.frappe?.call) {
@@ -259,33 +240,6 @@
 		if (provider) aliases.forEach((alias) => reports.registerProvider(alias, provider));
 	}
 
-	function registerLegacyReport(reportKey) {
-		const reports = adapter();
-		if (!reports?.registerPaginatedProvider || reports.getProvider(reportKey)) return;
-		reports.registerPaginatedProvider(reportKey, {
-			defaultPageLength: 50,
-			maxPageLength: 100,
-			loadPage: async ({ filters = {}, start = 0, page_length = 50 }) => {
-				const payload = await call("vetedge.services.legacy_report_pagination.get_legacy_report_page", {
-					report_name: reportKey,
-					filters,
-					start,
-					page_length,
-				});
-				return {
-					...payload,
-					columns: nonSortableColumns(payload.columns),
-					total_count: Number(payload.total || payload.total_count || 0),
-					metadata: {
-						...(payload.metadata || {}),
-						pagination_mode: payload.metadata?.pagination_mode || "materialize-then-slice",
-						sorting_mode: "not-supported",
-					},
-				};
-			},
-		});
-	}
-
 	function registerClinicalReports() {
 		registerConsultationReport();
 		registerLabOrderReport();
@@ -303,20 +257,15 @@
 		);
 	}
 
-	function registerLegacyReports() {
-		LEGACY_EDGE_REPORTS.forEach(registerLegacyReport);
-	}
-
 	function register() {
 		if (!adapter()?.runtimeReports?.()) return false;
 		registerStockExpiry();
 		registerPlannedTreatment();
 		registerClinicalReports();
 		registerMasterReports();
-		registerLegacyReports();
 		return true;
 	}
 
-	global.VetEdgeReportProviderRegistry = Object.freeze({ register, legacyReports: LEGACY_EDGE_REPORTS });
+	global.VetEdgeReportProviderRegistry = Object.freeze({ register });
 	if (!register()) global.addEventListener?.("edgesuite:report-runtime-ready", register, { once: true });
 })(window);

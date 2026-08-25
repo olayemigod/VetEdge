@@ -1,154 +1,227 @@
-# VCN / NADIS Regulatory Reporting Plan
+# VCN / NADIS Regulatory Reporting Implementation
 
 ## Business goal
 
 Allow veterinary practices using VetEdge to prepare Veterinary Council / NADIS regulatory submissions from operational data already captured during normal clinic work, with minimal duplicate entry and without creating a separate reporting architecture.
 
-The authoritative source workbooks previously supplied are:
+## Authoritative workbooks
+
+The two workbooks supplied directly for implementation have now been inspected and mapped:
 
 - `Nadis Template Vaccination Report 1.xlsx`
+  - SHA-256: `458e7af8b47c491f5245f5fc6cc8bbe754bbc23ab63829e88bb2083b813c05ba`
+  - official sheet: `Vaccinations`
+  - visible title: `Monthly Vaccination Report`
+  - data begins on row 5.
 - `NadisTemplate Disease Outbreak Report.xlsx`
+  - SHA-256: `8ea90b4b5c30a66029186905e9aab846bf897f40121d5ec7d7d69acf2964db94`
+  - official sheets: `Outbreaks`, `Animals affected`, `Bases of Diagnosis`, `Disease Control Measures`, `Locations`
+  - data begins on row 5.
 
-Exact workbook headers, merged cells, prescribed labels, ordering and submission formatting must be verified against those source files before a generated workbook is described as submission-ready.
+Exact visible headings, field-ID rows, sheet names, date hints and controlled values are captured in `vetedge/services/nadis_templates.py`. The original binary workbooks remain the acceptance reference for final Excel QA.
 
 ## Product layer
 
-- VetEdge owns veterinary source data, regulatory mappings and report-specific validation.
-- EdgeSuite UI provides the shared report shell and export interaction.
-- CoreEdge may later provide scheduled delivery/usage/notification services, but regulatory data truth remains in VetEdge.
+- VetEdge owns veterinary source data, regulatory mappings, validation and official workbook generation.
+- EdgeSuite UI owns the Regulatory Reporting workbench.
+- CoreEdge may later provide scheduled delivery, notification and platform governance services, but regulatory data truth remains in VetEdge.
+- Regulatory reports are Standard-plan compliance capability; they do not require Advanced Reporting entitlement.
 
-## Phase 7A — Regulatory source adapters
+## Phase 7A — Regulatory source adapter
 
-### NADIS Vaccination Source
+Status: **implemented before authoritative mapping and retained**.
 
-Status: implemented.
+`vetedge.services.nadis_reporting.get_nadis_vaccination_source` remains the query-paginated operational source preview using Vaccination + Patient truth and the existing Vaccination Report Branch/permission contract.
 
-Source objects:
+The authoritative workbook is now mapped, so source metadata reports `template_mapping_verified = true`. Source preview still reports `submission_ready = false`; readiness is calculated separately by the dedicated validation/export service because historical records may lack regulatory mappings.
 
-- `Veterinary Vaccination Record`
-- `Veterinary Patient`
-- `Customer`
-- `Veterinary Vaccine`
-- `Branch`
-- `Company`
-- `User`
+## Phase 7B — Authoritative vaccination mapping and export
 
-Implemented source fields include vaccination record, administered date/time, Branch, Company, patient, patient name, owner, species, breed, vaccine, dose, route, batch number, batch expiry date, administering practitioner, status and next due date.
+Status: **source-implemented; installed-site/browser/file QA pending**.
 
-The source endpoint is query-paginated and reuses the established `Vaccination Report` role/Branch visibility contract. It is deliberately marked:
+### Operational mappings added
 
-- `template_mapping_verified = false`
-- `submission_ready = false`
+- `Veterinary Species.nadis_species` — exact regulatory species wording.
+- `Veterinary Vaccine.nadis_disease` — exact disease wording protected by the vaccine.
+- `Veterinary Vaccine.nadis_vaccine_type` — NADIS vaccine type.
+- `Veterinary Vaccine.nadis_source_of_vaccine` — source/manufacturer wording.
+- `Veterinary Vaccine.nadis_panvac_tested` — `Yes` / `No`.
+- `Veterinary Vaccination Record.vaccination_reason` — exact supplied-template classification:
+  - `Control/Emergency vaccination`
+  - `Preventive/Routine vaccination`.
+- Branch custom fields:
+  - `vetedge_nadis_admin_level_1`
+  - `vetedge_nadis_admin_level_2`.
 
-until the authoritative spreadsheet is re-opened and mapped field-by-field.
+Branch geography is intentionally stored per Branch rather than as one global clinic setting so multi-branch clinics cannot silently export the wrong State/LGA.
 
-### Disease surveillance / outbreak source
+### EdgeSuite vaccination workflow integration
 
-Status: audit complete; official source object not yet implemented.
+The existing Vaccination Clinical Record Editor has an explicit field allowlist. `nadis_vaccination_editor.py` idempotently extends that existing configuration so `vaccination_reason` is visible/editable in the established EdgeSuite workflow rather than requiring a second regulatory vaccination form.
 
-VetEdge currently records diagnoses through `Consultation Diagnosis` linked to `Veterinary Diagnosis` and `Veterinary Consultation`. This is sufficient for clinical diagnosis history and could support an internal disease-occurrence surveillance view.
+The field is regulatory classification only. It is safe to correct after invoice submission because it does not alter vaccine identity, price, submitted invoice, stock posting, batch allocation or administration evidence.
 
-It is **not sufficient to represent an official outbreak event** because the current model does not provide a dedicated regulatory event with confirmed outbreak geography, affected population/exposure denominator, number of cases, deaths, animals at risk, outbreak start/end, investigation/confirmation state, control measures, reporting authority/reference, or other template-specific epidemiological fields.
+### Official export behavior
 
-Therefore the NADIS Disease Outbreak Report must not infer or manufacture an outbreak solely because one or more consultations contain a diagnosis.
+`vetedge.services.nadis_vaccination_export`:
 
-## Phase 7B — Authoritative template mapping
+- includes only `Administered` vaccination records;
+- uses normal VetEdge/Frappe read permissions and established Branch report normalization;
+- fetches operational records in bounded server pages;
+- resolves Patient → Species mapping, Vaccine regulatory metadata and Branch regulatory geography;
+- blocks export when required regulatory data is missing;
+- groups individual vaccinations by the exact NADIS reporting dimensions;
+- counts the grouped animals into `Number of animals vaccinated for the species selected`;
+- generates an XLSX with the official sheet name, title, field-ID row, visible headers and data-start row;
+- keeps official workbook export separate from generic EdgeSuite XLSX/CSV/PDF presentation exports.
 
-When the two source workbooks are available again:
+Strict controlled values are enforced where the supplied workbook is complete and authoritative. The supplied geography/species lookup lists appear incomplete for Nigeria, so those lists are not used to reject otherwise valid mapped values; wording warnings are returned instead.
 
-1. Record every worksheet name, exact column label, heading/merged-cell structure, required/optional field, accepted value format and totals/signature area.
-2. Map each Vaccination template field to the Phase 7A source dataset.
-3. Classify each Disease Outbreak field as:
-   - already captured in VetEdge;
-   - derivable safely from existing records;
-   - requires explicit outbreak capture;
-   - clinic/facility setting;
-   - regulatory/export-only constant.
-4. Do not add a field to an operational DocType merely because it appears in an export template unless it genuinely belongs to that business object.
-5. Save the mapping as a documented, tested contract before implementing spreadsheet generation.
+## Phase 7C — Disease outbreak capture model
 
-## Phase 7C — Disease outbreak capture
+Status: **source-implemented; installed-site QA pending**.
 
-If template verification confirms the expected gap, introduce a small dedicated regulatory DocType, provisionally `Veterinary Disease Outbreak`, rather than overloading `Veterinary Consultation`.
+Consultation Diagnosis remains useful clinical evidence but is not treated as an outbreak event. A dedicated `Veterinary Disease Outbreak` parent record has been introduced with four child tables matching the official workbook relationship:
 
-The final fields must be driven by the NADIS template. Likely relationships—not final field definitions—include:
+1. `Veterinary Outbreak Animal Group`
+2. `Veterinary Outbreak Diagnosis Basis`
+3. `Veterinary Outbreak Control Measure`
+4. `Veterinary Outbreak Location`
 
-- reporting Branch / Company;
-- diagnosis/disease;
-- species and affected population context;
-- geographical/location context;
-- first observed / report / resolution dates;
-- case/death/at-risk counts where required;
-- linked consultations/patients or supporting clinical records;
-- investigation/confirmation/reporting state;
-- control/action notes;
-- regulator reference/submission status.
+### Parent outbreak captures
 
-No provisional field above should be treated as an approved schema until the workbook mapping is complete.
+- Reporting Branch and Company
+- Country (`Nigeria`)
+- Branch NADIS Admin Level 1 snapshot
+- Veterinary Diagnosis and NADIS disease snapshot
+- Serotype
+- New / Follow-up classification and original outbreak relationship
+- Number of new outbreaks / total outbreaks
+- Outbreak start, report, investigation and final-diagnosis dates
+- Source of infection
+- Continuing / Resolved state
+- investigation notes.
 
-## Phase 7D — Regulatory report UI
+### Child data captures
 
-Expose verified reports through the shared `EdgeReportShell` / Report Center standard.
+Animals affected:
+- Species + NADIS species snapshot
+- age group
+- sex
+- susceptible animals
+- cases
+- deaths
+- slaughtered
+- destroyed
+- vaccinated around the outbreak.
 
-Requirements:
+Bases of diagnosis:
+- Advanced laboratory test(s)
+- Basic laboratory test(s)
+- Clinical
+- Owner's claim
+- Post-mortem
+- optional supporting Veterinary Lab Order.
 
-- regulatory reports are Standard-plan operational/compliance reports;
-- date, Branch, Company and workflow-relevant smart filters;
-- server-authoritative Branch/role/DocType permission checks;
-- paginated interactive data;
-- clickable source records where appropriate;
-- visible validation state such as Ready / Missing Required Data / Template Mapping Pending;
-- no large hidden master loads.
+Disease control measures:
+- official control-measure wording
+- Applied / Not Applicable / Planned
+- optional applied date and notes.
 
-## Phase 7E — Official workbook export presets
+Locations:
+- locality name
+- epidemiological unit type
+- production system
+- latitude / longitude.
 
-Create dedicated NADIS export presets only after template mapping is verified.
+`Veterinary Diagnosis.nadis_disease` provides the reusable regulatory mapping for disease names.
 
-The export path must:
+### Safety
 
-- preserve required worksheet names and layout;
-- populate exact expected columns/cells;
-- preserve required headings and merged sections where applicable;
-- use correct date/number formats;
-- calculate required totals explicitly;
-- identify missing mandatory data before file generation;
-- reopen/validate the produced workbook in automated tests;
-- never claim submission readiness when required source fields are unavailable.
+The outbreak controller:
 
-This official-template path should be separate from ordinary generic XLSX/CSV/PDF exports so future changes to EdgeSuite presentation exports cannot silently alter the regulatory workbook format.
+- derives/snapshots regulatory master values server-side;
+- validates selected Branch against assigned Branches on save for non-global users;
+- validates follow-up relationship;
+- rejects negative population/outcome counts;
+- validates chronological outbreak/investigation dates.
+
+Until dedicated native List/Form permission-query hooks are landed and tested, the outbreak DocType itself is deliberately restricted to `System Manager` and `VetEdge Administrator`. This prevents broad native-list exposure while the regulatory workbench and export layer are completed. Broader Doctor/Nurse/Branch Manager access should be enabled only after fail-closed read hooks are added.
+
+## Phase 7D — Disease outbreak official workbook export
+
+Status: **source-implemented; installed-site/browser/file QA pending**.
+
+`vetedge.services.nadis_outbreak_export` builds all five official sheets and keeps the parent relationship explicit:
+
+- `Outbreaks.Code` = Veterinary Disease Outbreak name;
+- each child sheet `parent` = that same outbreak name.
+
+The export blocks when required regulatory data is missing, including missing disease mapping, investigation/final-diagnosis dates, affected animals, locations, required case counts or invalid controlled values.
+
+Missing Basis of Diagnosis or Disease Control Measures currently produces warnings rather than automatic fabricated values.
+
+Dates are written as true date cells with `DD/MM/YYYY` formatting.
+
+## Phase 7E — EdgeSuite Regulatory Reporting workbench
+
+Status: **source-implemented; browser QA pending**.
+
+Route: `/desk/vetedge-regulatory-reporting`
+
+The workbench provides common Branch / From Date / To Date scope and two regulatory cards:
+
+### NADIS Monthly Vaccination Report
+
+- Validate
+- readiness counts
+- blocking errors/warnings
+- Download Official Excel.
+
+### NADIS Disease Outbreak Report
+
+- Validate
+- readiness counts
+- blocking errors/warnings
+- Download Official Excel
+- Outbreak Register / New Outbreak actions for authorised outbreak administrators.
+
+The workbench is inserted idempotently into the Veterinary sidebar as `Regulatory Reporting → VCN / NADIS Reports` after standard sidebar synchronization on install/migrate.
+
+## Validation state
+
+### Implemented source contracts
+
+`vetedge/tests/test_nadis_reporting_contract.py` covers:
+
+- read-only, paginated vaccination source behavior;
+- authoritative workbook filenames/hashes and visible mapping contract;
+- correct placement of regulatory metadata on Species, Diagnosis, Vaccine, Vaccination and Branch;
+- official vaccination export validation/aggregation boundaries;
+- outbreak parent/child model shape;
+- outbreak Branch/save safeguards;
+- five official workbook sheets and parent relationships;
+- no accounting/stock mutation or permission bypass in export services.
+
+### Still required before merge/release
+
+1. `bench --site <site> migrate` on a clean Frappe v16 VetEdge site.
+2. Python compile / Ruff / focused source contracts.
+3. Installed-site DocType/controller tests for outbreak create/update/permissions.
+4. Vaccination EdgeSuite editor QA showing and saving Reason for Vaccination.
+5. Regulatory Reporting page browser QA across supported roles.
+6. Branch-scoped and multi-branch validation.
+7. Generate both workbooks from fixture data and reopen them with `openpyxl`.
+8. Compare generated workbook sheet names, rows, field IDs, headers, values, number/date formats and validation behavior against the supplied originals.
+9. Open generated files in Microsoft Excel/LibreOffice to confirm no repair/security warnings and acceptable layout.
+10. Add dedicated fail-closed native outbreak List/Form read hooks before expanding outbreak access beyond System Manager/VetEdge Administrator.
 
 ## Safety and compatibility
 
-- All regulatory source/report endpoints are read-only.
-- Do not mutate submitted Sales Invoices, Payment Entries, Stock Entries or other submitted accounting/stock documents.
-- Do not infer an outbreak from diagnoses without an explicit approved outbreak model/rule.
-- Preserve existing Vaccination and Consultation workflows.
-- Use idempotent patches if new regulatory schema is later introduced.
-- Keep Branch/company/role access server-authoritative.
-- Regulatory reporting remains available as a Standard compliance capability; Advanced Reporting entitlement should not be required for mandatory reports.
-
-## Tests required
-
-### Automated
-
-- Branch-scoped zero-assignment fail closed.
-- Cross-Branch report/source access denied.
-- Vaccination source pagination and 100-row maximum page.
-- Patient/species/breed enrichment only for visible source rows.
-- Owner/customer filter alias parity.
-- Read-only/no-mutation contract.
-- Exact official workbook mapping tests once templates are available.
-- Generated workbook reopen/integrity tests once official export is implemented.
-
-### Manual browser/file QA
-
-- Date/Branch/Company filters.
-- Practitioner/Vaccine/Species filtering after UI exposure.
-- Multi-branch user switching.
-- Standard-plan visibility.
-- Pagination and low-data network behavior.
-- Official workbook comparison cell-by-cell against the supplied template after Phase 7B.
-
-## Current blockers / dependencies
-
-The exact NADIS source workbooks are not currently retrievable from File Library in this session, and reliable public copies were not found during the current verification pass. Phase 7A can proceed from existing VetEdge source truth; Phase 7B official template mapping remains blocked until the authoritative files can be opened again.
+- No submitted Sales Invoice, Payment Entry, Stock Entry or other submitted ERPNext accounting/stock document is mutated.
+- Vaccination regulatory metadata does not replace ERPNext billing or stock truth.
+- An outbreak is never inferred merely from one or more Consultation Diagnosis rows.
+- Existing Vaccination and Consultation workflows remain authoritative.
+- New fields are optional for existing data; missing regulatory data is surfaced by export validation rather than silently backfilled with guessed values.
+- Branch/company/role access remains server-authoritative.
+- The two NADIS reports remain Standard compliance capability.

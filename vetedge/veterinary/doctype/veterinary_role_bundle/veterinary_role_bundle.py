@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from frappe.model.document import Document
 
-from vetedge.services.role_bundle_security import validate_role_bundle_document
+from vetedge.services.permissions import validate_role_bundle
 
 
 class VeterinaryRoleBundle(Document):
 	def validate(self) -> None:
-		validate_role_bundle_document(self)
+		validate_role_bundle(self)

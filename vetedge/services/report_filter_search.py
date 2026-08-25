@@ -8,7 +8,6 @@ from vetedge.services.permissions import (
     ROLE_SYSTEM_MANAGER,
     ROLE_VETEDGE_ADMINISTRATOR,
     get_assigned_branches,
-    get_system_users,
     get_vaccination_staff_users,
     get_veterinary_doctor_users,
     user_has_global_branch_access,
@@ -27,21 +26,6 @@ REPORT_FIELDS = {
     "Vaccination Report": {"branch", "patient", "customer", "practitioner", "vaccine"},
     "Patient Register": {"branch", "customer", "species", "breed"},
     "Owner Register": {"branch", "customer"},
-    "Practitioner Performance Report": {"branch", "practitioner"},
-    "Branch Performance Report": {"branch"},
-    "Revenue Summary": {"branch", "customer", "cost_center"},
-    "Unpaid Invoice Report": {"branch", "customer"},
-    "Boarding Report": {"branch", "patient", "owner", "kennel"},
-    "Kennel Availability Report": {"branch", "kennel"},
-    "Grooming Report": {"branch", "patient", "owner", "assigned_staff"},
-    "Active Hospitalisations": {"branch", "patient", "owner", "attending_veterinarian", "care_location"},
-    "Hospitalisation Charge Summary": {"branch", "patient", "owner"},
-    "Care Location Occupancy": {"branch"},
-    "Hospitalisation Discharge Watch": {"branch", "attending_veterinarian"},
-    "Pending Hospitalisation Actions": {"branch", "attending_veterinarian"},
-    "Dispensary Activity Report": {"branch", "item", "warehouse"},
-    "Stock Usage Summary": {"branch", "item", "warehouse"},
-    "Stock Expiry Status": {"branch", "company", "warehouse", "item_group"},
     "Service Revenue Breakdown": {"branch", "practitioner", "item"},
 }
 
@@ -51,15 +35,6 @@ MASTER_FIELDS = {
     "vaccine": ("Veterinary Vaccine", {"disabled": 0}),
     "species": ("Veterinary Species", {"disabled": 0}),
     "breed": ("Veterinary Breed", {"disabled": 0}),
-}
-
-GENERIC_LINK_FIELDS = {
-    "kennel": "Kennel",
-    "care_location": "Veterinary Care Location",
-    "warehouse": "Warehouse",
-    "cost_center": "Cost Center",
-    "company": "Company",
-    "item_group": "Item Group",
 }
 
 
@@ -238,17 +213,13 @@ def _branch_allowed_users(users: list[list | tuple], branch: str) -> list[list |
     return [row for row in users if cstr(row[0]).strip() in allowed]
 
 
-def _search_user_rows(searcher, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
+def _search_practitioner(report_name: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
+    searcher = get_vaccination_staff_users if report_name == "Vaccination Report" else get_veterinary_doctor_users
     candidate_limit = min(MAX_PAGE_LENGTH * 3, CANDIDATE_WINDOW)
     rows = searcher("User", txt, "name", 0, candidate_limit, {}) or []
     rows = _branch_allowed_users(rows, cstr(normalized.get("branch") or "").strip())
     rows = rows[start : start + page_length]
     return [_option(row[0], row[1] if len(row) > 1 else row[0]) for row in rows]
-
-
-def _search_practitioner(report_name: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
-    searcher = get_vaccination_staff_users if report_name == "Vaccination Report" else get_veterinary_doctor_users
-    return _search_user_rows(searcher, txt, start, page_length, normalized)
 
 
 def _search_master(field: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
@@ -287,39 +258,6 @@ def _search_master(field: str, txt: str, start: int, page_length: int, normalize
     return [_option(row.name, row.get("breed_name") or row.name) for row in rows]
 
 
-def _search_generic_link(field: str, txt: str, start: int, page_length: int, normalized: dict) -> list[dict]:
-    doctype = GENERIC_LINK_FIELDS[field]
-    if not frappe.db.exists("DocType", doctype) or not frappe.has_permission(doctype, "read"):
-        return []
-
-    meta = frappe.get_meta(doctype)
-    filters: dict = {}
-    if meta.has_field("disabled"):
-        filters["disabled"] = 0
-    if field in {"kennel", "care_location"} and normalized.get("branch") and meta.has_field("branch"):
-        filters["branch"] = normalized.get("branch")
-
-    title_field = meta.title_field if meta.title_field and meta.has_field(meta.title_field) else None
-    fields = ["name"] + ([title_field] if title_field else [])
-    or_filters = None
-    if txt:
-        pattern = f"%{txt}%"
-        or_filters = [[doctype, "name", "like", pattern]]
-        if title_field:
-            or_filters.append([doctype, title_field, "like", pattern])
-
-    rows = frappe.get_list(
-        doctype,
-        fields=fields,
-        filters=filters,
-        or_filters=or_filters,
-        order_by=f"{title_field or 'name'} asc",
-        start=start,
-        page_length=page_length,
-    )
-    return [_option(row.get("name"), row.get(title_field) if title_field else row.get("name")) for row in rows]
-
-
 @frappe.whitelist()
 @frappe.read_only()
 def search_report_filter_options(
@@ -347,14 +285,10 @@ def search_report_filter_options(
         return _search_branch(txt, start, page_length)
     if field == "patient":
         return _search_patient(txt, start, page_length, normalized)
-    if field in {"customer", "owner"}:
+    if field == "customer":
         return _search_customer(txt, start, page_length, normalized)
-    if field in {"practitioner", "attending_veterinarian"}:
-        return _search_user_rows(get_veterinary_doctor_users, txt, start, page_length, normalized)
-    if field == "assigned_staff":
-        return _search_user_rows(get_system_users, txt, start, page_length, normalized)
+    if field == "practitioner":
+        return _search_practitioner(report_name, txt, start, page_length, normalized)
     if field in MASTER_FIELDS:
         return _search_master(field, txt, start, page_length, normalized)
-    if field in GENERIC_LINK_FIELDS:
-        return _search_generic_link(field, txt, start, page_length, normalized)
     return []
