@@ -278,6 +278,26 @@ def _validated_values(values: str | dict) -> dict[str, Any]:
 	}
 
 
+def _rename_care_location_if_needed(doc, requested_name: str):
+	requested_name = cstr(requested_name).strip()
+	if not requested_name or requested_name == doc.name:
+		return doc
+	if frappe.db.exists(DOCTYPE, requested_name):
+		frappe.throw(
+			_("Another Care Location named {0} already exists.").format(frappe.bold(requested_name)),
+			frappe.DuplicateEntryError,
+		)
+	new_name = frappe.rename_doc(
+		DOCTYPE,
+		doc.name,
+		requested_name,
+		force=False,
+		merge=False,
+		show_alert=False,
+	)
+	return frappe.get_doc(DOCTYPE, new_name)
+
+
 @frappe.whitelist()
 def save_care_location_document(
 	values: str | dict,
@@ -298,6 +318,8 @@ def save_care_location_document(
 		_assert_branch_access(doc.get("branch"))
 		if modified and cstr(doc.modified) != cstr(modified):
 			frappe.throw(_("This Care Location changed after you opened it. Reload before saving."), frappe.TimestampMismatchError)
+		doc = _rename_care_location_if_needed(doc, payload["location_name"])
+		doc.check_permission("write")
 	else:
 		_require_permission("create")
 		doc = frappe.new_doc(DOCTYPE)
