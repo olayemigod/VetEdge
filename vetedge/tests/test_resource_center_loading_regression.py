@@ -49,6 +49,16 @@ def test_resource_center_source_replaces_legacy_dom_bridges():
     assert "MutationObserver" not in bundle
 
 
+def test_resource_selector_uses_edgesuite_dropdown_for_mobile_viewport_safety():
+    component = read(APP / "public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+
+    assert '<select v-model="resource"' not in component
+    assert '<EdgeDropdown\n\t\t\t\t\t\t\tv-model="resource"' in component
+    assert 'label="Resource"' in component
+    assert ':options="resourceOptions"' in component
+    assert '@change="changeResource"' in component
+
+
 def test_resource_center_repeat_navigation_syncs_clinical_filters_and_deep_links():
     bundle = read(APP / "public/js/vetedge_resource_center.bundle.js")
 
