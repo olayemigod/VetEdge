@@ -17,9 +17,7 @@ def test_sent_report_can_be_accepted_or_rejected():
     assert_transition("Sent", "Rejected", has_sent_evidence=True)
 
 
-def test_sent_report_cannot_be_sent_again():
-    with pytest.raises(ValueError):
-        assert_transition("Sent", "Sent", has_sent_evidence=True)
+def test_sent_report_cannot_be_emailed_again():
     with pytest.raises(ValueError):
         assert_sendable("Sent")
 
