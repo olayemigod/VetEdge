@@ -59,6 +59,7 @@ after_install = "vetedge.install.after_install"
 after_migrate = "vetedge.install.after_migrate"
 boot_session = [
 	"vetedge.coreedge_adapter.filter_bootinfo_for_coreedge_platform",
+	"vetedge.platform_client.extend_bootinfo_with_remote_platform",
 	"vetedge.ui_identity.extend_bootinfo",
 ]
 
@@ -256,6 +257,7 @@ scheduler_events = {
 	"cron": {
 		"*/5 * * * *": [
 			"vetedge.services.appointment_notifications.run_appointment_notification_checks",
+			"vetedge.platform_client.refresh_remote_platform_heartbeat",
 		],
 	},
 	"hourly": [

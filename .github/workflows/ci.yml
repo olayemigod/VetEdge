@@ -36,6 +36,9 @@ jobs:
       - name: Ruff
         run: |
           ruff check \
+            vetedge/platform_client.py \
+            vetedge/services/platform_access.py \
+            vetedge/tests/test_remote_platform_client.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_resource_center_loading_regression.py \
@@ -229,6 +232,14 @@ jobs:
       - name: Run standalone adapter tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_coreedge_adapter
+
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_remote_platform_client
+
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.services.test_platform_access
 
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
