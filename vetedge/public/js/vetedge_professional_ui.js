@@ -80,6 +80,46 @@
 		return window.EdgeSuiteUI || window.EdgeUI || null;
 	}
 
+	function installCanonicalRuntimeRequireBridge() {
+		const frappeRuntime = window.frappe;
+		const currentRequire = frappeRuntime?.require;
+		if (typeof currentRequire !== "function") return false;
+		if (currentRequire.__vetedgeCanonicalEdgeSuiteBridge) return true;
+
+		const originalRequire = currentRequire.bind(frappeRuntime);
+		const wrappedRequire = function (items, callback) {
+			const requested = typeof items === "string" ? [items] : Array.isArray(items) ? [...items] : null;
+			if (!requested || !requested.includes("edgeui.bundle.js")) {
+				return originalRequire(items, callback);
+			}
+
+			const remaining = requested.filter((item) => item !== "edgeui.bundle.js");
+			if (!runtime()?.createEdgeApp && !remaining.includes("edgesuite_ui.bundle.js")) {
+				remaining.unshift("edgesuite_ui.bundle.js");
+			}
+
+			if (!remaining.length) {
+				return Promise.resolve().then(() => callback?.());
+			}
+
+			const nextItems = typeof items === "string" && remaining.length === 1 ? remaining[0] : remaining;
+			return originalRequire(nextItems, callback);
+		};
+
+		Object.defineProperty(wrappedRequire, "__vetedgeCanonicalEdgeSuiteBridge", {
+			value: true,
+			configurable: false,
+			enumerable: false,
+		});
+		Object.defineProperty(wrappedRequire, "__vetedgeOriginalRequire", {
+			value: currentRequire,
+			configurable: false,
+			enumerable: false,
+		});
+		frappeRuntime.require = wrappedRequire;
+		return true;
+	}
+
 	function versionSupportsProfessionalUI(version) {
 		const parts = String(version || "0.0.0").split(".").map((value) => Number.parseInt(value, 10) || 0);
 		return parts[0] > 0 || (parts[0] === 0 && parts[1] >= 2);
@@ -422,6 +462,7 @@
 
 	function install() {
 		state.lastError = null;
+		installCanonicalRuntimeRequireBridge();
 		injectStyles();
 		const edgeUI = runtime();
 		if (!edgeUI) {
@@ -494,9 +535,12 @@
 		openRoute,
 	});
 
+	installCanonicalRuntimeRequireBridge();
 	bindLifecycle();
-	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", () => scheduleInstall("asset-ready"));
+	if (runtime()?.createEdgeApp) {
+		scheduleInstall("asset-ready");
+	} else if (window.frappe?.require) {
+		window.frappe.require("edgesuite_ui.bundle.js", () => scheduleInstall("asset-ready"));
 	} else if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", () => scheduleInstall("dom-ready"), { once: true });
 	} else {
