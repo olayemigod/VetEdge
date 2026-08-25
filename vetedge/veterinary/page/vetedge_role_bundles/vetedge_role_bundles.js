@@ -3,10 +3,12 @@ frappe.pages["vetedge-role-bundles"].on_page_load = function (wrapper) {
 };
 frappe.pages["vetedge-role-bundles"].on_page_show = function () {
 	const target = "/desk/vetedge-administration?resource=role-bundles";
-	if (window.history && typeof frappe?.router?.route === "function") {
-		window.history.replaceState(window.history.state, "", target);
-		Promise.resolve(frappe.router.route()).catch(() => window.location.replace(target));
-		return;
-	}
-	window.location.replace(target);
+	window.setTimeout(() => {
+		if (window.history && typeof frappe?.router?.route === "function") {
+			window.history.replaceState(window.history.state, "", target);
+			Promise.resolve(frappe.router.route()).catch(() => window.location.replace(target));
+			return;
+		}
+		window.location.replace(target);
+	}, 0);
 };
