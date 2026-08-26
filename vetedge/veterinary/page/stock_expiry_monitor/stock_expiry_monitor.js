@@ -25,10 +25,6 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visit_id = wrapper.current_visit_id;
 
-	// Reuse the mounted monitor when returning through Desk navigation. This is
-	// especially important because the current cold load resolves warehouse and
-	// item-group filter metadata. Reusing the Vue instance prevents those lists
-	// from being downloaded again on every page visit.
 	if (wrapper.vue_app && wrapper.vue_view) {
 		const now = Date.now();
 		const branchContext = getVetEdgeStockBranchContext();
@@ -49,8 +45,6 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 		return;
 	}
 
-	// Backward-compatible cleanup for an older cached page instance that did not
-	// retain the mounted component proxy.
 	if (wrapper.vue_app) {
 		try {
 			wrapper.vue_app.unmount();
@@ -91,15 +85,9 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 
 	const requiredComponents = [
 		'EdgeAppShell',
-		'EdgeIcon',
-		'EdgePageLayout',
-		'EdgePageHeader',
-		'EdgeFilterBar',
-		'EdgeStatCard',
-		'EdgeStatusBadge',
-		'EdgeLoadingState',
-		'EdgeEmptyState',
-		'EdgeErrorState',
+		'EdgeReportShell',
+		'EdgeLinkField',
+		'EdgeDropdown',
 		'EdgeNotificationBell',
 		'EdgeNotificationDrawer'
 	];
@@ -134,9 +122,6 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			return;
 		}
 
-		// Keep both runtime globals aligned before the product bundle evaluates.
-		// Older VetEdge consumers still resolve components from window.EdgeUI,
-		// while the standalone shared runtime is canonical on window.EdgeSuiteUI.
 		if (!window.EdgeSuiteUI) window.EdgeSuiteUI = runtime;
 		if (!window.EdgeUI) window.EdgeUI = runtime;
 
@@ -146,7 +131,7 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 			if (!professionalUI?.installed) {
 				showLoadFailure(
 					professionalUI?.message ||
-					__('VetEdge requires EdgeSuite UI 0.2 or newer for the professional product shell.')
+					__('VetEdge requires the current EdgeSuite UI runtime for the professional product shell.')
 				);
 				return;
 			}
@@ -166,19 +151,14 @@ frappe.pages['stock-expiry-monitor'].on_page_show = function(wrapper) {
 						'<div class="vetedge-expiry-monitor-root" data-edge-product="vetedge"></div>'
 					).appendTo(page.body);
 
-					wrapper.vue_app = runtime.createEdgeApp(
-						window.VetedgeStockExpiryMonitor
-					);
-
+					wrapper.vue_app = runtime.createEdgeApp(window.VetedgeStockExpiryMonitor);
 					wrapper.vue_view = wrapper.vue_app.mount(root[0]);
 					wrapper.vue_last_refresh_at = Date.now();
 					wrapper.vue_branch_context = getVetEdgeStockBranchContext();
 				} catch (error) {
 					console.error('Error mounting Stock Expiry Monitor:', error);
 					showLoadFailure(
-						__('Error mounting Stock Expiry Monitor: {0}', [
-							error.message || String(error)
-						])
+						__('Error mounting Stock Expiry Monitor: {0}', [error.message || String(error)])
 					);
 				}
 			});

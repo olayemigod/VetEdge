@@ -1,121 +1,123 @@
-const VETEDGE_REPORT_CENTER_STYLE_ID = 'vetedge-report-center-style';
+const VETEDGE_REPORT_CENTER_STYLE_ID = "vetedge-report-center-style";
+const VETEDGE_REPORT_PAGE_LENGTH = 50;
+const CAPABILITIES_API = "vetedge.services.reporting_capabilities.get_shell_capabilities";
+const SMART_FILTER_API = "vetedge.services.report_filter_search.search_report_filter_options";
+const SAVED_VIEWS_GET_API = "vetedge.services.report_saved_views.get_saved_report_views";
+const SAVED_VIEWS_APPLY_API = "vetedge.services.report_saved_views.apply_saved_report_view";
+const SAVED_VIEWS_SAVE_API = "vetedge.services.report_saved_views.save_report_view";
+const SAVED_VIEWS_RENAME_API = "vetedge.services.report_saved_views.rename_saved_report_view";
+const SAVED_VIEWS_DELETE_API = "vetedge.services.report_saved_views.delete_saved_report_view";
+const REPORT_COMPARISON_API = "vetedge.services.report_comparison.get_report_comparison";
+const REPORT_GROUPING_API = "vetedge.services.report_grouping.get_report_grouping";
+const REPORT_FILTER_KEYS = [
+	"branch", "from_date", "to_date", "date_preset", "customer", "patient", "practitioner",
+	"consultation_type", "status", "payment_status", "service_category", "item", "vaccine",
+	"due_status", "species", "breed", "registration_status", "outstanding_only",
+];
 
 function ensureVetEdgeReportCenterStyles() {
 	if (document.getElementById(VETEDGE_REPORT_CENTER_STYLE_ID)) return;
-	const style = document.createElement('style');
+	const style = document.createElement("style");
 	style.id = VETEDGE_REPORT_CENTER_STYLE_ID;
 	style.textContent = `
 		.vetedge-report-center-root,.vetedge-report-center-root .edge-app-shell,.vetedge-report-center-root .edge-shell-body,.vetedge-report-center-root .edge-shell-main,.vetedge-report-center-root .edge-page-layout{width:100%;max-width:none;min-width:0}
-		.vetedge-report-center-root .edge-page-layout__content{padding:0 28px 32px}
-		.vetedge-report-center-root .edge-page-layout__header,.vetedge-report-center-root .edge-page-layout__filters{padding-left:28px;padding-right:28px}
 		.vetedge-report-center-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(12rem,1fr));gap:14px;width:100%;align-items:end}
-		.vetedge-report-center-filter-grid--service{grid-template-columns:repeat(3,minmax(11rem,1fr))}
-		.vetedge-report-center-content{display:grid;gap:22px;padding-top:20px}
-		.vetedge-report-center-section{padding:20px;border:1px solid var(--edge-color-border);border-radius:12px;background:var(--edge-color-surface);box-shadow:var(--edge-shadow-sm,0 8px 24px rgb(18 32 51 / 6%));min-width:0}
-		.vetedge-report-center-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:16px}
-		.vetedge-report-center-heading span{color:var(--edge-color-brand-600);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-		.vetedge-report-center-heading h2{margin:3px 0 0;color:var(--edge-color-ink-950);font-size:1.05rem}
-		.vetedge-report-center-heading p{margin:.3rem 0 0;color:var(--edge-color-ink-500)}
-		.vetedge-report-center-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:14px}
-		.vetedge-report-center-summary .edge-stat-card{border-top:3px solid var(--edge-color-brand-600)}
+		.vetedge-report-center-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+		.vetedge-report-center-saved-view,.vetedge-report-center-group-by{min-width:12rem;max-width:18rem}
+		.vetedge-report-provider-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:var(--edge-color-surface-muted);color:var(--edge-color-ink-500);font-size:.7rem;font-weight:600}
 		.vetedge-report-center-chart{min-height:280px}
-		.vetedge-report-center-actions{display:flex;gap:8px;flex-wrap:wrap}
+		.vetedge-report-center-insights{display:grid;gap:1rem}
 		:root[data-edge-palette] .vetedge-report-center-root .edge-shell-main{background:linear-gradient(180deg,var(--edge-color-brand-50) 0,var(--edge-color-surface-soft) 180px,var(--edge-color-surface-muted) 420px)!important}
 		:root[data-edge-palette] .graph-svg-tip,:root[data-edge-appearance] .graph-svg-tip{background:var(--edge-color-surface)!important;border:1px solid var(--edge-color-border)!important;color:var(--edge-color-ink-950)!important}
-		:root[data-edge-palette] .graph-svg-tip *,:root[data-edge-appearance] .graph-svg-tip *{color:var(--edge-color-ink-950)!important;fill:var(--edge-color-ink-950)!important;opacity:1!important}
-		@media(max-width:900px){.vetedge-report-center-filter-grid,.vetedge-report-center-filter-grid--service{grid-template-columns:repeat(2,minmax(10rem,1fr))}.vetedge-report-center-root .edge-page-layout__content,.vetedge-report-center-root .edge-page-layout__header,.vetedge-report-center-root .edge-page-layout__filters{padding-left:18px;padding-right:18px}}
-		@media(max-width:576px){.vetedge-report-center-filter-grid,.vetedge-report-center-filter-grid--service{grid-template-columns:1fr}.vetedge-report-center-root .edge-page-layout__content,.vetedge-report-center-root .edge-page-layout__header,.vetedge-report-center-root .edge-page-layout__filters{padding-left:12px;padding-right:12px}.vetedge-report-center-actions,.vetedge-report-center-actions .edge-button{width:100%}}
+		@media(max-width:900px){.vetedge-report-center-filter-grid{grid-template-columns:repeat(2,minmax(10rem,1fr))}}
+		@media(max-width:576px){.vetedge-report-center-filter-grid{grid-template-columns:1fr}.vetedge-report-center-actions,.vetedge-report-center-actions .edge-button,.vetedge-report-center-saved-view,.vetedge-report-center-group-by{width:100%;max-width:none}}
 	`;
 	document.head.appendChild(style);
 }
 
-function vetedgeReportCall(method, args = {}) {
-	return new Promise((resolve, reject) => {
-		frappe.call({
-			method,
-			args,
-			callback: (response) => resolve(response.message || {}),
-			error: reject,
-		});
-	});
-}
-
 function reportCenterProfile() {
 	const boot = frappe.boot || {};
-	const user = frappe.session?.user || '';
+	const user = frappe.session?.user || "";
 	const info = boot.user_info?.[user] || {};
 	return {
-		tenantName: boot.sysdefaults?.company || '',
-		branchName: frappe.route_options?.branch || frappe.defaults?.get_user_default?.('branch') || 'All Branches',
+		tenantName: boot.sysdefaults?.company || "",
+		branchName: frappe.route_options?.branch || frappe.defaults?.get_user_default?.("branch") || "All Branches",
 		userName: info.fullname || info.full_name || user,
 	};
 }
 
 function reportCenterRoute(route) {
-	const target = String(route || '').trim();
+	const target = String(route || "").trim();
 	if (!target) return false;
 	if (window.VetEdgeNavigationRecovery?.navigate?.(target) === true) return true;
 	if (window.VetEdgeProfessionalUI?.openRoute?.(target) === true) return true;
 	try {
 		const url = new URL(target, window.location.origin);
-		if (url.origin === window.location.origin && /^\/desk(?:\/|$)/.test(url.pathname) && typeof frappe.set_route === 'function') {
+		if (url.origin === window.location.origin && /^\/desk(?:\/|$)/.test(url.pathname) && typeof frappe.set_route === "function") {
 			frappe.route_options = {};
 			for (const [key, value] of url.searchParams) frappe.route_options[key] = value;
-			const parts = url.pathname.replace(/^\/desk(?:\/|$)/, '').split('/').filter(Boolean).map(decodeURIComponent);
+			const parts = url.pathname.replace(/^\/desk(?:\/|$)/, "").split("/").filter(Boolean).map(decodeURIComponent);
 			if (parts.length) {
 				frappe.set_route(...parts);
 				return true;
 			}
 		}
 	} catch (_error) {
-		// Fall through to normal browser navigation.
+		// Fall back to normal browser navigation.
 	}
 	window.location.assign(target);
 	return true;
 }
 
-function reportCenterParams() {
-	const params = new URLSearchParams(window.location.search || '');
-	const routeOptions = frappe.route_options || {};
-	const get = (key, fallback = '') => params.get(key) || routeOptions[key] || fallback;
-	return {
-		report: get('report'),
-		source: get('source', '/desk/vetedge-executive-dashboard'),
-		branch: get('branch'),
-		from_date: get('from_date'),
-		to_date: get('to_date'),
-		date_preset: get('date_preset'),
-		customer: get('customer'),
-		practitioner: get('practitioner'),
-		service_category: get('service_category'),
-		item: get('item'),
-	};
+function normalizeReportColumnKeys(value) {
+	const values = Array.isArray(value) ? value : String(value || "").split(",");
+	return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function parseReportColumn(column, index) {
-	if (typeof column === 'string') {
-		const [label, fieldname, fieldtype, width] = column.split(':');
-		return {
-			label: label || `Column ${index + 1}`,
-			fieldname: fieldname || `column_${index + 1}`,
-			fieldtype: fieldtype || 'Data',
-			width: Number(width || 0) || undefined,
-		};
+function normalizeReportSort(value = null) {
+	if (!value) return null;
+	let source = value;
+	if (typeof source === "string") {
+		const [field, direction] = source.split(":");
+		source = { field, direction };
 	}
-	return {
-		...column,
-		label: column?.label || column?.fieldname || `Column ${index + 1}`,
-		fieldname: column?.fieldname || column?.key || `column_${index + 1}`,
-		fieldtype: column?.fieldtype || column?.type || 'Data',
-	};
+	if (!source || typeof source !== "object") return null;
+	const field = String(source.field || source.fieldname || source.key || "").trim();
+	const direction = String(source.direction || source.order || "").trim().toLowerCase();
+	if (!field || !["asc", "desc"].includes(direction)) return null;
+	return { field, direction };
 }
 
-frappe.pages['vetedge-report-center'].on_page_load = function(wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: __('Veterinary Quick Report'), single_column: true });
-	wrapper.page = page;
+function reportCenterParams() {
+	const params = new URLSearchParams(window.location.search || "");
+	const routeOptions = frappe.route_options || {};
+	const get = (key, fallback = "") => params.get(key) || routeOptions[key] || fallback;
+	const result = {
+		report: get("report"),
+		source: get("source", "/desk/vetedge-executive-dashboard"),
+		columns: get("columns"),
+		sort: get("sort"),
+	};
+	for (const key of REPORT_FILTER_KEYS) result[key] = get(key);
+	return result;
+}
+
+function loadProviderAssets(callback) {
+	frappe.require("/assets/vetedge/js/vetedge_report_provider_adapter.js", () => {
+		frappe.require("/assets/vetedge/js/vetedge_report_provider_registry.js", () => {
+			frappe.require("/assets/vetedge/js/vetedge_report_filter_ui.js", () => {
+				window.VetEdgeReportProviderRegistry?.register?.();
+				callback();
+			});
+		});
+	});
+}
+
+frappe.pages["vetedge-report-center"].on_page_load = function (wrapper) {
+	wrapper.page = frappe.ui.make_app_page({ parent: wrapper, title: __("Veterinary Quick Report"), single_column: true });
 };
 
-frappe.pages['vetedge-report-center'].on_page_show = function(wrapper) {
+frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 	const page = wrapper.page;
 	wrapper.current_visit_id = (wrapper.current_visit_id || 0) + 1;
 	const visitId = wrapper.current_visit_id;
@@ -123,215 +125,615 @@ frappe.pages['vetedge-report-center'].on_page_show = function(wrapper) {
 	wrapper.vue_app = null;
 	$(page.body).empty();
 	ensureVetEdgeReportCenterStyles();
-
-	const $loading = $('<div class="p-6 text-center text-muted"></div>').text(__('Loading EdgeSuite report...')).appendTo(page.body);
-	const showFailure = (message) => {
+	const $loading = $("<div class='p-6 text-center text-muted'></div>").text(__("Loading EdgeSuite report...")).appendTo(page.body);
+	const fail = (message) => {
 		$loading.remove();
-		$('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Quick report failed to load.')).appendTo(page.body);
+		$("<div class='alert alert-danger p-6 text-center'></div>").text(message || __("Quick report failed to load.")).appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require("edgeui.bundle.js", () => loadProviderAssets(() => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
-		const required = ['EdgeAppShell','EdgePageLayout','EdgePageHeader','EdgeFilterBar','EdgeLinkField','EdgeDropdown','EdgeInput','EdgeDataTable','EdgeDashboardLayout','EdgeStatCard','EdgeLoadingState','EdgeErrorState','EdgeEmptyState'];
+		const required = ["EdgeAppShell", "EdgeReportShell", "EdgeLinkField", "EdgeDropdown", "EdgeInput"];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
-		if (!runtime?.createEdgeApp || !runtime?.Vue?.h || missing.length) {
-			showFailure(missing.length ? __('Quick Reports require EdgeSuite UI 0.6.3 or newer. Missing: {0}', [missing.join(', ')]) : __('The EdgeSuite UI runtime is unavailable.'));
+		if (!runtime?.createEdgeApp || !runtime?.Vue?.h || missing.length || !window.VetEdgeReportFilterUI) {
+			fail(__("Quick Reports require the current EdgeSuite UI and VetEdge report-filter runtime. Missing: {0}", [missing.join(", ")]));
 			return;
 		}
 
-		const mountReport = () => {
-			if (wrapper.current_visit_id !== visitId) return;
-			const professional = window.VetEdgeProfessionalUI?.install?.();
-			window.VetEdgeUIBridge?.install?.();
-			window.VetEdgeNavigationRecovery?.install?.();
-			if (!professional?.installed) {
-				showFailure(professional?.message || __('The VetEdge professional shell is unavailable.'));
-				return;
-			}
+		window.VetEdgeProfessionalUI?.install?.();
+		window.VetEdgeUIBridge?.install?.();
+		window.VetEdgeNavigationRecovery?.install?.();
+		const h = runtime.Vue.h;
+		const nextTick = runtime.Vue.nextTick;
+		const { EdgeAppShell, EdgeReportShell, EdgeLinkField, EdgeDropdown, EdgeInput } = runtime.components;
+		const EdgeReportComparisonPanel = runtime.components.EdgeReportComparisonPanel || null;
+		const EdgeReportGroupingPanel = runtime.components.EdgeReportGroupingPanel || null;
+		const initial = reportCenterParams();
+		const profile = reportCenterProfile();
 
-			const h = runtime.Vue.h;
-			const nextTick = runtime.Vue.nextTick;
-			const { EdgeAppShell, EdgePageLayout, EdgePageHeader, EdgeFilterBar, EdgeLinkField, EdgeDropdown, EdgeInput, EdgeDataTable, EdgeDashboardLayout, EdgeStatCard, EdgeLoadingState, EdgeErrorState, EdgeEmptyState } = runtime.components;
-			const initial = reportCenterParams();
-			const profile = reportCenterProfile();
-			const serviceCategories = ['', 'Consultation Service', 'Treatment', 'Registration', 'Vaccination', 'Lab', 'Grooming', 'Boarding', 'Hospitalisation', 'Dispensary / Pharmacy', 'General / Other'].map((value) => ({ value, label: value || __('All Service Categories') }));
-
-			const component = {
-				name: 'VetEdgeReportCenter',
-				data() {
+		const component = {
+			name: "VetEdgeReportCenter",
+			data() {
+				const filters = {};
+				for (const key of REPORT_FILTER_KEYS) filters[key] = initial[key] || "";
+				return {
+					reportName: initial.report,
+					sourceRoute: initial.source,
+					filters,
+					viewState: {
+						visible_columns: normalizeReportColumnKeys(initial.columns),
+						sort: normalizeReportSort(initial.sort),
+					},
+					savedViews: [],
+					selectedSavedViewId: "",
+					savedViewsLoading: false,
+					loading: false,
+					error: "",
+					provider: null,
+					pageStart: 0,
+					pageLength: VETEDGE_REPORT_PAGE_LENGTH,
+					result: { columns: [], rows: [], summary: [], chart: null, total: 0, start: 0, page_length: VETEDGE_REPORT_PAGE_LENGTH, has_previous: false, has_next: false, metadata: {} },
+					chartInstance: null,
+					exportBusy: false,
+					printBusy: false,
+					comparisonLoading: false,
+					comparison: null,
+					comparisonRequestGeneration: 0,
+					groupingLoading: false,
+					groupingDimension: "",
+					grouping: null,
+					groupingRequestGeneration: 0,
+					capabilities: { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true, advanced_features_entitled: false },
+				};
+			},
+			async mounted() {
+				await this.refresh();
+				if (this.capabilities.can_view !== false) await this.loadSavedViews();
+			},
+			beforeUnmount() {
+				this.invalidateInsightRequests();
+				this.chartInstance?.destroy?.();
+			},
+			computed: {
+				providerLabel() {
+					if (!this.provider) return __("Query Report");
+					if (["query-level", "query-level-detail"].includes(this.result.metadata?.pagination_mode)) return __("Optimized paginated provider");
+					if (this.result.metadata?.pagination_mode === "materialize-then-slice") return __("Paged response · optimization pending");
+					return this.provider.kind === "paginated" ? __("Paginated provider") : __("Query Report provider");
+				},
+				savedViewOptions() {
+					return (this.savedViews || []).map((view) => ({ value: view.view_id, label: view.label }));
+				},
+				selectedSavedView() {
+					return (this.savedViews || []).find((view) => view.view_id === this.selectedSavedViewId) || null;
+				},
+				comparisonSupported() {
+					return Boolean(EdgeReportComparisonPanel && this.reportName === "Consultation Register");
+				},
+				groupingSupported() {
+					return Boolean(EdgeReportGroupingPanel && this.reportName === "Consultation Register");
+				},
+				groupingOptions() {
+					return [
+						{ value: "branch", label: __("Group by Branch") },
+						{ value: "practitioner", label: __("Group by Practitioner") },
+						{ value: "consultation_type", label: __("Group by Consultation Type") },
+						{ value: "status", label: __("Group by Status") },
+					];
+				},
+				pagination() {
+					const pageSize = Number(this.result.page_length || this.pageLength || VETEDGE_REPORT_PAGE_LENGTH);
+					const total = Number(this.result.total || 0);
+					const start = Number(this.result.start || this.pageStart || 0);
 					return {
-						reportName: initial.report,
-						sourceRoute: initial.source,
-						filters: {
-							branch: initial.branch || '',
-							from_date: initial.from_date || '',
-							to_date: initial.to_date || '',
-							date_preset: initial.date_preset || '',
-							customer: initial.customer || '',
-							practitioner: initial.practitioner || '',
-							service_category: initial.service_category || '',
-							item: initial.item || '',
-						},
-						loading: false,
-						error: '',
-						columns: [],
-						rows: [],
-						reportSummary: [],
-						chart: null,
-						chartInstance: null,
+						page: Math.floor(start / Math.max(1, pageSize)) + 1,
+						page_size: pageSize,
+						total_rows: total,
+						total_pages: Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
+						has_previous: Boolean(this.result.has_previous),
+						has_next: Boolean(this.result.has_next),
 					};
 				},
-				mounted() { this.refresh(); },
-				beforeUnmount() { this.chartInstance?.destroy?.(); },
-				methods: {
-					isServiceRevenue() { return this.reportName === 'Service Revenue Breakdown'; },
-					async searchLink(doctype, term) {
-						const response = await frappe.call('frappe.desk.search.search_link', { doctype, txt: term || '', page_length: 20, ignore_user_permissions: 0 });
-						return response.message || [];
-					},
-					searchBranches(term) { return this.searchLink('Branch', term); },
-					searchItems(term) { return this.searchLink('Item', term); },
-					reportFilters() {
-						const result = {};
-						for (const fieldname of ['branch','from_date','to_date','customer','practitioner','service_category','item']) {
-							const value = this.filters[fieldname];
-							if (value !== undefined && value !== null && String(value) !== '') result[fieldname] = value;
+			},
+			methods: {
+				filterSearchReportName() {
+					return this.reportName === "Laboratory Report" ? "Lab Order Report" : this.reportName;
+				},
+				async searchGenericLink(doctype, term) {
+					const response = await frappe.call("frappe.desk.search.search_link", { doctype, txt: term || "", page_length: 20, ignore_user_permissions: 0 });
+					return response.message || [];
+				},
+				async searchReportFilter(reportName, field, term) {
+					const response = await frappe.call(SMART_FILTER_API, {
+						report_name: reportName || this.filterSearchReportName(),
+						field,
+						txt: term || "",
+						start: 0,
+						page_length: 20,
+						filters: JSON.stringify(this.reportFilters()),
+					});
+					return response.message || [];
+				},
+				insightRequestSignature(extra = {}) {
+					const filters = Object.entries(this.reportFilters())
+						.sort(([left], [right]) => left.localeCompare(right))
+						.map(([key, value]) => [key, value]);
+					return JSON.stringify({ report_name: this.reportName, filters, ...extra });
+				},
+				invalidateInsightRequests() {
+					this.comparisonRequestGeneration += 1;
+					this.groupingRequestGeneration += 1;
+					this.comparisonLoading = false;
+					this.groupingLoading = false;
+				},
+				setFilter(field, value) {
+					const previous = this.filters[field] || "";
+					if (previous === value) return;
+					if (field === "branch") {
+						this.filters.patient = "";
+						this.filters.customer = "";
+						this.filters.practitioner = "";
+					}
+					if (field === "customer") this.filters.patient = "";
+					if (field === "patient") this.filters.customer = "";
+					if (field === "species") this.filters.breed = "";
+					this.filters[field] = value || "";
+					this.invalidateInsightRequests();
+					this.selectedSavedViewId = "";
+					this.comparison = null;
+					this.grouping = null;
+					this.groupingDimension = "";
+				},
+				reportFilters() {
+					return Object.fromEntries(Object.entries(this.filters).filter(([, value]) => value !== undefined && value !== null && String(value) !== ""));
+				},
+				async loadCapabilities() {
+					if (!this.reportName) return;
+					try {
+						if (window.VetEdgeReportingCapabilities?.get) {
+							this.capabilities = await window.VetEdgeReportingCapabilities.get(this.reportName, "report", { refresh: true });
+						} else {
+							const response = await frappe.call(CAPABILITIES_API, { scope_name: this.reportName, scope_type: "report" });
+							this.capabilities = response.message || this.capabilities;
 						}
-						return result;
-					},
-					updateLocation() {
-						const params = new URLSearchParams({ report: this.reportName, source: this.sourceRoute || '/desk/vetedge-executive-dashboard' });
-						for (const [key, value] of Object.entries(this.filters)) if (value) params.set(key, value);
-						window.history.replaceState({}, '', `/desk/vetedge-report-center?${params.toString()}`);
-					},
-					formatValue(value, fieldtype = 'Data') {
-						if (value === undefined || value === null || value === '') return '—';
-						if (fieldtype === 'Currency') {
-							const currency = frappe.boot?.sysdefaults?.currency || 'NGN';
-							try { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(value || 0)); }
-							catch (_error) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
+					} catch (error) {
+						console.warn("VetEdge Report Center capabilities could not be loaded", error);
+						this.capabilities = { can_view: true, can_print: false, can_export: false, report_tier: "", subscription_entitled: true, advanced_features_entitled: false };
+					}
+				},
+				async loadSavedViews() {
+					if (!this.reportName || this.capabilities.can_view === false) return;
+					this.savedViewsLoading = true;
+					try {
+						const response = await frappe.call(SAVED_VIEWS_GET_API, { report_name: this.reportName });
+						this.savedViews = Array.isArray(response.message) ? response.message : [];
+						if (this.selectedSavedViewId && !this.savedViews.some((view) => view.view_id === this.selectedSavedViewId)) this.selectedSavedViewId = "";
+					} catch (error) {
+						console.warn("VetEdge saved report views could not be loaded", error);
+						this.savedViews = [];
+					} finally {
+						this.savedViewsLoading = false;
+					}
+				},
+				resolveProvider() {
+					const adapters = window.VetEdgeReportProviders;
+					this.provider = adapters?.getProvider?.(this.reportName) || adapters?.ensureQueryProvider?.(this.reportName, this.reportName) || null;
+					return this.provider;
+				},
+				updateLocation() {
+					const params = new URLSearchParams({ report: this.reportName, source: this.sourceRoute || "/desk/vetedge-executive-dashboard" });
+					for (const [key, value] of Object.entries(this.filters)) if (value) params.set(key, value);
+					const visibleColumns = normalizeReportColumnKeys(this.viewState?.visible_columns);
+					if (visibleColumns.length) params.set("columns", visibleColumns.join(","));
+					const sort = normalizeReportSort(this.viewState?.sort);
+					if (sort) params.set("sort", `${sort.field}:${sort.direction}`);
+					window.history.replaceState({}, "", `/desk/vetedge-report-center?${params.toString()}`);
+				},
+				setViewState(state = {}) {
+					const previousSort = normalizeReportSort(this.viewState?.sort);
+					const nextSort = normalizeReportSort(state.sort);
+					const sortChanged = JSON.stringify(previousSort) !== JSON.stringify(nextSort);
+					this.viewState = {
+						visible_columns: normalizeReportColumnKeys(state.visible_columns),
+						sort: nextSort,
+					};
+					this.selectedSavedViewId = "";
+					this.updateLocation();
+					if (!sortChanged) return;
+					this.invalidateInsightRequests();
+					this.pageStart = 0;
+					this.comparison = null;
+					this.grouping = null;
+					this.groupingDimension = "";
+					this.refresh();
+				},
+				async applySavedView(viewId) {
+					if (!viewId) { this.selectedSavedViewId = ""; return; }
+					try {
+						const response = await frappe.call(SAVED_VIEWS_APPLY_API, { view_id: viewId, report_name: this.reportName });
+						const state = response.message || {};
+						const nextFilters = {};
+						for (const key of REPORT_FILTER_KEYS) nextFilters[key] = state.filters?.[key] ?? "";
+						this.filters = nextFilters;
+						this.invalidateInsightRequests();
+						this.viewState = {
+							visible_columns: normalizeReportColumnKeys(state.visible_columns),
+							sort: normalizeReportSort(state.sort),
+						};
+						this.selectedSavedViewId = state.view?.view_id || viewId;
+						this.pageStart = 0;
+						this.comparison = null;
+						this.grouping = null;
+						this.groupingDimension = "";
+						this.updateLocation();
+						if (Array.isArray(state.removed_filter_keys) && state.removed_filter_keys.length) {
+							frappe.show_alert?.({ message: __("Some saved filters were removed because your current access or report context changed."), indicator: "orange" });
 						}
-						if (fieldtype === 'Int') return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-						if (fieldtype === 'Float' || fieldtype === 'Percent') return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-						if (fieldtype === 'Date' || fieldtype === 'Datetime') return frappe.datetime?.str_to_user?.(value) || value;
-						return String(value);
-					},
-					normalizeResult(payload) {
-						this.columns = (payload.columns || []).map(parseReportColumn);
-						const sourceRows = payload.result || payload.rows || [];
-						this.rows = sourceRows.map((row, rowIndex) => {
-							const source = Array.isArray(row)
-								? Object.fromEntries(this.columns.map((column, index) => [column.fieldname, row[index]]))
-								: row;
-							const normalized = { __row_key: source?.name || source?.invoice || `row-${rowIndex}` };
-							for (const column of this.columns) normalized[column.fieldname] = this.formatValue(source?.[column.fieldname], column.fieldtype);
-							return normalized;
+						await this.refresh(true);
+					} catch (error) {
+						this.selectedSavedViewId = "";
+						frappe.msgprint({ title: __("Saved View Failed"), message: error?.message || __("The saved view could not be applied."), indicator: "red" });
+					}
+				},
+				promptSaveView(existing = null) {
+					frappe.prompt(
+						[{ fieldname: "label", fieldtype: "Data", label: __("View Name"), reqd: 1, default: existing?.label || "" }],
+						async (values) => {
+							try {
+								let response;
+								if (existing) {
+									response = await frappe.call(SAVED_VIEWS_RENAME_API, { view_id: existing.view_id, report_name: this.reportName, label: values.label });
+								} else {
+									response = await frappe.call(SAVED_VIEWS_SAVE_API, {
+										label: values.label,
+										report_name: this.reportName,
+										filters: JSON.stringify(this.reportFilters()),
+										visible_columns: JSON.stringify(normalizeReportColumnKeys(this.viewState?.visible_columns)),
+										set_default: 0,
+									});
+								}
+								await this.loadSavedViews();
+								this.selectedSavedViewId = response.message?.view_id || existing?.view_id || "";
+								frappe.show_alert?.({ message: existing ? __("Saved view renamed.") : __("Saved view created."), indicator: "green" });
+							} catch (error) {
+								frappe.msgprint({ title: __("Saved View Failed"), message: error?.message || __("The saved view could not be stored."), indicator: "red" });
+							}
+						},
+						__(existing ? "Rename Saved View" : "Save Current View"),
+						__(existing ? "Rename" : "Save"),
+					);
+				},
+				deleteSelectedSavedView() {
+					const view = this.selectedSavedView;
+					if (!view) return;
+					frappe.confirm(
+						__("Delete saved view {0}?", [view.label]),
+						async () => {
+							try {
+								await frappe.call(SAVED_VIEWS_DELETE_API, { view_id: view.view_id });
+								this.selectedSavedViewId = "";
+								await this.loadSavedViews();
+								frappe.show_alert?.({ message: __("Saved view deleted."), indicator: "green" });
+							} catch (error) {
+								frappe.msgprint({ title: __("Delete Saved View Failed"), message: error?.message || __("The saved view could not be deleted."), indicator: "red" });
+							}
+						},
+					);
+				},
+				formatValue(value, column = {}) {
+					if (value === undefined || value === null || value === "") return "—";
+					const fieldtype = column.fieldtype || column.datatype || "Data";
+					if (fieldtype === "Currency") {
+						const currency = frappe.boot?.sysdefaults?.currency || "NGN";
+						try { return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(value || 0)); }
+						catch (_error) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
+					}
+					if (["Int", "Float", "Percent"].includes(fieldtype)) return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: fieldtype === "Int" ? 0 : 2 });
+					if (["Date", "Datetime"].includes(fieldtype)) return frappe.datetime?.str_to_user?.(value) || value;
+					return String(value);
+				},
+				rowKey(row, index) { return row?.name || row?.invoice || row?.batch_no || `row-${Number(this.result.start || 0) + index}`; },
+				async refresh(resetPage = false) {
+					if (!this.reportName) { this.error = __("No report was selected."); return; }
+					if (resetPage) {
+						this.invalidateInsightRequests();
+						this.pageStart = 0;
+						this.comparison = null;
+						this.grouping = null;
+						this.groupingDimension = "";
+					}
+					this.loading = true;
+					this.error = "";
+					this.chartInstance?.destroy?.();
+					this.chartInstance = null;
+					try {
+						await this.loadCapabilities();
+						if (this.capabilities.can_view === false) {
+							this.result = { columns: [], rows: [], summary: [], chart: null, total: 0, start: 0, page_length: this.pageLength, has_previous: false, has_next: false, metadata: {} };
+							this.error = __("This Advanced report is not included in the current Plan.");
+							return;
+						}
+						const provider = this.resolveProvider();
+						if (!provider?.load) throw new Error(__("No report provider is available."));
+						this.result = await provider.load({
+							filters: this.reportFilters(),
+							start: this.pageStart,
+							page_length: this.pageLength,
+							sort: normalizeReportSort(this.viewState?.sort),
 						});
-						this.reportSummary = payload.report_summary || [];
-						this.chart = payload.chart || null;
-					},
-					async refresh() {
-						if (!this.reportName) { this.error = __('No report was selected.'); return; }
-						this.loading = true;
-						this.error = '';
+						this.pageStart = Number(this.result.start || 0);
+						this.updateLocation();
+					} catch (error) {
+						this.error = error?.message || error?._server_messages || __("The report could not be generated.");
+					} finally {
+						this.loading = false;
+						await nextTick();
+						this.renderChart();
+					}
+				},
+				goToPage(pageNumber) {
+					const page = Math.max(1, Number(pageNumber || 1));
+					this.pageStart = (page - 1) * this.pageLength;
+					this.refresh();
+				},
+				setPageSize(size) {
+					this.pageLength = Math.min(100, Math.max(1, Number(size || VETEDGE_REPORT_PAGE_LENGTH)));
+					this.pageStart = 0;
+					this.refresh();
+				},
+				async loadComparison() {
+					if (!this.comparisonSupported || this.comparisonLoading) return;
+					if (!this.capabilities.advanced_features_entitled) {
+						frappe.msgprint({
+							title: __("Advanced Reporting"),
+							message: __("Previous-period comparison is an Advanced reporting feature and is not included in the current Plan."),
+							indicator: "orange",
+						});
+						return;
+					}
+					const generation = ++this.comparisonRequestGeneration;
+					const signature = this.insightRequestSignature();
+					this.comparisonLoading = true;
+					try {
+						const response = await frappe.call(REPORT_COMPARISON_API, {
+							report_name: this.reportName,
+							filters: JSON.stringify(this.reportFilters()),
+						});
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
+						this.comparison = response.message || null;
+					} catch (error) {
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
+						this.comparison = null;
+						frappe.msgprint({ title: __("Comparison Failed"), message: error?.message || __("The comparison could not be generated."), indicator: "red" });
+					} finally {
+						if (generation !== this.comparisonRequestGeneration || signature !== this.insightRequestSignature()) return;
+						this.comparisonLoading = false;
+						await nextTick();
 						this.chartInstance?.destroy?.();
 						this.chartInstance = null;
-						try {
-							const payload = await vetedgeReportCall('frappe.desk.query_report.run', {
-								report_name: this.reportName,
-								filters: JSON.stringify(this.reportFilters()),
-								ignore_prepared_report: 1,
-								are_default_filters: false,
-							});
-							this.normalizeResult(payload || {});
-							this.updateLocation();
-							await nextTick();
-							this.renderChart();
-						} catch (error) {
-							this.error = error?.message || error?._server_messages || __('The report could not be generated.');
-						} finally {
-							this.loading = false;
-							await nextTick();
-							this.renderChart();
-						}
-					},
-					renderChart() {
-						if (!this.chart?.data || !frappe.Chart || !this.$el) return;
-						const target = this.$el.querySelector('[data-vetedge-report-chart]');
-						if (!target) return;
-						this.chartInstance?.destroy?.();
-						try {
-							this.chartInstance = new frappe.Chart(target, { ...this.chart, height: 280, colors: ['var(--edge-color-brand-600)', '#16a34a', '#7c3aed', '#d97706', '#0891b2', '#dc2626'] });
-						} catch (error) { console.warn('VetEdge quick report chart failed to render', error); }
-					},
-					back() { reportCenterRoute(this.sourceRoute || '/desk/vetedge-executive-dashboard'); },
-					renderFilters() {
-						const common = [
-							h(EdgeLinkField, { modelValue: this.filters.branch, selectedLabel: this.filters.branch || __('All Branches'), label: __('Branch'), placeholder: __('All Branches'), searcher: this.searchBranches, allowClear: true, 'onUpdate:modelValue': (value) => { this.filters.branch = value || ''; } }),
-							h(EdgeInput, { modelValue: this.filters.from_date, label: __('From Date'), type: 'date', 'onUpdate:modelValue': (value) => { this.filters.from_date = value || ''; } }),
-							h(EdgeInput, { modelValue: this.filters.to_date, label: __('To Date'), type: 'date', 'onUpdate:modelValue': (value) => { this.filters.to_date = value || ''; } }),
-						];
-						if (!this.isServiceRevenue()) return h('div', { class: 'vetedge-report-center-filter-grid' }, common);
-						return h('div', { class: 'vetedge-report-center-filter-grid vetedge-report-center-filter-grid--service' }, [
-							...common,
-							h(EdgeDropdown, { modelValue: this.filters.service_category, label: __('Service Category'), options: serviceCategories, 'onUpdate:modelValue': (value) => { this.filters.service_category = value || ''; } }),
-							h(EdgeInput, { modelValue: this.filters.practitioner, label: __('Practitioner'), placeholder: __('All Practitioners'), 'onUpdate:modelValue': (value) => { this.filters.practitioner = value || ''; } }),
-							h(EdgeLinkField, { modelValue: this.filters.item, selectedLabel: this.filters.item, label: __('Item'), placeholder: __('All Items'), searcher: this.searchItems, allowClear: true, 'onUpdate:modelValue': (value) => { this.filters.item = value || ''; } }),
-						]);
-					},
-					renderSummary() {
-						if (!this.reportSummary?.length) return null;
-						return h(EdgeDashboardLayout, { minColumnWidth: '12rem', class: 'vetedge-report-center-summary' }, {
-							default: () => this.reportSummary.map((card, index) => h(EdgeStatCard, {
-								label: card.label || __('Metric'),
-								value: this.formatValue(card.value, ['Revenue','Paid','Outstanding'].includes(card.label) ? 'Currency' : 'Data'),
-								tone: ['primary','success','warning','info'][index % 4],
-							})),
+						this.renderChart();
+					}
+				},
+				async loadGrouping(dimension) {
+					this.groupingDimension = dimension || "";
+					this.grouping = null;
+					if (!this.groupingDimension || !this.groupingSupported || this.groupingLoading) return;
+					if (!this.capabilities.advanced_features_entitled) {
+						this.groupingDimension = "";
+						frappe.msgprint({
+							title: __("Advanced Reporting"),
+							message: __("Grouping and subtotals are an Advanced reporting feature and are not included in the current Plan."),
+							indicator: "orange",
 						});
-					},
+						return;
+					}
+					const generation = ++this.groupingRequestGeneration;
+					const signature = this.insightRequestSignature({ dimension: this.groupingDimension });
+					this.groupingLoading = true;
+					try {
+						const response = await frappe.call(REPORT_GROUPING_API, {
+							report_name: this.reportName,
+							dimension: this.groupingDimension,
+							filters: JSON.stringify(this.reportFilters()),
+						});
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
+						this.grouping = response.message || null;
+					} catch (error) {
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
+						this.grouping = null;
+						this.groupingDimension = "";
+						frappe.msgprint({ title: __("Grouping Failed"), message: error?.message || __("The grouped summary could not be generated."), indicator: "red" });
+					} finally {
+						if (generation !== this.groupingRequestGeneration || signature !== this.insightRequestSignature({ dimension: this.groupingDimension })) return;
+						this.groupingLoading = false;
+					}
 				},
-				render() {
-					return h(EdgeAppShell, {
-						product: 'vetedge', title: 'Veterinary', tenantName: profile.tenantName,
-						branchName: this.filters.branch || profile.branchName,
-						userName: profile.userName,
-						activeRoute: this.sourceRoute || '/desk/vetedge-executive-dashboard',
-					}, {
-						default: () => h(EdgePageLayout, {}, {
-							header: () => h(EdgePageHeader, { eyebrow: __('Quick Report'), title: this.reportName || __('Veterinary Report'), subtitle: __('EdgeSuite report view using the dashboard scope that opened this report.') }, {
-								actions: () => h('button', { class: 'edge-button edge-button--secondary', type: 'button', onClick: this.back }, __('Back to Dashboard')),
-							}),
-							filters: () => h(EdgeFilterBar, { title: __('Report Filters') }, {
-								default: () => this.renderFilters(),
-								actions: () => h('div', { class: 'vetedge-report-center-actions' }, [h('button', { class: 'edge-button edge-button--primary', type: 'button', disabled: this.loading, onClick: this.refresh }, this.loading ? __('Refreshing…') : __('Apply / Refresh'))]),
-							}),
-							default: () => this.error
-								? h('div', { class: 'vetedge-report-center-content' }, [h(EdgeErrorState, { title: __('Report Failed'), message: this.error, onRetry: this.refresh })])
-								: this.loading
-									? h('div', { class: 'vetedge-report-center-content' }, [h(EdgeLoadingState, { message: __('Generating report…'), skeleton: true })])
-									: h('div', { class: 'vetedge-report-center-content' }, [
-										this.renderSummary(),
-										this.chart?.data ? h('section', { class: 'vetedge-report-center-section' }, [h('div', { class: 'vetedge-report-center-heading' }, [h('div', [h('span', __('Chart')), h('h2', this.chart.title || this.reportName)])]), h('div', { class: 'vetedge-report-center-chart', 'data-vetedge-report-chart': '1' })]) : null,
-										h('section', { class: 'vetedge-report-center-section' }, [h('div', { class: 'vetedge-report-center-heading' }, [h('div', [h('span', __('Detail')), h('h2', this.reportName || __('Report Results')), h('p', __('Filters are retained in the URL and can be refreshed without leaving EdgeSuite UI.'))])]), this.rows.length ? h(EdgeDataTable, { columns: this.columns, rows: this.rows, rowKey: '__row_key' }) : h(EdgeEmptyState, { title: __('No report rows'), description: __('No records match the selected report filters.') })]),
-									].filter(Boolean)),
+				renderChart() {
+					if (!this.result.chart?.data || !frappe.Chart || !this.$el) return;
+					const target = this.$el.querySelector("[data-vetedge-report-chart]");
+					if (!target) return;
+					try { this.chartInstance = new frappe.Chart(target, { ...this.result.chart, height: 280 }); }
+					catch (error) { console.warn("VetEdge report chart failed to render", error); }
+				},
+				back() { reportCenterRoute(this.sourceRoute || "/desk/vetedge-executive-dashboard"); },
+				async runExport(options) {
+					if (!this.capabilities.can_export) return;
+					this.exportBusy = true;
+					try {
+						await window.VetEdgeReportProviders.downloadReportExport({ reportName: this.reportName, filters: this.reportFilters(), options, start: this.pageStart, pageLength: this.pageLength });
+						frappe.show_alert?.({ message: __("Report download prepared successfully."), indicator: "green" });
+					} catch (error) {
+						frappe.msgprint({ title: __("Report Download Failed"), message: error?.message || __("The report could not be downloaded."), indicator: "red" });
+					} finally {
+						this.exportBusy = false;
+					}
+				},
+				async runPrint() {
+					if (!this.capabilities.can_print || this.printBusy || this.loading) return;
+					this.printBusy = true;
+					try {
+						await window.VetEdgeReportProviders.printReport({
+							reportName: this.reportName,
+							filters: this.reportFilters(),
+							options: { scope: "all_filtered" },
+							start: this.pageStart,
+							pageLength: this.pageLength,
+						});
+					} catch (error) {
+						frappe.msgprint({ title: __("Report Print Failed"), message: error?.message || __("The report could not be prepared for printing."), indicator: "red" });
+					} finally {
+						this.printBusy = false;
+					}
+				},
+				renderFilters() {
+					const searchReport = this.filterSearchReportName();
+					const smart = window.VetEdgeReportFilterUI.hasSmartDefinition(this.reportName);
+					const branchSearcher = smart
+						? (term) => this.searchReportFilter(searchReport, "branch", term)
+						: (term) => this.searchGenericLink("Branch", term);
+					const common = [
+						h(EdgeLinkField, {
+							modelValue: this.filters.branch,
+							selectedLabel: this.filters.branch || __("All Branches"),
+							label: __("Branch"),
+							placeholder: __("All Branches"),
+							searcher: branchSearcher,
+							allowClear: true,
+							"onUpdate:modelValue": (value) => this.setFilter("branch", value || ""),
 						}),
+						h(EdgeInput, { modelValue: this.filters.from_date, label: __("From Date"), type: "date", "onUpdate:modelValue": (value) => this.setFilter("from_date", value || "") }),
+						h(EdgeInput, { modelValue: this.filters.to_date, label: __("To Date"), type: "date", "onUpdate:modelValue": (value) => this.setFilter("to_date", value || "") }),
+					];
+					const extra = window.VetEdgeReportFilterUI.extraNodes({
+						h,
+						EdgeLinkField,
+						EdgeDropdown,
+						reportName: this.reportName,
+						filters: this.filters,
+						searcher: (reportName, field, term) => this.searchReportFilter(reportName, field, term),
+						onChange: (field, value) => this.setFilter(field, value),
 					});
+					return h("div", { class: "vetedge-report-center-filter-grid" }, [...common, ...extra]);
 				},
-			};
+				renderSavedViewActions() {
+					return [
+						h(EdgeDropdown, {
+							class: "vetedge-report-center-saved-view",
+							modelValue: this.selectedSavedViewId,
+							options: this.savedViewOptions,
+							placeholder: this.savedViewsLoading ? __("Loading saved views…") : __("Saved Views"),
+							disabled: this.savedViewsLoading || this.capabilities.can_view === false,
+							"onUpdate:modelValue": (value) => this.applySavedView(value || ""),
+						}),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: this.capabilities.can_view === false, onClick: () => this.promptSaveView() }, __("Save View")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: !this.selectedSavedView, onClick: () => this.promptSaveView(this.selectedSavedView) }, __("Rename")),
+						h("button", { class: "edge-button edge-button--secondary", type: "button", disabled: !this.selectedSavedView, onClick: this.deleteSelectedSavedView }, __("Delete")),
+					];
+				},
+				renderInsights() {
+					const nodes = [];
+					if (this.groupingSupported && (this.grouping || this.groupingLoading)) {
+						const payload = this.grouping || {};
+						nodes.push(h(EdgeReportGroupingPanel, {
+							title: payload.title || __("Grouped Summary"),
+							groupLabel: payload.group_label || __("Group"),
+							rows: payload.rows || [],
+							measures: payload.measures || [],
+							loading: this.groupingLoading,
+						}));
+					}
+					if (this.comparisonSupported && (this.comparison || this.comparisonLoading)) {
+						const payload = this.comparison || {};
+						nodes.push(h(EdgeReportComparisonPanel, {
+							title: payload.title || __("Previous Period Comparison"),
+							currentLabel: payload.current_label || __("Current period"),
+							comparisonLabel: payload.comparison_label || __("Previous period"),
+							metrics: payload.metrics || [],
+							loading: this.comparisonLoading,
+						}));
+					}
+					if (this.result.chart?.data) nodes.push(h("div", { class: "vetedge-report-center-chart", "data-vetedge-report-chart": "1" }));
+					return h("div", { class: "vetedge-report-center-insights" }, nodes);
+				},
+			},
+			render() {
+				const reportShell = h(
+					EdgeReportShell,
+					{
+						title: this.reportName || __("Veterinary Report"),
+						eyebrow: __("Quick Report"),
+						subtitle: __("EdgeSuite report view using the dashboard scope that opened this report."),
+						columns: this.result.columns || [],
+						rows: this.result.rows || [],
+						summary: this.result.summary || [],
+						pagination: this.pagination,
+						loading: this.loading,
+						error: this.error,
+						rowKey: this.rowKey,
+						formatter: this.formatValue,
+						columnChooserEnabled: true,
+						viewState: this.viewState,
+						sort: normalizeReportSort(this.viewState?.sort),
+						exportEnabled: Boolean(this.capabilities.can_export),
+						printEnabled: Boolean(this.capabilities.can_print),
+						exportBusy: this.exportBusy,
+						printBusy: this.printBusy,
+						exportInitialOptions: { format: "xlsx", scope: "all_filtered" },
+						tier: this.capabilities.report_tier || "",
+						subscriptionEntitled: this.capabilities.subscription_entitled !== false,
+						emptyTitle: __("No report rows"),
+						emptyDescription: __("No records match the selected report filters."),
+						loadingMessage: __("Generating report…"),
+						onRetry: () => this.refresh(),
+						onPageChange: this.goToPage,
+						onPageSizeChange: this.setPageSize,
+						onViewStateChange: this.setViewState,
+						onExport: this.runExport,
+						onPrint: this.runPrint,
+					},
+					{
+						actions: () => h("div", { class: "vetedge-report-center-actions" }, [
+							h("span", { class: "vetedge-report-provider-badge" }, this.providerLabel),
+							h("button", { class: "edge-button edge-button--secondary", type: "button", onClick: this.back }, __("Back to Dashboard")),
+						]),
+						filters: () => this.renderFilters(),
+						filterActions: () => h("div", { class: "vetedge-report-center-actions" }, [
+							...this.renderSavedViewActions(),
+							...(this.groupingSupported ? [h(EdgeDropdown, {
+								class: "vetedge-report-center-group-by",
+								modelValue: this.groupingDimension,
+								options: this.groupingOptions,
+								placeholder: this.capabilities.advanced_features_entitled ? __("Group By") : __("Group By · Advanced"),
+								disabled: this.loading || this.groupingLoading || this.capabilities.can_view === false || !this.capabilities.advanced_features_entitled,
+								"onUpdate:modelValue": (value) => this.loadGrouping(value || ""),
+							})] : []),
+							...(this.comparisonSupported ? [h("button", {
+								class: "edge-button edge-button--secondary",
+								type: "button",
+								disabled: this.loading || this.comparisonLoading || this.capabilities.can_view === false || !this.capabilities.advanced_features_entitled,
+								title: this.capabilities.advanced_features_entitled ? __("Compare the selected period with the immediately preceding equal-length period.") : __("Advanced reporting feature"),
+								onClick: this.loadComparison,
+							}, this.comparisonLoading ? __("Comparing…") : (this.capabilities.advanced_features_entitled ? __("Compare Previous Period") : __("Compare · Advanced")))] : []),
+							h("button", { class: "edge-button edge-button--primary", type: "button", disabled: this.loading || this.capabilities.can_view === false, onClick: () => this.refresh(true) }, this.loading ? __("Refreshing…") : __("Apply / Refresh")),
+						]),
+						chart: (this.result.chart?.data || this.grouping || this.groupingLoading || this.comparison || this.comparisonLoading) ? () => this.renderInsights() : undefined,
+						resultMeta: () => h("span", {}, __("{0} · filters, columns and sort retained in URL", [this.providerLabel])),
+					},
+				);
 
-			try {
-				$loading.remove();
-				const root = $('<div class="vetedge-report-center-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-				wrapper.vue_app = runtime.createEdgeApp(component);
-				wrapper.vue_app.mount(root[0]);
-			} catch (error) {
-				console.error('Error mounting VetEdge Quick Report Center:', error);
-				showFailure(__('Error mounting Quick Report Center: {0}', [error.message || String(error)]));
-			}
+				return h(EdgeAppShell, { product: "vetedge", title: "Veterinary", tenantName: profile.tenantName, branchName: this.filters.branch || profile.branchName, userName: profile.userName, activeRoute: this.sourceRoute || "/desk/vetedge-executive-dashboard" }, { default: () => reportShell });
+			},
 		};
 
-		if (window.VetEdgeProfessionalUI?.install) mountReport();
-		else frappe.require('/assets/vetedge/js/vetedge_professional_ui.js', mountReport);
-	});
+		try {
+			$loading.remove();
+			const root = $("<div class='vetedge-report-center-root' data-edge-product='vetedge'></div>").appendTo(page.body);
+			wrapper.vue_app = runtime.createEdgeApp(component);
+			wrapper.vue_app.mount(root[0]);
+		} catch (error) {
+			console.error("Error mounting VetEdge Report Center:", error);
+			fail(__("Error mounting Report Center: {0}", [error.message || String(error)]));
+		}
+	})));
 };
