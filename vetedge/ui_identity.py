@@ -7,6 +7,16 @@ from vetedge.services.branding import get_branding
 
 VETEDGE_LOGO = "/assets/vetedge/images/vetedge-app-icon.png"
 MEDICAL_HISTORY_PAGE = "veterinary-medical-history"
+EDGE_PAGE_DESTINATIONS = {
+	"Veterinary Care Location": "vetedge-care-locations",
+	"Branch User Assignment": "vetedge-branch-user-access",
+	"Branch Practitioner Assignment": "vetedge-practitioner-coverage",
+	"Veterinary Notification Preference": "vetedge-notification-preferences",
+	"Veterinary Notification Log": "vetedge-notification-delivery-log",
+	"Veterinary Notification Item": "vetedge-notification-items",
+	"Veterinary Role Bundle": "vetedge-role-bundles",
+	"Veterinary License Profile": "vetedge-license-profile",
+}
 
 
 def _company_identity(company: str | None) -> dict:
@@ -64,6 +74,31 @@ def _expose_medical_history_page(bootinfo) -> None:
 		"route": MEDICAL_HISTORY_PAGE,
 	}
 	bootinfo["page_info"] = page_info
+
+
+def _align_edge_sidebar_destinations(bootinfo) -> None:
+	"""Keep product navigation on EdgeSuite pages without changing stored DocType identity.
+
+	The canonical Workspace Sidebar remains the source of labels, roles and ordering. Only
+	the browser destination is adapted after permission filtering has already happened.
+	This also keeps the shared product/waffle menu aligned because it consumes the same
+	boot sidebar manifest.
+	"""
+	sidebars = bootinfo.get("workspace_sidebar_item") or {}
+	for key in ("vetedge", "veterinary"):
+		sidebar = sidebars.get(key)
+		if not isinstance(sidebar, dict):
+			continue
+		for item in sidebar.get("items") or []:
+			if not isinstance(item, dict) or item.get("type") != "Link":
+				continue
+			page = EDGE_PAGE_DESTINATIONS.get(item.get("link_to"))
+			if not page:
+				continue
+			item["link_type"] = "Page"
+			item["link_to"] = page
+			item.pop("report", None)
+	bootinfo["workspace_sidebar_item"] = sidebars
 
 
 def build_vetedge_ui_identity() -> dict:
@@ -125,3 +160,4 @@ def extend_bootinfo(bootinfo) -> None:
 	bootinfo["edgesuite_ui_identity"] = shared
 	bootinfo["vetedge_ui_identity"] = identity
 	_expose_medical_history_page(bootinfo)
+	_align_edge_sidebar_destinations(bootinfo)
