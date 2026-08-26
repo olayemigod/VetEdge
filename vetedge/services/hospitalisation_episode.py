@@ -36,6 +36,17 @@ EDITABLE_CONTEXT_FIELDS = {
     "care_level",
     "isolation_required",
 }
+WRITE_ACTIONS = {
+    "admit",
+    "assign_location",
+    "release_location",
+    "post_stock",
+    "build_charges",
+    "sync_invoice",
+    "generate_daily_charges",
+    "check_payment_gate",
+    "discharge",
+}
 
 
 def _clean(value: Any) -> str:
@@ -55,7 +66,10 @@ def _load_hospitalisation(name: str, *, write: bool = False):
     if not _clean(name):
         frappe.throw(_("Hospitalisation is required."), frappe.ValidationError)
     if not frappe.db.exists(HOSPITALISATION_DOCTYPE, name):
-        frappe.throw(_("Veterinary Hospitalisation {0} could not be found.").format(name), frappe.DoesNotExistError)
+        frappe.throw(
+            _("Veterinary Hospitalisation {0} could not be found.").format(name),
+            frappe.DoesNotExistError,
+        )
 
     doc = frappe.get_doc(HOSPITALISATION_DOCTYPE, name)
     doc.check_permission("write" if write else "read")
@@ -177,8 +191,12 @@ def _episode_payload(doc) -> dict[str, Any]:
     care_location = doc.get("care_location")
     activities = [_activity_payload(row) for row in (doc.get("activities") or [])]
     charges = [_charge_payload(row) for row in (doc.get("charge_items") or [])]
-    pending_stock = sum(1 for row in activities if row.get("stock_affecting") and row.get("stock_status") == "Pending")
-    pending_billable = sum(1 for row in activities if row.get("billable") and row.get("billing_status") == "Pending Charge")
+    pending_stock = sum(
+        1 for row in activities if row.get("stock_affecting") and row.get("stock_status") == "Pending"
+    )
+    pending_billable = sum(
+        1 for row in activities if row.get("billable") and row.get("billing_status") == "Pending Charge"
+    )
     pending_charges = sum(1 for row in charges if row.get("billing_status") == "Pending Invoice")
 
     return {
@@ -239,12 +257,69 @@ def _parse_payload(payload) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _parse_list(payload) -> list[Any]:
+    if isinstance(payload, str):
+        payload = frappe.parse_json(payload)
+    if isinstance(payload, dict):
+        payload = [payload]
+    return list(payload or []) if isinstance(payload, (list, tuple)) else []
+
+
 def _assert_not_stale(doc, modified: str | None) -> None:
     if modified and cstr(doc.modified) != cstr(modified):
         frappe.throw(
             _("This Hospitalisation changed after the page was loaded. Refresh and try again."),
             frappe.TimestampMismatchError,
         )
+
+
+def _assert_open_episode(doc) -> None:
+    if _clean(doc.get("status")) in CLOSED_STATUSES:
+        frappe.throw(_("Closed Hospitalisation episodes are read-only."), frappe.ValidationError)
+
+
+def _append_activity(doc, values: dict[str, Any]):
+    resolved_item = _clean(values.get("item"))
+    resolved_qty = flt(values.get("qty")) if values.get("qty") not in (None, "") else (1 if resolved_item else 0)
+    if resolved_item and resolved_qty <= 0:
+        frappe.throw(_("Quantity must be greater than zero when an Item is selected."), frappe.ValidationError)
+    uom = values.get("uom")
+    if resolved_item and not uom:
+        uom = frappe.db.get_value("Item", resolved_item, "stock_uom")
+
+    return doc.append(
+        "activities",
+        {
+            "activity_type": values.get("activity_type") or "Other",
+            "activity_datetime": values.get("activity_datetime") or now_datetime(),
+            "performed_by": get_current_user(),
+            "clinical_notes": values.get("clinical_notes"),
+            "billable": cint(values.get("billable")),
+            "stock_affecting": cint(values.get("stock_affecting")),
+            "item": resolved_item or None,
+            "qty": resolved_qty or None,
+            "uom": uom,
+            "source_warehouse": values.get("source_warehouse"),
+            "linked_doctype": values.get("linked_doctype"),
+            "linked_document": values.get("linked_document"),
+        },
+    )
+
+
+def _build_charges_if_needed(doc, *, billable: bool, item: str | None) -> None:
+    if not billable or not item:
+        return
+    from vetedge.services.hospitalisation import build_hospitalisation_charge_items
+
+    build_hospitalisation_charge_items(doc.name)
+    doc.reload()
+
+
+def _format_notes(pairs: list[tuple[str, Any]], trailing: str | None = None) -> str:
+    parts = [f"{label}: {value}" for label, value in pairs if value not in (None, "")]
+    if _clean(trailing):
+        parts.append(_clean(trailing))
+    return "\n".join(parts)
 
 
 @frappe.whitelist()
@@ -257,8 +332,7 @@ def get_hospitalisation_episode(name: str) -> dict[str, Any]:
 def save_hospitalisation_episode_context(name: str, values=None, modified: str | None = None) -> dict[str, Any]:
     doc = _load_hospitalisation(name, write=True)
     _assert_not_stale(doc, modified)
-    if _clean(doc.get("status")) in CLOSED_STATUSES:
-        frappe.throw(_("Closed Hospitalisation episodes are read-only."), frappe.ValidationError)
+    _assert_open_episode(doc)
 
     values = _parse_payload(values)
     for fieldname in EDITABLE_CONTEXT_FIELDS:
@@ -270,6 +344,18 @@ def save_hospitalisation_episode_context(name: str, values=None, modified: str |
         doc.set(fieldname, value)
     doc.save()
     return _episode_payload(doc)
+
+
+@frappe.whitelist()
+def get_hospitalisation_episode_item_context(
+    hospitalisation_name: str,
+    item: str,
+    uom: str | None = None,
+) -> dict[str, Any]:
+    _load_hospitalisation(hospitalisation_name)
+    from vetedge.services.hospitalisation import get_hospitalisation_medication_item_context
+
+    return get_hospitalisation_medication_item_context(hospitalisation_name, item, uom)
 
 
 @frappe.whitelist()
@@ -288,47 +374,231 @@ def add_hospitalisation_activity(
 ) -> dict[str, Any]:
     doc = _load_hospitalisation(hospitalisation_name, write=True)
     _assert_not_stale(doc, modified)
-    if _clean(doc.get("status")) in CLOSED_STATUSES:
-        frappe.throw(_("Clinical activity cannot be added to a closed Hospitalisation."), frappe.ValidationError)
+    _assert_open_episode(doc)
 
     resolved_type = _clean(activity_type) or "Other"
     if resolved_type not in ACTIVITY_TYPES:
         frappe.throw(_("Unsupported Hospitalisation activity type."), frappe.ValidationError)
 
-    resolved_item = _clean(item)
-    resolved_qty = flt(qty) if qty not in (None, "") else (1 if resolved_item else 0)
-    if resolved_item and resolved_qty <= 0:
-        frappe.throw(_("Quantity must be greater than zero when an Item is selected."), frappe.ValidationError)
-    if resolved_item and not uom:
-        uom = frappe.db.get_value("Item", resolved_item, "stock_uom")
-
-    row = doc.append(
-        "activities",
+    row = _append_activity(
+        doc,
         {
             "activity_type": resolved_type,
-            "activity_datetime": activity_datetime or now_datetime(),
-            "performed_by": get_current_user(),
+            "activity_datetime": activity_datetime,
             "clinical_notes": clinical_notes,
-            "billable": cint(billable),
-            "stock_affecting": cint(stock_affecting),
-            "item": resolved_item or None,
-            "qty": resolved_qty or None,
+            "billable": billable,
+            "stock_affecting": stock_affecting,
+            "item": item,
+            "qty": qty,
             "uom": uom,
             "source_warehouse": source_warehouse,
         },
     )
     doc.save()
+    _build_charges_if_needed(doc, billable=bool(cint(billable)), item=_clean(item) or None)
     return {
         "activity": _activity_payload(row),
         "episode": _episode_payload(doc),
         "warnings": [
             message
             for condition, message in (
-                (cint(billable) and not resolved_item, _("Billable activity has no Item and cannot be converted to a charge until one is supplied.")),
-                (cint(stock_affecting) and not resolved_item, _("Stock-affecting activity has no Item and cannot be posted until one is supplied.")),
+                (cint(billable) and not _clean(item), _("Billable activity has no Item and cannot be converted to a charge until one is supplied.")),
+                (cint(stock_affecting) and not _clean(item), _("Stock-affecting activity has no Item and cannot be posted until one is supplied.")),
             )
             if condition
         ],
+    }
+
+
+@frappe.whitelist()
+def add_hospitalisation_vitals(
+    hospitalisation_name: str,
+    values=None,
+    modified: str | None = None,
+) -> dict[str, Any]:
+    doc = _load_hospitalisation(hospitalisation_name, write=True)
+    _assert_not_stale(doc, modified)
+    _assert_open_episode(doc)
+    values = _parse_payload(values)
+
+    linked_record = None
+    if doc.get("linked_consultation"):
+        from vetedge.services.vitals import create_vitals_from_consultation
+
+        linked_record = create_vitals_from_consultation(doc.get("linked_consultation"), values)
+
+    notes = _format_notes(
+        [
+            (_("Temperature"), values.get("temperature")),
+            (_("Weight"), values.get("weight")),
+            (_("Heart Rate"), values.get("heart_rate")),
+            (_("Respiratory Rate"), values.get("respiratory_rate")),
+            (_("Body Condition Score"), values.get("body_condition_score")),
+            (_("Hydration"), values.get("hydration_status")),
+            (_("Mucous Membrane"), values.get("mucous_membrane")),
+            (_("Capillary Refill Time"), values.get("capillary_refill_time")),
+            (_("Pain Score"), values.get("pain_score")),
+            (_("Appetite"), values.get("appetite_status")),
+        ],
+        values.get("notes"),
+    )
+    row = _append_activity(
+        doc,
+        {
+            "activity_type": "Vitals",
+            "activity_datetime": values.get("recorded_on"),
+            "clinical_notes": notes,
+            "linked_doctype": "Veterinary Vital Signs" if linked_record else None,
+            "linked_document": linked_record,
+        },
+    )
+    doc.save()
+    return {"activity": _activity_payload(row), "linked_record": linked_record, "episode": _episode_payload(doc)}
+
+
+@frappe.whitelist()
+def add_hospitalisation_vaccination(
+    hospitalisation_name: str,
+    values=None,
+    modified: str | None = None,
+) -> dict[str, Any]:
+    doc = _load_hospitalisation(hospitalisation_name, write=True)
+    _assert_not_stale(doc, modified)
+    _assert_open_episode(doc)
+    values = _parse_payload(values)
+    vaccine = _clean(values.get("vaccine"))
+    if not vaccine:
+        frappe.throw(_("Vaccine is required."), frappe.ValidationError)
+
+    linked_record = None
+    if doc.get("linked_consultation"):
+        from vetedge.services.vaccination import create_vaccination_from_consultation
+
+        result = create_vaccination_from_consultation(
+            consultation=doc.get("linked_consultation"),
+            values=values,
+            create_invoice=0,
+            post_stock=0,
+        )
+        linked_record = result.get("name") if isinstance(result, dict) else None
+
+    vaccine_row = frappe.db.get_value(
+        "Veterinary Vaccine",
+        vaccine,
+        ["default_item", "default_price"],
+        as_dict=True,
+    ) or {}
+    item = vaccine_row.get("default_item")
+    billable = cint(values.get("billable", 1)) and bool(item)
+    notes = _format_notes(
+        [
+            (_("Vaccine"), vaccine),
+            (_("Dose"), values.get("dose")),
+            (_("Route"), values.get("route")),
+            (_("Next Due"), values.get("next_due_date")),
+        ],
+        values.get("notes"),
+    )
+    row = _append_activity(
+        doc,
+        {
+            "activity_type": "Vaccination",
+            "activity_datetime": values.get("administered_on"),
+            "clinical_notes": notes,
+            "billable": 1 if billable else 0,
+            "stock_affecting": cint(values.get("stock_affecting")),
+            "item": item,
+            "qty": 1,
+            "linked_doctype": "Veterinary Vaccination Record" if linked_record else None,
+            "linked_document": linked_record,
+        },
+    )
+    doc.save()
+    _build_charges_if_needed(doc, billable=bool(billable), item=item)
+    return {
+        "activity": _activity_payload(row),
+        "linked_record": linked_record,
+        "episode": _episode_payload(doc),
+        "warning": None if item or not cint(values.get("billable", 1)) else _("The selected Vaccine has no billing Item."),
+    }
+
+
+@frappe.whitelist()
+def add_hospitalisation_lab_order(
+    hospitalisation_name: str,
+    lab_tests=None,
+    sample_notes: str | None = None,
+    modified: str | None = None,
+) -> dict[str, Any]:
+    doc = _load_hospitalisation(hospitalisation_name, write=True)
+    _assert_not_stale(doc, modified)
+    _assert_open_episode(doc)
+    requested = _parse_list(lab_tests)
+    names = []
+    for row in requested:
+        if isinstance(row, str):
+            name = _clean(row)
+        elif isinstance(row, dict):
+            name = _clean(row.get("lab_test_template") or row.get("name") or row.get("test"))
+        else:
+            name = ""
+        if name and name not in names:
+            names.append(name)
+    if not names:
+        frappe.throw(_("Select at least one lab test."), frappe.ValidationError)
+
+    rows = frappe.get_list(
+        "Veterinary Lab Test",
+        filters={"name": ["in", names], "is_active": 1},
+        fields=["name", "test_name", "sample_type", "linked_item", "default_rate"],
+        page_length=min(len(names), 50),
+    )
+    by_name = {row.get("name"): row for row in rows}
+    missing = [name for name in names if name not in by_name]
+    if missing:
+        frappe.throw(_("One or more selected Lab Tests are unavailable."), frappe.ValidationError)
+
+    linked_order = None
+    if doc.get("linked_consultation"):
+        from vetedge.services.lab import create_lab_order_from_consultation
+
+        result = create_lab_order_from_consultation(
+            consultation=doc.get("linked_consultation"),
+            lab_tests=[{"lab_test_template": name} for name in names],
+            sample_notes=sample_notes,
+        )
+        linked_order = result.get("name") if isinstance(result, dict) else None
+
+    created = []
+    has_billable = False
+    for name in names:
+        test = by_name[name]
+        item = test.get("linked_item")
+        billable = bool(item)
+        has_billable = has_billable or billable
+        row = _append_activity(
+            doc,
+            {
+                "activity_type": "Lab",
+                "clinical_notes": "\n".join(filter(None, [test.get("test_name") or name, _clean(sample_notes)])),
+                "billable": 1 if billable else 0,
+                "item": item,
+                "qty": 1 if item else None,
+                "linked_doctype": "Veterinary Lab Order" if linked_order else None,
+                "linked_document": linked_order,
+            },
+        )
+        created.append(row)
+    doc.save()
+    if has_billable:
+        from vetedge.services.hospitalisation import build_hospitalisation_charge_items
+
+        build_hospitalisation_charge_items(doc.name)
+        doc.reload()
+    return {
+        "linked_order": linked_order,
+        "created_count": len(created),
+        "episode": _episode_payload(doc),
     }
 
 
@@ -399,7 +669,9 @@ def search_hospitalisation_episode_options(
             {
                 "value": row.get("name"),
                 "label": row.get("item_name") or row.get("name"),
-                "description": " · ".join(filter(None, [row.get("stock_uom"), "Stock Item" if cint(row.get("is_stock_item")) else "Service Item"])),
+                "description": " · ".join(
+                    filter(None, [row.get("stock_uom"), "Stock Item" if cint(row.get("is_stock_item")) else "Service Item"])
+                ),
                 "uom": row.get("stock_uom"),
                 "is_stock_item": cint(row.get("is_stock_item")),
             }
@@ -410,4 +682,118 @@ def search_hospitalisation_episode_options(
         rows = get_veterinary_doctor_users("User", query, "name", offset, page_len, {})
         return [{"value": row[0], "label": row[1]} for row in rows]
 
+    if field == "vaccine":
+        filters = {"is_active": 1}
+        or_filters = None
+        if query:
+            or_filters = [
+                ["Veterinary Vaccine", "name", "like", f"%{query}%"],
+                ["Veterinary Vaccine", "vaccine_name", "like", f"%{query}%"],
+                ["Veterinary Vaccine", "vaccine_code", "like", f"%{query}%"],
+            ]
+        rows = frappe.get_list(
+            "Veterinary Vaccine",
+            filters=filters,
+            or_filters=or_filters,
+            fields=["name", "vaccine_name", "vaccine_code", "species", "default_item"],
+            order_by="vaccine_name asc",
+            start=offset,
+            page_length=page_len,
+        )
+        patient_species = frappe.db.get_value("Veterinary Patient", doc.get("patient"), "species") if doc.get("patient") else None
+        return [
+            {
+                "value": row.get("name"),
+                "label": row.get("vaccine_name") or row.get("name"),
+                "description": " · ".join(filter(None, [row.get("vaccine_code"), row.get("species")])),
+            }
+            for row in rows
+            if not row.get("species") or not patient_species or row.get("species") == patient_species
+        ]
+
+    if field == "lab_test":
+        filters = {"is_active": 1}
+        or_filters = None
+        if query:
+            or_filters = [
+                ["Veterinary Lab Test", "name", "like", f"%{query}%"],
+                ["Veterinary Lab Test", "test_name", "like", f"%{query}%"],
+            ]
+        rows = frappe.get_list(
+            "Veterinary Lab Test",
+            filters=filters,
+            or_filters=or_filters,
+            fields=["name", "test_name", "sample_type", "linked_item", "default_rate"],
+            order_by="test_name asc",
+            start=offset,
+            page_length=page_len,
+        )
+        return [
+            {
+                "value": row.get("name"),
+                "label": row.get("test_name") or row.get("name"),
+                "description": " · ".join(filter(None, [row.get("sample_type"), "Billable" if row.get("linked_item") else None])),
+                "linked_item": row.get("linked_item"),
+                "default_rate": flt(row.get("default_rate")),
+            }
+            for row in rows
+        ]
+
     frappe.throw(_("Unsupported Hospitalisation episode option field."), frappe.ValidationError)
+
+
+@frappe.whitelist()
+def perform_hospitalisation_episode_action(
+    name: str,
+    action: str,
+    values=None,
+    modified: str | None = None,
+) -> dict[str, Any]:
+    action = _clean(action)
+    values = _parse_payload(values)
+    doc = _load_hospitalisation(name, write=action in WRITE_ACTIONS)
+    if action in WRITE_ACTIONS:
+        _assert_not_stale(doc, modified)
+
+    from vetedge.services import hospitalisation as service
+
+    if action == "admit":
+        result = service.admit_hospitalisation(name)
+    elif action == "check_discharge_readiness":
+        result = service.get_hospitalisation_discharge_readiness(name)
+    elif action == "stock_preview":
+        result = service.get_hospitalisation_stock_posting_preview(name, values.get("activity_row_name"))
+    elif action == "assign_location":
+        result = service.assign_hospitalisation_care_location(name, values.get("care_location"), values.get("notes"))
+    elif action == "release_location":
+        result = service.release_hospitalisation_care_location(name, values.get("notes"))
+    elif action == "post_stock":
+        result = service.post_hospitalisation_activity_stock(name, values.get("activity_row_name"))
+    elif action == "build_charges":
+        result = service.build_hospitalisation_charge_items(name)
+    elif action == "sync_invoice":
+        result = service.sync_hospitalisation_charges_to_invoice(
+            name,
+            confirm=bool(cint(values.get("confirm"))),
+            confirmation_type=values.get("confirmation_type"),
+        )
+    elif action == "generate_daily_charges":
+        result = service.generate_hospitalisation_daily_charges(
+            name,
+            from_date=values.get("from_date"),
+            to_date=values.get("to_date"),
+            care_level=values.get("care_level") or doc.get("care_level"),
+        )
+    elif action == "check_payment_gate":
+        result = service.check_hospitalisation_payment_gate(name)
+    elif action == "discharge":
+        result = service.discharge_hospitalisation(
+            name,
+            discharge_details=values.get("discharge_details") or values,
+            force=False,
+        )
+    else:
+        frappe.throw(_("Unsupported Hospitalisation episode action."), frappe.ValidationError)
+
+    refreshed = _load_hospitalisation(name)
+    return {"result": result or {}, "episode": _episode_payload(refreshed)}
