@@ -378,6 +378,37 @@ def check_vetedge_feature_access(
 			"context": context,
 		}
 
+
+def check_vetedge_feature_entitlement(
+	feature_key: str,
+	user: str | None = None,
+	tenant: str | None = None,
+	product_app: str | None = None,
+) -> dict:
+	"""Call CoreEdge's feature-entitlement API behind VetEdge's adapter boundary."""
+	from coreedge.coreedge.entitlements import check_entitlement
+
+	context = get_current_vetedge_context(user=user) or {}
+	tenant = tenant or context.get("tenant")
+	product_app = (
+		product_app
+		or context.get("product_app")
+		or context.get("active_product_app")
+		or get_vetedge_product_app()
+	)
+	return check_entitlement(
+		user=user,
+		tenant=tenant,
+		product_app=product_app,
+		entitlement_key=feature_key,
+		entitlement_type="Feature",
+		request_source="System",
+		reference_doctype="CoreEdge Entitlement",
+		reference_name=feature_key,
+		log_result=False,
+	) or {}
+
+
 def get_visible_vetedge_sidebar_items(items: list[dict]) -> list[dict]:
 	if should_show_coreedge_controls():
 		return items

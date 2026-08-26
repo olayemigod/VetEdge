@@ -67,15 +67,20 @@ def test_advanced_reporting_adapter_uses_coreedge_feature_entitlement_and_standa
 	source = (ROOT / "services/reporting_entitlement_adapter.py").read_text()
 	for expected in (
 		'ADVANCED_REPORTS_FEATURE_KEY = "advanced_reports"',
-		"from coreedge.coreedge.entitlements import check_entitlement",
-		'entitlement_type="Feature"',
-		'entitlement_key=ADVANCED_REPORTS_FEATURE_KEY',
+		"check_vetedge_feature_entitlement",
+		"ADVANCED_REPORTS_FEATURE_KEY,",
 		'is_enabled(ADVANCED_REPORTS_FEATURE_KEY)',
 		'"source": "coreedge_entitlement"',
 		'"source": "veterinary_settings"',
 	):
 		assert expected in source
+	assert "from coreedge" not in source
 	assert "ignore_permissions" not in source
+
+	adapter = (ROOT / "coreedge_adapter.py").read_text()
+	assert "def check_vetedge_feature_entitlement(" in adapter
+	assert "from coreedge.coreedge.entitlements import check_entitlement" in adapter
+	assert 'entitlement_type="Feature"' in adapter
 
 
 def test_query_report_and_dashboard_data_paths_enforce_subscription_tier_server_side():

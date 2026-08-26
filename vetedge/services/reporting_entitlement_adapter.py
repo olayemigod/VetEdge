@@ -3,8 +3,7 @@ from __future__ import annotations
 import frappe
 
 from vetedge.coreedge_adapter import (
-	get_current_vetedge_context,
-	get_vetedge_product_app,
+	check_vetedge_feature_entitlement,
 	is_coreedge_available,
 	is_coreedge_enabled,
 	should_fail_closed_when_coreedge_missing,
@@ -41,22 +40,10 @@ def check_advanced_reporting_entitlement(user: str | None = None) -> dict:
 		}
 
 	try:
-		from coreedge.coreedge.entitlements import check_entitlement
-
-		context = get_current_vetedge_context(user=user) or {}
-		tenant = context.get("tenant")
-		product_app = context.get("product_app") or context.get("active_product_app") or get_vetedge_product_app()
-		result = check_entitlement(
+		result = check_vetedge_feature_entitlement(
+			ADVANCED_REPORTS_FEATURE_KEY,
 			user=user,
-			tenant=tenant,
-			product_app=product_app,
-			entitlement_key=ADVANCED_REPORTS_FEATURE_KEY,
-			entitlement_type="Feature",
-			request_source="System",
-			reference_doctype="CoreEdge Entitlement",
-			reference_name=ADVANCED_REPORTS_FEATURE_KEY,
-			log_result=False,
-		) or {}
+		)
 		return {
 			"allowed": bool(result.get("allowed")),
 			"source": "coreedge_entitlement",

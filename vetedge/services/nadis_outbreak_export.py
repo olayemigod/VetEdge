@@ -252,7 +252,7 @@ def _sheet_rows(data: dict) -> dict[str, list[list]]:
         outbreak_rows.append([
             None,
             row.get("name"),
-            row.get("country") or "Nigeria",
+            row.get("country"),
             row.get("admin_level_1"),
             investigated.year,
             investigated.strftime("%B"),

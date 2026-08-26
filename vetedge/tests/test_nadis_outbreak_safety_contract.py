@@ -11,6 +11,8 @@ def test_outbreak_export_allows_zero_new_count_for_follow_up_but_not_new_outbrea
     assert 'A New outbreak must report at least one new outbreak' in export
     assert 'investigated.strftime("%B")' in export
     assert 'investigated.strftime("%B").upper()' not in export
+    assert 'row.get("country"),' in export
+    assert 'or "Nigeria"' not in export
 
 
 def test_outbreak_source_model_rejects_cross_company_branch_and_bad_follow_up_disease():
