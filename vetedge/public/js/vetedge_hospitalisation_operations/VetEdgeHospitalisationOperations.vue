@@ -461,10 +461,14 @@ export default {
       return String(value);
     },
     openCell({ row, column, value }) {
-      if (!window.frappe?.set_route || !column?.fieldname) return;
+      if (!column?.fieldname) return;
       const field = column.fieldname;
-      if (field === 'hospitalisation' && row?.hospitalisation) frappe.set_route('Form', 'Veterinary Hospitalisation', row.hospitalisation);
-      else if (field === 'patient_name' && row?.patient) frappe.set_route('Form', 'Veterinary Patient', row.patient);
+      if (field === 'hospitalisation' && row?.hospitalisation) {
+        window.location.assign(`/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(row.hospitalisation)}`);
+        return;
+      }
+      if (!window.frappe?.set_route) return;
+      if (field === 'patient_name' && row?.patient) frappe.set_route('Form', 'Veterinary Patient', row.patient);
       else if (field === 'owner' && row?.owner) frappe.set_route('Form', 'Customer', row.owner);
       else if (field === 'care_location' && row?.care_location) frappe.set_route('Form', 'Veterinary Care Location', row.care_location);
       else if (field === 'attending_veterinarian' && value) frappe.set_route('Form', 'User', value);
