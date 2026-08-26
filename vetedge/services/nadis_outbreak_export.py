@@ -96,6 +96,7 @@ def _child_rows(doctype: str, parent_names: list[str], fields: list[str]) -> lis
         fields=["parent", "idx", *fields],
         order_by="parent asc, idx asc",
         page_length=MAX_TEMPLATE_ROWS + 1,
+        parent_doctype=OUTBREAK_DOCTYPE,
     )
     if len(rows) > MAX_TEMPLATE_ROWS:
         frappe.throw(

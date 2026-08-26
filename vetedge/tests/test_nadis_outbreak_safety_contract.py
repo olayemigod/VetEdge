@@ -55,3 +55,16 @@ def test_outbreak_source_of_infection_is_guided_by_supplied_template_values():
         "From endemic foci at locality",
     ):
         assert value in doctype
+
+
+def test_outbreak_child_query_preserves_parent_doctype_context():
+    """Child-table regulatory reads must retain parent permission context."""
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "services"
+        / "nadis_outbreak_export.py"
+    ).read_text()
+
+    assert "parent_doctype=OUTBREAK_DOCTYPE" in source
