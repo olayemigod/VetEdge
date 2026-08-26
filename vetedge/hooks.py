@@ -67,6 +67,7 @@ permission_query_conditions = {
 	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.get_veterinary_missed_appointment_query",
 	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
+	"Veterinary Hospitalisation": "vetedge.services.hospitalisation_permissions.get_hospitalisation_query",
 	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
 	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.get_veterinary_vaccination_record_query",
@@ -81,6 +82,7 @@ permission_query_conditions = {
 
 has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
+	"Veterinary Hospitalisation": "vetedge.services.hospitalisation_permissions.has_hospitalisation_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
