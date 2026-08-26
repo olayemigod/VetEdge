@@ -495,21 +495,3 @@ export default {
 @media (max-width: 900px) { .hospitalisation-filter-grid { grid-template-columns: repeat(2, minmax(10rem, 1fr)); } }
 @media (max-width: 576px) { .hospitalisation-filter-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
-
-<style>
-.vetedge-hospitalisation-operations-root .edge-sidebar,
-.vetedge-hospitalisation-operations-root .edge-shell-sidebar { display: none !important; }
-.vetedge-hospitalisation-operations-root .edge-shell-body {
-  grid-template-columns: minmax(0, 1fr) !important;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-}
-.vetedge-hospitalisation-operations-root .edge-shell-main,
-.vetedge-hospitalisation-operations-root .edge-page-layout,
-.vetedge-hospitalisation-operations-root .edge-page-layout-body {
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-}
-</style>
