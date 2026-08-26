@@ -36,6 +36,7 @@
 	const SAME_TAB_PRODUCT_PAGES = Object.freeze({
 		"Training Centre": "/desk/veterinary-training-centre",
 		"Settings": "/desk/veterinary-settings-center",
+		"VCN / NADIS Reports": "/desk/vetedge-regulatory-reporting",
 	});
 
 	function normalizeDeskPath(pathname) {
@@ -300,6 +301,7 @@
 			};
 		}
 		if (path === "/desk/veterinary-settings-center") return { section: "Configuration", label: "Settings" };
+		if (path === "/desk/vetedge-regulatory-reporting") return { section: "Regulatory Reporting", label: "VCN / NADIS Reports" };
 		if (path === "/desk/veterinary-training-centre") return { section: "Help & Training", label: "Training Centre" };
 		if (path === "/desk/vetedge-vitals-center") return { section: "Clinical", label: "Vital Signs" };
 		if (path === "/desk/vetedge-treatment-plan-report") return { section: "Reports", label: "Planned Treatment" };

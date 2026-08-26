@@ -19,6 +19,8 @@ REPORT_CATALOG = {
 	"Planned Treatment": {"tier": STANDARD_TIER},
 	"Lab Order Report": {"tier": STANDARD_TIER},
 	"Vaccination Report": {"tier": STANDARD_TIER},
+	"NADIS Monthly Vaccination Report": {"tier": STANDARD_TIER, "reason": "regulatory_compliance"},
+	"NADIS Disease Outbreak Report": {"tier": STANDARD_TIER, "reason": "regulatory_compliance"},
 	"Patient Register": {"tier": STANDARD_TIER},
 	"Owner Register": {"tier": STANDARD_TIER},
 	"Boarding Report": {"tier": STANDARD_TIER},
