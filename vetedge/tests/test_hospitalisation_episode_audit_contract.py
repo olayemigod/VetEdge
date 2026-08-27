@@ -20,8 +20,19 @@ EPISODE_COMPONENT = (
     / "vetedge_hospitalisation_episode"
     / "VetEdgeHospitalisationEpisode.vue"
 )
+SETTINGS_COMPONENT = (
+    ROOT
+    / "vetedge"
+    / "public"
+    / "js"
+    / "veterinary_settings_center"
+    / "VeterinarySettingsCenter.vue"
+)
 POLICY = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy.py"
 EPISODE_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_episode.py"
+OPERATIONS_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_operations.py"
+REPORT_EXCEPTIONS = ROOT / "vetedge" / "services" / "report_exceptions.py"
+SETTINGS_PAGE = ROOT / "vetedge" / "services" / "settings_page.py"
 MEDICAL_HISTORY = ROOT / "vetedge" / "services" / "medical_history_integrity.py"
 CLINICAL_CONTEXT = ROOT / "vetedge" / "services" / "clinical_consultation_context.py"
 CLINICAL_WORKSPACE_CONTEXT = ROOT / "vetedge" / "services" / "clinical_workspace_context.py"
@@ -57,6 +68,20 @@ def test_dispensary_off_is_server_authoritative_and_hides_episode_stock_actions(
     assert 'v-if="episode.capabilities?.dispensary_enabled"' in episode
     assert 'v-if="episode.capabilities?.can_preview_stock"' in episode
     assert 'v-if="episode.capabilities?.can_post_stock"' in episode
+
+
+def test_dispensary_off_suppresses_actionable_operations_and_exception_stock_signals():
+    operations = read(OPERATIONS_SERVICE)
+    exceptions = read(REPORT_EXCEPTIONS)
+
+    assert "is_hospitalisation_dispensary_enabled" in operations
+    assert "dispensary_enabled = is_hospitalisation_dispensary_enabled()" in operations
+    assert "dispensary_enabled\n            and cint(row.get(\"stock_affecting\"))" in operations
+
+    assert "is_hospitalisation_dispensary_enabled" in exceptions
+    assert "if not is_hospitalisation_dispensary_enabled():" in exceptions
+    assert "return []" in exceptions
+    assert '"exception_type": "pending_stock"' in exceptions
 
 
 def test_charge_editing_setting_preserves_submitted_invoice_immutability():
@@ -109,6 +134,8 @@ def test_direct_hospitalisation_clinical_records_do_not_require_fake_consultatio
 def test_daily_charge_switch_controls_runtime_configuration_and_initial_source():
     policy = read(POLICY)
     settings = read(SETTINGS_CONTROLLER)
+    settings_page = read(SETTINGS_PAGE)
+    settings_component = read(SETTINGS_COMPONENT)
     patch = read(SETTINGS_PATCH)
     harden_patch = read(DAILY_SETTINGS_PATCH)
     patches = read(PATCHES)
@@ -125,6 +152,11 @@ def test_daily_charge_switch_controls_runtime_configuration_and_initial_source()
     assert 'doc.enable_hospitalisation_daily_charges' in harden_patch
     assert 'make_property_setter(' in harden_patch
     assert 'vetedge.patches.harden_hospitalisation_daily_charge_settings' in patches
+
+    # The EdgeSuite Settings Center is metadata-driven, so the Property Setter
+    # hides the table without a Hospitalisation-specific alternate settings UI.
+    assert '"depends_on": field.depends_on or ""' in settings_page
+    assert "isVisible(field) { return evaluateCondition(field.depends_on, this.values); }" in settings_component
 
 
 def test_hospitalisation_history_skips_dedicated_clinical_duplicates():
