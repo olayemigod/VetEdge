@@ -1,13 +1,33 @@
+function decodeHospitalisationRoutePart(value) {
+	try {
+		return decodeURIComponent(String(value || '')).trim();
+	} catch (_error) {
+		return String(value || '').trim();
+	}
+}
+
 function hospitalisationEpisodeRouteState() {
+	const route = window.frappe?.get_route?.() || [];
+	const routeName = route?.[0] === 'vetedge-hospitalisation-episode'
+		? String(route?.[1] || '').trim()
+		: '';
+
+	const pathParts = window.location.pathname.split('/').filter(Boolean);
+	const pathName = pathParts[0] === 'desk' && pathParts[1] === 'vetedge-hospitalisation-episode'
+		? decodeHospitalisationRoutePart(pathParts[2])
+		: '';
+
+	// Query-string and route_options support are retained only for links created
+	// by older VetEdge revisions. New drill-throughs use the record path segment.
 	const params = new URLSearchParams(window.location.search || '');
-	const routeOptionName = window.frappe?.route_options?.name;
-	const name = String(params.get('name') || routeOptionName || '').trim();
+	const routeOptionName = String(window.frappe?.route_options?.name || '').trim();
+	const name = String(routeName || pathName || params.get('name') || routeOptionName || '').trim();
 	return { name, key: name ? `hospitalisation:${name}` : 'missing' };
 }
 
 function hospitalisationEpisodeDeskUrl(name) {
 	return name
-		? `/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}`
+		? `/desk/vetedge-hospitalisation-episode/${encodeURIComponent(name)}`
 		: '/desk/vetedge-hospitalisation-episode';
 }
 
