@@ -12,6 +12,14 @@ OPERATIONS_COMPONENT = (
     / "vetedge_hospitalisation_operations"
     / "VetEdgeHospitalisationOperations.vue"
 )
+OPERATIONS_PAGE = (
+    ROOT
+    / "vetedge"
+    / "veterinary"
+    / "page"
+    / "vetedge_hospitalisation_operations"
+    / "vetedge_hospitalisation_operations.js"
+)
 EPISODE_COMPONENT = (
     ROOT
     / "vetedge"
@@ -273,14 +281,25 @@ def test_hospitalisation_operations_sorting_is_server_side_and_allowlisted():
     assert '"missing_price_count", "label": _("Missing Prices"), "fieldtype": "Int", "sortable": False' in service
 
 
-def test_hospitalisation_exception_and_list_actions_route_to_registered_app_page():
+def test_hospitalisation_exception_and_list_actions_use_frappe_native_desk_route():
     component = read(OPERATIONS_COMPONENT)
-    page = read(EPISODE_PAGE)
+    operations_page = read(OPERATIONS_PAGE)
+    episode_page = read(EPISODE_PAGE)
 
+    # Both Vue actions share the same method, which the Frappe Page wrapper
+    # replaces with a route-safe implementation after mount and on repeat visits.
     assert "item.reference_doctype === 'Veterinary Hospitalisation'" in component
-    assert "/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}" in component
-    assert "/desk/vetedge-hospitalisation-episode" not in component
+    assert "this.openHospitalisationEpisode(item.reference_name)" in component
+    assert "this.openHospitalisationEpisode(row.hospitalisation)" in component
+    assert "function openHospitalisationEpisodeRoute" in operations_page
+    assert "view.openHospitalisationEpisode = openHospitalisationEpisodeRoute" in operations_page
+    assert "frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation })" in operations_page
+    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}" in operations_page
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', item.reference_name)" not in component
-    assert "hospitalisationEpisodeAppUrl" in page
-    assert "/app/vetedge-hospitalisation-episode" in page
-    assert "canonicalizeHospitalisationEpisodeRoute" in page
+
+    # Frappe v16's router emits /desk/... URLs and serialises route options into
+    # the query string. The Episode Page also accepts route_options defensively.
+    assert "hospitalisationEpisodeDeskUrl" in episode_page
+    assert "/desk/vetedge-hospitalisation-episode" in episode_page
+    assert "window.frappe?.route_options?.name" in episode_page
+    assert "canonicalizeHospitalisationEpisodeRoute" in episode_page
