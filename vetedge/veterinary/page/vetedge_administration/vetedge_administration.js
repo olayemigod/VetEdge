@@ -265,6 +265,8 @@ frappe.pages["vetedge-administration"].on_page_show = function (wrapper) {
 						this.updateRoute(doc);
 						frappe.show_alert({ message: __("Administration record saved"), indicator: "green" });
 						await this.refresh();
+						this.editor.saving = false;
+						this.closeEditor();
 					} catch (error) {
 						this.editor.error = this.message(error, __("Administration record could not be saved."));
 					} finally {
@@ -346,9 +348,11 @@ frappe.pages["vetedge-administration"].on_page_show = function (wrapper) {
 					]);
 				},
 				renderEditor() {
+					if (!this.editor.open) return null;
 					const doc = this.editor.document;
 					return h(EdgeModal, {
-						open: this.editor.open,
+						key: "vetedge-administration-editor-modal",
+						open: true,
 						title: doc?.title || this.list.singular || __("Administration Record"),
 						subtitle: this.list.subtitle || "",
 						size: "lg",
@@ -369,7 +373,8 @@ frappe.pages["vetedge-administration"].on_page_show = function (wrapper) {
 					});
 				},
 				renderDeleteConfirmation() {
-					return h(EdgeModal, { open: this.confirmDeleteOpen, title: __("Delete administration record"), subtitle: this.editor.document?.title || this.editor.document?.name || "", busy: this.deleteBusy, onClose: () => { if (!this.deleteBusy) this.confirmDeleteOpen = false; } }, {
+					if (!this.confirmDeleteOpen) return null;
+					return h(EdgeModal, { key: "vetedge-administration-delete-modal", open: true, title: __("Delete administration record"), subtitle: this.editor.document?.title || this.editor.document?.name || "", busy: this.deleteBusy, onClose: () => { if (!this.deleteBusy) this.confirmDeleteOpen = false; } }, {
 						default: () => h("p", __("Delete this record? Frappe link integrity and permissions will still be enforced.")),
 						footer: () => h("div", { class: "vetedge-administration-actions" }, [
 							h("button", { class: "edge-button", type: "button", disabled: this.deleteBusy, onClick: () => { this.confirmDeleteOpen = false; } }, __("Cancel")),
