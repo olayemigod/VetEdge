@@ -165,6 +165,28 @@ def test_hospitalisation_episode_exposes_authoritative_daily_charge_action():
     assert 'frappe.new_doc("Sales Invoice"' not in component
 
 
+def test_hospitalisation_episode_billing_actions_match_native_operational_parity():
+    component = read(COMPONENT)
+    service = read(SERVICE)
+    hospitalisation = read(HOSPITALISATION_SERVICE)
+
+    assert "Check Payment Gate" in component
+    assert '@click="checkPaymentGate"' in component
+    assert "runAction('check_payment_gate'" in component
+    assert 'elif action == "check_payment_gate"' in service
+    assert "service.check_hospitalisation_payment_gate(name)" in service
+
+    assert "View Charge Summary" in component
+    assert '@click="viewChargeSummary"' in component
+    assert "vetedge.services.hospitalisation.get_hospitalisation_charge_summary" in component
+    assert "def get_hospitalisation_charge_summary" in hospitalisation
+
+    # The parity actions consume authoritative backend summaries/gates; the
+    # EdgeSuite workspace still does not construct accounting documents.
+    assert "frappe.new_doc('Sales Invoice'" not in component
+    assert 'frappe.new_doc("Sales Invoice"' not in component
+
+
 def test_hospitalisation_episode_policy_is_routed_through_frappe_overrides():
     hooks = read(HOOKS)
 
