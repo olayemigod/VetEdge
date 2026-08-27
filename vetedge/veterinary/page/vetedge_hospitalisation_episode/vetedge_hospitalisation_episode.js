@@ -1,32 +1,40 @@
 function hospitalisationEpisodeRouteState() {
 	const params = new URLSearchParams(window.location.search || '');
-	const name = String(params.get('name') || '').trim();
+	const routeOptionName = window.frappe?.route_options?.name;
+	const name = String(params.get('name') || routeOptionName || '').trim();
 	return { name, key: name ? `hospitalisation:${name}` : 'missing' };
 }
 
-function hospitalisationEpisodeAppUrl(name) {
+function hospitalisationEpisodeDeskUrl(name) {
 	return name
-		? `/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}`
-		: '/app/vetedge-hospitalisation-episode';
+		? `/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}`
+		: '/desk/vetedge-hospitalisation-episode';
 }
 
 function canonicalizeHospitalisationEpisodeRoute(name) {
-	const target = hospitalisationEpisodeAppUrl(name);
+	const target = hospitalisationEpisodeDeskUrl(name);
 	if (`${window.location.pathname}${window.location.search}` !== target) {
 		window.history.replaceState({}, '', target);
 	}
 }
 
+function routeToHospitalisationOperations() {
+	if (window.frappe?.set_route) {
+		frappe.set_route('vetedge-hospitalisation-operations');
+		return;
+	}
+	window.location.assign('/desk/vetedge-hospitalisation-operations');
+}
+
 function hardenMountedHospitalisationEpisodeNavigation(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return;
-	// Older Episode bundle revisions used /desk/... hard navigation. Keep the
-	// canonical Frappe v16 /app route even if that bundle is still in browser cache.
-	view.backToOperations = () => window.location.assign('/app/vetedge-hospitalisation-operations');
 
-	// Canonicalize after every load too. This removes the race where a cached Vue
-	// bundle can finish its async load after the Page wrapper and replace /app
-	// with the obsolete /desk URL.
+	// Frappe v16 Desk routing is /desk/... and frappe.set_route owns SPA
+	// navigation. Keep the mounted Vue workspace aligned even if a cached bundle
+	// still contains an older hard-coded path.
+	view.backToOperations = routeToHospitalisationOperations;
+
 	if (!view.__vetedgeCanonicalEpisodeLoad && typeof view.loadEpisode === 'function') {
 		const originalLoadEpisode = view.loadEpisode.bind(view);
 		view.loadEpisode = async (name) => {
