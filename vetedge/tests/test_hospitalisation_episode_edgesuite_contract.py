@@ -24,6 +24,12 @@ OPERATIONS_COMPONENT = (
     / "VetEdgeHospitalisationOperations.vue"
 )
 SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_episode.py"
+POLICY = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy.py"
+HOSPITALISATION_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation.py"
+MEDICAL_HISTORY = ROOT / "vetedge" / "services" / "medical_history_integrity.py"
+HOOKS = ROOT / "vetedge" / "hooks.py"
+PATCH = ROOT / "vetedge" / "patches" / "add_hospitalisation_episode_policy_settings.py"
+PATCHES = ROOT / "vetedge" / "patches.txt"
 
 
 def read(path: Path) -> str:
@@ -158,3 +164,117 @@ def test_hospitalisation_episode_exposes_authoritative_daily_charge_action():
     assert "frappe.new_doc('Sales Invoice'" not in component
     assert 'frappe.new_doc("Sales Invoice"' not in component
 
+
+def test_hospitalisation_episode_policy_is_routed_through_frappe_overrides():
+    hooks = read(HOOKS)
+
+    for contract in (
+        '"vetedge.services.hospitalisation_episode.get_hospitalisation_episode": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_episode"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_activity"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vaccination"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_lab_order"',
+        '"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy.perform_hospitalisation_episode_action"',
+        '"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_stock_posting_preview"',
+        '"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy.post_hospitalisation_activity_stock"',
+        '"vetedge.services.hospitalisation.generate_hospitalisation_daily_charges": "vetedge.services.hospitalisation_episode_policy.generate_hospitalisation_daily_charges"',
+        '"vetedge.services.hospitalisation.admit_hospitalisation": "vetedge.services.hospitalisation_episode_policy.admit_hospitalisation"',
+        '"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_discharge_readiness"',
+        '"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy.discharge_hospitalisation"',
+    ):
+        assert contract in hooks
+
+
+def test_hospitalisation_episode_policy_preserves_admission_and_accounting_safety():
+    policy = read(POLICY)
+    hospitalisation = read(HOSPITALISATION_SERVICE)
+
+    # The pre-existing admission policy remains authoritative. A clinic that
+    # requires consultation linkage does not silently become a direct-admission
+    # clinic merely because the EdgeSuite Episode workspace exists.
+    assert 'allow_direct_admission=cint(value("allow_direct_hospitalisation_admission", 0))' in hospitalisation
+    assert "Hospitalisation should be created from a Consultation" in hospitalisation
+
+    # Charge editing is confined to the Hospitalisation charge sheet while
+    # submitted/cancelled ERPNext invoices remain immutable.
+    assert "update_hospitalisation_charge_item" in policy
+    assert "This charge is linked to a submitted or cancelled Sales Invoice." in policy
+    assert '"invoice_sync_required"' in policy
+    assert "Sync Charges to Invoice" in policy
+    assert "ignore_permissions" not in policy
+    assert "frappe.new_doc" not in policy
+
+
+def test_hospitalisation_episode_policy_settings_patch_is_registered_and_idempotent():
+    patch = read(PATCH)
+    patches = read(PATCHES)
+
+    assert "create_custom_fields(" in patch
+    assert "update=True" in patch
+    assert '"enable_hospitalisation_daily_charges"' in patch
+    assert '"allow_editing_hospitalisation_charge_items"' in patch
+    assert patch.count('"fieldname": "hospitalisation"') == 3
+    assert '"Veterinary Vital Signs"' in patch
+    assert '"Veterinary Vaccination Record"' in patch
+    assert '"Veterinary Lab Order"' in patch
+    assert "vetedge.patches.add_hospitalisation_episode_policy_settings" in patches
+
+
+def test_direct_admission_clinical_records_are_authoritative_and_linked():
+    policy = read(POLICY)
+
+    for contract in (
+        "_create_direct_hospitalisation_vitals",
+        '"doctype": "Veterinary Vital Signs"',
+        "_create_direct_hospitalisation_vaccination",
+        '"doctype": "Veterinary Vaccination Record"',
+        "_create_direct_hospitalisation_lab_order",
+        '"doctype": "Veterinary Lab Order"',
+        "_link_record_to_hospitalisation",
+        "_link_activity_rows",
+    ):
+        assert contract in policy
+
+    # Source clinical documents are created through ordinary permission-aware
+    # document insertion; the new policy layer must not bypass permissions.
+    assert "record.insert()" in policy
+    assert "order.insert()" in policy
+    assert "ignore_permissions" not in policy
+
+
+def test_hospitalisation_medical_history_has_permission_aware_episode_timeline():
+    history = read(MEDICAL_HISTORY)
+
+    for contract in (
+        "get_hospitalisation_history",
+        "require_internal_user()",
+        "can_access_medical_history",
+        'frappe.has_permission(HOSPITALISATION_DOCTYPE, "read")',
+        '"event_type": "Admission"',
+        '"event_type": "Discharge"',
+        'if section == "hospitalisations"',
+        'result["hospitalisations"] = get_hospitalisation_history(',
+        "HOSPITALISATION_HISTORY_MAX_LIMIT = 100",
+    ):
+        assert contract in history
+
+
+def test_hospitalisation_episode_ui_reflects_clinic_policy_capabilities():
+    component = read(COMPONENT)
+    policy = read(POLICY)
+
+    for contract in (
+        "dispensary_enabled",
+        "daily_charges_enabled",
+        "can_generate_daily_charges",
+        "allow_charge_item_editing",
+        "update_hospitalisation_charge_item",
+    ):
+        assert contract in policy
+
+    assert "Dispensary Flow" in component
+    assert "Daily charges are off" in component
+    assert "Edit Hospitalisation Charge" in component
+    assert "Draft invoice linked" in component
+    assert "Sync Charges to Invoice afterwards" in component
+    assert "hospitalisation_episode_policy.update_hospitalisation_charge_item" in component
