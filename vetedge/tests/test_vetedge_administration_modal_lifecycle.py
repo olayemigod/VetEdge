@@ -55,7 +55,12 @@ class TestVetEdgeAdministrationModalLifecycle(unittest.TestCase):
 
     def test_all_five_resources_share_the_same_editor_lifecycle(self):
         text = source()
-        self.assertEqual(text.count('{ key: "'), 5)
+        resource_block = method_block(
+            text,
+            "const VETEDGE_ADMIN_RESOURCES = Object.freeze([",
+            "const VETEDGE_ADMIN_STYLE_ID",
+        )
+        self.assertEqual(resource_block.count('{ key: "'), 5)
         for resource in (
             "notification-preferences",
             "notification-logs",
@@ -63,7 +68,7 @@ class TestVetEdgeAdministrationModalLifecycle(unittest.TestCase):
             "role-bundles",
             "license-profile",
         ):
-            self.assertIn(f'key: "{resource}"', text)
+            self.assertIn(f'key: "{resource}"', resource_block)
 
 
 if __name__ == "__main__":
