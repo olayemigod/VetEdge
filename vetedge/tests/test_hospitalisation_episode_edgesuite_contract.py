@@ -26,6 +26,7 @@ OPERATIONS_COMPONENT = (
 SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_episode.py"
 POLICY = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy.py"
 POLICY_V2 = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy_v2.py"
+ITEM_POLICY = ROOT / "vetedge" / "services" / "hospitalisation_item_policy.py"
 HOSPITALISATION_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation.py"
 MEDICAL_HISTORY = ROOT / "vetedge" / "services" / "medical_history_integrity.py"
 HOOKS = ROOT / "vetedge" / "hooks.py"
@@ -122,6 +123,7 @@ def test_hospitalisation_episode_reuses_authoritative_hospitalisation_services()
 
 def test_hospitalisation_episode_uses_bounded_context_searches():
     service = read(SERVICE)
+    item_policy = read(ITEM_POLICY)
 
     assert "_bounded_limit(page_length)" in service
     assert 'if field == "care_location"' in service
@@ -130,6 +132,9 @@ def test_hospitalisation_episode_uses_bounded_context_searches():
     assert 'if field == "vaccine"' in service
     assert 'if field == "lab_test"' in service
     assert 'if field == "item"' in service
+    assert 'filters = {"disabled": 0, "is_sales_item": 1}' in item_policy
+    assert "base_policy._load_hospitalisation(hospitalisation_name)" in item_policy
+    assert "page_length=limit" in item_policy
 
 
 def test_hospitalisation_episode_ui_uses_server_facade_for_mutations():
@@ -197,14 +202,13 @@ def test_hospitalisation_episode_billing_actions_match_native_operational_parity
 def test_hospitalisation_episode_policy_is_routed_through_frappe_overrides():
     hooks = read(HOOKS)
 
-    legacy_contracts = (
+    contracts = (
         '"vetedge.services.hospitalisation_episode.get_hospitalisation_episode": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_episode"',
-        '"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_activity"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_item_policy.add_hospitalisation_activity"',
         '"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals"',
-    )
-    hardened_contracts = (
         '"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination"',
         '"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order"',
+        '"vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options": "vetedge.services.hospitalisation_item_policy.search_hospitalisation_episode_options"',
         '"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy_v2.perform_hospitalisation_episode_action"',
         '"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_stock_posting_preview"',
         '"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy_v2.post_hospitalisation_activity_stock"',
@@ -213,8 +217,17 @@ def test_hospitalisation_episode_policy_is_routed_through_frappe_overrides():
         '"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_discharge_readiness"',
         '"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.discharge_hospitalisation"',
     )
-    for contract in (*legacy_contracts, *hardened_contracts):
+    for contract in contracts:
         assert contract in hooks
+
+
+def test_hospitalisation_activity_item_policy_is_server_authoritative():
+    item_policy = read(ITEM_POLICY)
+
+    assert '"disabled", "is_sales_item", "is_stock_item"' in item_policy
+    assert "Billable Hospitalisation activities require an Item enabled for Sales." in item_policy
+    assert "Stock-affecting Hospitalisation activities require a Stock Item." in item_policy
+    assert "base_policy.add_hospitalisation_activity(" in item_policy
 
 
 def test_hardened_policy_keeps_dedicated_clinical_billing_and_stock_single_sourced():
