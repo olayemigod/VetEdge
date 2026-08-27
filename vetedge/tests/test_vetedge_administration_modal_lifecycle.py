@@ -42,16 +42,23 @@ class TestVetEdgeAdministrationModalLifecycle(unittest.TestCase):
         self.assertIn("open: true", block)
         self.assertNotIn("open: this.confirmDeleteOpen", block)
 
-    def test_successful_save_refreshes_then_closes_editor(self):
+    def test_successful_save_closes_editor_before_refreshing_list(self):
         text = source()
         block = method_block(text, "async saveDocument() {", "async deleteDocument() {")
 
-        refresh_index = block.index("await this.refresh();")
-        release_busy_index = block.index("this.editor.saving = false;", refresh_index)
-        close_index = block.index("this.closeEditor();", release_busy_index)
+        self.assertNotIn("this.updateRoute(doc);", block)
+        release_busy_index = block.index("this.editor.saving = false;")
+        close_index = block.index("this.editor.open = false;", release_busy_index)
+        first_page_index = block.index("this.pageStart = 0;", close_index)
+        route_index = block.index("this.updateRoute();", first_page_index)
+        next_tick_index = block.index("await this.$nextTick();", route_index)
+        refresh_index = block.index("await this.refresh();", next_tick_index)
 
-        self.assertLess(refresh_index, release_busy_index)
         self.assertLess(release_busy_index, close_index)
+        self.assertLess(close_index, first_page_index)
+        self.assertLess(first_page_index, route_index)
+        self.assertLess(route_index, next_tick_index)
+        self.assertLess(next_tick_index, refresh_index)
 
     def test_all_five_resources_share_the_same_editor_lifecycle(self):
         text = source()
