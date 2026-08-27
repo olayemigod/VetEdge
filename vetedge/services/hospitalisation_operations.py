@@ -130,6 +130,13 @@ def _activity_aggregates(parent_names: list[str]) -> dict[str, dict]:
     )
     if not parent_names:
         return result
+
+    # Dispensary Flow is the action authority. Historical stock-affecting rows
+    # remain visible in the episode timeline, but they must not surface as
+    # actionable "Pending Stock" while the clinic has disabled stock movement.
+    from vetedge.services.hospitalisation_episode_policy import is_hospitalisation_dispensary_enabled
+
+    dispensary_enabled = is_hospitalisation_dispensary_enabled()
     rows = frappe.get_all(
         ACTIVITY_DOCTYPE,
         filters={"parent": ["in", parent_names]},
@@ -150,7 +157,12 @@ def _activity_aggregates(parent_names: list[str]) -> dict[str, dict]:
         activity_datetime = row.get("activity_datetime")
         if activity_datetime and not item["latest_activity_datetime"]:
             item["latest_activity_datetime"] = activity_datetime
-        if cint(row.get("stock_affecting")) and row.get("stock_status") != "Posted" and not row.get("stock_entry"):
+        if (
+            dispensary_enabled
+            and cint(row.get("stock_affecting"))
+            and row.get("stock_status") != "Posted"
+            and not row.get("stock_entry")
+        ):
             item["pending_stock_count"] += 1
         if cint(row.get("billable")) and row.get("billing_status") not in {"Charged", "Cancelled"}:
             item["pending_billable_activity_count"] += 1
