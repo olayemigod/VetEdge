@@ -223,7 +223,7 @@
 						<div class="episode-actions">
 							<button type="button" class="edge-button" :disabled="busy" @click="openBilling">Billing & Payment</button>
 							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_bill" @click="checkPaymentGate">Check Payment Gate</button>
-							<button type="button" class="edge-button" :disabled="busy" @click="viewChargeSummary">View Charge Summary</button>
+							<button type="button" class="edge-button" :disabled="busy || dirty" @click="viewChargeSummary">View Charge Summary</button>
 							<button v-if="episode.capabilities?.can_generate_daily_charges" type="button" class="edge-button" :disabled="busy || dirty" @click="generateDailyCharges">Generate Daily Charges</button>
 							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_manage_charges" @click="buildCharges">Build Charge Sheet</button>
 							<button type="button" class="edge-button edge-button--primary" :disabled="busy || dirty || !episode.capabilities?.can_bill" @click="syncInvoice">Sync Charges to Invoice</button>
@@ -772,22 +772,27 @@ export default {
 			if (!result.can_proceed && result.open_billing_modal) this.openBilling();
 		},
 		async viewChargeSummary() {
-			if (!this.episode.name || this.busy) return;
+			if (!this.episode.name || this.busy || !this.ensureActionReady()) return;
 			this.busy = true; this.error = '';
 			try {
-				const summary = (await call('vetedge.services.hospitalisation.get_hospitalisation_charge_summary', {
-					hospitalisation_name: this.episode.name,
-				})) || {};
+				this.applyEpisode(await call(API.detail, { name: this.episode.name }));
+				const rows = this.episode.charge_items || [];
+				const amountFor = (row) => Number(row.amount || (Number(row.qty || 1) * Number(row.rate || 0)) || 0);
+				const totalPending = rows.filter((row) => !['Invoiced', 'Cancelled'].includes(row.billing_status)).reduce((total, row) => total + amountFor(row), 0);
+				const totalInvoiced = rows.filter((row) => row.billing_status === 'Invoiced').reduce((total, row) => total + amountFor(row), 0);
+				const totalCancelled = rows.filter((row) => row.billing_status === 'Cancelled').reduce((total, row) => total + amountFor(row), 0);
+				const missingPriceCount = rows.filter((row) => !['Invoiced', 'Cancelled'].includes(row.billing_status) && row.item && (Number(row.rate || 0) <= 0 || amountFor(row) <= 0)).length;
+				const notBillableCount = (this.episode.activities || []).filter((row) => !Number(row.billable || 0)).length;
 				frappe.msgprint({
 					title: __('Charge Summary'),
 					message: [
-						`${__('Total Hospitalisation Charges')}: ${this.formatMoney(summary.total_charge_amount || 0)}`,
-						`${__('Pending Charges')}: ${this.formatMoney(summary.pending_charge_amount || summary.total_pending || 0)}`,
-						`${__('Invoiced Charges')}: ${this.formatMoney(summary.invoiced_charge_amount || summary.total_invoiced || 0)}`,
-						`${__('Cancelled')}: ${this.formatMoney(summary.cancelled_charge_amount || summary.total_cancelled || 0)}`,
-						`${__('Missing Price')}: ${summary.missing_price_count || 0}`,
-						`${__('Not Billable Activities')}: ${summary.not_billable_count || 0}`,
-						`${__('Linked Invoice')}: ${summary.linked_invoice || this.episode.sales_invoice || '—'}`,
+						`${__('Total Hospitalisation Charges')}: ${this.formatMoney(totalPending + totalInvoiced + totalCancelled)}`,
+						`${__('Pending Charges')}: ${this.formatMoney(totalPending)}`,
+						`${__('Invoiced Charges')}: ${this.formatMoney(totalInvoiced)}`,
+						`${__('Cancelled')}: ${this.formatMoney(totalCancelled)}`,
+						`${__('Missing Price')}: ${missingPriceCount}`,
+						`${__('Not Billable Activities')}: ${notBillableCount}`,
+						`${__('Linked Invoice')}: ${this.episode.sales_invoice || '—'}`,
 					].join('<br>'),
 				});
 			} catch (error) { this.error = errorMessage(error, __('Charge summary could not be loaded.')); }
