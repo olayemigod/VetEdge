@@ -4,12 +4,34 @@ function hospitalisationEpisodeRouteState() {
 	return { name, key: name ? `hospitalisation:${name}` : 'missing' };
 }
 
+function hospitalisationEpisodeAppUrl(name) {
+	return name
+		? `/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}`
+		: '/app/vetedge-hospitalisation-episode';
+}
+
+function canonicalizeHospitalisationEpisodeRoute(name) {
+	const target = hospitalisationEpisodeAppUrl(name);
+	if (`${window.location.pathname}${window.location.search}` !== target) {
+		window.history.replaceState({}, '', target);
+	}
+}
+
+function hardenMountedHospitalisationEpisodeNavigation(wrapper) {
+	const view = wrapper.vue_app?.view;
+	if (!view) return;
+	// Older Episode bundle revisions used /desk/... hard navigation. Keep the
+	// canonical Frappe v16 /app route even if that bundle is still in browser cache.
+	view.backToOperations = () => window.location.assign('/app/vetedge-hospitalisation-operations');
+}
+
 async function refreshMountedHospitalisationEpisode(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return false;
 	const requested = hospitalisationEpisodeRouteState();
 	if (!requested.name) {
 		view.setRouteError?.(__('Select a Hospitalisation from Hospitalisation Operations.'));
+		canonicalizeHospitalisationEpisodeRoute('');
 		return true;
 	}
 	if (wrapper.hospitalisation_episode_route_key !== requested.key || view.episode?.name !== requested.name) {
@@ -18,6 +40,8 @@ async function refreshMountedHospitalisationEpisode(wrapper) {
 		await view.refreshEpisode?.();
 	}
 	wrapper.hospitalisation_episode_route_key = requested.key;
+	hardenMountedHospitalisationEpisodeNavigation(wrapper);
+	canonicalizeHospitalisationEpisodeRoute(requested.name);
 	return true;
 }
 
@@ -89,7 +113,10 @@ frappe.pages['vetedge-hospitalisation-episode'].on_page_show = function(wrapper)
 						.appendTo(page.body);
 					wrapper.vue_app = window.mountVetEdgeHospitalisationEpisode(root[0]);
 					wrapper.hospitalisation_episode_route_key = hospitalisationEpisodeRouteState().key;
-					refreshMountedHospitalisationEpisode(wrapper);
+					hardenMountedHospitalisationEpisodeNavigation(wrapper);
+					Promise.resolve(refreshMountedHospitalisationEpisode(wrapper)).catch((error) => {
+						console.error('Error refreshing Hospitalisation Episode after mount:', error);
+					});
 				} catch (error) {
 					console.error('Error mounting Hospitalisation Episode:', error);
 					showFailure(__('Error mounting Hospitalisation Episode: {0}', [error.message || String(error)]));
