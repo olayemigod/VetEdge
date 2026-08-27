@@ -163,6 +163,7 @@ export default {
       activeTab: 'guide',
       mermaidLoadPromise: null,
       mermaidInitialized: false,
+      mermaidTheme: '',
       tenantName: '',
       branchName: 'All Branches',
       userName: '',
@@ -258,12 +259,15 @@ export default {
       this.activeTab = 'guide';
       try {
         this.currentModule = (await this.callFrappe(CONTENT_API, { module_id: moduleId })) || {};
-        await this.$nextTick();
-        await this.renderVisibleMermaid();
       } catch (error) {
         this.moduleError = error?.message || 'Unable to load this training guide.';
       } finally {
         this.moduleLoading = false;
+      }
+
+      await this.$nextTick();
+      if (!this.moduleError) {
+        await this.renderVisibleMermaid();
       }
     },
     showList() {
@@ -422,9 +426,18 @@ export default {
       if (!blocks.length) return;
       const mermaid = await this.loadMermaid();
       if (!mermaid) return;
-      if (!this.mermaidInitialized) {
-        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+      const appearance =
+        document.documentElement?.getAttribute('data-edge-appearance') || 'light';
+      const theme = appearance === 'dark' ? 'dark' : 'default';
+
+      if (!this.mermaidInitialized || this.mermaidTheme !== theme) {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme
+        });
         this.mermaidInitialized = true;
+        this.mermaidTheme = theme;
       }
       for (let index = 0; index < blocks.length; index += 1) {
         const code = blocks[index];
@@ -490,11 +503,4 @@ export default {
 .vtc-table-wrap th, .vtc-table-wrap td { padding: 8px; border: 1px solid var(--edge-border, #dfe3e8); text-align: left; vertical-align: top; }
 .vetedge-training-mermaid { overflow-x: auto; margin: 16px 0; padding: 16px; border: 1px solid var(--edge-border, #dfe3e8); border-radius: 8px; background: var(--edge-surface, #fff); }
 .vetedge-training-mermaid svg { max-width: 100%; height: auto; }
-.vtc-mermaid-fallback { border-color: var(--edge-warning, #d97706) !important; }
-.vetedge-training-centre-root .edge-sidebar,
-.vetedge-training-centre-root .edge-shell-sidebar { display: none !important; }
-.vetedge-training-centre-root .edge-shell-body,
-.vetedge-training-centre-root .edge-shell-main,
-.vetedge-training-centre-root .edge-page-layout,
-.vetedge-training-centre-root .edge-page-layout-body { width: 100%; max-width: none; min-width: 0; }
-</style>
+.vtc-mermaid-fallback { border-color: var(--edge-warning, #d97706) !important; }</style>
