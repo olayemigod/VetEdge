@@ -20,6 +20,14 @@ EPISODE_COMPONENT = (
     / "vetedge_hospitalisation_episode"
     / "VetEdgeHospitalisationEpisode.vue"
 )
+EPISODE_PAGE = (
+    ROOT
+    / "vetedge"
+    / "veterinary"
+    / "page"
+    / "vetedge_hospitalisation_episode"
+    / "vetedge_hospitalisation_episode.js"
+)
 SETTINGS_COMPONENT = (
     ROOT
     / "vetedge"
@@ -29,6 +37,7 @@ SETTINGS_COMPONENT = (
     / "VeterinarySettingsCenter.vue"
 )
 POLICY = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy.py"
+POLICY_V2 = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy_v2.py"
 EPISODE_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_episode.py"
 OPERATIONS_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_operations.py"
 REPORT_EXCEPTIONS = ROOT / "vetedge" / "services" / "report_exceptions.py"
@@ -36,6 +45,7 @@ SETTINGS_PAGE = ROOT / "vetedge" / "services" / "settings_page.py"
 MEDICAL_HISTORY = ROOT / "vetedge" / "services" / "medical_history_integrity.py"
 CLINICAL_CONTEXT = ROOT / "vetedge" / "services" / "clinical_consultation_context.py"
 CLINICAL_WORKSPACE_CONTEXT = ROOT / "vetedge" / "services" / "clinical_workspace_context.py"
+HOOKS = ROOT / "vetedge" / "hooks.py"
 SETTINGS_CONTROLLER = (
     ROOT
     / "vetedge"
@@ -55,6 +65,7 @@ def read(path: Path) -> str:
 
 def test_dispensary_off_is_server_authoritative_and_hides_episode_stock_actions():
     policy = read(POLICY)
+    policy_v2 = read(POLICY_V2)
     episode = read(EPISODE_COMPONENT)
 
     assert 'return bool(is_enabled("dispensary_flow"))' in policy
@@ -63,7 +74,7 @@ def test_dispensary_off_is_server_authoritative_and_hides_episode_stock_actions(
     assert 'signals["pending_stock"] = 0' in policy
     assert 'resolved_stock = 0' in policy
     assert 'source_warehouse = None' in policy
-    assert "Hospitalisation stock posting is unavailable" in policy
+    assert "Hospitalisation stock posting is unavailable" in policy_v2
 
     assert 'v-if="episode.capabilities?.dispensary_enabled"' in episode
     assert 'v-if="episode.capabilities?.can_preview_stock"' in episode
@@ -131,8 +142,60 @@ def test_direct_hospitalisation_clinical_records_do_not_require_fake_consultatio
     assert 'if consultation:\n\t\tassert_consultation_write_ownership' in workspace_context
 
 
+def test_dedicated_vaccination_and_lab_keep_single_billing_stock_authority():
+    policy_v2 = read(POLICY_V2)
+    hooks = read(HOOKS)
+
+    assert '"billable": 0' in policy_v2
+    assert '"stock_affecting": 0' in policy_v2
+    assert "timeline reference only" in policy_v2
+    assert "create_vaccination_from_consultation" in policy_v2
+    assert "create_lab_order_from_consultation" in policy_v2
+    assert "create_invoice=0" in policy_v2
+    assert "post_stock=0" in policy_v2
+    assert (
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": '
+        '"vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination"'
+    ) in hooks
+    assert (
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": '
+        '"vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order"'
+    ) in hooks
+
+
+def test_disabled_policy_shortcuts_apply_access_boundary_before_returning():
+    policy_v2 = read(POLICY_V2)
+    hooks = read(HOOKS)
+
+    assert "def _require_hospitalisation_access" in policy_v2
+    assert "assert_hospitalisation_enabled()" in policy_v2
+    assert "base_policy._load_hospitalisation" in policy_v2
+    assert "require_vetedge_platform_access" in policy_v2
+    for method in (
+        "get_hospitalisation_stock_posting_preview",
+        "post_hospitalisation_activity_stock",
+        "generate_hospitalisation_daily_charges",
+        "admit_hospitalisation",
+        "get_hospitalisation_discharge_readiness",
+        "discharge_hospitalisation",
+    ):
+        assert f"hospitalisation_episode_policy_v2.{method}" in hooks
+
+
+def test_dispensary_off_readiness_does_not_rewrite_historical_stock_rows():
+    policy_v2 = read(POLICY_V2)
+
+    assert "def _readiness_without_disabled_stock" in policy_v2
+    assert 'result["pending_stock_activities"] = []' in policy_v2
+    assert 'action != "Post Stock Usage"' in policy_v2
+    assert "stock_affecting = 0" not in policy_v2
+    assert "source_warehouse = None" not in policy_v2
+    assert "_normalize_unposted_stock_flags_when_dispensary_disabled" not in policy_v2
+
+
 def test_daily_charge_switch_controls_runtime_configuration_and_initial_source():
     policy = read(POLICY)
+    policy_v2 = read(POLICY_V2)
     settings = read(SETTINGS_CONTROLLER)
     settings_page = read(SETTINGS_PAGE)
     settings_component = read(SETTINGS_COMPONENT)
@@ -144,7 +207,7 @@ def test_daily_charge_switch_controls_runtime_configuration_and_initial_source()
     assert '"default": "1"' in patch
     assert 'is_hospitalisation_daily_charges_enabled' in policy
     assert 'capabilities["can_generate_daily_charges"]' in policy
-    assert 'Hospitalisation Daily Charges are disabled' in policy
+    assert 'Hospitalisation Daily Charges are disabled' in policy_v2
     assert 'hospitalisation_initial_billing_source' in settings
     assert 'Day 1 Daily Charge cannot be used' in settings
 
@@ -188,11 +251,36 @@ def test_hospitalisation_operations_uses_edgesuite_signature_smart_date_and_four
     assert 'label="Admitted From"' not in component
     assert 'label="Admitted To"' not in component
     assert "grid-template-columns: repeat(4, minmax(10rem, 1fr));" in component
+    assert ":deep(.edge-smart-date__picker)" in component
+    assert "inset-inline-end: 0" in component
+    assert "if (hadAppliedRange) this.applyFilters();" in component
 
 
-def test_hospitalisation_exception_action_routes_to_edgesuite_episode():
+def test_hospitalisation_operations_sorting_is_server_side_and_allowlisted():
     component = read(OPERATIONS_COMPONENT)
+    service = read(OPERATIONS_SERVICE)
+
+    assert ':sort="sort"' in component
+    assert '@sort-change="onSortChange"' in component
+    assert "sort: JSON.stringify(this.sort || DEFAULT_SORT)" in component
+    assert "def _normalize_sort" in service
+    assert "SORTABLE_PARENT_FIELDS" in service
+    assert "order_by=_order_by(sort)" in service
+    assert '"sorting_strategy": "server-parent-fields"' in service
+    assert '"latest_activity_datetime", "label": _("Latest Activity"), "fieldtype": "Datetime", "sortable": False' in service
+    assert '"pending_stock_count", "label": _("Pending Stock"), "fieldtype": "Int", "sortable": False' in service
+    assert '"pending_charge_amount", "label": _("Pending Charges"), "fieldtype": "Currency", "sortable": False' in service
+    assert '"missing_price_count", "label": _("Missing Prices"), "fieldtype": "Int", "sortable": False' in service
+
+
+def test_hospitalisation_exception_and_list_actions_route_to_registered_app_page():
+    component = read(OPERATIONS_COMPONENT)
+    page = read(EPISODE_PAGE)
 
     assert "item.reference_doctype === 'Veterinary Hospitalisation'" in component
-    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(item.reference_name)}" in component
+    assert "/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}" in component
+    assert "/desk/vetedge-hospitalisation-episode" not in component
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', item.reference_name)" not in component
+    assert "hospitalisationEpisodeAppUrl" in page
+    assert "/app/vetedge-hospitalisation-episode" in page
+    assert "canonicalizeHospitalisationEpisodeRoute" in page
