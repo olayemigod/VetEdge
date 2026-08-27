@@ -491,10 +491,4 @@ export default {
 .vetedge-training-mermaid { overflow-x: auto; margin: 16px 0; padding: 16px; border: 1px solid var(--edge-border, #dfe3e8); border-radius: 8px; background: var(--edge-surface, #fff); }
 .vetedge-training-mermaid svg { max-width: 100%; height: auto; }
 .vtc-mermaid-fallback { border-color: var(--edge-warning, #d97706) !important; }
-.vetedge-training-centre-root .edge-sidebar,
-.vetedge-training-centre-root .edge-shell-sidebar { display: none !important; }
-.vetedge-training-centre-root .edge-shell-body,
-.vetedge-training-centre-root .edge-shell-main,
-.vetedge-training-centre-root .edge-page-layout,
-.vetedge-training-centre-root .edge-page-layout-body { width: 100%; max-width: none; min-width: 0; }
 </style>
