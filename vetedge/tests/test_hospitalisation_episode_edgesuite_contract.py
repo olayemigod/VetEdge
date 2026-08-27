@@ -76,7 +76,7 @@ def test_hospitalisation_episode_preserves_shared_edgesuite_navigation_shell():
     assert "display: none !important" not in component
 
 
-def test_hospitalisation_operations_drills_into_edgesuite_episode_with_query_preserved():
+def test_hospitalisation_operations_drills_into_edgesuite_episode_with_record_segment_preserved():
     component = read(OPERATIONS_COMPONENT)
     operations_page = read(OPERATIONS_PAGE_JS)
     page = read(PAGE_JS)
@@ -86,12 +86,16 @@ def test_hospitalisation_operations_drills_into_edgesuite_episode_with_query_pre
     assert "this.openHospitalisationEpisode(item.reference_name)" in component
     assert "function openHospitalisationEpisodeRoute" in operations_page
     assert "view.openHospitalisationEpisode = openHospitalisationEpisodeRoute" in operations_page
-    assert "frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation })" in operations_page
-    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}" in operations_page
+    assert "frappe.set_route('vetedge-hospitalisation-episode', hospitalisation)" in operations_page
+    assert "/desk/vetedge-hospitalisation-episode/${encodeURIComponent(hospitalisation)}" in operations_page
+    assert "{ name: hospitalisation }" not in operations_page
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', row.hospitalisation)" not in component
     assert "canonicalizeHospitalisationEpisodeRoute" in page
     assert "hospitalisationEpisodeDeskUrl" in page
-    assert "/desk/vetedge-hospitalisation-episode" in page
+    assert "/desk/vetedge-hospitalisation-episode/${encodeURIComponent(name)}" in page
+    assert "window.frappe?.get_route?.()" in page
+    assert "pathParts" in page
+    assert "params.get('name')" in page
     assert "window.frappe?.route_options?.name" in page
 
 
