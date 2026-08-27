@@ -3,11 +3,11 @@ function openHospitalisationEpisodeRoute(name) {
 	if (!hospitalisation) return;
 
 	if (window.frappe?.set_route) {
-		frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation });
+		frappe.set_route('vetedge-hospitalisation-episode', hospitalisation);
 		return;
 	}
 
-	window.location.assign(`/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}`);
+	window.location.assign(`/desk/vetedge-hospitalisation-episode/${encodeURIComponent(hospitalisation)}`);
 }
 
 function hardenHospitalisationOperationsNavigation(wrapper) {
@@ -16,7 +16,7 @@ function hardenHospitalisationOperationsNavigation(wrapper) {
 
 	// Both the main Hospitalisation column and Hospitalisation Exceptions call
 	// this shared Vue method. Keep the runtime fix in the Frappe Page wrapper so
-	// cached product bundles cannot re-introduce the obsolete /app hard route.
+	// cached product bundles cannot re-introduce an obsolete hard route.
 	view.openHospitalisationEpisode = openHospitalisationEpisodeRoute;
 }
 
