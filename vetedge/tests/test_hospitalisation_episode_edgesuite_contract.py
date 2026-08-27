@@ -178,11 +178,13 @@ def test_hospitalisation_episode_billing_actions_match_native_operational_parity
 
     assert "View Charge Summary" in component
     assert '@click="viewChargeSummary"' in component
-    assert "vetedge.services.hospitalisation.get_hospitalisation_charge_summary" in component
     assert "def get_hospitalisation_charge_summary" in hospitalisation
+    assert "const rows = this.episode.charge_items || []" in component
+    assert "this.applyEpisode(await call(API.detail" in component
+    assert "vetedge.services.hospitalisation.get_hospitalisation_charge_summary" not in component
 
-    # The parity actions consume authoritative backend summaries/gates; the
-    # EdgeSuite workspace still does not construct accounting documents.
+    # The parity actions consume authoritative, permission-aware Episode data;
+    # the EdgeSuite workspace still does not construct accounting documents.
     assert "frappe.new_doc('Sales Invoice'" not in component
     assert 'frappe.new_doc("Sales Invoice"' not in component
 
