@@ -222,6 +222,8 @@
 						<div><h3>Charges & Billing</h3><p>Hospitalisation charges remain governed by Billing Core and ERPNext invoice immutability.</p></div>
 						<div class="episode-actions">
 							<button type="button" class="edge-button" :disabled="busy" @click="openBilling">Billing & Payment</button>
+							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_bill" @click="checkPaymentGate">Check Payment Gate</button>
+							<button type="button" class="edge-button" :disabled="busy" @click="viewChargeSummary">View Charge Summary</button>
 							<button v-if="episode.capabilities?.can_generate_daily_charges" type="button" class="edge-button" :disabled="busy || dirty" @click="generateDailyCharges">Generate Daily Charges</button>
 							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_manage_charges" @click="buildCharges">Build Charge Sheet</button>
 							<button type="button" class="edge-button edge-button--primary" :disabled="busy || dirty || !episode.capabilities?.can_bill" @click="syncInvoice">Sync Charges to Invoice</button>
@@ -758,6 +760,38 @@ export default {
 		async buildCharges() {
 			const result = await this.runAction('build_charges');
 			if (result) frappe.show_alert({ message: __(`Created ${result.created || 0} charge item(s).`), indicator: 'green' });
+		},
+		async checkPaymentGate() {
+			const result = await this.runAction('check_payment_gate');
+			if (!result) return;
+			frappe.msgprint({
+				title: __('Payment Gate'),
+				message: result.message || (result.can_proceed ? __('Payment gate passed.') : __('Payment gate checked.')),
+				indicator: result.can_proceed ? 'green' : 'orange',
+			});
+			if (!result.can_proceed && result.open_billing_modal) this.openBilling();
+		},
+		async viewChargeSummary() {
+			if (!this.episode.name || this.busy) return;
+			this.busy = true; this.error = '';
+			try {
+				const summary = (await call('vetedge.services.hospitalisation.get_hospitalisation_charge_summary', {
+					hospitalisation_name: this.episode.name,
+				})) || {};
+				frappe.msgprint({
+					title: __('Charge Summary'),
+					message: [
+						`${__('Total Hospitalisation Charges')}: ${this.formatMoney(summary.total_charge_amount || 0)}`,
+						`${__('Pending Charges')}: ${this.formatMoney(summary.pending_charge_amount || summary.total_pending || 0)}`,
+						`${__('Invoiced Charges')}: ${this.formatMoney(summary.invoiced_charge_amount || summary.total_invoiced || 0)}`,
+						`${__('Cancelled')}: ${this.formatMoney(summary.cancelled_charge_amount || summary.total_cancelled || 0)}`,
+						`${__('Missing Price')}: ${summary.missing_price_count || 0}`,
+						`${__('Not Billable Activities')}: ${summary.not_billable_count || 0}`,
+						`${__('Linked Invoice')}: ${summary.linked_invoice || this.episode.sales_invoice || '—'}`,
+					].join('<br>'),
+				});
+			} catch (error) { this.error = errorMessage(error, __('Charge summary could not be loaded.')); }
+			finally { this.busy = false; }
 		},
 		openChargeEdit(row) {
 			if (!row?.editable || this.busy) return;
