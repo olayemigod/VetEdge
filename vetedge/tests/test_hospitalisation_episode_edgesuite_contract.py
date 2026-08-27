@@ -6,6 +6,14 @@ ROOT = Path(__file__).resolve().parents[2]
 PAGE_DIR = ROOT / "vetedge" / "veterinary" / "page" / "vetedge_hospitalisation_episode"
 PAGE_JS = PAGE_DIR / "vetedge_hospitalisation_episode.js"
 PAGE_JSON = PAGE_DIR / "vetedge_hospitalisation_episode.json"
+OPERATIONS_PAGE_JS = (
+    ROOT
+    / "vetedge"
+    / "veterinary"
+    / "page"
+    / "vetedge_hospitalisation_operations"
+    / "vetedge_hospitalisation_operations.js"
+)
 BUNDLE = ROOT / "vetedge" / "public" / "js" / "vetedge_hospitalisation_episode.bundle.js"
 COMPONENT = (
     ROOT
@@ -70,14 +78,21 @@ def test_hospitalisation_episode_preserves_shared_edgesuite_navigation_shell():
 
 def test_hospitalisation_operations_drills_into_edgesuite_episode_with_query_preserved():
     component = read(OPERATIONS_COMPONENT)
+    operations_page = read(OPERATIONS_PAGE_JS)
     page = read(PAGE_JS)
 
-    assert "/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}" in component
     assert "openHospitalisationEpisode" in component
-    assert "/desk/vetedge-hospitalisation-episode" not in component
+    assert "this.openHospitalisationEpisode(row.hospitalisation)" in component
+    assert "this.openHospitalisationEpisode(item.reference_name)" in component
+    assert "function openHospitalisationEpisodeRoute" in operations_page
+    assert "view.openHospitalisationEpisode = openHospitalisationEpisodeRoute" in operations_page
+    assert "frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation })" in operations_page
+    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}" in operations_page
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', row.hospitalisation)" not in component
     assert "canonicalizeHospitalisationEpisodeRoute" in page
-    assert "/app/vetedge-hospitalisation-episode" in page
+    assert "hospitalisationEpisodeDeskUrl" in page
+    assert "/desk/vetedge-hospitalisation-episode" in page
+    assert "window.frappe?.route_options?.name" in page
 
 
 def test_hospitalisation_episode_service_is_permission_and_branch_aware():
