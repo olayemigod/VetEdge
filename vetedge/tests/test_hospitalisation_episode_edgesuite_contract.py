@@ -25,6 +25,7 @@ OPERATIONS_COMPONENT = (
 )
 SERVICE = ROOT / "vetedge" / "services" / "hospitalisation_episode.py"
 POLICY = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy.py"
+POLICY_V2 = ROOT / "vetedge" / "services" / "hospitalisation_episode_policy_v2.py"
 HOSPITALISATION_SERVICE = ROOT / "vetedge" / "services" / "hospitalisation.py"
 MEDICAL_HISTORY = ROOT / "vetedge" / "services" / "medical_history_integrity.py"
 HOOKS = ROOT / "vetedge" / "hooks.py"
@@ -68,10 +69,14 @@ def test_hospitalisation_episode_preserves_shared_edgesuite_navigation_shell():
 
 def test_hospitalisation_operations_drills_into_edgesuite_episode_with_query_preserved():
     component = read(OPERATIONS_COMPONENT)
+    page = read(PAGE_JS)
 
-    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(row.hospitalisation)}" in component
-    assert "window.location.assign(`/desk/vetedge-hospitalisation-episode?name=" in component
+    assert "/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}" in component
+    assert "openHospitalisationEpisode" in component
+    assert "/desk/vetedge-hospitalisation-episode" not in component
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', row.hospitalisation)" not in component
+    assert "canonicalizeHospitalisationEpisodeRoute" in page
+    assert "/app/vetedge-hospitalisation-episode" in page
 
 
 def test_hospitalisation_episode_service_is_permission_and_branch_aware():
@@ -192,25 +197,50 @@ def test_hospitalisation_episode_billing_actions_match_native_operational_parity
 def test_hospitalisation_episode_policy_is_routed_through_frappe_overrides():
     hooks = read(HOOKS)
 
-    for contract in (
+    legacy_contracts = (
         '"vetedge.services.hospitalisation_episode.get_hospitalisation_episode": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_episode"',
         '"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_activity"',
         '"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals"',
-        '"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vaccination"',
-        '"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_lab_order"',
-        '"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy.perform_hospitalisation_episode_action"',
-        '"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_stock_posting_preview"',
-        '"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy.post_hospitalisation_activity_stock"',
-        '"vetedge.services.hospitalisation.generate_hospitalisation_daily_charges": "vetedge.services.hospitalisation_episode_policy.generate_hospitalisation_daily_charges"',
-        '"vetedge.services.hospitalisation.admit_hospitalisation": "vetedge.services.hospitalisation_episode_policy.admit_hospitalisation"',
-        '"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_discharge_readiness"',
-        '"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy.discharge_hospitalisation"',
-    ):
+    )
+    hardened_contracts = (
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination"',
+        '"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order"',
+        '"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy_v2.perform_hospitalisation_episode_action"',
+        '"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_stock_posting_preview"',
+        '"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy_v2.post_hospitalisation_activity_stock"',
+        '"vetedge.services.hospitalisation.generate_hospitalisation_daily_charges": "vetedge.services.hospitalisation_episode_policy_v2.generate_hospitalisation_daily_charges"',
+        '"vetedge.services.hospitalisation.admit_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.admit_hospitalisation"',
+        '"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_discharge_readiness"',
+        '"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.discharge_hospitalisation"',
+    )
+    for contract in (*legacy_contracts, *hardened_contracts):
         assert contract in hooks
+
+
+def test_hardened_policy_keeps_dedicated_clinical_billing_and_stock_single_sourced():
+    policy = read(POLICY_V2)
+
+    assert '"billable": 0' in policy
+    assert '"stock_affecting": 0' in policy
+    assert "timeline reference only" in policy
+    assert "create_vaccination_from_consultation" in policy
+    assert "create_lab_order_from_consultation" in policy
+    assert "create_invoice=0" in policy
+    assert "post_stock=0" in policy
+
+
+def test_hardened_policy_does_not_mutate_stock_history_for_disabled_dispensary():
+    policy = read(POLICY_V2)
+
+    assert "def _readiness_without_disabled_stock" in policy
+    assert 'result["pending_stock_activities"] = []' in policy
+    assert "_normalize_unposted_stock_flags_when_dispensary_disabled" not in policy
+    assert "source_warehouse = None" not in policy
 
 
 def test_hospitalisation_episode_policy_preserves_admission_and_accounting_safety():
     policy = read(POLICY)
+    hardened = read(POLICY_V2)
     hospitalisation = read(HOSPITALISATION_SERVICE)
 
     # The pre-existing admission policy remains authoritative. A clinic that
@@ -227,6 +257,11 @@ def test_hospitalisation_episode_policy_preserves_admission_and_accounting_safet
     assert "Sync Charges to Invoice" in policy
     assert "ignore_permissions" not in policy
     assert "frappe.new_doc" not in policy
+
+    # Disabled policy branches are not weaker permission/platform paths.
+    assert "def _require_hospitalisation_access" in hardened
+    assert "assert_hospitalisation_enabled()" in hardened
+    assert "require_vetedge_platform_access" in hardened
 
 
 def test_hospitalisation_episode_policy_settings_patch_is_registered_and_idempotent():
