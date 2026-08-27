@@ -23,11 +23,25 @@ function hardenMountedHospitalisationEpisodeNavigation(wrapper) {
 	// Older Episode bundle revisions used /desk/... hard navigation. Keep the
 	// canonical Frappe v16 /app route even if that bundle is still in browser cache.
 	view.backToOperations = () => window.location.assign('/app/vetedge-hospitalisation-operations');
+
+	// Canonicalize after every load too. This removes the race where a cached Vue
+	// bundle can finish its async load after the Page wrapper and replace /app
+	// with the obsolete /desk URL.
+	if (!view.__vetedgeCanonicalEpisodeLoad && typeof view.loadEpisode === 'function') {
+		const originalLoadEpisode = view.loadEpisode.bind(view);
+		view.loadEpisode = async (name) => {
+			const result = await originalLoadEpisode(name);
+			canonicalizeHospitalisationEpisodeRoute(name);
+			return result;
+		};
+		view.__vetedgeCanonicalEpisodeLoad = true;
+	}
 }
 
 async function refreshMountedHospitalisationEpisode(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return false;
+	hardenMountedHospitalisationEpisodeNavigation(wrapper);
 	const requested = hospitalisationEpisodeRouteState();
 	if (!requested.name) {
 		view.setRouteError?.(__('Select a Hospitalisation from Hospitalisation Operations.'));
@@ -40,7 +54,6 @@ async function refreshMountedHospitalisationEpisode(wrapper) {
 		await view.refreshEpisode?.();
 	}
 	wrapper.hospitalisation_episode_route_key = requested.key;
-	hardenMountedHospitalisationEpisodeNavigation(wrapper);
 	canonicalizeHospitalisationEpisodeRoute(requested.name);
 	return true;
 }
