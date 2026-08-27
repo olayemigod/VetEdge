@@ -262,11 +262,14 @@ frappe.pages["vetedge-administration"].on_page_show = function (wrapper) {
 						this.editor.model = JSON.parse(JSON.stringify(doc?.values || {}));
 						this.editor.roles = Array.isArray(doc?.roles) ? [...doc.roles] : [];
 						this.editor.dirty = false;
-						this.updateRoute(doc);
 						frappe.show_alert({ message: __("Administration record saved"), indicator: "green" });
-						await this.refresh();
 						this.editor.saving = false;
-						this.closeEditor();
+						this.editor.open = false;
+						this.confirmDeleteOpen = false;
+						this.pageStart = 0;
+						this.updateRoute();
+						await this.$nextTick();
+						await this.refresh();
 					} catch (error) {
 						this.editor.error = this.message(error, __("Administration record could not be saved."));
 					} finally {
