@@ -1,3 +1,25 @@
+function openHospitalisationEpisodeRoute(name) {
+	const hospitalisation = String(name || '').trim();
+	if (!hospitalisation) return;
+
+	if (window.frappe?.set_route) {
+		frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation });
+		return;
+	}
+
+	window.location.assign(`/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}`);
+}
+
+function hardenHospitalisationOperationsNavigation(wrapper) {
+	const view = wrapper.vue_app?.view;
+	if (!view) return;
+
+	// Both the main Hospitalisation column and Hospitalisation Exceptions call
+	// this shared Vue method. Keep the runtime fix in the Frappe Page wrapper so
+	// cached product bundles cannot re-introduce the obsolete /app hard route.
+	view.openHospitalisationEpisode = openHospitalisationEpisodeRoute;
+}
+
 frappe.pages['vetedge-hospitalisation-operations'].on_page_load = function(wrapper) {
 	wrapper.page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -12,6 +34,7 @@ frappe.pages['vetedge-hospitalisation-operations'].on_page_show = function(wrapp
 	const visitId = wrapper.current_visit_id;
 
 	if (wrapper.vue_app?.view) {
+		hardenHospitalisationOperationsNavigation(wrapper);
 		wrapper.vue_app.view.syncShellContext?.();
 		wrapper.vue_app.view.fetchData?.();
 		return;
@@ -56,6 +79,7 @@ frappe.pages['vetedge-hospitalisation-operations'].on_page_show = function(wrapp
 					const root = $('<div class="vetedge-hospitalisation-operations-root" data-edge-product="vetedge"></div>')
 						.appendTo(page.body);
 					wrapper.vue_app = window.mountVetEdgeHospitalisationOperations(root[0]);
+					hardenHospitalisationOperationsNavigation(wrapper);
 				} catch (error) {
 					console.error('Error mounting Hospitalisation Operations:', error);
 					showFailure(__('Error mounting Hospitalisation Operations: {0}', [error.message || String(error)]));
