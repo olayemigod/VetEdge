@@ -141,3 +141,20 @@ def test_hospitalisation_episode_ui_uses_server_facade_for_mutations():
     assert 'frappe.new_doc("Sales Invoice"' not in component
     assert "frappe.new_doc('Stock Entry'" not in component
     assert 'frappe.new_doc("Stock Entry"' not in component
+
+
+def test_hospitalisation_episode_exposes_authoritative_daily_charge_action():
+    component = read(COMPONENT)
+    service = read(SERVICE)
+
+    assert "Generate Daily Charges" in component
+    assert '@click="generateDailyCharges"' in component
+    assert "runAction('generate_daily_charges'" in component
+    assert '"generate_daily_charges"' in service
+    assert "service.generate_hospitalisation_daily_charges(" in service
+
+    # Daily charging remains server-owned. The Episode UI must not create
+    # or mutate ERPNext invoices directly.
+    assert "frappe.new_doc('Sales Invoice'" not in component
+    assert 'frappe.new_doc("Sales Invoice"' not in component
+

@@ -216,6 +216,7 @@
 						<div><h3>Charges & Billing</h3><p>Hospitalisation charges remain governed by Billing Core and ERPNext invoice immutability.</p></div>
 						<div class="episode-actions">
 							<button type="button" class="edge-button" :disabled="busy" @click="openBilling">Billing & Payment</button>
+							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_manage_charges" @click="generateDailyCharges">Generate Daily Charges</button>
 							<button type="button" class="edge-button" :disabled="busy || dirty || !episode.capabilities?.can_manage_charges" @click="buildCharges">Build Charge Sheet</button>
 							<button type="button" class="edge-button edge-button--primary" :disabled="busy || dirty || !episode.capabilities?.can_bill" @click="syncInvoice">Sync Charges to Invoice</button>
 						</div>
@@ -671,6 +672,25 @@ export default {
 			this.stockDialog.open = false;
 			const result = await this.runAction('post_stock');
 			if (result) frappe.msgprint({ title: __('Stock Usage'), message: `${__('Posted')}: ${result.posted_count || 0}<br>${__('Skipped')}: ${result.skipped_count || 0}<br>${__('Blocked')}: ${result.blocked_count || 0}`, indicator: result.blocked_count ? 'orange' : 'green' });
+		},
+		async generateDailyCharges() {
+			const result = await this.runAction('generate_daily_charges', {
+				care_level: this.episode.care_level || this.context.care_level || 'Standard',
+			});
+			if (!result) return;
+
+			frappe.msgprint({
+				title: __('Daily Hospitalisation Charges'),
+				message: [
+					result.message || __('Daily hospitalisation charges generated.'),
+					`${__('Created')}: ${result.created || 0}`,
+					`${__('Updated')}: ${result.updated || 0}`,
+					`${__('Skipped Existing')}: ${result.skipped_existing || 0}`,
+					`${__('Missing Price')}: ${result.missing_price || 0}`,
+					`${__('Total')}: ${this.formatMoney(result.total_amount || 0)}`,
+				].join('<br>'),
+				indicator: result.missing_price ? 'orange' : 'green',
+			});
 		},
 		async buildCharges() {
 			const result = await this.runAction('build_charges');
