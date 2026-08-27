@@ -281,7 +281,7 @@ def test_hospitalisation_operations_sorting_is_server_side_and_allowlisted():
     assert '"missing_price_count", "label": _("Missing Prices"), "fieldtype": "Int", "sortable": False' in service
 
 
-def test_hospitalisation_exception_and_list_actions_use_frappe_native_desk_route():
+def test_hospitalisation_exception_and_list_actions_use_record_path_segment():
     component = read(OPERATIONS_COMPONENT)
     operations_page = read(OPERATIONS_PAGE)
     episode_page = read(EPISODE_PAGE)
@@ -293,13 +293,18 @@ def test_hospitalisation_exception_and_list_actions_use_frappe_native_desk_route
     assert "this.openHospitalisationEpisode(row.hospitalisation)" in component
     assert "function openHospitalisationEpisodeRoute" in operations_page
     assert "view.openHospitalisationEpisode = openHospitalisationEpisodeRoute" in operations_page
-    assert "frappe.set_route('vetedge-hospitalisation-episode', { name: hospitalisation })" in operations_page
-    assert "/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(hospitalisation)}" in operations_page
+    assert "frappe.set_route('vetedge-hospitalisation-episode', hospitalisation)" in operations_page
+    assert "/desk/vetedge-hospitalisation-episode/${encodeURIComponent(hospitalisation)}" in operations_page
+    assert "{ name: hospitalisation }" not in operations_page
     assert "frappe.set_route('Form', 'Veterinary Hospitalisation', item.reference_name)" not in component
 
-    # Frappe v16's router emits /desk/... URLs and serialises route options into
-    # the query string. The Episode Page also accepts route_options defensively.
+    # The Hospitalisation identifier is a Frappe route segment so it cannot be
+    # lost as transient route_options. Query-string support remains only for
+    # older links already in browser history.
     assert "hospitalisationEpisodeDeskUrl" in episode_page
-    assert "/desk/vetedge-hospitalisation-episode" in episode_page
+    assert "/desk/vetedge-hospitalisation-episode/${encodeURIComponent(name)}" in episode_page
+    assert "window.frappe?.get_route?.()" in episode_page
+    assert "pathParts" in episode_page
+    assert "params.get('name')" in episode_page
     assert "window.frappe?.route_options?.name" in episode_page
     assert "canonicalizeHospitalisationEpisodeRoute" in episode_page
