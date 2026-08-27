@@ -16,6 +16,20 @@ ACTIVITY_DOCTYPE = "Veterinary Hospitalisation Activity"
 CHARGE_DOCTYPE = "Veterinary Hospitalisation Charge Item"
 PAGE_LENGTH_MAX = 100
 OPERATIONAL_ACTIVE_STATUSES = {"Admitted", "Under Care", "Ready for Discharge"}
+DEFAULT_SORT = {"field": "admission_datetime", "direction": "desc"}
+SORTABLE_PARENT_FIELDS = {
+    "hospitalisation": "name",
+    "patient_name": "patient_name",
+    "owner": "customer",
+    "branch": "service_branch",
+    "admission_datetime": "admission_datetime",
+    "status": "status",
+    "care_level": "care_level",
+    "care_location": "care_location",
+    "attending_veterinarian": "attending_veterinarian",
+    "invoice_status": "invoice_status",
+    "payment_gate_status": "payment_gate_status",
+}
 
 
 def _filters(value: str | dict | None) -> dict:
@@ -31,6 +45,33 @@ def _filters(value: str | dict | None) -> dict:
     # Branch normalization/role checks. The DocType permission hook remains the
     # final authority for each list query.
     return dict(normalize_report_filters("Active Hospitalisations", cleaned) or {})
+
+
+def _normalize_sort(value: str | dict | None) -> dict[str, str]:
+    if not value:
+        return dict(DEFAULT_SORT)
+    try:
+        parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+    except Exception:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        return dict(DEFAULT_SORT)
+
+    field = cstr(parsed.get("field") or parsed.get("fieldname") or "").strip()
+    direction = cstr(parsed.get("direction") or "").strip().lower()
+    if field not in SORTABLE_PARENT_FIELDS or direction not in {"asc", "desc"}:
+        return dict(DEFAULT_SORT)
+    return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict[str, str]) -> str:
+    field = sort.get("field") if sort else None
+    direction = sort.get("direction") if sort else None
+    db_field = SORTABLE_PARENT_FIELDS.get(field, SORTABLE_PARENT_FIELDS[DEFAULT_SORT["field"]])
+    direction = direction if direction in {"asc", "desc"} else DEFAULT_SORT["direction"]
+    # All values in this expression come from the fixed allowlist above. Never
+    # accept arbitrary client order_by strings.
+    return f"{db_field} {direction}, name {direction}"
 
 
 def _query_filters(filters: dict) -> dict:
@@ -88,7 +129,7 @@ def _status_counts(query_filters: dict) -> dict[str, int]:
     return {cstr(row.get("status")): cint(row.get("row_count")) for row in rows}
 
 
-def _page_rows(query_filters: dict, start: int, page_length: int) -> list[dict]:
+def _page_rows(query_filters: dict, start: int, page_length: int, sort: dict[str, str]) -> list[dict]:
     return frappe.get_list(
         DOCTYPE,
         filters=query_filters,
@@ -113,7 +154,7 @@ def _page_rows(query_filters: dict, start: int, page_length: int) -> list[dict]:
             "follow_up_date",
             "modified",
         ],
-        order_by="admission_datetime desc, name desc",
+        order_by=_order_by(sort),
         start=start,
         page_length=page_length,
     )
@@ -216,21 +257,21 @@ def _summary(query_filters: dict, total: int) -> list[dict]:
 
 def _columns() -> list[dict]:
     return [
-        {"fieldname": "hospitalisation", "label": _("Hospitalisation"), "fieldtype": "Link", "options": DOCTYPE},
-        {"fieldname": "patient_name", "label": _("Patient"), "fieldtype": "Data"},
-        {"fieldname": "owner", "label": _("Pet Owner"), "fieldtype": "Link", "options": "Customer"},
-        {"fieldname": "branch", "label": _("Branch"), "fieldtype": "Link", "options": "Branch"},
-        {"fieldname": "admission_datetime", "label": _("Admitted On"), "fieldtype": "Datetime"},
-        {"fieldname": "status", "label": _("Status"), "fieldtype": "Data"},
-        {"fieldname": "care_level", "label": _("Care Level"), "fieldtype": "Data"},
-        {"fieldname": "care_location", "label": _("Care Location"), "fieldtype": "Link", "options": "Veterinary Care Location"},
-        {"fieldname": "attending_veterinarian", "label": _("Attending Veterinarian"), "fieldtype": "Link", "options": "User"},
-        {"fieldname": "latest_activity_datetime", "label": _("Latest Activity"), "fieldtype": "Datetime"},
-        {"fieldname": "pending_stock_count", "label": _("Pending Stock"), "fieldtype": "Int"},
-        {"fieldname": "pending_charge_amount", "label": _("Pending Charges"), "fieldtype": "Currency"},
-        {"fieldname": "missing_price_count", "label": _("Missing Prices"), "fieldtype": "Int"},
-        {"fieldname": "invoice_status", "label": _("Invoice Status"), "fieldtype": "Data"},
-        {"fieldname": "payment_gate_status", "label": _("Payment Gate"), "fieldtype": "Data"},
+        {"fieldname": "hospitalisation", "label": _("Hospitalisation"), "fieldtype": "Link", "options": DOCTYPE, "sortable": True},
+        {"fieldname": "patient_name", "label": _("Patient"), "fieldtype": "Data", "sortable": True},
+        {"fieldname": "owner", "label": _("Pet Owner"), "fieldtype": "Link", "options": "Customer", "sortable": True},
+        {"fieldname": "branch", "label": _("Branch"), "fieldtype": "Link", "options": "Branch", "sortable": True},
+        {"fieldname": "admission_datetime", "label": _("Admitted On"), "fieldtype": "Datetime", "sortable": True},
+        {"fieldname": "status", "label": _("Status"), "fieldtype": "Data", "sortable": True},
+        {"fieldname": "care_level", "label": _("Care Level"), "fieldtype": "Data", "sortable": True},
+        {"fieldname": "care_location", "label": _("Care Location"), "fieldtype": "Link", "options": "Veterinary Care Location", "sortable": True},
+        {"fieldname": "attending_veterinarian", "label": _("Attending Veterinarian"), "fieldtype": "Link", "options": "User", "sortable": True},
+        {"fieldname": "latest_activity_datetime", "label": _("Latest Activity"), "fieldtype": "Datetime", "sortable": False},
+        {"fieldname": "pending_stock_count", "label": _("Pending Stock"), "fieldtype": "Int", "sortable": False},
+        {"fieldname": "pending_charge_amount", "label": _("Pending Charges"), "fieldtype": "Currency", "sortable": False},
+        {"fieldname": "missing_price_count", "label": _("Missing Prices"), "fieldtype": "Int", "sortable": False},
+        {"fieldname": "invoice_status", "label": _("Invoice Status"), "fieldtype": "Data", "sortable": True},
+        {"fieldname": "payment_gate_status", "label": _("Payment Gate"), "fieldtype": "Data", "sortable": True},
     ]
 
 
@@ -240,6 +281,7 @@ def get_hospitalisation_operations(
     filters: str | dict | None = None,
     start: int = 0,
     page_length: int = 50,
+    sort: str | dict | None = None,
 ) -> dict:
     require_internal_user()
     assert_hospitalisation_enabled()
@@ -248,11 +290,12 @@ def get_hospitalisation_operations(
 
     report_filters = _filters(filters)
     query_filters = _query_filters(report_filters)
+    resolved_sort = _normalize_sort(sort)
     start = max(cint(start), 0)
     page_length = min(max(cint(page_length) or 50, 1), PAGE_LENGTH_MAX)
 
     total = _visible_count(query_filters)
-    parents = _page_rows(query_filters, start, page_length)
+    parents = _page_rows(query_filters, start, page_length, resolved_sort)
     parent_names = [row.get("name") for row in parents if row.get("name")]
     activities = _activity_aggregates(parent_names)
     charges = _charge_aggregates(parent_names)
@@ -299,6 +342,7 @@ def get_hospitalisation_operations(
         "columns": _columns(),
         "rows": rows,
         "summary": _summary(query_filters, total),
+        "sort": resolved_sort,
         "total": total,
         "start": start,
         "page_length": page_length,
@@ -306,6 +350,7 @@ def get_hospitalisation_operations(
         "has_next": start + len(rows) < total,
         "metadata": {
             "pagination_mode": "query-level-parent-page-child-enrichment",
+            "sorting_strategy": "server-parent-fields",
             "all_matching_rows_materialized": False,
             "child_scope": "requested_parent_page_only",
             "max_page_length": PAGE_LENGTH_MAX,
