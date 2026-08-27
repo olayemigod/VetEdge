@@ -14,6 +14,11 @@ VACCINATION_HISTORY_STATUSES = {"Administered"}
 HOSPITALISATION_DOCTYPE = "Veterinary Hospitalisation"
 HOSPITALISATION_ACTIVITY_DOCTYPE = "Veterinary Hospitalisation Activity"
 HOSPITALISATION_HISTORY_MAX_LIMIT = 100
+DEDICATED_HOSPITALISATION_CLINICAL_DOCTYPES = {
+    "Veterinary Vital Signs",
+    "Veterinary Vaccination Record",
+    "Veterinary Lab Order",
+}
 
 
 def _dedupe(rows: list[dict]) -> list[dict]:
@@ -101,6 +106,19 @@ def _activity_details(row) -> str:
     return cstr(row.get("clinical_notes") or "").strip()
 
 
+def _is_dedicated_clinical_activity(row) -> bool:
+    """True when Medical History already has a canonical clinical source row.
+
+    Hospitalisation keeps the orchestration/activity link for operational use,
+    but Vitals, Vaccination and Lab must appear from their real clinical
+    DocTypes rather than being repeated as text-only Hospitalisation events.
+    """
+    return bool(
+        row.get("linked_document")
+        and row.get("linked_doctype") in DEDICATED_HOSPITALISATION_CLINICAL_DOCTYPES
+    )
+
+
 def get_hospitalisation_history(
     patient: str,
     limit: int = 50,
@@ -110,9 +128,9 @@ def get_hospitalisation_history(
     """Return permission-aware Hospitalisation events for the patient timeline.
 
     Hospitalisation remains the operational parent. Dedicated clinical events
-    such as Vitals, Vaccination and Lab are also linked to their authoritative
-    records, so Medical History can open either the episode or the source record
-    without creating a second clinical truth.
+    such as Vitals, Vaccination and Lab are linked to their authoritative
+    records and intentionally omitted from this section so they appear once in
+    their existing Medical History sections instead of creating parallel truth.
     """
     require_internal_user()
     can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
@@ -207,6 +225,8 @@ def get_hospitalisation_history(
 
         for activity in activities_by_parent.get(hospitalisation, []):
             if not _timestamp_in_range(activity.get("activity_datetime"), start, end):
+                continue
+            if _is_dedicated_clinical_activity(activity):
                 continue
             activity_type = activity.get("activity_type") or "Hospitalisation Activity"
             result.append(
