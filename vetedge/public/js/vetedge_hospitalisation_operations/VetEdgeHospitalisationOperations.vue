@@ -101,19 +101,14 @@
             :disabled="loading"
             @change="applyFilters"
           />
-          <EdgeInput
-            v-model="filters.from_date"
-            type="date"
-            label="Admitted From"
+          <EdgeSmartDateRange
+            :model-value="smartDate"
+            label="Admitted Date"
+            placeholder="e.g. Last 3 weeks, This Month, Last 90 days"
+            date-order="DMY"
             :disabled="loading"
-            @change="applyFilters"
-          />
-          <EdgeInput
-            v-model="filters.to_date"
-            type="date"
-            label="Admitted To"
-            :disabled="loading"
-            @change="applyFilters"
+            @update:model-value="onAdmittedDateModel"
+            @resolved="onAdmittedDateResolved"
           />
         </div>
       </template>
@@ -148,7 +143,7 @@ const requiredEdgeUIComponents = [
   'EdgeReportShell',
   'EdgeLinkField',
   'EdgeDropdown',
-  'EdgeInput'
+  'EdgeSmartDateRange'
 ];
 const optionalEdgeUIComponents = ['EdgeReportExceptionPanel'];
 
@@ -192,6 +187,7 @@ export default {
       exceptionPayload: null,
       exceptionRequestGeneration: 0,
       exceptionCapabilities: { advanced_features_entitled: false },
+      smartDate: {},
       filters: {
         branch: '',
         patient: '',
@@ -378,7 +374,22 @@ export default {
       if (this.filters.customer) this.filters.patient = '';
       this.applyFilters();
     },
+    onAdmittedDateModel(value) {
+      this.smartDate = value || {};
+      if (!value?.from_date || !value?.to_date) {
+        this.filters.from_date = '';
+        this.filters.to_date = '';
+      }
+    },
+    onAdmittedDateResolved(value) {
+      if (!value?.from_date || !value?.to_date) return;
+      this.smartDate = value;
+      this.filters.from_date = value.from_date;
+      this.filters.to_date = value.to_date;
+      this.applyFilters();
+    },
     clearFilters() {
+      this.smartDate = {};
       this.filters = {
         branch: this.visibilityDefaultBranch || '', patient: '', customer: '', practitioner: '', care_location: '', status: '',
         care_level: '', from_date: '', to_date: '', active_only: 1
@@ -474,8 +485,12 @@ export default {
       else if (field === 'attending_veterinarian' && value) frappe.set_route('Form', 'User', value);
     },
     openException(item) {
-      if (!window.frappe?.set_route || !item?.reference_doctype || !item?.reference_name) return;
-      frappe.set_route('Form', item.reference_doctype, item.reference_name);
+      if (!item?.reference_doctype || !item?.reference_name) return;
+      if (item.reference_doctype === 'Veterinary Hospitalisation') {
+        window.location.assign(`/desk/vetedge-hospitalisation-episode?name=${encodeURIComponent(item.reference_name)}`);
+        return;
+      }
+      if (window.frappe?.set_route) frappe.set_route('Form', item.reference_doctype, item.reference_name);
     }
   }
 };
@@ -484,7 +499,7 @@ export default {
 <style scoped>
 .hospitalisation-filter-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(12rem, 1fr));
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
   gap: var(--edge-space-md, 16px);
   width: 100%;
 }
@@ -496,6 +511,6 @@ export default {
   color: var(--edge-text, #172033);
 }
 .hospitalisation-runtime-error__detail { margin: 10px 0 16px; color: var(--edge-text-muted, #667085); }
-@media (max-width: 900px) { .hospitalisation-filter-grid { grid-template-columns: repeat(2, minmax(10rem, 1fr)); } }
+@media (max-width: 1100px) { .hospitalisation-filter-grid { grid-template-columns: repeat(2, minmax(10rem, 1fr)); } }
 @media (max-width: 576px) { .hospitalisation-filter-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
