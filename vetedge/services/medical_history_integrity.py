@@ -3,12 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 import frappe
+from frappe.utils import cint, cstr, get_datetime
 
+from vetedge.services.permissions import can_access_medical_history
 from vetedge.services.portal_access import require_internal_user
 
 
 LAB_HISTORY_STATUSES = {"Completed"}
 VACCINATION_HISTORY_STATUSES = {"Administered"}
+HOSPITALISATION_DOCTYPE = "Veterinary Hospitalisation"
+HOSPITALISATION_ACTIVITY_DOCTYPE = "Veterinary Hospitalisation Activity"
+HOSPITALISATION_HISTORY_MAX_LIMIT = 100
 
 
 def _dedupe(rows: list[dict]) -> list[dict]:
@@ -22,8 +27,8 @@ def _dedupe(rows: list[dict]) -> list[dict]:
         ) if name else (
             row.get("type"),
             row.get("timestamp"),
-            row.get("consultation") or row.get("linked_consultation"),
-            row.get("tests_summary") or row.get("vaccine"),
+            row.get("consultation") or row.get("linked_consultation") or row.get("hospitalisation"),
+            row.get("tests_summary") or row.get("vaccine") or row.get("event_type"),
         )
         if key in seen:
             continue
@@ -67,6 +72,183 @@ def _filter_view(payload: dict) -> dict:
     return result
 
 
+def _normalize_history_limit(limit: int | str | None) -> int:
+    try:
+        resolved = int(limit or 50)
+    except (TypeError, ValueError):
+        resolved = 50
+    return min(max(resolved, 1), HOSPITALISATION_HISTORY_MAX_LIMIT)
+
+
+def _history_bounds(from_date: str, to_date: str):
+    return (
+        get_datetime(f"{from_date} 00:00:00"),
+        get_datetime(f"{to_date} 23:59:59"),
+    )
+
+
+def _timestamp_in_range(value, start, end) -> bool:
+    if not value:
+        return False
+    try:
+        resolved = get_datetime(value)
+    except Exception:
+        return False
+    return start <= resolved <= end
+
+
+def _activity_details(row) -> str:
+    return cstr(row.get("clinical_notes") or "").strip()
+
+
+def get_hospitalisation_history(
+    patient: str,
+    limit: int = 50,
+    from_date: str | None = None,
+    to_date: str | None = None,
+) -> list[dict]:
+    """Return permission-aware Hospitalisation events for the patient timeline.
+
+    Hospitalisation remains the operational parent. Dedicated clinical events
+    such as Vitals, Vaccination and Lab are also linked to their authoritative
+    records, so Medical History can open either the episode or the source record
+    without creating a second clinical truth.
+    """
+    require_internal_user()
+    can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
+    if not frappe.has_permission(HOSPITALISATION_DOCTYPE, "read"):
+        return []
+
+    from vetedge.services.medical_history import normalize_date_range
+
+    from_date, to_date = normalize_date_range(from_date, to_date)
+    page_limit = _normalize_history_limit(limit)
+    start, end = _history_bounds(from_date, to_date)
+
+    parents = frappe.get_list(
+        HOSPITALISATION_DOCTYPE,
+        filters={"patient": patient},
+        fields=[
+            "name",
+            "hospitalisation_title",
+            "status",
+            "admission_datetime",
+            "discharge_datetime",
+            "admission_reason",
+            "discharge_summary",
+            "condition_at_discharge",
+            "service_branch",
+            "care_level",
+            "attending_veterinarian",
+        ],
+        order_by="admission_datetime desc, modified desc",
+        page_length=page_limit,
+    )
+    if not parents:
+        return []
+
+    parent_names = [row.get("name") for row in parents if row.get("name")]
+    activities = frappe.get_list(
+        HOSPITALISATION_ACTIVITY_DOCTYPE,
+        filters={"parent": ["in", parent_names]},
+        fields=[
+            "name",
+            "parent",
+            "idx",
+            "activity_datetime",
+            "activity_type",
+            "performed_by",
+            "clinical_notes",
+            "item",
+            "qty",
+            "uom",
+            "linked_doctype",
+            "linked_document",
+            "billing_status",
+            "stock_status",
+        ],
+        parent_doctype=HOSPITALISATION_DOCTYPE,
+        order_by="activity_datetime desc, idx desc",
+        page_length=min(max(page_limit * 20, page_limit), 1000),
+    )
+    activities_by_parent: dict[str, list] = {}
+    for row in activities:
+        activities_by_parent.setdefault(cstr(row.get("parent")), []).append(row)
+
+    result: list[dict] = []
+    for parent in parents:
+        hospitalisation = cstr(parent.get("name"))
+        common = {
+            "type": "hospitalisation",
+            "hospitalisation": hospitalisation,
+            "title": parent.get("hospitalisation_title") or hospitalisation,
+            "service_branch": parent.get("service_branch"),
+            "care_level": parent.get("care_level"),
+            "practitioner": parent.get("attending_veterinarian"),
+            "status": parent.get("status"),
+        }
+
+        if _timestamp_in_range(parent.get("admission_datetime"), start, end):
+            result.append(
+                {
+                    **common,
+                    "name": f"{hospitalisation}::admission",
+                    "timestamp": parent.get("admission_datetime"),
+                    "event_type": "Admission",
+                    "activity_type": "Admission",
+                    "details": parent.get("admission_reason") or "Patient admitted for Hospitalisation.",
+                    "item": None,
+                    "qty": None,
+                    "uom": None,
+                    "linked_doctype": HOSPITALISATION_DOCTYPE,
+                    "linked_document": hospitalisation,
+                }
+            )
+
+        for activity in activities_by_parent.get(hospitalisation, []):
+            if not _timestamp_in_range(activity.get("activity_datetime"), start, end):
+                continue
+            activity_type = activity.get("activity_type") or "Hospitalisation Activity"
+            result.append(
+                {
+                    **common,
+                    "name": activity.get("name") or f"{hospitalisation}::activity::{activity.get('idx')}",
+                    "timestamp": activity.get("activity_datetime"),
+                    "event_type": activity_type,
+                    "activity_type": activity_type,
+                    "details": _activity_details(activity),
+                    "performed_by": activity.get("performed_by"),
+                    "item": activity.get("item"),
+                    "qty": activity.get("qty"),
+                    "uom": activity.get("uom"),
+                    "billing_status": activity.get("billing_status"),
+                    "stock_status": activity.get("stock_status"),
+                    "linked_doctype": activity.get("linked_doctype"),
+                    "linked_document": activity.get("linked_document"),
+                }
+            )
+
+        if _timestamp_in_range(parent.get("discharge_datetime"), start, end):
+            result.append(
+                {
+                    **common,
+                    "name": f"{hospitalisation}::discharge",
+                    "timestamp": parent.get("discharge_datetime"),
+                    "event_type": "Discharge",
+                    "activity_type": "Discharge",
+                    "details": parent.get("discharge_summary") or parent.get("condition_at_discharge") or "Patient discharged.",
+                    "item": None,
+                    "qty": None,
+                    "uom": None,
+                    "linked_doctype": HOSPITALISATION_DOCTYPE,
+                    "linked_document": hospitalisation,
+                }
+            )
+
+    result.sort(key=lambda row: cstr(row.get("timestamp")), reverse=True)
+    return _dedupe(result)[:page_limit]
+
+
 @frappe.whitelist()
 def get_patient_medical_history_view(
     patient: str,
@@ -77,9 +259,16 @@ def get_patient_medical_history_view(
     require_internal_user()
     from vetedge.services.medical_history import get_patient_medical_history_view as original
 
-    return _filter_view(
+    result = _filter_view(
         original(patient=patient, from_date=from_date, to_date=to_date, limit=limit)
     )
+    result["hospitalisations"] = get_hospitalisation_history(
+        patient=patient,
+        limit=limit,
+        from_date=result.get("from_date") or from_date,
+        to_date=result.get("to_date") or to_date,
+    )
+    return result
 
 
 @frappe.whitelist()
@@ -119,7 +308,18 @@ def get_patient_medical_history(
                 filtered.append(enriched)
             continue
         filtered.append(row)
-    return _dedupe(filtered)[: int(limit or 50)]
+
+    filtered.extend(
+        get_hospitalisation_history(
+            patient=patient,
+            limit=limit,
+            from_date=from_date,
+            to_date=to_date,
+        )
+    )
+    filtered = _dedupe(filtered)
+    filtered.sort(key=lambda row: cstr(row.get("timestamp")), reverse=True)
+    return filtered[: int(limit or 50)]
 
 
 @frappe.whitelist()
@@ -131,6 +331,27 @@ def get_patient_medical_history_section(
     to_date: str | None = None,
 ) -> dict:
     require_internal_user()
+    section = cstr(section or "").strip().lower()
+    if section == "hospitalisations":
+        from vetedge.services.medical_history import normalize_date_range
+
+        can_access_medical_history(getattr(frappe.session, "user", None), patient, raise_exception=True)
+        from_date, to_date = normalize_date_range(from_date, to_date)
+        page_limit = _normalize_history_limit(limit)
+        return {
+            "patient": patient,
+            "section": section,
+            "from_date": from_date,
+            "to_date": to_date,
+            "limit": page_limit,
+            "rows": get_hospitalisation_history(
+                patient=patient,
+                limit=page_limit,
+                from_date=from_date,
+                to_date=to_date,
+            ),
+        }
+
     from vetedge.services.medical_history_lazy import get_patient_medical_history_section as original
 
     payload = dict(
