@@ -29,6 +29,9 @@
 	});
 	const CARE_LOCATION_DOCTYPE = "Veterinary Care Location";
 	const CARE_LOCATION_ROUTE = "/desk/vetedge-care-locations";
+	const HOSPITALISATION_DOCTYPE = "Veterinary Hospitalisation";
+	const HOSPITALISATION_OPERATIONS_ROUTE = "/desk/vetedge-hospitalisation-operations";
+	const LEGACY_HOSPITALISATION_EPISODE_ROUTE = "/desk/vetedge-hospitalisation-episode";
 	const BRANCH_ACCESS_ROUTES = Object.freeze({
 		"Branch User Assignment": "/desk/vetedge-branch-access?resource=user-assignments",
 		"Branch Practitioner Assignment": "/desk/vetedge-branch-access?resource=practitioner-assignments",
@@ -99,6 +102,36 @@
 		planned.dataset.vetedgeTreatmentReport = "1";
 	}
 
+	function suppressNativeHospitalisationSidebarSource() {
+		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
+		if (!sidebars) return false;
+		let changed = false;
+		for (const key of ["vetedge", "veterinary"]) {
+			const sidebar = sidebars[key];
+			if (!Array.isArray(sidebar?.items)) continue;
+			const filtered = sidebar.items.filter((item) => !(
+				item?.type === "Link" &&
+				String(item?.link_type || "") === "DocType" &&
+				String(item?.link_to || "") === HOSPITALISATION_DOCTYPE
+			));
+			if (filtered.length !== sidebar.items.length) {
+				sidebar.items = filtered;
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	function removeNativeHospitalisationSidebarItems(shell) {
+		const hospital = section(shell, "Hospital & Services");
+		if (!hospital) return;
+		hospital.querySelectorAll(".edge-sidebar-item").forEach((item) => {
+			const label = itemLabel(item);
+			const explicit = String(item?.dataset?.linkTo || item?.getAttribute?.("data-link-to") || "").trim();
+			if (label === "Hospitalisations" || explicit === HOSPITALISATION_DOCTYPE) item.remove();
+		});
+	}
+
 	function sourceRoute() {
 		const path = normalizeDeskPath(window.location.pathname);
 		if (path.startsWith("/desk/query-report/") || path === "/desk/vetedge-report-center") return "/desk/vetedge";
@@ -165,10 +198,34 @@
 		return "";
 	}
 
+	function hospitalisationTargetFromLegacyRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		const url = new URL(raw, window.location.origin);
+		const path = normalizeDeskPath(url.pathname);
+		const nativeListPath = `/desk/${slug(HOSPITALISATION_DOCTYPE)}`;
+
+		// The native list is retired from normal operations. Specific native Form
+		// routes remain untouched so the explicit "Open Native Form" fallback works.
+		if (path === nativeListPath) return HOSPITALISATION_OPERATIONS_ROUTE;
+		if (path !== LEGACY_HOSPITALISATION_EPISODE_ROUTE && !path.startsWith(`${LEGACY_HOSPITALISATION_EPISODE_ROUTE}/`)) return "";
+
+		let name = path.startsWith(`${LEGACY_HOSPITALISATION_EPISODE_ROUTE}/`)
+			? path.slice(LEGACY_HOSPITALISATION_EPISODE_ROUTE.length + 1)
+			: "";
+		try { name = decodeURIComponent(name); } catch (_error) { /* keep route text */ }
+		name = String(name || url.searchParams.get("name") || url.searchParams.get("hospitalisation") || "").trim();
+		return name
+			? `${HOSPITALISATION_OPERATIONS_ROUTE}/${encodeURIComponent(name)}`
+			: HOSPITALISATION_OPERATIONS_ROUTE;
+	}
+
 	function migratedTargetFromRoute(route) {
 		const raw = String(route || "").trim();
 		if (!raw) return "";
 		const url = new URL(raw, window.location.origin);
+		const hospitalisation = hospitalisationTargetFromLegacyRoute(raw);
+		if (hospitalisation) return hospitalisation;
 		const report = reportFromNativePath(url.pathname);
 		if (report) return reportCenterTarget(report, sourceRoute());
 		const care = careLocationTargetFromNativePath(url.pathname);
@@ -179,6 +236,13 @@
 	}
 
 	function redirectCurrentLegacyRoute() {
+		const currentRoute = `${window.location.pathname}${window.location.search || ""}`;
+		const hospitalisation = hospitalisationTargetFromLegacyRoute(currentRoute);
+		if (hospitalisation) {
+			sameTab(hospitalisation, { replace: true });
+			return true;
+		}
+
 		const path = window.location.pathname;
 		const report = reportFromNativePath(path);
 		if (report) {
@@ -213,6 +277,14 @@
 
 	function explicitTarget(candidate) {
 		return String(candidate?.dataset?.linkTo || candidate?.getAttribute?.("data-link-to") || candidate?.getAttribute?.("href") || "").trim();
+	}
+
+	function isNativeHospitalisationCandidate(candidate) {
+		const explicit = explicitTarget(candidate);
+		const text = itemLabel(candidate);
+		if (explicit === HOSPITALISATION_DOCTYPE) return true;
+		if (normalizeDeskPath(explicit) === `/desk/${slug(HOSPITALISATION_DOCTYPE)}`) return true;
+		return text === "Hospitalisations" || text.startsWith("Hospitalisations\n");
 	}
 
 	function reportNameFromCandidate(candidate) {
@@ -256,6 +328,7 @@
 		const linkType = String(item?.link_type || item?.linkType || "Page");
 		const linkTo = String(item?.link_to || item?.linkTo || "").trim();
 		const label = String(item?.label || "").trim();
+		if (linkType === "DocType" && linkTo === HOSPITALISATION_DOCTYPE) return HOSPITALISATION_OPERATIONS_ROUTE;
 		if (linkType === "Report" && MIGRATED_REPORTS[linkTo]) return reportCenterTarget(linkTo);
 		if (linkType === "DocType" && linkTo === CARE_LOCATION_DOCTYPE) return CARE_LOCATION_ROUTE;
 		if (linkType === "DocType" && BRANCH_ACCESS_ROUTES[linkTo]) return BRANCH_ACCESS_ROUTES[linkTo];
@@ -271,8 +344,18 @@
 		const product = String(config?.product || "").trim().toLowerCase();
 		if (!config || !["vetedge", "veterinary"].includes(product)) return false;
 		const previousNavigate = typeof config.navigate === "function" ? config.navigate : null;
+		const sections = (config.sections || [])
+			.map((section) => ({
+				...section,
+				items: (section.items || []).filter((item) => !(
+					String(item?.link_type || item?.linkType || "") === "DocType" &&
+					String(item?.link_to || item?.linkTo || "") === HOSPITALISATION_DOCTYPE
+				)),
+			}))
+			.filter((section) => section.items.length);
 		runtime.registerProductMenu({
 			...config,
+			sections,
 			navigate(item) {
 				const target = targetForMenuItem(item);
 				if (target && sameTab(target)) return;
@@ -287,6 +370,9 @@
 	function focusForCurrentRoute() {
 		const path = normalizeDeskPath(window.location.pathname);
 		const params = new URLSearchParams(window.location.search || "");
+		if (path === HOSPITALISATION_OPERATIONS_ROUTE || path.startsWith(`${HOSPITALISATION_OPERATIONS_ROUTE}/`)) {
+			return { section: "Hospital & Services", label: "Hospitalisation Operations" };
+		}
 		if (path === "/desk/vetedge-report-center") {
 			const report = params.get("report") || "";
 			const label = MIGRATED_REPORTS[report] || report;
@@ -309,11 +395,13 @@
 	}
 
 	function sync() {
-		redirectCurrentLegacyRoute();
+		suppressNativeHospitalisationSidebarSource();
+		if (redirectCurrentLegacyRoute()) return;
 		patchSharedProductMenuNavigation();
 		const focus = focusForCurrentRoute();
 		document.querySelectorAll(".edge-app-shell[data-edge-product='vetedge'], .edge-app-shell[data-edge-product='veterinary']").forEach((shell) => {
 			movePlannedTreatmentToReports(shell);
+			removeNativeHospitalisationSidebarItems(shell);
 			if (!focus) return;
 			const activeSection = section(shell, focus.section);
 			const activeItem = itemIn(activeSection, focus.label);
@@ -324,6 +412,14 @@
 	document.addEventListener("click", (event) => {
 		const candidate = navigationCandidate(event);
 		if (!candidate) return;
+
+		if (isNativeHospitalisationCandidate(candidate)) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(HOSPITALISATION_OPERATIONS_ROUTE);
+			return;
+		}
 
 		if (candidate.matches?.(".edge-sidebar-item") && itemLabel(candidate) === "Planned Treatment") {
 			event.preventDefault();
@@ -371,6 +467,9 @@
 	window.VetEdgeNavigationCoverage = Object.freeze({
 		migratedReports: MIGRATED_REPORTS,
 		careLocationRoute: CARE_LOCATION_ROUTE,
+		hospitalisationDoctype: HOSPITALISATION_DOCTYPE,
+		hospitalisationOperationsRoute: HOSPITALISATION_OPERATIONS_ROUTE,
+		legacyHospitalisationEpisodeRoute: LEGACY_HOSPITALISATION_EPISODE_ROUTE,
 		branchAccessRoutes: BRANCH_ACCESS_ROUTES,
 		sameTabProductPages: SAME_TAB_PRODUCT_PAGES,
 		resolveMigratedRoute: migratedTargetFromRoute,
