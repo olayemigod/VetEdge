@@ -26,7 +26,13 @@ jobs:
       - name: Compile inspection sources
         run: python -m compileall -q vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
       - name: Ruff inspection sources
-        run: ruff check vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
+        run: |
+          ruff check --fix vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
+          if ! git diff --exit-code -- vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py; then
+            echo "Ruff would change the committed inspection sources:"
+            git diff -- vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
+            exit 1
+          fi
       - name: Verify fixed inspection surface
         run: |
           python - <<'PY'
@@ -41,7 +47,7 @@ jobs:
           }
           for value in required:
               assert f'"{value}"' in source, value
-          forbidden = ["frappe.db.sql(", "frappe.db.sql(", "doctype: str", "table_name", "sql_query"]
+          forbidden = ["frappe.db.sql(", "doctype: str", "table_name", "sql_query"]
           for value in forbidden:
               assert value not in source, value
           assert "X-ProcessEdge-QA-Token" in source
