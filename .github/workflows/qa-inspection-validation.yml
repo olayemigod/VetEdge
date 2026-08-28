@@ -1,0 +1,51 @@
+name: VetEdge QA Inspection Validation
+
+on:
+  pull_request:
+    branches:
+      - qa/vetedge-release-candidate-2026-08-28
+    paths:
+      - vetedge/qa_inspection.py
+      - vetedge/tests/test_qa_inspection.py
+      - .github/workflows/qa-inspection-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install validation tools
+        run: python -m pip install --upgrade ruff
+      - name: Compile inspection sources
+        run: python -m compileall -q vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
+      - name: Ruff inspection sources
+        run: ruff check vetedge/qa_inspection.py vetedge/tests/test_qa_inspection.py
+      - name: Verify fixed inspection surface
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("vetedge/qa_inspection.py").read_text()
+          required = {
+              "hospitalisation_charges",
+              "hospitalisation_activities",
+              "related_invoice_summary",
+              "stock_posting_summary",
+              "payment_gate_evidence",
+          }
+          for value in required:
+              assert f'"{value}"' in source, value
+          forbidden = ["frappe.db.sql(", "frappe.db.sql(", "doctype: str", "table_name", "sql_query"]
+          for value in forbidden:
+              assert value not in source, value
+          assert "X-ProcessEdge-QA-Token" in source
+          assert "hmac.compare_digest" in source
+          assert "allow_guest=True" in source
+          assert "clinical_notes" not in source[source.index("def _activity_summary"):source.index("def _invoice_names")]
+          PY
