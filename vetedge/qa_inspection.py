@@ -7,7 +7,6 @@ import json
 import frappe
 from frappe.utils import cint, flt
 
-
 HOSPITALISATION_DOCTYPE = "Veterinary Hospitalisation"
 QA_ENABLED_KEY = "vetedge_qa_inspection_enabled"
 QA_TOKEN_KEY = "vetedge_qa_inspection_token"
