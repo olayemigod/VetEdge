@@ -59,6 +59,13 @@ def _grouped_activity_candidates(filters: dict) -> list[dict]:
 
 
 def _pending_stock_candidates() -> list[dict]:
+	# A disabled Dispensary Flow means there is no actionable Hospitalisation
+	# stock-posting workflow. Preserve historical rows, but do not report them as
+	# current stock exceptions that users are unable (and not permitted) to post.
+	from vetedge.services.hospitalisation_episode_policy import is_hospitalisation_dispensary_enabled
+
+	if not is_hospitalisation_dispensary_enabled():
+		return []
 	return _grouped_activity_candidates(
 		{
 			"stock_affecting": 1,

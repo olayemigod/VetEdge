@@ -25,6 +25,7 @@
       :rows="rows"
       :summary="summary"
       :pagination="pagination"
+      :sort="sort"
       :loading="loading"
       :error="error"
       :rowKey="rowKey"
@@ -38,6 +39,7 @@
       @retry="refreshOperationalView"
       @page-change="goToPage"
       @page-size-change="setPageSize"
+      @sort-change="onSortChange"
       @cell-click="openCell"
     >
       <template #filters>
@@ -101,19 +103,14 @@
             :disabled="loading"
             @change="applyFilters"
           />
-          <EdgeInput
-            v-model="filters.from_date"
-            type="date"
-            label="Admitted From"
+          <EdgeSmartDateRange
+            :model-value="smartDate"
+            label="Admitted Date"
+            placeholder="e.g. Last 3 weeks, This Month, Last 90 days"
+            date-order="DMY"
             :disabled="loading"
-            @change="applyFilters"
-          />
-          <EdgeInput
-            v-model="filters.to_date"
-            type="date"
-            label="Admitted To"
-            :disabled="loading"
-            @change="applyFilters"
+            @update:model-value="onAdmittedDateModel"
+            @resolved="onAdmittedDateResolved"
           />
         </div>
       </template>
@@ -136,7 +133,7 @@
         />
       </template>
       <template #resultMeta>
-        <span>Active admissions only · activity and charge signals are enriched for the current page.</span>
+        <span>Active admissions only · parent-field sorting is server-side · activity and charge signals are enriched for the current page.</span>
       </template>
     </EdgeReportShell>
   </EdgeAppShell>
@@ -148,9 +145,10 @@ const requiredEdgeUIComponents = [
   'EdgeReportShell',
   'EdgeLinkField',
   'EdgeDropdown',
-  'EdgeInput'
+  'EdgeSmartDateRange'
 ];
 const optionalEdgeUIComponents = ['EdgeReportExceptionPanel'];
+const DEFAULT_SORT = Object.freeze({ field: 'admission_datetime', direction: 'desc' });
 
 const runtimeComponents = () => {
   const runtime = typeof window !== 'undefined' ? (window.EdgeSuiteUI || window.EdgeUI || {}) : {};
@@ -184,6 +182,7 @@ export default {
       totalCount: 0,
       currentPage: 1,
       pageLength: 50,
+      sort: { ...DEFAULT_SORT },
       tenantName: '',
       branchName: 'All Branches',
       userName: '',
@@ -192,6 +191,7 @@ export default {
       exceptionPayload: null,
       exceptionRequestGeneration: 0,
       exceptionCapabilities: { advanced_features_entitled: false },
+      smartDate: {},
       filters: {
         branch: '',
         patient: '',
@@ -378,7 +378,24 @@ export default {
       if (this.filters.customer) this.filters.patient = '';
       this.applyFilters();
     },
+    onAdmittedDateModel(value) {
+      const hadAppliedRange = Boolean(this.filters.from_date || this.filters.to_date);
+      this.smartDate = value || {};
+      if (!value?.from_date || !value?.to_date) {
+        this.filters.from_date = '';
+        this.filters.to_date = '';
+        if (hadAppliedRange) this.applyFilters();
+      }
+    },
+    onAdmittedDateResolved(value) {
+      if (!value?.from_date || !value?.to_date) return;
+      this.smartDate = value;
+      this.filters.from_date = value.from_date;
+      this.filters.to_date = value.to_date;
+      this.applyFilters();
+    },
     clearFilters() {
+      this.smartDate = {};
       this.filters = {
         branch: this.visibilityDefaultBranch || '', patient: '', customer: '', practitioner: '', care_location: '', status: '',
         care_level: '', from_date: '', to_date: '', active_only: 1
@@ -405,12 +422,14 @@ export default {
         const payload = await this.callFrappe(OPERATIONS_API, {
           filters: JSON.stringify(this.requestFilters()),
           start: (this.currentPage - 1) * Number(this.pageLength || 50),
-          page_length: Number(this.pageLength || 50)
+          page_length: Number(this.pageLength || 50),
+          sort: JSON.stringify(this.sort || DEFAULT_SORT)
         });
         this.rows = payload.rows || [];
         this.columns = payload.columns || [];
         this.summary = payload.summary || [];
         this.totalCount = Number(payload.total || 0);
+        this.sort = payload.sort || this.sort || { ...DEFAULT_SORT };
       } catch (error) {
         this.error = error?.message || 'Hospitalisation Operations could not be loaded.';
       } finally {
@@ -447,6 +466,11 @@ export default {
       this.currentPage = 1;
       this.fetchData();
     },
+    onSortChange(value) {
+      this.sort = value?.field && value?.direction ? value : { ...DEFAULT_SORT };
+      this.currentPage = 1;
+      this.fetchData();
+    },
     formatCell(value, column) {
       if (value === null || value === undefined || value === '') return '—';
       if (column?.fieldtype === 'Currency') {
@@ -460,18 +484,30 @@ export default {
       }
       return String(value);
     },
+    openHospitalisationEpisode(name) {
+      if (!name) return;
+      window.location.assign(`/app/vetedge-hospitalisation-episode?name=${encodeURIComponent(name)}`);
+    },
     openCell({ row, column, value }) {
-      if (!window.frappe?.set_route || !column?.fieldname) return;
+      if (!column?.fieldname) return;
       const field = column.fieldname;
-      if (field === 'hospitalisation' && row?.hospitalisation) frappe.set_route('Form', 'Veterinary Hospitalisation', row.hospitalisation);
-      else if (field === 'patient_name' && row?.patient) frappe.set_route('Form', 'Veterinary Patient', row.patient);
+      if (field === 'hospitalisation' && row?.hospitalisation) {
+        this.openHospitalisationEpisode(row.hospitalisation);
+        return;
+      }
+      if (!window.frappe?.set_route) return;
+      if (field === 'patient_name' && row?.patient) frappe.set_route('Form', 'Veterinary Patient', row.patient);
       else if (field === 'owner' && row?.owner) frappe.set_route('Form', 'Customer', row.owner);
       else if (field === 'care_location' && row?.care_location) frappe.set_route('Form', 'Veterinary Care Location', row.care_location);
       else if (field === 'attending_veterinarian' && value) frappe.set_route('Form', 'User', value);
     },
     openException(item) {
-      if (!window.frappe?.set_route || !item?.reference_doctype || !item?.reference_name) return;
-      frappe.set_route('Form', item.reference_doctype, item.reference_name);
+      if (!item?.reference_doctype || !item?.reference_name) return;
+      if (item.reference_doctype === 'Veterinary Hospitalisation') {
+        this.openHospitalisationEpisode(item.reference_name);
+        return;
+      }
+      if (window.frappe?.set_route) frappe.set_route('Form', item.reference_doctype, item.reference_name);
     }
   }
 };
@@ -480,9 +516,18 @@ export default {
 <style scoped>
 .hospitalisation-filter-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(12rem, 1fr));
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
   gap: var(--edge-space-md, 16px);
   width: 100%;
+}
+/* The Smart Date control is the right-most desktop filter. Align its wider
+   picker to the trigger's right edge so it opens leftward into the viewport. */
+.hospitalisation-filter-grid :deep(.edge-smart-date__picker) {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  max-height: min(42rem, calc(100vh - 2rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .hospitalisation-runtime-error {
   margin: 20px;
@@ -492,6 +537,12 @@ export default {
   color: var(--edge-text, #172033);
 }
 .hospitalisation-runtime-error__detail { margin: 10px 0 16px; color: var(--edge-text-muted, #667085); }
-@media (max-width: 900px) { .hospitalisation-filter-grid { grid-template-columns: repeat(2, minmax(10rem, 1fr)); } }
-@media (max-width: 576px) { .hospitalisation-filter-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1100px) { .hospitalisation-filter-grid { grid-template-columns: repeat(2, minmax(10rem, 1fr)); } }
+@media (max-width: 576px) {
+  .hospitalisation-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .hospitalisation-filter-grid :deep(.edge-smart-date__picker) {
+    inset-inline-start: 0;
+    inset-inline-end: auto;
+  }
+}
 </style>

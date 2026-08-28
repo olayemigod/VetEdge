@@ -121,6 +121,19 @@ override_whitelisted_methods = {
 	"vetedge.services.grooming.transition_grooming_session_status": "vetedge.services.grooming_payment_workflow.transition_grooming_session_status",
 	"vetedge.services.service_operations.get_service_operation_detail": "vetedge.services.service_operations_state.get_service_operation_detail",
 	"vetedge.services.service_operations.transition_grooming_session": "vetedge.services.service_operations_state.transition_grooming_session",
+	"vetedge.services.hospitalisation_episode.get_hospitalisation_episode": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_episode",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_item_policy.add_hospitalisation_activity",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order",
+	"vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options": "vetedge.services.hospitalisation_item_policy.search_hospitalisation_episode_options",
+	"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy_v2.perform_hospitalisation_episode_action",
+	"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_stock_posting_preview",
+	"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy_v2.post_hospitalisation_activity_stock",
+	"vetedge.services.hospitalisation.generate_hospitalisation_daily_charges": "vetedge.services.hospitalisation_episode_policy_v2.generate_hospitalisation_daily_charges",
+	"vetedge.services.hospitalisation.admit_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.admit_hospitalisation",
+	"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_discharge_readiness",
+	"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.discharge_hospitalisation",
 }
 
 doc_events = {
