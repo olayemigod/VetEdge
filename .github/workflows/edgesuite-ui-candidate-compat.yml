@@ -1,0 +1,142 @@
+name: EdgeSuite UI Candidate Compatibility
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vetedge-edgeui-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: VetEdge + reconciled EdgeSuite UI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Check out VetEdge QA candidate
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install bench prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev pkg-config redis-tools
+          python -m pip install --upgrade frappe-bench
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create clean Frappe v16 bench
+        run: |
+          bench init \
+            --frappe-branch version-16 \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            frappe-bench
+          cd frappe-bench
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Check out exact reconciled EdgeSuite UI candidate
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          ref: d692fa95ad917138aa32a36e882bf22776b4c5b9
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
+
+      - name: Fetch ERPNext, Payments, EdgeSuite UI, and VetEdge
+        working-directory: frappe-bench
+        run: |
+          bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
+          bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
+          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "$GITHUB_WORKSPACE"
+
+      - name: Create standalone VetEdge site
+        working-directory: frappe-bench
+        run: |
+          bench new-site ci.localhost \
+            --db-host 127.0.0.1 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
+          bench --site ci.localhost install-app edgesuite_ui
+          bench --site ci.localhost install-app vetedge
+          bench --site ci.localhost set-config edge_platform_mode standalone
+          bench --site ci.localhost set-config coreedge_required 0
+          bench --site ci.localhost set-config allow_tests true
+
+      - name: Verify installed application set
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost list-apps | tee /tmp/installed-apps.txt
+          grep -Eq '^frappe[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^erpnext[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^payments[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
+          grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
+
+      - name: Build, migrate, and verify shared runtime
+        working-directory: frappe-bench
+        run: |
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "d692fa95ad917138aa32a36e882bf22776b4c5b9"
+          bench build --app edgesuite_ui
+          bench build --app vetedge
+          bench --site ci.localhost migrate
+          grep -Eq 'EdgeReportShell' apps/edgesuite_ui/edgesuite_ui/public/js/edgeui/report_presentation.js
+          test -f apps/edgesuite_ui/edgesuite_ui/search_ranking.py
+
+      - name: Run VetEdge full test suite
+        working-directory: frappe-bench
+        shell: bash
+        run: |
+          set -o pipefail
+          bench --site ci.localhost run-tests --app vetedge 2>&1 | tee /tmp/vetedge-edgeui-candidate-tests.log
+
+      - name: Preserve failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vetedge-edgeui-candidate-failure
+          path: /tmp/vetedge-edgeui-candidate-tests.log
+          if-no-files-found: ignore
+          retention-days: 3
