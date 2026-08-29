@@ -3,9 +3,16 @@ campaign:
   product: VetEdge
   type: full_release_qa
   status: draft
-  qa_branch: qa/vetedge-release-candidate-2026-08-28
-  source_branch: feature/vetedge-hospitalisation-episode
-  purpose: Consolidated browser, permission, workflow, reporting, accounting-safety, stock-safety, responsive and performance QA for post-PR36 VetEdge work.
+  qa_branch: qa/vetedge-full-implementation-2026-08-29
+  source_branch: qa/vetedge-release-candidate-2026-08-28
+  purpose: Consolidated browser, permission, workflow, reporting, accounting-safety, stock-safety, responsive and performance QA for the reconciled post-PR36 VetEdge implementation.
+  source_refs:
+    main_baseline: e08a9278c2c975a5e5d4221481a760a90e21a8ea
+    reporting_operations_pr47: 6e273352fdaacd2bbf478aa4caa5ce975a481a31
+    vcn_nadis_pr50: fa11960760fd85def526f5d0582a3bc15ff5b1a7
+    hospitalisation_episode_pr51: ffd054023297f29074e6945837a267b17ec150d5
+    reconciliation: 324114962b7f2225f169163173758f1298219035
+    consolidation_audit: docs/qa/vetedge_full_implementation_audit_2026-08-29.md
 
 release_rules:
   answers: [PASS, FAIL, BLOCKED, NOT_APPLICABLE, NOT_TESTED]
@@ -209,8 +216,8 @@ issue_capture:
     - OTHER
 
 next_platform_step:
-  repository: standalone ProcessEdge QA repository to be created
+  repository: processedge-qa
   hosting: Vercel
-  database: PostgreSQL-compatible managed database
+  database: Supabase/PostgreSQL
   first_product: VetEdge
   import_source: this campaign manifest
