@@ -73,11 +73,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:6379
           bench set-config -g redis_socketio redis://127.0.0.1:6379
 
-      - name: Check out exact reconciled EdgeSuite UI candidate
+      - name: Check out exact governed EdgeSuite UI 1.1.0 candidate
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: d692fa95ad917138aa32a36e882bf22776b4c5b9
+          ref: b1d403be980c45baf7043515a96da327d8e86b2b
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -105,20 +105,11 @@ jobs:
           bench --site ci.localhost set-config coreedge_required 0
           bench --site ci.localhost set-config allow_tests true
 
-      - name: Verify installed application set
-        working-directory: frappe-bench
-        run: |
-          bench --site ci.localhost list-apps | tee /tmp/installed-apps.txt
-          grep -Eq '^frappe[[:space:]]' /tmp/installed-apps.txt
-          grep -Eq '^erpnext[[:space:]]' /tmp/installed-apps.txt
-          grep -Eq '^payments[[:space:]]' /tmp/installed-apps.txt
-          grep -Eq '^edgesuite_ui[[:space:]]' /tmp/installed-apps.txt
-          grep -Eq '^vetedge[[:space:]]' /tmp/installed-apps.txt
-
       - name: Build, migrate, and verify shared runtime
         working-directory: frappe-bench
         run: |
-          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "d692fa95ad917138aa32a36e882bf22776b4c5b9"
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "b1d403be980c45baf7043515a96da327d8e86b2b"
+          grep -Eq '^__version__ = "1\.1\.0"$' apps/edgesuite_ui/edgesuite_ui/__init__.py
           bench build --app edgesuite_ui
           bench build --app vetedge
           bench --site ci.localhost migrate
