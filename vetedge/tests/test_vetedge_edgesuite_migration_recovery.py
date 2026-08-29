@@ -279,7 +279,7 @@ def test_hospital_services_and_vital_signs_remain_while_obsolete_dashboard_stays
 	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.json").exists()
 	assert "REMOVED_STANDARD_PAGES" in dashboard_install
 	assert '"veterinary-hospitalisation-dashboard"' in dashboard_install
-	assert '("Page", "veterinary-hospitalisation-dashboard")' in dashboard_install
+	assert '("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE)' in dashboard_install
 	assert '("DocType", "Veterinary Vital Signs")' not in dashboard_install
 	assert '"veterinary", "page", "veterinary_hospitalisation_dashboard"' not in dashboard_install
 	assert '"label": "Vital Signs"' in sidebar

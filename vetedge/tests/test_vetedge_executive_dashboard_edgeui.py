@@ -155,8 +155,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn("tenantName", component)
 			self.assertIn("branchName", component)
 			self.assertIn("userName", component)
-			self.assertIn("vetedge-notification-icon", component)
 			self.assertNotIn("coreedge/", component.lower())
+		self.assertIn("vetedge-notification-icon", executive)
 		self.assertIn("'All Branches'", stock)
 		self.assertIn("syncShellContext", stock)
 
@@ -213,8 +213,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(component, content)
 		self.assertIn("repeat(auto-fit, minmax(180px, 1fr))", content)
 		stock = self.read(STOCK_COMPONENT)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", stock)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", stock)
+		self.assertIn("grid-template-columns: repeat(3, minmax(12rem, 1fr))", stock)
+		self.assertIn("grid-template-columns: repeat(2, minmax(10rem, 1fr))", stock)
 		self.assertIn("grid-template-columns: minmax(0, 1fr)", stock)
 		self.assertIn("edge-select edge-control", content)
 		self.assertIn("edge-input edge-control", content)
@@ -236,7 +236,6 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("normalize_dashboard_filters(key, filters)", content)
 		self.assertIn('if key == "executive":', content)
 
-
 	def test_phase_two_fluid_layout_preserves_page_content_and_runtime_contract(self):
 		executive = self.read(COMPONENT)
 		stock = self.read(STOCK_COMPONENT)
@@ -255,18 +254,18 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(required, executive)
 
 		for required in (
+			"EdgeReportShell",
 			"Warehouse",
 			"Item Group",
 			"Expiry Window",
 			"Days Threshold",
 			"Item Code",
 			"Apply / Refresh",
-			"summary-stats-grid",
-			'v-for="row in rows"',
-			"pagination-footer",
-			"EdgeLoadingState",
-			"EdgeEmptyState",
-			"EdgeErrorState",
+			':summary="summaryCards"',
+			':rows="rows"',
+			':pagination="pagination"',
+			'@page-change="goToPage"',
+			'@page-size-change="setPageSize"',
 			"EdgeNotificationBell",
 			"EdgeNotificationDrawer",
 		):
