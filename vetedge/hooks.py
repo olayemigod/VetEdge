@@ -53,6 +53,10 @@ app_include_js = [
 	"/assets/vetedge/js/veterinary_unread_badge.js",
 ]
 
+doctype_js = {
+	"Veterinary Hospitalisation": "public/js/vetedge_hospitalisation_preqa.js",
+}
+
 get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website_user_home_page"
 
 after_install = "vetedge.install.after_install"
@@ -136,7 +140,7 @@ override_whitelisted_methods = {
 	"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals",
 	"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination",
 	"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order",
-	"vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options": "vetedge.services.hospitalisation_item_policy.search_hospitalisation_episode_options",
+	"vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options": "vetedge.services.hospitalisation_form_integrity.search_hospitalisation_episode_options",
 	"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy_v2.perform_hospitalisation_episode_action",
 	"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_stock_posting_preview",
 	"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy_v2.post_hospitalisation_activity_stock",
