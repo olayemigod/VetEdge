@@ -166,10 +166,10 @@ class TestInvoiceCancellationRecovery(TestCase):
 
 		detach.assert_called_once_with("SINV-CANCELLED", reason="cancelled_invoice_rebilling")
 		self.assertEqual(
-			reopen.call_args_list,
+			[item.args for item in reopen.call_args_list],
 			[
-				(("VBS-001", "SINV-CANCELLED"),),
-				(("VBS-002", "SINV-CANCELLED"),),
+				("VBS-001", "SINV-CANCELLED"),
+				("VBS-002", "SINV-CANCELLED"),
 			],
 		)
 
