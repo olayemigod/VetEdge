@@ -7,6 +7,7 @@ from frappe.modules.import_file import import_file_by_path
 
 
 REGULATORY_PAGE = "vetedge-regulatory-reporting"
+OUTBREAK_PAGE = "vetedge-disease-outbreak-register"
 OUTBREAK_DOCTYPE = "Veterinary Disease Outbreak"
 ADMINISTRATION_PAGE = "vetedge-administration"
 SIDEBAR_NAME = "VetEdge"
@@ -20,6 +21,13 @@ LEGACY_ADMINISTRATION_LINKS = {
 	("DocType", "Veterinary Role Bundle"),
 	("DocType", "Veterinary License Profile"),
 	("DocType", "Veterinary Notification Item"),
+}
+REGULATORY_MANAGED_LINKS = {
+	("Page", REGULATORY_PAGE),
+	("Page", OUTBREAK_PAGE),
+	# Previous releases published Disease Outbreak Register as a native DocType
+	# link. Keep the signature managed so migrate removes the stale native route.
+	("DocType", OUTBREAK_DOCTYPE),
 }
 CONFIGURATION_LINK_ORDER = (
 	("DocType", "Veterinary Settings"),
@@ -105,7 +113,7 @@ def _normalise_sidebar_items(items, *, include_outbreak=True, include_administra
 		signature = _signature(item)
 		if item.get("type") != "Link" or signature in CONFIGURATION_LINKS:
 			continue
-		if signature in {("Page", REGULATORY_PAGE), ("DocType", OUTBREAK_DOCTYPE)}:
+		if signature in REGULATORY_MANAGED_LINKS:
 			continue
 		if include_administration and (signature == ("Page", ADMINISTRATION_PAGE) or signature in LEGACY_ADMINISTRATION_LINKS):
 			continue
@@ -120,7 +128,7 @@ def _normalise_sidebar_items(items, *, include_outbreak=True, include_administra
 			continue
 		if _is_section(item, CONFIGURATION_SECTION_LABEL) or (item.get("type") == "Link" and signature in CONFIGURATION_LINKS):
 			continue
-		if _is_section(item, SECTION_LABEL) or signature in {("Page", REGULATORY_PAGE), ("DocType", OUTBREAK_DOCTYPE)}:
+		if _is_section(item, SECTION_LABEL) or signature in REGULATORY_MANAGED_LINKS:
 			continue
 		if include_administration and (
 			_is_section(item, ADMINISTRATION_SECTION_LABEL)
@@ -135,7 +143,7 @@ def _normalise_sidebar_items(items, *, include_outbreak=True, include_administra
 		_link("VCN / NADIS Reports", "Page", REGULATORY_PAGE, "shield-check", REGULATORY_VISIBILITY),
 	]
 	if include_outbreak:
-		managed.append(_link("Disease Outbreak Register", "DocType", OUTBREAK_DOCTYPE, "alert-triangle", REGULATORY_VISIBILITY))
+		managed.append(_link("Disease Outbreak Register", "Page", OUTBREAK_PAGE, "alert-triangle", REGULATORY_VISIBILITY))
 
 	managed.append(_section(CONFIGURATION_SECTION_LABEL))
 	managed.extend(config_rows[signature] for signature in CONFIGURATION_LINK_ORDER if signature in config_rows)
@@ -155,16 +163,23 @@ def _normalise_sidebar_items(items, *, include_outbreak=True, include_administra
 	return filtered
 
 
+def _ensure_standard_page(page_name: str, page_folder: str) -> None:
+	if frappe.db.exists("Page", page_name):
+		return
+	page_file = frappe.get_app_path(
+		"vetedge", "veterinary", "page", page_folder, f"{page_folder}.json"
+	)
+	if os.path.exists(page_file):
+		import_file_by_path(page_file, force=True, ignore_version=True)
+
+
 def ensure_regulatory_reporting_navigation() -> None:
 	"""Repair VetEdge regulatory, configuration and administration navigation."""
 	if not frappe.db.exists("DocType", "Page"):
 		return
-	if not frappe.db.exists("Page", REGULATORY_PAGE):
-		page_file = frappe.get_app_path(
-			"vetedge", "veterinary", "page", "vetedge_regulatory_reporting", "vetedge_regulatory_reporting.json"
-		)
-		if os.path.exists(page_file):
-			import_file_by_path(page_file, force=True, ignore_version=True)
+
+	_ensure_standard_page(REGULATORY_PAGE, "vetedge_regulatory_reporting")
+	_ensure_standard_page(OUTBREAK_PAGE, "vetedge_disease_outbreak_register")
 	if not frappe.db.exists("Page", REGULATORY_PAGE):
 		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
@@ -174,7 +189,10 @@ def ensure_regulatory_reporting_navigation() -> None:
 	current = [_row_payload(item) for item in list(sidebar.get("items") or [])]
 	normalised = _normalise_sidebar_items(
 		list(sidebar.get("items") or []),
-		include_outbreak=bool(frappe.db.exists("DocType", OUTBREAK_DOCTYPE)),
+		include_outbreak=bool(
+			frappe.db.exists("DocType", OUTBREAK_DOCTYPE)
+			and frappe.db.exists("Page", OUTBREAK_PAGE)
+		),
 		include_administration=bool(frappe.db.exists("Page", ADMINISTRATION_PAGE)),
 	)
 	if current == normalised:
