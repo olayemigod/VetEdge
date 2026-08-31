@@ -40,6 +40,35 @@ def test_vetedge_emergency_menu_is_edgesuite_shell_only():
 		assert forbidden not in menu
 
 
+def test_native_page_guard_removes_product_navigation_for_hidden_or_stale_shells():
+	guard = read(APP / "public/js/vetedge_product_menu_native_guard.js")
+	loader = read(APP / "public/js/report_pdf_patch.js")
+
+	for expected in (
+		'"edge-product-menu-host"',
+		'"edge-product-menu-dropdown"',
+		'"edge-product-menu-slot"',
+		'"edge-product-menu-navbar-bridge"',
+		'"vetedge-product-menu-slot"',
+		'"vetedge-product-menu-trigger"',
+		'"vetedge-product-menu-panel"',
+		'current.hidden',
+		'current.getAttribute?.("aria-hidden") === "true"',
+		'style?.display === "none"',
+		'style?.visibility === "hidden"',
+		'style?.contentVisibility === "hidden"',
+		'if (!activeEdgeShell()) {',
+		'removeProductNavigationArtifacts();',
+		'attributeFilter: ["class", "style", "hidden", "aria-hidden"]',
+		'global.frappe?.router?.on?.("change", scheduleReconcile)',
+	):
+		assert expected in guard
+
+	assert 'frappe.require("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1")' in loader
+	assert '".page-actions"' not in guard
+	assert '".navbar-right"' not in guard
+
+
 def test_v16_navigation_recovery_makes_desk_routes_canonical():
 	recovery = read(APP / "public/js/vetedge_navigation_recovery.js")
 
