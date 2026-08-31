@@ -96,10 +96,10 @@ def _query_filters(filters: dict) -> tuple[dict, list]:
 def _count_rows(filters: dict, or_filters: list) -> int:
     rows = frappe.get_list(
         DOCTYPE,
-        fields=["count(name) as total"],
+        fields=[{"COUNT": "*", "as": "total"}],
         filters=filters,
         or_filters=or_filters or None,
-        page_length=1,
+        limit_page_length=1,
     )
     return cint(rows[0].get("total") if rows else 0)
 
