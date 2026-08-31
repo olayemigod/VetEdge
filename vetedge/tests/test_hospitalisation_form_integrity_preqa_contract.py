@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FORM_POLICY = ROOT / "services" / "hospitalisation_form_integrity.py"
+TERMINAL_POLICY = ROOT / "services" / "hospitalisation_terminal_integrity.py"
 FALLBACK_JS = ROOT / "public" / "js" / "vetedge_hospitalisation_preqa.js"
 CONTROLLER = (
     ROOT
@@ -71,3 +72,20 @@ def test_hospitalisation_controller_runs_fallback_integrity_before_main_validati
     assert "from vetedge.services.hospitalisation_form_integrity import enforce_hospitalisation_form_integrity" in controller
     assert "enforce_hospitalisation_form_integrity(self)" in controller
     assert controller.index("enforce_hospitalisation_form_integrity(self)") < controller.index("validate_hospitalisation(self)")
+
+
+def test_terminal_hospitalisation_releases_live_care_location_without_extra_user_permissions():
+    controller = read(CONTROLLER)
+    policy = read(TERMINAL_POLICY)
+
+    assert "reconcile_terminal_hospitalisation_care_location" in controller
+    assert "def on_update(self)" in controller
+    assert "reconcile_terminal_hospitalisation_care_location(self)" in controller
+    assert 'TERMINAL_STATUSES = {"Discharged", "Cancelled"}' in policy
+    assert "get_active_care_location_log" in policy
+    assert "get_active_care_location_occupancy_count" in policy
+    assert '"care_location": None' in policy
+    assert '"care_location_status": "Released"' in policy
+    assert 'log_status = "Cancelled" if doc.get("status") == "Cancelled" else "Released"' in policy
+    assert 'target_status = "Occupied" if active_count >= capacity else "Available"' in policy
+    assert "ignore_permissions" not in policy
