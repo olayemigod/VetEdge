@@ -24,3 +24,4 @@ vetedge.patches.harden_hospitalisation_daily_charge_settings
 vetedge.patches.add_reporting_action_settings
 vetedge.patches.normalize_veterinary_desktop_icon_label
 vetedge.patches.normalize_veterinary_desktop_layout_labels
+vetedge.patches.normalize_veterinary_desktop_layout_link_labels

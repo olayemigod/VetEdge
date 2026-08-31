@@ -8,6 +8,9 @@ HOOKS = ROOT / "vetedge" / "hooks.py"
 PATCHES = ROOT / "vetedge" / "patches.txt"
 MIGRATION = ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_icon_label.py"
 LAYOUT_MIGRATION = ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_layout_labels.py"
+LAYOUT_LINK_MIGRATION = (
+	ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_layout_link_labels.py"
+)
 
 
 def test_visible_desk_icon_is_veterinary_without_renaming_internal_identity():
@@ -51,12 +54,31 @@ def test_saved_desktop_layout_snapshots_are_normalized_without_resetting_user_la
 	assert 'frappe.db.exists("DocType", "Desktop Layout")' in migration
 	assert 'frappe.get_all("Desktop Layout", fields=["name", "layout"])' in migration
 	assert 'value.get("app") == APP_NAME' in migration
-	assert 'value.get("icon_type") == "App"' in migration
-	assert 'value.get("label") == OLD_LABEL' in migration
 	assert 'value.get("parent_icon") == OLD_LABEL' in migration
 	assert "json.loads" in migration
 	assert "json.dumps" in migration
 	assert "update_modified=False" in migration
-	assert 'frappe.cache.delete_key("desktop_icons")' in migration
-	assert 'frappe.cache.delete_key("bootinfo")' in migration
+	assert "delete_doc" not in migration
+
+
+def test_frappe_v16_link_tile_layout_receives_forward_only_repair():
+	patches = PATCHES.read_text(encoding="utf-8")
+	migration = LAYOUT_LINK_MIGRATION.read_text(encoding="utf-8")
+	v1_patch = "vetedge.patches.normalize_veterinary_desktop_layout_labels"
+	v2_patch = "vetedge.patches.normalize_veterinary_desktop_layout_link_labels"
+
+	assert v2_patch in patches
+	assert patches.index(v1_patch) < patches.index(v2_patch)
+	assert 'frappe.get_all("Desktop Layout", fields=["name", "user", "layout"])' in migration
+	assert 'value.get("app") == APP_NAME' in migration
+	assert 'value.get("name") == OLD_LABEL' in migration
+	assert 'value.get("link_to") == OLD_LABEL' in migration
+	assert 'value.get("label") == OLD_LABEL' in migration
+	assert 'value["label"] = NEW_LABEL' in migration
+	assert 'value.get("icon_type") == "App"' not in migration
+	assert 'value.get("parent_icon") == OLD_LABEL' in migration
+	assert "clear_desktop_icons_cache(user=user)" in migration
+	assert "json.loads" in migration
+	assert "json.dumps" in migration
+	assert "update_modified=False" in migration
 	assert "delete_doc" not in migration
