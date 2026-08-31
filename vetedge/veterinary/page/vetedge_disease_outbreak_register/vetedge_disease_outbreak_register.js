@@ -15,25 +15,25 @@ const OUTBREAK_COLUMNS = Object.freeze([
 	{ fieldname: "total_outbreaks", label: __("Total Outbreaks"), fieldtype: "Int" },
 ]);
 
+const OUTBREAK_STATUS_OPTIONS = Object.freeze([
+	{ value: "", label: __("All statuses") },
+	{ value: "Continuing", label: __("Continuing") },
+	{ value: "Resolved", label: __("Resolved") },
+]);
+
 function ensureOutbreakRegisterStyles() {
 	if (document.getElementById(VETEDGE_OUTBREAK_REGISTER_STYLE_ID)) return;
 	const style = document.createElement("style");
 	style.id = VETEDGE_OUTBREAK_REGISTER_STYLE_ID;
 	style.textContent = `
 		.vetedge-outbreak-register-root{width:100%;max-width:none;display:grid;gap:16px}
-		.vetedge-outbreak-register-filters{border:1px solid var(--edge-color-border,#d9dce1);border-radius:14px;background:var(--edge-color-surface,#fff);padding:16px;display:grid;gap:12px}
 		.vetedge-outbreak-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
-		.vetedge-outbreak-filter-label{display:grid;gap:6px;font-size:.78rem;font-weight:600;color:var(--edge-color-ink-700,#475467)}
-		.vetedge-outbreak-filter-label select{width:100%;min-height:38px;border:1px solid var(--edge-color-border,#d0d5dd);border-radius:9px;background:var(--edge-color-surface,#fff);color:var(--edge-color-ink-900,#344054);padding:7px 10px}
 		.vetedge-outbreak-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-		.vetedge-outbreak-button{appearance:none;border:1px solid var(--edge-color-border,#d0d5dd);background:var(--edge-color-surface,#fff);color:var(--edge-color-ink-900,#344054);border-radius:9px;padding:8px 12px;font-weight:600;cursor:pointer}
-		.vetedge-outbreak-button.primary{background:var(--edge-color-brand-600,#2563eb);border-color:var(--edge-color-brand-600,#2563eb);color:#fff}
-		.vetedge-outbreak-button:disabled{opacity:.55;cursor:not-allowed}
 		.vetedge-outbreak-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 		.vetedge-outbreak-pagination{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding-top:10px}
 		.vetedge-outbreak-note{color:var(--edge-color-ink-500,#667085);font-size:.82rem}
 		@media(max-width:1100px){.vetedge-outbreak-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-		@media(max-width:620px){.vetedge-outbreak-filter-grid,.vetedge-outbreak-summary{grid-template-columns:1fr}.vetedge-outbreak-actions .vetedge-outbreak-button{width:100%}}
+		@media(max-width:620px){.vetedge-outbreak-filter-grid,.vetedge-outbreak-summary{grid-template-columns:1fr}.vetedge-outbreak-actions .edge-button{width:100%}}
 	`;
 	document.head.appendChild(style);
 }
@@ -49,11 +49,12 @@ function outbreakApiCall(method, args = {}) {
 	});
 }
 
-function outbreakProfile() {
+function outbreakShellContext() {
 	const user = frappe.session?.user || "";
 	const info = frappe.boot?.user_info?.[user] || {};
+	const identity = frappe.boot?.vetedge_ui_identity || frappe.boot?.edgesuite_ui_identity?.vetedge || {};
 	return {
-		tenantName: frappe.boot?.sysdefaults?.company || "",
+		tenantName: identity.tenant_name || frappe.boot?.sysdefaults?.company || "",
 		branchName: frappe.defaults?.get_user_default?.("branch") || __("All Branches"),
 		userName: info.fullname || info.full_name || user,
 	};
@@ -92,12 +93,23 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 
 	frappe.require("edgeui.bundle.js", () => {
 		if (wrapper.visit_id !== visitId) return;
+		const professional = window.VetEdgeProfessionalUI?.install?.();
+		if (!professional?.installed) {
+			$loading.remove();
+			$("<div class='alert alert-danger p-6'></div>")
+				.text(professional?.message || __("The Veterinary professional shell is unavailable."))
+				.appendTo(wrapper.page.body);
+			return;
+		}
+
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = [
 			"EdgeAppShell",
 			"EdgePageLayout",
 			"EdgePageHeader",
+			"EdgeFilterBar",
 			"EdgeLinkField",
+			"EdgeDropdown",
 			"EdgeInput",
 			"EdgeStatCard",
 			"EdgeDataTable",
@@ -119,7 +131,9 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 			EdgeAppShell,
 			EdgePageLayout,
 			EdgePageHeader,
+			EdgeFilterBar,
 			EdgeLinkField,
+			EdgeDropdown,
 			EdgeInput,
 			EdgeStatCard,
 			EdgeDataTable,
@@ -127,7 +141,7 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 			EdgeErrorState,
 			EdgeEmptyState,
 		} = runtime.components;
-		const userProfile = outbreakProfile();
+		const userProfile = outbreakShellContext();
 
 		const component = {
 			name: "VetEdgeDiseaseOutbreakRegister",
@@ -143,6 +157,7 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 					canCreate: false,
 					canWrite: false,
 					columns: OUTBREAK_COLUMNS,
+					statusOptions: OUTBREAK_STATUS_OPTIONS,
 					filters: {
 						company: frappe.defaults?.get_user_default?.("Company") || frappe.boot?.sysdefaults?.company || "",
 						branch: frappe.defaults?.get_user_default?.("branch") || "",
@@ -275,9 +290,9 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 				openRegulatoryReports() {
 					frappe.set_route?.("vetedge-regulatory-reporting");
 				},
-				renderFilterPanel() {
-					return h("section", { class: "vetedge-outbreak-register-filters" }, [
-						h("div", { class: "vetedge-outbreak-filter-grid" }, [
+				renderFilterBar() {
+					return h(EdgeFilterBar, { title: __("Filter disease outbreaks") }, {
+						default: () => h("div", { class: "vetedge-outbreak-filter-grid" }, [
 							h(EdgeLinkField, {
 								modelValue: this.filters.company,
 								selectedLabel: this.filters.company || "",
@@ -296,17 +311,13 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 								clearable: true,
 								"onUpdate:modelValue": (value) => this.setFilter("branch", value),
 							}),
-							h("label", { class: "vetedge-outbreak-filter-label" }, [
-								h("span", __("Status")),
-								h("select", {
-									value: this.filters.status,
-									onChange: (event) => this.setFilter("status", event.target.value),
-								}, [
-									h("option", { value: "" }, __("All statuses")),
-									h("option", { value: "Continuing" }, __("Continuing")),
-									h("option", { value: "Resolved" }, __("Resolved")),
-								]),
-							]),
+							h(EdgeDropdown, {
+								modelValue: this.filters.status,
+								label: __("Status"),
+								placeholder: __("All statuses"),
+								options: this.statusOptions,
+								"onUpdate:modelValue": (value) => this.setFilter("status", value),
+							}),
 							h(EdgeLinkField, {
 								modelValue: this.filters.disease,
 								selectedLabel: this.filters.disease || "",
@@ -331,18 +342,18 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 							h(EdgeInput, {
 								modelValue: this.filters.txt,
 								label: __("Search"),
+								type: "search",
 								placeholder: __("Outbreak, disease or serotype"),
 								"onUpdate:modelValue": (value) => this.setFilter("txt", value),
 							}),
 						]),
-						h("div", { class: "vetedge-outbreak-actions" }, [
-							h("button", { class: "vetedge-outbreak-button primary", disabled: this.loading, onClick: this.applyFilters }, __("Apply Filters")),
-							h("button", { class: "vetedge-outbreak-button", disabled: this.loading, onClick: this.resetFilters }, __("Reset")),
-							h("button", { class: "vetedge-outbreak-button", disabled: this.loading, onClick: this.load }, this.loading ? __("Refreshing...") : __("Refresh")),
-							h("button", { class: "vetedge-outbreak-button", onClick: this.openRegulatoryReports }, __("VCN / NADIS Reports")),
+						actions: () => h("div", { class: "vetedge-outbreak-actions" }, [
+							h("button", { class: "edge-button edge-button--primary", disabled: this.loading, onClick: this.applyFilters }, __("Apply")),
+							h("button", { class: "edge-button", disabled: this.loading, onClick: this.resetFilters }, __("Reset")),
+							h("button", { class: "edge-button", disabled: this.loading, onClick: this.load }, this.loading ? __("Refreshing...") : __("Refresh")),
+							h("button", { class: "edge-button", onClick: this.openRegulatoryReports }, __("VCN / NADIS Reports")),
 						]),
-						h("div", { class: "vetedge-outbreak-note" }, __("Rows are permission-aware and Branch-scoped. The register does not bypass the Veterinary Disease Outbreak document validation or NADIS export controls.")),
-					]);
+					});
 				},
 				renderContent() {
 					if (this.loading) return h(EdgeLoadingState, { message: __("Loading disease outbreaks..."), skeleton: true });
@@ -353,30 +364,39 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 						h("div", { class: "vetedge-outbreak-pagination" }, [
 							h("span", { class: "vetedge-outbreak-note" }, __("Showing {0}–{1} of {2}", [this.firstVisible, this.lastVisible, this.total])),
 							h("div", { class: "vetedge-outbreak-actions" }, [
-								h("button", { class: "vetedge-outbreak-button", disabled: !this.hasPrevious || this.loading, onClick: this.previousPage }, __("Previous")),
+								h("button", { class: "edge-button edge-button--compact", disabled: !this.hasPrevious || this.loading, onClick: this.previousPage }, __("Previous")),
 								h("span", { class: "vetedge-outbreak-note" }, __("Page {0} of {1}", [this.currentPage, this.totalPages])),
-								h("button", { class: "vetedge-outbreak-button", disabled: !this.hasNext || this.loading, onClick: this.nextPage }, __("Next")),
+								h("button", { class: "edge-button edge-button--compact", disabled: !this.hasNext || this.loading, onClick: this.nextPage }, __("Next")),
 							]),
 						]),
 					]);
 				},
 			},
 			render() {
-				return h(EdgeAppShell, { productKey: "vetedge", profile: userProfile }, {
+				return h(EdgeAppShell, {
+					product: "vetedge",
+					title: __("Veterinary"),
+					tenantName: userProfile.tenantName,
+					branchName: userProfile.branchName,
+					userName: userProfile.userName,
+					activeRoute: "/desk/vetedge-disease-outbreak-register",
+				}, {
 					default: () => h(EdgePageLayout, {}, {
 						header: () => h(EdgePageHeader, {
+							eyebrow: __("Regulatory Reporting"),
 							title: __("Disease Outbreak Register"),
-							description: __("Review and maintain branch-scoped disease outbreak events used by VCN / NADIS regulatory reporting."),
+							subtitle: __("Review and maintain branch-scoped disease outbreak events used by VCN / NADIS regulatory reporting."),
 							actionLabel: this.canCreate ? __("New Outbreak") : "",
 							onAction: this.newOutbreak,
 						}),
+						filters: () => this.renderFilterBar(),
 						default: () => h("main", { class: "vetedge-outbreak-register-root" }, [
-							this.renderFilterPanel(),
 							h("section", { class: "vetedge-outbreak-summary" }, [
-								h(EdgeStatCard, { label: __("Matching Outbreaks"), value: this.total, tone: "primary" }),
-								h(EdgeStatCard, { label: __("Current Page"), value: `${this.currentPage} / ${this.totalPages}`, tone: "info" }),
-								h(EdgeStatCard, { label: __("Register Access"), value: this.canWrite ? __("Read / Write") : __("Read Only"), tone: this.canWrite ? "success" : "neutral" }),
+								h(EdgeStatCard, { label: __("Matching Outbreaks"), value: this.total, icon: "activity" }),
+								h(EdgeStatCard, { label: __("Current Page"), value: `${this.currentPage} / ${this.totalPages}`, icon: "report" }),
+								h(EdgeStatCard, { label: __("Register Access"), value: this.canWrite ? __("Read / Write") : __("Read Only"), icon: "shield" }),
 							]),
+							h("div", { class: "vetedge-outbreak-note" }, __("Rows are permission-aware and Branch-scoped. The register does not bypass Veterinary Disease Outbreak validation or NADIS export controls.")),
 							this.renderContent(),
 						]),
 					}),
