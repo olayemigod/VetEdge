@@ -735,5 +735,5 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 			console.error("Error mounting VetEdge Report Center:", error);
 			fail(__("Error mounting Report Center: {0}", [error.message || String(error)]));
 		}
-	})));
+	}));
 };
