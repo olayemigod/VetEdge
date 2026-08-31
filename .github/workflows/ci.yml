@@ -37,6 +37,7 @@ jobs:
         run: |
           ruff check \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_invoice_cancellation_recovery.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_resource_center_loading_regression.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
@@ -229,6 +230,10 @@ jobs:
       - name: Run standalone adapter tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_coreedge_adapter
+
+      - name: Run invoice cancellation recovery tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_invoice_cancellation_recovery
 
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
