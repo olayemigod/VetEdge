@@ -76,6 +76,10 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 			/ "veterinary/page/vetedge_disease_outbreak_register/vetedge_disease_outbreak_register.js"
 		).read_text(encoding="utf-8")
 		provider_source = (ROOT / "services/outbreak_register.py").read_text(encoding="utf-8")
+		list_source = (
+			ROOT
+			/ "veterinary/doctype/veterinary_disease_outbreak/veterinary_disease_outbreak_list.js"
+		).read_text(encoding="utf-8")
 
 		for expected in (
 			'frappe.pages["vetedge-disease-outbreak-register"]',
@@ -91,3 +95,6 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 		self.assertIn("frappe.get_list(", provider_source)
 		self.assertNotIn("ignore_permissions=True", provider_source)
 		self.assertNotIn("ignore_permissions = True", provider_source)
+
+		self.assertIn('frappe.listview_settings["Veterinary Disease Outbreak"]', list_source)
+		self.assertIn('frappe.set_route?.("vetedge-disease-outbreak-register")', list_source)
