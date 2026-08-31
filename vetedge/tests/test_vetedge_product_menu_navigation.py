@@ -17,6 +17,29 @@ def test_shared_product_menu_still_owns_same_tab_navigation():
 	assert 'menu_source: "workspace_sidebar"' in menu
 
 
+def test_vetedge_emergency_menu_is_edgesuite_shell_only():
+	menu = read(APP / "public/js/edgesuite_product_menu.js")
+
+	for expected in (
+		'function edgeShellPresent()',
+		'".edge-app-shell[data-edge-product] .edge-topbar__brand"',
+		'".edge-app-shell[data-edge-product] .edge-topbar-actions"',
+		'if (!edgeShellPresent()) {',
+		'state.mode = "native-desk-hidden"',
+		'return result(false, "native-desk-hidden", null);',
+	):
+		assert expected in menu
+
+	for forbidden in (
+		'".page-head .page-actions"',
+		'".page-head-content .page-actions"',
+		'".page-actions"',
+		'"header .navbar .navbar-right"',
+		'vetedge-product-menu-slot--floating',
+	):
+		assert forbidden not in menu
+
+
 def test_v16_navigation_recovery_makes_desk_routes_canonical():
 	recovery = read(APP / "public/js/vetedge_navigation_recovery.js")
 
