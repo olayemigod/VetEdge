@@ -53,16 +53,21 @@ def reconcile_terminal_hospitalisation_care_location(doc) -> None:
             update_modified=False,
         )
 
+    released_values = {
+        "care_location": None,
+        "care_location_status": "Released",
+        "care_location_released_on": released_on,
+    }
     frappe.db.set_value(
         HOSPITALISATION_DOCTYPE,
         doc.name,
-        {
-            "care_location": None,
-            "care_location_status": "Released",
-            "care_location_released_on": released_on,
-        },
+        released_values,
         update_modified=False,
     )
+    # Keep the in-memory document aligned with the DB write so Frappe Version,
+    # on-change processing and API responses do not retain a stale live location.
+    for fieldname, value in released_values.items():
+        doc.set(fieldname, value)
 
     location = frappe.db.get_value(
         CARE_LOCATION_DOCTYPE,
