@@ -33,6 +33,7 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 							"link_to": missing,
 						}
 					)
+				)
 
 	def test_runtime_sidebar_contains_only_existing_standard_targets(self):
 		ensure_vetedge_workspace_sidebar()
