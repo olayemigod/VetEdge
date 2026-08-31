@@ -16,6 +16,7 @@ from vetedge.services.permissions import get_veterinary_doctor_users
 
 ASSIGNMENT_DOCTYPE = "Branch Practitioner Assignment"
 CARE_LOCATION_DOCTYPE = "Veterinary Care Location"
+BLOCKED_CARE_LOCATION_STATUSES = {"Inactive", "Maintenance", "Cleaning"}
 ACTIVITY_SIGNATURE_FIELDS = (
     "activity_type",
     "billable",
@@ -108,25 +109,71 @@ def _validate_practitioner_branch(doc, previous) -> None:
         )
 
 
+def _care_location_change_is_managed(doc, previous) -> bool:
+    """Recognise the existing Assign/Release actions without using a global flag."""
+    if previous is None or doc.is_new():
+        return False
+
+    new_location = _clean(doc.get("care_location"))
+    if new_location:
+        assigned_on = _clean(doc.get("care_location_assigned_on"))
+        return bool(
+            _clean(doc.get("care_location_status")) == "Assigned"
+            and assigned_on
+            and assigned_on != _clean(previous.get("care_location_assigned_on"))
+        )
+
+    released_on = _clean(doc.get("care_location_released_on"))
+    return bool(
+        _clean(doc.get("care_location_status")) == "Released"
+        and released_on
+        and released_on != _clean(previous.get("care_location_released_on"))
+    )
+
+
 def _validate_care_location_branch(doc, previous) -> None:
-    if not (_field_changed(doc, previous, "service_branch") or _field_changed(doc, previous, "care_location")):
+    branch_changed = _field_changed(doc, previous, "service_branch")
+    location_changed = _field_changed(doc, previous, "care_location")
+    if not (branch_changed or location_changed):
         return
+
     location_name = _clean(doc.get("care_location"))
     branch = _clean(doc.get("service_branch"))
+
+    if location_changed and not _care_location_change_is_managed(doc, previous):
+        frappe.throw(
+            _(
+                "Use Assign Care Location or Release Care Location to change the Hospitalisation location so occupancy history stays accurate."
+            ),
+            frappe.ValidationError,
+        )
+
     if not location_name:
         return
+
     location = frappe.db.get_value(
         CARE_LOCATION_DOCTYPE,
         location_name,
-        ["name", "branch", "enabled", "status"],
+        ["name", "branch", "enabled", "status", "capacity"],
         as_dict=True,
     ) or {}
     if not location:
         frappe.throw(_("Select a valid Veterinary Care Location."), frappe.ValidationError)
     if _clean(location.get("branch")) and _clean(location.get("branch")) != branch:
         frappe.throw(_("Care Location Branch must match the Hospitalisation Branch."), frappe.ValidationError)
-    if not cint(location.get("enabled")):
-        frappe.throw(_("Selected Care Location is disabled."), frappe.ValidationError)
+    if not cint(location.get("enabled")) or location.get("status") in BLOCKED_CARE_LOCATION_STATUSES:
+        frappe.throw(_("Selected Care Location is not available for assignment."), frappe.ValidationError)
+
+    if location_changed:
+        from vetedge.services.hospitalisation import get_active_care_location_occupancy_count
+
+        capacity = max(cint(location.get("capacity")) or 1, 1)
+        active_count = get_active_care_location_occupancy_count(
+            location_name,
+            exclude_hospitalisation=getattr(doc, "name", None),
+        )
+        if active_count >= capacity:
+            frappe.throw(_("Selected Care Location is already full."), frappe.ValidationError)
 
 
 def _validate_changed_activities(doc, previous) -> None:
