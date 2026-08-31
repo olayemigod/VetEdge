@@ -81,11 +81,15 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("window.VetedgeProductMenu", product_menu)
 		for public_method in ("mount,", "unmount,", "remount,"):
 			self.assertIn(public_method, product_menu)
-		self.assertIn('".page-head .page-actions"', product_menu)
-		self.assertIn('"header .navbar .navbar-right"', product_menu)
+		self.assertIn('".edge-app-shell[data-edge-product] .edge-topbar__brand"', product_menu)
+		self.assertIn('".edge-app-shell[data-edge-product] .edge-topbar-actions"', product_menu)
+		self.assertIn("function edgeShellPresent()", product_menu)
+		self.assertIn('state.mode = "native-desk-hidden"', product_menu)
+		self.assertNotIn('".page-head .page-actions"', product_menu)
+		self.assertNotIn('"header .navbar .navbar-right"', product_menu)
 		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
 		self.assertIn("<circle", product_menu)
-		self.assertIn("target.node.prepend(slot)", product_menu)
+		self.assertIn("target.node.appendChild(slot)", product_menu)
 
 	def test_product_menu_is_an_isolated_responsive_mega_menu(self):
 		product_menu = self.read(PRODUCT_MENU)
@@ -134,10 +138,11 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("currentMenuNodeCount", product_menu)
 		self.assertIn("FALLBACK_ROUTES", product_menu)
 		self.assertIn("configured_routes", product_menu)
-		self.assertIn("vetedge-product-menu-slot--floating", product_menu)
-		self.assertIn('"navbar-became-visible"', product_menu)
+		self.assertNotIn("vetedge-product-menu-slot--floating", product_menu)
+		self.assertNotIn('"navbar-became-visible"', product_menu)
 		self.assertIn('result(true, "inserted"', product_menu)
-		self.assertIn('result(false, "no-navbar-target"', product_menu)
+		self.assertIn('result(false, "no-edge-shell-target"', product_menu)
+		self.assertIn('result(false, "native-desk-hidden"', product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
 		self.assertNotIn("socket", product_menu.lower())
 
