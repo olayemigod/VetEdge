@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import importlib.util
 from io import BytesIO
 from pathlib import Path
@@ -8,6 +9,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 WRITER_PATH = ROOT / "services/nadis_xlsx_template_writer.py"
+NADIS_TEMPLATE_DIR = ROOT / "templates" / "nadis"
+VACCINATION_TEMPLATE_PART_PATTERN = "Nadis Template Vaccination Report 1.xlsx.b64.part*"
 
 
 def _load_writer_module():
@@ -57,6 +60,13 @@ def _official_style_template_bytes() -> bytes:
         archive.writestr("xl/worksheets/sheet1.xml", worksheet)
         archive.writestr("docProps/custom.xml", b"official-package-part")
     return output.getvalue()
+
+
+def _packaged_vaccination_template_bytes() -> bytes:
+    parts = sorted(NADIS_TEMPLATE_DIR.glob(VACCINATION_TEMPLATE_PART_PATTERN))
+    assert parts, "Packaged official NADIS vaccination template chunks are required"
+    payload = "".join(part.read_text(encoding="ascii").strip() for part in parts)
+    return base64.b64decode(payload)
 
 
 def _outside_sheet_data(xml: bytes) -> tuple[bytes, bytes]:
@@ -131,3 +141,51 @@ def test_writer_preserves_excel_namespace_envelope_and_untouched_package_parts()
     assert b'xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"' in generated_sheet
     assert b"Rabies" in generated_sheet
     assert b"old-2" not in generated_sheet
+
+
+def test_packaged_vaccination_template_keeps_official_worksheet_envelope_after_population():
+    writer = _load_writer_module()
+    template = _packaged_vaccination_template_bytes()
+
+    with ZipFile(BytesIO(template), "r") as archive:
+        sheet_path = writer._sheet_paths(archive)["Vaccinations"]
+        original_sheet = archive.read(sheet_path)
+        original_parts = {info.filename: archive.read(info.filename) for info in archive.infolist() if info.filename != sheet_path}
+
+    generated = writer.populate_official_template(
+        template,
+        sheet_rows={
+            "Vaccinations": [[
+                None,
+                1,
+                "Nigeria",
+                "Lagos, Nigeria",
+                "Ikeja, Nigeria",
+                2026,
+                "August",
+                "Preventive/Routine vaccination",
+                "Dog",
+                "Rabies",
+                1,
+                "Rabies",
+                "Inactivated vaccines",
+                "QA source",
+                "QA-BATCH-1",
+                "No",
+            ]]
+        },
+        start_row=5,
+        visible_column_counts={"Vaccinations": 16},
+        clear_through_row=239,
+    )
+
+    with ZipFile(BytesIO(generated), "r") as archive:
+        assert archive.testzip() is None
+        generated_sheet = archive.read(sheet_path)
+        for filename, payload in original_parts.items():
+            assert archive.read(filename) == payload, f"Unexpected package rewrite: {filename}"
+
+    assert _outside_sheet_data(generated_sheet) == _outside_sheet_data(original_sheet)
+    assert b"Lagos, Nigeria" in generated_sheet
+    assert b"Preventive/Routine vaccination" in generated_sheet
+    assert b"Rabies" in generated_sheet
