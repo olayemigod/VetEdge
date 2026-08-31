@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from datetime import date, datetime
 from io import BytesIO
@@ -9,6 +10,7 @@ from xml.etree import ElementTree as ET
 _MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+_SHEET_DATA_OPEN_RE = re.compile(rb"<(?P<prefix>[A-Za-z_][\w.-]*:)?sheetData\b[^>]*>")
 ET.register_namespace("", _MAIN_NS)
 ET.register_namespace("r", _REL_NS)
 
@@ -141,6 +143,37 @@ def _style_templates(sheet_data: ET.Element, template_row: int) -> dict[int, ET.
     return {_column_number(cell.attrib["r"]): deepcopy(cell) for cell in row.findall(_q("c"))}
 
 
+def _replace_sheet_data_xml(original_xml: bytes, sheet_data: ET.Element) -> bytes:
+    """Replace only sheetData while preserving Excel-specific worksheet XML verbatim.
+
+    Official Excel worksheets carry namespace declarations and extension metadata
+    whose prefixes can be referenced by string-valued attributes such as
+    ``mc:Ignorable``. Re-serializing the complete worksheet with ElementTree can
+    rename or remove those prefixes even when the XML remains well-formed, which
+    makes desktop Excel repair the generated workbook. Keep the official worksheet
+    envelope byte-for-byte and serialize only the report rows VetEdge owns.
+    """
+    opening = _SHEET_DATA_OPEN_RE.search(original_xml)
+    if opening is None:
+        raise ValueError("Official NADIS worksheet XML has no sheetData element.")
+
+    prefix = opening.group("prefix") or b""
+    opening_bytes = opening.group(0)
+    if opening_bytes.rstrip().endswith(b"/>"):
+        end = opening.end()
+    else:
+        closing = b"</" + prefix + b"sheetData>"
+        closing_start = original_xml.find(closing, opening.end())
+        if closing_start < 0:
+            raise ValueError("Official NADIS worksheet XML has an unclosed sheetData element.")
+        end = closing_start + len(closing)
+
+    fragment = deepcopy(sheet_data)
+    fragment.tail = None
+    replacement = ET.tostring(fragment, encoding="utf-8", short_empty_elements=True)
+    return original_xml[: opening.start()] + replacement + original_xml[end:]
+
+
 def populate_official_template(
     template_bytes: bytes,
     *,
@@ -165,7 +198,8 @@ def populate_official_template(
             path = paths.get(sheet_name)
             if not path:
                 raise ValueError(f"Official NADIS template is missing sheet {sheet_name!r}.")
-            root = ET.fromstring(source.read(path))
+            sheet_xml = source.read(path)
+            root = ET.fromstring(sheet_xml)
             sheet_data = root.find(_q("sheetData"))
             if sheet_data is None:
                 raise ValueError(f"Official NADIS sheet {sheet_name!r} has no sheetData element.")
@@ -187,7 +221,7 @@ def populate_official_template(
                     cell_ref = f"{_column_letters(column_number)}{row_number}"
                     cell = _ensure_cell(row_node, cell_ref, styles.get(column_number))
                     _write_value(cell, value)
-            replacements[path] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            replacements[path] = _replace_sheet_data_xml(sheet_xml, sheet_data)
 
         with ZipFile(output_buffer, "w", ZIP_DEFLATED) as output:
             for info in source.infolist():
