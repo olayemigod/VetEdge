@@ -10,12 +10,25 @@
 		}));
 	}
 
-	function queueHospitalisationPractitionerQuery(frm) {
-		window.setTimeout(() => applyHospitalisationPractitionerQuery(frm), 0);
+	function protectCareLocationField(frm) {
+		if (!frm?.set_df_property || !frm.fields_dict?.care_location) return;
+		frm.set_df_property("care_location", "read_only", 1);
+		frm.set_df_property(
+			"care_location",
+			"description",
+			__("Use Care Location → Assign Care Location or Release Care Location so occupancy history and capacity remain accurate.")
+		);
+	}
+
+	function queueHospitalisationSafeguards(frm) {
+		window.setTimeout(() => {
+			applyHospitalisationPractitionerQuery(frm);
+			protectCareLocationField(frm);
+		}, 0);
 	}
 
 	async function clearInvalidHospitalisationPractitioner(frm) {
-		queueHospitalisationPractitionerQuery(frm);
+		queueHospitalisationSafeguards(frm);
 		const practitioner = frm.doc.attending_veterinarian;
 		if (!practitioner || !frm.doc.service_branch || !window.frappe?.call) return;
 		try {
@@ -41,13 +54,13 @@
 
 	frappe.ui.form.on("Veterinary Hospitalisation", {
 		setup(frm) {
-			queueHospitalisationPractitionerQuery(frm);
+			queueHospitalisationSafeguards(frm);
 		},
 		onload(frm) {
-			queueHospitalisationPractitionerQuery(frm);
+			queueHospitalisationSafeguards(frm);
 		},
 		refresh(frm) {
-			queueHospitalisationPractitionerQuery(frm);
+			queueHospitalisationSafeguards(frm);
 		},
 		service_branch(frm) {
 			void clearInvalidHospitalisationPractitioner(frm);
