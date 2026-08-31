@@ -7,6 +7,7 @@ from vetedge.services.hospitalisation import validate_hospitalisation
 from vetedge.services.hospitalisation_context import resolve_hospitalisation_context
 from vetedge.services.hospitalisation_form_integrity import enforce_hospitalisation_form_integrity
 from vetedge.services.hospitalisation_permissions import validate_hospitalisation_branch_access
+from vetedge.services.hospitalisation_terminal_integrity import reconcile_terminal_hospitalisation_care_location
 from vetedge.services.permissions import validate_doctor_user
 from vetedge.services.practitioner_integrity import enforce_practitioner_integrity
 
@@ -20,3 +21,6 @@ class VeterinaryHospitalisation(Document):
 		validate_doctor_user(self.attending_veterinarian, label="Attending Veterinarian")
 		enforce_hospitalisation_form_integrity(self)
 		validate_hospitalisation(self)
+
+	def on_update(self) -> None:
+		reconcile_terminal_hospitalisation_care_location(self)
