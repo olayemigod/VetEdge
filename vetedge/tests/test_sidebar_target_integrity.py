@@ -94,6 +94,8 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 
 		self.assertIn("normalize_outbreak_report_filters", provider_source)
 		self.assertIn("frappe.get_list(", provider_source)
+		self.assertIn('fields=[{"COUNT": "*", "as": "total"}]', provider_source)
+		self.assertNotIn('fields=["count(name) as total"]', provider_source)
 		self.assertNotIn("ignore_permissions=True", provider_source)
 		self.assertNotIn("ignore_permissions = True", provider_source)
 
