@@ -71,6 +71,36 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 			)
 		)
 
+	def test_regulatory_pages_follow_professional_veterinary_shell_contract(self):
+		regulatory_source = (
+			ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js"
+		).read_text(encoding="utf-8")
+		outbreak_source = (
+			ROOT
+			/ "veterinary/page/vetedge_disease_outbreak_register/vetedge_disease_outbreak_register.js"
+		).read_text(encoding="utf-8")
+
+		for source in (regulatory_source, outbreak_source):
+			for expected in (
+				"window.VetEdgeProfessionalUI?.install?.()",
+				'"EdgeAppShell"',
+				'"EdgePageLayout"',
+				'"EdgePageHeader"',
+				'"EdgeFilterBar"',
+				'product: "vetedge"',
+				'title: __("Veterinary")',
+				"frappe.boot?.vetedge_ui_identity",
+			):
+				self.assertIn(expected, source)
+			self.assertNotIn('productKey: "vetedge"', source)
+
+		self.assertIn('eyebrow: __("Regulatory Reporting")', regulatory_source)
+		self.assertIn('title: __("VCN / NADIS Reporting")', regulatory_source)
+		self.assertIn('frappe.set_route?.("vetedge-disease-outbreak-register")', regulatory_source)
+		self.assertIn('eyebrow: __("Regulatory Reporting")', outbreak_source)
+		self.assertIn('title: __("Disease Outbreak Register")', outbreak_source)
+		self.assertIn('"EdgeDropdown"', outbreak_source)
+
 	def test_disease_outbreak_register_source_stays_permission_aware_and_edgesuite_native(self):
 		page_source = (
 			ROOT
