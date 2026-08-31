@@ -48,6 +48,17 @@ class ReportingPageLoadContractTests(TestCase):
 		self.assertIn("$(wrapper.page.body).append(mount)", source)
 		self.assertIn("wrapper.vue_app.mount(mount)", source)
 
+	def test_regulatory_scope_fields_use_edgesuite_link_searcher_contract(self):
+		source = REGULATORY_JS.read_text(encoding="utf-8")
+		self.assertIn('searcher: this.searchCompanies', source)
+		self.assertIn('searcher: this.searchBranches', source)
+		self.assertIn('selectedLabel: this.filters.company || ""', source)
+		self.assertIn('selectedLabel: this.filters.branch || ""', source)
+		self.assertNotIn('search: this.searchCompanies', source)
+		self.assertNotIn('search: this.searchBranches', source)
+		self.assertIn('ignore_user_permissions: 0', source)
+		self.assertIn('report_name: "Vaccination Report", field: "branch"', source)
+
 	def test_regulatory_navigation_targets_standard_page_and_outbreak_register(self):
 		navigation = REGULATORY_NAV.read_text(encoding="utf-8")
 		page = json.loads(REGULATORY_PAGE_JSON.read_text(encoding="utf-8"))
