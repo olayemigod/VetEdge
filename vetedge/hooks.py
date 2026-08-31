@@ -15,7 +15,7 @@ add_to_apps_screen = [
 	{
 		"name": app_name,
 		"logo": app_logo_url,
-		"title": app_title,
+		"title": "Veterinary",
 		"route": app_home,
 	}
 ]

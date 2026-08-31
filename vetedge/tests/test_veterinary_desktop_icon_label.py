@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ICON = ROOT / "vetedge" / "desktop_icon" / "vetedge.json"
+HOOKS = ROOT / "vetedge" / "hooks.py"
 PATCHES = ROOT / "vetedge" / "patches.txt"
 MIGRATION = ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_icon_label.py"
 
@@ -15,6 +16,17 @@ def test_visible_desk_icon_is_veterinary_without_renaming_internal_identity():
 	assert payload["name"] == "VetEdge"
 	assert payload["link_to"] == "VetEdge"
 	assert payload["label"] == "Veterinary"
+
+
+def test_apps_screen_launcher_is_veterinary_without_renaming_app_identity():
+	hooks = HOOKS.read_text(encoding="utf-8")
+
+	assert 'app_name = "vetedge"' in hooks
+	assert 'app_title = "VetEdge"' in hooks
+	assert '"name": app_name' in hooks
+	assert '"title": "Veterinary"' in hooks
+	assert '"route": app_home' in hooks
+	assert '"title": app_title' not in hooks
 
 
 def test_existing_sites_receive_idempotent_visible_label_migration():
