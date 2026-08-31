@@ -3,6 +3,8 @@
 // frappe.set_route('vetedge-hospitalisation-episode', hospitalisation)
 // /desk/vetedge-hospitalisation-episode/${encodeURIComponent(hospitalisation)}
 
+const HOSPITALISATION_PATIENT_SNAPSHOT_API = 'vetedge.services.hospitalisation_preqa_security.get_hospitalisation_patient_snapshot';
+
 function decodeHospitalisationOperationsRoutePart(value) {
 	try {
 		return decodeURIComponent(String(value || '')).trim();
@@ -57,6 +59,63 @@ function openHospitalisationEpisodeRoute(name) {
 	routeToHospitalisationOperations(hospitalisation);
 }
 
+function escapeHospitalisationSnapshotValue(value) {
+	const text = value === undefined || value === null || value === '' ? '—' : String(value);
+	return window.frappe?.utils?.escape_html ? frappe.utils.escape_html(text) : text.replace(/[&<>"']/g, (character) => ({
+		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+	}[character]));
+}
+
+function hospitalisationSnapshotItem(label, value) {
+	return `<div style="display:grid;gap:4px;min-width:0;padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;">
+		<span class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;">${escapeHospitalisationSnapshotValue(label)}</span>
+		<strong style="overflow-wrap:anywhere;">${escapeHospitalisationSnapshotValue(value)}</strong>
+	</div>`;
+}
+
+function showHospitalisationPatientSnapshot(row) {
+	const hospitalisation = String(row?.hospitalisation || '').trim();
+	if (!hospitalisation || !window.frappe?.call) return;
+
+	frappe.call({
+		method: HOSPITALISATION_PATIENT_SNAPSHOT_API,
+		args: { hospitalisation_name: hospitalisation },
+		freeze: true,
+		freeze_message: __('Loading Patient details...'),
+		callback(response) {
+			const snapshot = response?.message || {};
+			const patient = snapshot.patient || {};
+			const owner = snapshot.owner || {};
+			const patientName = patient.patient_name || patient.name || row?.patient_name || __('Patient');
+			const ownerName = owner.customer_name || owner.name || row?.owner || '—';
+			const details = [
+				hospitalisationSnapshotItem(__('Patient'), patientName),
+				hospitalisationSnapshotItem(__('Patient ID'), patient.name),
+				hospitalisationSnapshotItem(__('Species'), patient.species),
+				hospitalisationSnapshotItem(__('Breed'), patient.breed),
+				hospitalisationSnapshotItem(__('Sex'), patient.sex),
+				hospitalisationSnapshotItem(__('Approximate Age'), patient.approximate_age),
+				hospitalisationSnapshotItem(__('Date of Birth'), patient.date_of_birth),
+				hospitalisationSnapshotItem(__('Pet Owner'), ownerName),
+				hospitalisationSnapshotItem(__('Customer ID'), owner.name),
+				hospitalisationSnapshotItem(__('Mobile'), owner.mobile_no),
+				hospitalisationSnapshotItem(__('Email'), owner.email_id),
+				hospitalisationSnapshotItem(__('Customer Group'), owner.customer_group),
+				hospitalisationSnapshotItem(__('Territory'), owner.territory),
+				hospitalisationSnapshotItem(__('Service Branch'), snapshot.service_branch),
+				hospitalisationSnapshotItem(__('Company'), snapshot.company),
+				hospitalisationSnapshotItem(__('Hospitalisation Status'), snapshot.status),
+			];
+			frappe.msgprint({
+				title: __('Patient & Pet Owner — {0}', [patientName]),
+				message: `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">${details.join('')}</div>`,
+				indicator: 'blue',
+				wide: true,
+			});
+		},
+	});
+}
+
 function hardenHospitalisationOperationsNavigation(wrapper) {
 	const view = wrapper.operations_vue_app?.view;
 	if (!view) return;
@@ -65,6 +124,28 @@ function hardenHospitalisationOperationsNavigation(wrapper) {
 	// this shared Vue method. The record opens inside the canonical Operations
 	// Page so a stale bundle cannot move the workflow to the retired Episode URL.
 	view.openHospitalisationEpisode = openHospitalisationEpisodeRoute;
+
+	// QA requires Patient drill-through to stay inside Operations. Keep the
+	// original handlers for Owner, Care Location and Practitioner, but replace
+	// Patient navigation with a permission-aware read-only Patient/Owner snapshot.
+	// Branch is informational only and must never navigate away from Operations.
+	if (!view.__vetedgeOperationsCellPolicy && typeof view.openCell === 'function') {
+		const originalOpenCell = view.openCell.bind(view);
+		view.openCell = (event = {}) => {
+			const field = event?.column?.fieldname;
+			if (field === 'patient_name') {
+				showHospitalisationPatientSnapshot(event.row);
+				return;
+			}
+			if (field === 'branch') return;
+			if (field === 'hospitalisation' && event?.row?.hospitalisation) {
+				openHospitalisationEpisodeRoute(event.row.hospitalisation);
+				return;
+			}
+			return originalOpenCell(event);
+		};
+		view.__vetedgeOperationsCellPolicy = true;
+	}
 }
 
 function hardenHostedHospitalisationEpisodeNavigation(wrapper) {
