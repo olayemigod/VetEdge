@@ -181,6 +181,7 @@ doc_events = {
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
 			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+			"vetedge.services.invoice_cancellation_recovery.reopen_active_service_billing_after_invoice_cancel",
 		],
 	},
 	"Payment Entry": {
