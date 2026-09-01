@@ -11,6 +11,9 @@ LAYOUT_MIGRATION = ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_
 LAYOUT_LINK_MIGRATION = (
 	ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_layout_link_labels.py"
 )
+ALL_USERS_MIGRATION = (
+	ROOT / "vetedge" / "patches" / "normalize_veterinary_desktop_icon_all_users.py"
+)
 
 
 def test_visible_desk_icon_is_veterinary_without_renaming_internal_identity():
@@ -81,4 +84,24 @@ def test_frappe_v16_link_tile_layout_receives_forward_only_repair():
 	assert "json.loads" in migration
 	assert "json.dumps" in migration
 	assert "update_modified=False" in migration
+	assert "delete_doc" not in migration
+
+
+def test_all_users_receive_forward_only_desktop_cache_repair():
+	patches = PATCHES.read_text(encoding="utf-8")
+	migration = ALL_USERS_MIGRATION.read_text(encoding="utf-8")
+	previous_patch = "vetedge.patches.normalize_veterinary_desktop_layout_link_labels"
+	all_users_patch = "vetedge.patches.normalize_veterinary_desktop_icon_all_users"
+
+	assert all_users_patch in patches
+	assert patches.index(previous_patch) < patches.index(all_users_patch)
+	assert 'filters={"app": APP_NAME, "standard": 1}' in migration
+	assert 'icon.link_type != "Workspace Sidebar"' in migration
+	assert 'icon.icon_type != "Link"' in migration
+	assert "icon.link_to != OLD_LABEL" in migration
+	assert 'frappe.get_all("Desktop Layout", fields=["name", "user", "layout"])' in migration
+	assert 'frappe.cache.delete_key("desktop_icons")' in migration
+	assert 'frappe.cache.delete_key("bootinfo")' in migration
+	assert "update_modified=False" in migration
+	assert "rename_doc" not in migration
 	assert "delete_doc" not in migration
