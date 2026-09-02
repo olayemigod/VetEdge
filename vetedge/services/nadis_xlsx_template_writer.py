@@ -4,12 +4,14 @@ import re
 from copy import deepcopy
 from datetime import date, datetime
 from io import BytesIO
+from xml.sax.saxutils import quoteattr
 from zipfile import ZIP_DEFLATED, ZipFile
 from xml.etree import ElementTree as ET
 
 _MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+_DEFAULT_DATE_FORMAT = "dd/mm/yyyy"
 _SHEET_DATA_OPEN_RE = re.compile(rb"<(?P<prefix>[A-Za-z_][\w.-]*:)?sheetData\b[^>]*>")
 ET.register_namespace("", _MAIN_NS)
 ET.register_namespace("r", _REL_NS)
@@ -136,11 +138,146 @@ def _write_value(cell: ET.Element, value) -> None:
     text.text = string_value
 
 
+def _excel_date_serial(value: date | datetime) -> float | int:
+    day = value.date() if isinstance(value, datetime) else value
+    serial = (day - date(1899, 12, 31)).days
+    if day >= date(1900, 3, 1):
+        serial += 1
+    if not isinstance(value, datetime):
+        return serial
+    seconds = value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000
+    return serial + seconds / 86400
+
+
+def _write_excel_date(cell: ET.Element, value: date | datetime) -> None:
+    _clear_value(cell)
+    serial = _excel_date_serial(value)
+    text = str(serial) if isinstance(serial, int) else format(serial, ".15g")
+    ET.SubElement(cell, _q("v")).text = text
+
+
 def _style_templates(sheet_data: ET.Element, template_row: int) -> dict[int, ET.Element]:
     row = _find_row(sheet_data, template_row)
     if row is None:
         return {}
     return {_column_number(cell.attrib["r"]): deepcopy(cell) for cell in row.findall(_q("c"))}
+
+
+def _tag_opening(xml: bytes, local_name: str) -> re.Match[bytes] | None:
+    return re.search(
+        rb"<(?P<prefix>[A-Za-z_][\w.-]*:)?" + re.escape(local_name.encode()) + rb"\b[^>]*>",
+        xml,
+    )
+
+
+def _with_count(opening: bytes, count: int) -> bytes:
+    count_bytes = f'count="{count}"'.encode()
+    if re.search(rb"\bcount=\"[^\"]*\"", opening):
+        return re.sub(rb"\bcount=\"[^\"]*\"", count_bytes, opening, count=1)
+    suffix = b"/>" if opening.rstrip().endswith(b"/>") else b">"
+    body = opening[: -len(suffix)].rstrip()
+    return body + b" " + count_bytes + suffix
+
+
+def _append_xml_child(xml: bytes, container_name: str, child: bytes, count: int) -> bytes:
+    opening = _tag_opening(xml, container_name)
+    if opening is None:
+        raise ValueError(f"Official NADIS styles.xml has no {container_name} element.")
+    prefix = opening.group("prefix") or b""
+    opening_bytes = opening.group(0)
+    updated_opening = _with_count(opening_bytes, count)
+    if opening_bytes.rstrip().endswith(b"/>"):
+        expanded_opening = updated_opening.rstrip()
+        expanded_opening = expanded_opening[:-2].rstrip() + b">"
+        closing = b"</" + prefix + container_name.encode() + b">"
+        return xml[: opening.start()] + expanded_opening + child + closing + xml[opening.end() :]
+
+    closing = b"</" + prefix + container_name.encode() + b">"
+    closing_start = xml.find(closing, opening.end())
+    if closing_start < 0:
+        raise ValueError(f"Official NADIS styles.xml has an unclosed {container_name} element.")
+    return (
+        xml[: opening.start()]
+        + updated_opening
+        + xml[opening.end() : closing_start]
+        + child
+        + xml[closing_start:]
+    )
+
+
+def _insert_num_format(xml: bytes, num_fmt_id: int, format_code: str, existing_count: int) -> bytes:
+    num_fmt_opening = _tag_opening(xml, "numFmts")
+    if num_fmt_opening is not None:
+        prefix = num_fmt_opening.group("prefix") or b""
+        child = (
+            b"<"
+            + prefix
+            + b'numFmt numFmtId="'
+            + str(num_fmt_id).encode()
+            + b'" formatCode='
+            + quoteattr(format_code).encode()
+            + b"/>"
+        )
+        return _append_xml_child(xml, "numFmts", child, existing_count + 1)
+
+    fonts = _tag_opening(xml, "fonts")
+    if fonts is None:
+        raise ValueError("Official NADIS styles.xml has no fonts element before cell styles.")
+    prefix = fonts.group("prefix") or b""
+    block = (
+        b"<"
+        + prefix
+        + b'numFmts count="1"><'
+        + prefix
+        + b'numFmt numFmtId="'
+        + str(num_fmt_id).encode()
+        + b'" formatCode='
+        + quoteattr(format_code).encode()
+        + b"/></"
+        + prefix
+        + b"numFmts>"
+    )
+    return xml[: fonts.start()] + block + xml[fonts.start() :]
+
+
+def _number_format_map(root: ET.Element) -> dict[int, str]:
+    num_fmts = root.find(_q("numFmts"))
+    if num_fmts is None:
+        return {}
+    return {
+        int(item.attrib["numFmtId"]): item.attrib.get("formatCode", "")
+        for item in num_fmts.findall(_q("numFmt"))
+        if item.attrib.get("numFmtId")
+    }
+
+
+def _ensure_number_format_style(styles_xml: bytes, base_style_index: int, format_code: str) -> tuple[bytes, int]:
+    root = ET.fromstring(styles_xml)
+    cell_xfs = root.find(_q("cellXfs"))
+    if cell_xfs is None:
+        raise ValueError("Official NADIS styles.xml has no cellXfs element.")
+    xfs = cell_xfs.findall(_q("xf"))
+    if base_style_index < 0 or base_style_index >= len(xfs):
+        raise ValueError(f"Official NADIS cell style index {base_style_index} is outside cellXfs.")
+
+    format_map = _number_format_map(root)
+    base_xf = xfs[base_style_index]
+    base_num_fmt_id = int(base_xf.attrib.get("numFmtId", "0") or 0)
+    if format_map.get(base_num_fmt_id) == format_code:
+        return styles_xml, base_style_index
+
+    matching_num_fmt_id = next((fmt_id for fmt_id, code in format_map.items() if code == format_code), None)
+    if matching_num_fmt_id is None:
+        matching_num_fmt_id = max([163, *format_map.keys()]) + 1
+        styles_xml = _insert_num_format(styles_xml, matching_num_fmt_id, format_code, len(format_map))
+
+    cloned_xf = deepcopy(base_xf)
+    cloned_xf.attrib["numFmtId"] = str(matching_num_fmt_id)
+    cloned_xf.attrib["applyNumberFormat"] = "1"
+    xf_bytes = ET.tostring(cloned_xf, encoding="utf-8", short_empty_elements=True)
+    style_index = len(xfs)
+    styles_xml = _append_xml_child(styles_xml, "cellXfs", xf_bytes, style_index + 1)
+    return styles_xml, style_index
 
 
 def _replace_sheet_data_xml(original_xml: bytes, sheet_data: ET.Element) -> bytes:
@@ -187,13 +324,16 @@ def populate_official_template(
     Only the visible report-cell values inside the requested worksheets are
     changed. Hidden lookup columns, named ranges, validations, comments,
     drawings and other package parts remain sourced from the verified official
-    workbook rather than being reconstructed by VetEdge.
+    workbook rather than being reconstructed by VetEdge. Python date values are
+    stored as native Excel serials with the NADIS ``dd/mm/yyyy`` display format.
     """
     source_buffer = BytesIO(template_bytes)
     output_buffer = BytesIO()
     with ZipFile(source_buffer, "r") as source:
         paths = _sheet_paths(source)
         replacements: dict[str, bytes] = {}
+        styles_xml: bytes | None = None
+        date_style_cache: dict[int, int] = {}
         for sheet_name, rows in sheet_rows.items():
             path = paths.get(sheet_name)
             if not path:
@@ -220,8 +360,29 @@ def populate_official_template(
                         break
                     cell_ref = f"{_column_letters(column_number)}{row_number}"
                     cell = _ensure_cell(row_node, cell_ref, styles.get(column_number))
-                    _write_value(cell, value)
+                    if isinstance(value, (date, datetime)):
+                        if styles_xml is None:
+                            try:
+                                styles_xml = source.read("xl/styles.xml")
+                            except KeyError as exc:
+                                raise ValueError("Official NADIS template has no xl/styles.xml for date formatting.") from exc
+                        base_style_index = int(cell.attrib.get("s", "0") or 0)
+                        date_style_index = date_style_cache.get(base_style_index)
+                        if date_style_index is None:
+                            styles_xml, date_style_index = _ensure_number_format_style(
+                                styles_xml,
+                                base_style_index,
+                                _DEFAULT_DATE_FORMAT,
+                            )
+                            date_style_cache[base_style_index] = date_style_index
+                        cell.attrib["s"] = str(date_style_index)
+                        _write_excel_date(cell, value)
+                    else:
+                        _write_value(cell, value)
             replacements[path] = _replace_sheet_data_xml(sheet_xml, sheet_data)
+
+        if styles_xml is not None:
+            replacements["xl/styles.xml"] = styles_xml
 
         with ZipFile(output_buffer, "w", ZIP_DEFLATED) as output:
             for info in source.infolist():
