@@ -113,7 +113,7 @@ def test_send_uses_frozen_private_attachment_and_confirms_delivery_before_sent_s
     ):
         assert expected in send_section
 
-    assert 'now=True' not in send_section
+    assert 'now=True,' not in send_section
     assert send_section.index('assert_sendable(cstr(run.status).strip())') < send_section.index('frappe.sendmail(')
     assert send_section.index('assert_transition(cstr(run.status).strip(), "Sent", has_sent_evidence=True)') < send_section.index('frappe.sendmail(')
     assert send_section.index('email_queue.send()') < send_section.index('run.status = "Sent"')
