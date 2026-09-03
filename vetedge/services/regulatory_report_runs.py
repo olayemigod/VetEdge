@@ -168,6 +168,16 @@ def _throw_state_error(exc: ValueError) -> None:
     frappe.throw(_(str(exc)), frappe.ValidationError)
 
 
+def _sent_queue_recipients(email_queue) -> list[str]:
+    """Return recipients that Frappe's Email Queue has confirmed as sent."""
+    email_queue.reload()
+    return [
+        cstr(row.recipient).strip()
+        for row in email_queue.recipients
+        if cstr(row.status).strip() == "Sent" and cstr(row.recipient).strip()
+    ]
+
+
 @frappe.whitelist()
 def generate_regulatory_report_run(report_type: str, filters: str | dict | None = None) -> dict:
     _require_admin()
@@ -320,22 +330,57 @@ def send_regulatory_report_run(
     )
 
     # Validate the state change before the irreversible external side effect.
-    sent_on = now_datetime()
     try:
         assert_transition(cstr(run.status).strip(), "Sent", has_sent_evidence=True)
     except ValueError as exc:
         _throw_state_error(exc)
 
-    frappe.sendmail(
+    # Frappe v16's sendmail(now=True) defers EmailQueue.send() until after the
+    # request transaction commits. A regulatory run must not be marked Sent
+    # until SMTP/Frappe Mail has actually confirmed delivery, so build the queue
+    # without the after-commit callback and execute it synchronously here.
+    email_queue = frappe.sendmail(
         recipients=recipient_list,
         subject=mail_subject,
         message=mail_message,
         attachments=[{"fname": file_doc.file_name, "fcontent": attachment_content}],
-        now=True,
+        reference_doctype=REPORT_RUN_DOCTYPE,
+        reference_name=run.name,
+        now=False,
     )
+    if not email_queue:
+        frappe.throw(
+            _("Email delivery could not be started. The regulatory report remains Generated."),
+            frappe.ValidationError,
+        )
 
+    try:
+        email_queue.send()
+    except Exception:
+        sent_recipients = _sent_queue_recipients(email_queue)
+        if sent_recipients:
+            frappe.throw(
+                _(
+                    "Email delivery was only partially successful. The regulatory report remains Generated. "
+                    "Frappe confirmed delivery to: {0}. Review the linked Email Queue before retrying."
+                ).format(", ".join(sent_recipients)),
+                frappe.ValidationError,
+            )
+        raise
+
+    sent_recipients = _sent_queue_recipients(email_queue)
+    if cstr(email_queue.status).strip() != "Sent" or len(sent_recipients) != len(recipient_list):
+        frappe.throw(
+            _(
+                "Email delivery was not confirmed for every recipient. The regulatory report remains Generated. "
+                "Review the linked Email Queue before retrying."
+            ),
+            frappe.ValidationError,
+        )
+
+    sent_on = now_datetime()
     run.status = "Sent"
-    run.sent_to = ", ".join(recipient_list)
+    run.sent_to = ", ".join(sent_recipients)
     run.sent_on = sent_on
     run.flags.vetedge_regulatory_send_action = True
     run.save()
