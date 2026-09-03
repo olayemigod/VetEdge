@@ -88,7 +88,7 @@ def test_regulatory_report_history_is_bounded_and_admin_only():
     assert '"has_next": start + len(rows) < total' in service
 
 
-def test_send_uses_frozen_private_attachment_and_validates_state_before_email():
+def test_send_uses_frozen_private_attachment_and_confirms_delivery_before_sent_state():
     service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
     send_section = service.split("def send_regulatory_report_run", 1)[1].split("def update_regulatory_submission_status", 1)[0]
 
@@ -99,16 +99,25 @@ def test_send_uses_frozen_private_attachment_and_validates_state_before_email():
         'attachment_content = file_doc.get_content()',
         'assert_transition(cstr(run.status).strip(), "Sent", has_sent_evidence=True)',
         'attachments=[{"fname": file_doc.file_name, "fcontent": attachment_content}]',
-        'now=True',
+        'reference_doctype=REPORT_RUN_DOCTYPE',
+        'reference_name=run.name',
+        'now=False',
+        'email_queue.send()',
+        '_sent_queue_recipients(email_queue)',
+        'cstr(email_queue.status).strip() != "Sent"',
+        'The regulatory report remains Generated.',
         'run.status = "Sent"',
-        'run.sent_to = ", ".join(recipient_list)',
+        'run.sent_to = ", ".join(sent_recipients)',
         'run.sent_on = sent_on',
         'run.flags.vetedge_regulatory_send_action = True',
     ):
         assert expected in send_section
 
+    assert 'now=True' not in send_section
     assert send_section.index('assert_sendable(cstr(run.status).strip())') < send_section.index('frappe.sendmail(')
     assert send_section.index('assert_transition(cstr(run.status).strip(), "Sent", has_sent_evidence=True)') < send_section.index('frappe.sendmail(')
+    assert send_section.index('email_queue.send()') < send_section.index('run.status = "Sent"')
+    assert send_section.index('cstr(email_queue.status).strip() != "Sent"') < send_section.index('run.status = "Sent"')
 
     for forbidden in (
         "_official_rows(",
@@ -117,6 +126,24 @@ def test_send_uses_frozen_private_attachment_and_validates_state_before_email():
         "save_file(",
     ):
         assert forbidden not in send_section
+
+
+def test_send_preserves_partial_delivery_evidence_in_linked_email_queue():
+    service = (ROOT / "services/regulatory_report_runs.py").read_text(encoding="utf-8")
+    send_section = service.split("def send_regulatory_report_run", 1)[1].split("def update_regulatory_submission_status", 1)[0]
+
+    for expected in (
+        'except Exception:',
+        'sent_recipients = _sent_queue_recipients(email_queue)',
+        'Email delivery was only partially successful.',
+        'Frappe confirmed delivery to: {0}.',
+        'Review the linked Email Queue before retrying.',
+    ):
+        assert expected in send_section
+
+    helper_section = service.split("def _sent_queue_recipients", 1)[1].split("@frappe.whitelist()", 1)[0]
+    assert 'email_queue.reload()' in helper_section
+    assert 'cstr(row.status).strip() == "Sent"' in helper_section
 
 
 def test_recipient_validation_is_bounded():
