@@ -331,7 +331,7 @@
 				<EdgeInput :model-value="vaccinationDialog.values.dose" label="Dose" @update:model-value="(value) => setVaccination('dose', value)" />
 				<EdgeDropdown :model-value="vaccinationDialog.values.route" label="Route" :options="vaccinationRouteOptions" @update:model-value="(value) => setVaccination('route', value)" />
 				<EdgeInput :model-value="vaccinationDialog.values.administered_on" type="datetime-local" label="Recorded On" @update:model-value="(value) => setVaccination('administered_on', value)" />
-				<EdgeInput :model-value="vaccinationDialog.values.next_due_date" type="date" label="Next Due Date" @update:model-value="(value) => setVaccination('next_due_date', value)" />
+				<EdgeInput :model-value="vaccinationDialog.values.next_due_date" type="datetime-local" label="Next Due Date/Time" @update:model-value="(value) => setVaccination('next_due_date', value)" />
 				<EdgeDropdown :model-value="String(vaccinationDialog.values.billable)" label="Billable" :options="yesNoOptions" @update:model-value="(value) => setVaccination('billable', Number(value || 0))" />
 				<EdgeDropdown v-if="episode.capabilities?.dispensary_enabled" :model-value="String(vaccinationDialog.values.stock_affecting)" label="Stock Affecting" :options="yesNoOptions" @update:model-value="(value) => setVaccination('stock_affecting', Number(value || 0))" />
 				<EdgeTextarea class="episode-wide" :model-value="vaccinationDialog.values.notes" label="Notes" :rows="4" @update:model-value="(value) => setVaccination('notes', value)" />
@@ -680,6 +680,7 @@ export default {
 				const values = {
 					...this.vaccinationDialog.values,
 					administered_on: serverDatetime(this.vaccinationDialog.values.administered_on),
+					next_due_date: serverDatetime(this.vaccinationDialog.values.next_due_date),
 					stock_affecting: this.episode.capabilities?.dispensary_enabled ? this.vaccinationDialog.values.stock_affecting : 0,
 				};
 				const result = await call(API.addVaccination, { hospitalisation_name: this.episode.name, values, modified: this.episode.modified });
