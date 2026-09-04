@@ -287,13 +287,22 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 				},
 				renderRunActions(run) {
 					const busy = this.sendingRun === run.name || this.updatingRun === run.name;
+					const status = run.status || "Generated";
 					const actions = [
 						run.export_file ? h("button", { class: "edge-button", disabled: busy, onClick: () => window.open(run.export_file, "_blank", "noopener") }, __("Open File")) : null,
-						h("button", { class: "edge-button edge-button--primary", disabled: busy || ["Accepted", "Superseded"].includes(run.status), onClick: () => this.sendRun(run) }, this.sendingRun === run.name ? __("Sending...") : __("Send")),
 					];
-					if (["Sent", "Rejected"].includes(run.status)) actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Accepted") }, __("Accept")));
-					if (run.status === "Sent") actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Rejected") }, __("Reject")));
-					if (!["Accepted", "Superseded"].includes(run.status)) actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Superseded") }, __("Supersede")));
+					if (status === "Generated") {
+						actions.push(h("button", { class: "edge-button edge-button--primary", disabled: busy, onClick: () => this.sendRun(run) }, this.sendingRun === run.name ? __("Sending...") : __("Send")));
+						actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Superseded") }, __("Supersede")));
+					}
+					if (status === "Sent") {
+						actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Accepted") }, __("Accept")));
+						actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Rejected") }, __("Reject")));
+						actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Superseded") }, __("Supersede")));
+					}
+					if (status === "Rejected") {
+						actions.push(h("button", { class: "edge-button", disabled: busy, onClick: () => this.updateRunStatus(run, "Superseded") }, __("Supersede")));
+					}
 					return h("div", { class: "vetedge-regulatory-actions" }, actions);
 				},
 				renderHistory() {
