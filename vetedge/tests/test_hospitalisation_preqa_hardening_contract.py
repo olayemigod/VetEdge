@@ -135,7 +135,10 @@ def test_care_location_legacy_picker_cannot_enumerate_other_branches():
     assert "_assert_branch_visible(requested_branch)" in security
     assert "for allowed_branch in allowed:" in security
     assert "original(branch=allowed_branch" in security
-    assert "Care Location Branch must match the Hospitalisation Branch" in security
+    # Assignment itself delegates the final location/Branch/capacity check to
+    # the existing authoritative Hospitalisation service after the caller has
+    # already passed the Hospitalisation Branch boundary.
+    assert "service.ensure_care_location_assignable(doc, location)" in security
 
 
 def test_linked_clinical_record_snapshot_is_bounded_and_episode_authorised():
