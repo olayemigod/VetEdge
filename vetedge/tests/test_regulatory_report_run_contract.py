@@ -188,3 +188,35 @@ def test_submission_status_uses_shared_state_machine():
         'Only a Sent regulatory report can be marked Accepted or Rejected.',
     ):
         assert expected in state
+
+
+def test_regulatory_report_run_actions_match_state_machine():
+    page = (
+        ROOT
+        / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js"
+    ).read_text(encoding="utf-8")
+    action_section = page.split("renderRunActions(run)", 1)[1].split("renderHistory()", 1)[0]
+
+    generated_section = action_section.split('if (status === "Generated") {', 1)[1].split(
+        'if (status === "Sent") {', 1
+    )[0]
+    sent_section = action_section.split('if (status === "Sent") {', 1)[1].split(
+        'if (status === "Rejected") {', 1
+    )[0]
+    rejected_section = action_section.split('if (status === "Rejected") {', 1)[1]
+
+    assert 'const status = run.status || "Generated";' in action_section
+    assert "this.sendRun(run)" in generated_section
+    assert 'this.updateRunStatus(run, "Superseded")' in generated_section
+    assert 'this.updateRunStatus(run, "Accepted")' in sent_section
+    assert 'this.updateRunStatus(run, "Rejected")' in sent_section
+    assert 'this.updateRunStatus(run, "Superseded")' in sent_section
+    assert 'this.updateRunStatus(run, "Superseded")' in rejected_section
+
+    assert "this.sendRun(run)" not in sent_section
+    assert "this.sendRun(run)" not in rejected_section
+    assert 'this.updateRunStatus(run, "Accepted")' not in rejected_section
+    assert 'this.updateRunStatus(run, "Rejected")' not in rejected_section
+    assert action_section.count("this.sendRun(run)") == 1
+    assert action_section.count('this.updateRunStatus(run, "Accepted")') == 1
+    assert action_section.count('this.updateRunStatus(run, "Rejected")') == 1
