@@ -444,6 +444,25 @@ def perform_hospitalisation_episode_action(
     if action == "admit":
         result = admit_hospitalisation(name)
         return {"result": result, "episode": base_policy.get_hospitalisation_episode(name)}
+    if action == "assign_location":
+        from vetedge.services import hospitalisation_preqa_security as secured_hospitalisation
+
+        result = secured_hospitalisation.assign_hospitalisation_care_location(
+            name,
+            values.get("care_location"),
+            notes=values.get("notes"),
+            modified=modified,
+        )
+        return {"result": result, "episode": base_policy.get_hospitalisation_episode(name)}
+    if action == "release_location":
+        from vetedge.services import hospitalisation_preqa_security as secured_hospitalisation
+
+        result = secured_hospitalisation.release_hospitalisation_care_location(
+            name,
+            notes=values.get("notes"),
+            modified=modified,
+        )
+        return {"result": result, "episode": base_policy.get_hospitalisation_episode(name)}
     if action == "check_discharge_readiness":
         result = get_hospitalisation_discharge_readiness(name)
         return {"result": result, "episode": base_policy.get_hospitalisation_episode(name)}
