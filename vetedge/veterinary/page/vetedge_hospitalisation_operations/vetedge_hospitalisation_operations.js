@@ -4,6 +4,9 @@
 // /desk/vetedge-hospitalisation-episode/${encodeURIComponent(hospitalisation)}
 
 const HOSPITALISATION_PATIENT_SNAPSHOT_API = 'vetedge.services.hospitalisation_preqa_security.get_hospitalisation_patient_snapshot';
+const HOSPITALISATION_LINKED_RECORD_SNAPSHOT_API = 'vetedge.services.hospitalisation_preqa_security.get_hospitalisation_linked_record_snapshot';
+const HOSPITALISATION_ASSIGN_CARE_LOCATION_API = 'vetedge.services.hospitalisation_preqa_security.assign_hospitalisation_care_location';
+const HOSPITALISATION_RELEASE_CARE_LOCATION_API = 'vetedge.services.hospitalisation_preqa_security.release_hospitalisation_care_location';
 
 function decodeHospitalisationOperationsRoutePart(value) {
 	try {
@@ -73,6 +76,20 @@ function hospitalisationSnapshotItem(label, value) {
 	</div>`;
 }
 
+function callHospitalisationApi(method, args = {}, options = {}) {
+	return new Promise((resolve, reject) => {
+		if (!window.frappe?.call) return reject(new Error(__('Frappe Desk is not ready.')));
+		frappe.call({
+			method,
+			args,
+			freeze: Boolean(options.freeze),
+			freeze_message: options.freeze_message,
+			callback: (response) => resolve(response?.message || {}),
+			error: reject,
+		});
+	});
+}
+
 function showHospitalisationPatientSnapshot(row) {
 	const hospitalisation = String(row?.hospitalisation || '').trim();
 	if (!hospitalisation || !window.frappe?.call) return;
@@ -116,6 +133,41 @@ function showHospitalisationPatientSnapshot(row) {
 	});
 }
 
+async function showHospitalisationLinkedRecordSnapshot(view, linkedDoctype, linkedDocument) {
+	const hospitalisation = String(view?.episode?.name || '').trim();
+	const doctype = String(linkedDoctype || '').trim();
+	const name = String(linkedDocument || '').trim();
+	if (!hospitalisation || !doctype || !name) return;
+
+	try {
+		const snapshot = await callHospitalisationApi(
+			HOSPITALISATION_LINKED_RECORD_SNAPSHOT_API,
+			{
+				hospitalisation_name: hospitalisation,
+				linked_doctype: doctype,
+				linked_document: name,
+			},
+			{ freeze: true, freeze_message: __('Loading linked clinical record...') },
+		);
+		const fields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+		const details = fields.map((field) => hospitalisationSnapshotItem(field.label || field.fieldname, field.value));
+		frappe.msgprint({
+			title: __('{0} — {1}', [snapshot.doctype || doctype, snapshot.title || snapshot.name || name]),
+			message: details.length
+				? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">${details.join('')}</div>`
+				: `<div class="text-muted">${escapeHospitalisationSnapshotValue(__('No contextual details are available.'))}</div>`,
+			indicator: 'blue',
+			wide: true,
+		});
+	} catch (error) {
+		frappe.msgprint({
+			title: __('Linked clinical record could not be opened'),
+			message: error?.message || __('The linked record is unavailable or you do not have permission to view it.'),
+			indicator: 'red',
+		});
+	}
+}
+
 function hardenHospitalisationOperationsNavigation(wrapper) {
 	const view = wrapper.operations_vue_app?.view;
 	if (!view) return;
@@ -125,15 +177,14 @@ function hardenHospitalisationOperationsNavigation(wrapper) {
 	// Page so a stale bundle cannot move the workflow to the retired Episode URL.
 	view.openHospitalisationEpisode = openHospitalisationEpisodeRoute;
 
-	// QA requires Patient drill-through to stay inside Operations. Keep the
-	// original handlers for Owner, Care Location and Practitioner, but replace
-	// Patient navigation with a permission-aware read-only Patient/Owner snapshot.
-	// Branch is informational only and must never navigate away from Operations.
+	// Patient and Pet Owner drill-through must stay inside Operations. The same
+	// permission-aware snapshot is authoritative for both cells. Branch is
+	// informational only and must never navigate away from Operations.
 	if (!view.__vetedgeOperationsCellPolicy && typeof view.openCell === 'function') {
 		const originalOpenCell = view.openCell.bind(view);
 		view.openCell = (event = {}) => {
 			const field = event?.column?.fieldname;
-			if (field === 'patient_name') {
+			if (field === 'patient_name' || field === 'owner') {
 				showHospitalisationPatientSnapshot(event.row);
 				return;
 			}
@@ -153,6 +204,51 @@ function hardenHostedHospitalisationEpisodeNavigation(wrapper) {
 	if (!view) return;
 
 	view.backToOperations = () => routeToHospitalisationOperations();
+
+	// Linked clinical records are contextual Episode detail, not a reason to
+	// leave the hosted workflow for a native Frappe form.
+	view.openDocument = (doctype, name) => showHospitalisationLinkedRecordSnapshot(view, doctype, name);
+
+	// Care Location and Occupancy Log are system-maintained operational records.
+	// Route the hosted Episode through the explicitly authorised wrapper rather
+	// than allowing the legacy service to require broad Doctor CRUD permission.
+	if (!view.__vetedgeCareLocationActionPolicy && typeof view.runAction === 'function') {
+		const originalRunAction = view.runAction.bind(view);
+		view.runAction = async (action, values = {}) => {
+			if (!['assign_location', 'release_location'].includes(action)) {
+				return originalRunAction(action, values);
+			}
+			if (!view.episode?.name || view.busy || (typeof view.ensureActionReady === 'function' && !view.ensureActionReady())) return null;
+			view.busy = true;
+			view.error = '';
+			try {
+				const method = action === 'assign_location'
+					? HOSPITALISATION_ASSIGN_CARE_LOCATION_API
+					: HOSPITALISATION_RELEASE_CARE_LOCATION_API;
+				const args = action === 'assign_location'
+					? {
+						hospitalisation_name: view.episode.name,
+						care_location: values.care_location,
+						notes: values.notes,
+						modified: view.episode.modified,
+					}
+					: {
+						hospitalisation_name: view.episode.name,
+						notes: values.notes,
+						modified: view.episode.modified,
+					};
+				const result = await callHospitalisationApi(method, args);
+				await view.refreshEpisode?.();
+				return result;
+			} catch (error) {
+				view.error = error?.message || __('Hospitalisation action failed.');
+				return null;
+			} finally {
+				view.busy = false;
+			}
+		};
+		view.__vetedgeCareLocationActionPolicy = true;
+	}
 
 	if (!view.__vetedgeOperationsHostedEpisodeLoad && typeof view.loadEpisode === 'function') {
 		const originalLoadEpisode = view.loadEpisode.bind(view);
