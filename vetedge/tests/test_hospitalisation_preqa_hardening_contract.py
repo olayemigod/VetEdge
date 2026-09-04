@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOOKS = ROOT / "hooks.py"
 SECURITY = ROOT / "services" / "hospitalisation_preqa_security.py"
+EPISODE_POLICY_V2 = ROOT / "services" / "hospitalisation_episode_policy_v2.py"
 OPERATIONS_PAGE = (
     ROOT
     / "veterinary"
@@ -147,7 +148,10 @@ def test_linked_clinical_record_snapshot_is_bounded_and_episode_authorised():
 
     assert "HOSPITALISATION_LINKED_RECORD_SNAPSHOT_API" in page
     assert "get_hospitalisation_linked_record_snapshot" in page
-    assert "view.openDocument = (doctype, name) => showHospitalisationLinkedRecordSnapshot" in page
+    assert "HOSPITALISATION_CONTEXTUAL_LINKED_DOCTYPES" in page
+    assert "HOSPITALISATION_CONTEXTUAL_LINKED_DOCTYPES.has(normalizedDoctype)" in page
+    assert "showHospitalisationLinkedRecordSnapshot(view, normalizedDoctype, name)" in page
+    assert "return originalOpenDocument(doctype, name);" in page
     assert "LINKED_RECORD_FIELDS" in security
     assert '"Veterinary Vital Signs"' in security
     assert '"Veterinary Vaccination Record"' in security
@@ -159,11 +163,22 @@ def test_linked_clinical_record_snapshot_is_bounded_and_episode_authorised():
 
 def test_hosted_episode_care_location_uses_authorised_workflow_api():
     page = read(OPERATIONS_PAGE)
+    policy = read(EPISODE_POLICY_V2)
 
     assert "HOSPITALISATION_ASSIGN_CARE_LOCATION_API" in page
     assert "HOSPITALISATION_RELEASE_CARE_LOCATION_API" in page
     assert "['assign_location', 'release_location'].includes(action)" in page
     assert "modified: view.episode.modified" in page
+
+    # The API action dispatcher itself must also route Assign/Release through
+    # the secured Hospitalisation wrapper, so non-page callers do not fall back
+    # to the legacy permission-dependent mutation path.
+    assert 'if action == "assign_location":' in policy
+    assert 'if action == "release_location":' in policy
+    assert "hospitalisation_preqa_security as secured_hospitalisation" in policy
+    assert "secured_hospitalisation.assign_hospitalisation_care_location(" in policy
+    assert "secured_hospitalisation.release_hospitalisation_care_location(" in policy
+    assert "modified=modified" in policy
 
 
 def test_hospitalisation_vaccination_preserves_next_due_datetime():
