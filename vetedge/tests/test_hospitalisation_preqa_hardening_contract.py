@@ -14,6 +14,7 @@ OPERATIONS_PAGE = (
     / "vetedge_hospitalisation_operations"
     / "vetedge_hospitalisation_operations.js"
 )
+EPISODE_VUE = ROOT / "public" / "js" / "vetedge_hospitalisation_episode" / "VetEdgeHospitalisationEpisode.vue"
 CARE_LOCATION = (
     ROOT
     / "veterinary"
@@ -160,3 +161,11 @@ def test_hosted_episode_care_location_uses_authorised_workflow_api():
     assert "HOSPITALISATION_RELEASE_CARE_LOCATION_API" in page
     assert "['assign_location', 'release_location'].includes(action)" in page
     assert "modified: view.episode.modified" in page
+
+
+def test_hospitalisation_vaccination_preserves_next_due_datetime():
+    episode = read(EPISODE_VUE)
+
+    assert 'vaccinationDialog.values.next_due_date" type="datetime-local" label="Next Due Date/Time"' in episode
+    assert "next_due_date: serverDatetime(this.vaccinationDialog.values.next_due_date)" in episode
+    assert 'vaccinationDialog.values.next_due_date" type="date"' not in episode
