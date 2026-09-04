@@ -7,6 +7,11 @@ const HOSPITALISATION_PATIENT_SNAPSHOT_API = 'vetedge.services.hospitalisation_p
 const HOSPITALISATION_LINKED_RECORD_SNAPSHOT_API = 'vetedge.services.hospitalisation_preqa_security.get_hospitalisation_linked_record_snapshot';
 const HOSPITALISATION_ASSIGN_CARE_LOCATION_API = 'vetedge.services.hospitalisation_preqa_security.assign_hospitalisation_care_location';
 const HOSPITALISATION_RELEASE_CARE_LOCATION_API = 'vetedge.services.hospitalisation_preqa_security.release_hospitalisation_care_location';
+const HOSPITALISATION_CONTEXTUAL_LINKED_DOCTYPES = new Set([
+	'Veterinary Vital Signs',
+	'Veterinary Vaccination Record',
+	'Veterinary Lab Order',
+]);
 
 function decodeHospitalisationOperationsRoutePart(value) {
 	try {
@@ -205,9 +210,19 @@ function hardenHostedHospitalisationEpisodeNavigation(wrapper) {
 
 	view.backToOperations = () => routeToHospitalisationOperations();
 
-	// Linked clinical records are contextual Episode detail, not a reason to
-	// leave the hosted workflow for a native Frappe form.
-	view.openDocument = (doctype, name) => showHospitalisationLinkedRecordSnapshot(view, doctype, name);
+	// Only clinical timeline links are contextualised. Explicit non-clinical
+	// actions such as Sales Invoice retain their existing authorised behaviour.
+	if (!view.__vetedgeLinkedClinicalRecordPolicy && typeof view.openDocument === 'function') {
+		const originalOpenDocument = view.openDocument.bind(view);
+		view.openDocument = (doctype, name) => {
+			const normalizedDoctype = String(doctype || '').trim();
+			if (HOSPITALISATION_CONTEXTUAL_LINKED_DOCTYPES.has(normalizedDoctype)) {
+				return showHospitalisationLinkedRecordSnapshot(view, normalizedDoctype, name);
+			}
+			return originalOpenDocument(doctype, name);
+		};
+		view.__vetedgeLinkedClinicalRecordPolicy = true;
+	}
 
 	// Care Location and Occupancy Log are system-maintained operational records.
 	// Route the hosted Episode through the explicitly authorised wrapper rather
