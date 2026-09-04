@@ -327,13 +327,15 @@
 
 		<EdgeModal :open="vaccinationDialog.open" title="Add Vaccination" subtitle="Hospitalisation Clinical Care" :busy="busy" @close="closeVaccination">
 			<div class="episode-grid">
+				<div class="episode-guidance episode-wide">
+					<strong>Vaccination billing and stock</strong>
+					<span>Billing, payment and stock administration are managed on the linked Vaccination Record after creation. This Hospitalisation entry remains a clinical timeline reference only.</span>
+				</div>
 				<EdgeLinkField :model-value="vaccinationDialog.values.vaccine" label="Vaccine" placeholder="Select active vaccine" :searcher="(query) => optionSearch('vaccine', query)" @update:model-value="(value) => setVaccination('vaccine', value)" />
 				<EdgeInput :model-value="vaccinationDialog.values.dose" label="Dose" @update:model-value="(value) => setVaccination('dose', value)" />
 				<EdgeDropdown :model-value="vaccinationDialog.values.route" label="Route" :options="vaccinationRouteOptions" @update:model-value="(value) => setVaccination('route', value)" />
 				<EdgeInput :model-value="vaccinationDialog.values.administered_on" type="datetime-local" label="Recorded On" @update:model-value="(value) => setVaccination('administered_on', value)" />
 				<EdgeInput :model-value="vaccinationDialog.values.next_due_date" type="datetime-local" label="Next Due Date/Time" @update:model-value="(value) => setVaccination('next_due_date', value)" />
-				<EdgeDropdown :model-value="String(vaccinationDialog.values.billable)" label="Billable" :options="yesNoOptions" @update:model-value="(value) => setVaccination('billable', Number(value || 0))" />
-				<EdgeDropdown v-if="episode.capabilities?.dispensary_enabled" :model-value="String(vaccinationDialog.values.stock_affecting)" label="Stock Affecting" :options="yesNoOptions" @update:model-value="(value) => setVaccination('stock_affecting', Number(value || 0))" />
 				<EdgeTextarea class="episode-wide" :model-value="vaccinationDialog.values.notes" label="Notes" :rows="4" @update:model-value="(value) => setVaccination('notes', value)" />
 			</div>
 			<template #footer><button type="button" class="edge-button" :disabled="busy" @click="closeVaccination">Cancel</button><button type="button" class="edge-button edge-button--primary" :disabled="busy || !vaccinationDialog.values.vaccine" @click="saveVaccination">Create Vaccination Record</button></template>
@@ -341,6 +343,10 @@
 
 		<EdgeModal :open="labDialog.open" title="Add Lab Order" subtitle="Hospitalisation Clinical Care" :busy="busy" @close="closeLab">
 			<div class="episode-stack">
+				<div class="episode-guidance">
+					<strong>Lab billing</strong>
+					<span>Billing and payment are managed on the linked Lab Order after creation. This Hospitalisation entry remains a clinical timeline reference only.</span>
+				</div>
 				<p v-if="!episode.linked_consultation" class="episode-warning">This direct admission will create a Veterinary Lab Order and link it to this Hospitalisation. The Hospitalisation activity remains the episode timeline entry.</p>
 				<div class="episode-inline-picker">
 					<EdgeLinkField :model-value="labDialog.pending" label="Lab Test" placeholder="Search active lab tests" :searcher="searchLabTests" @update:model-value="(value) => labDialog.pending = value" />
@@ -441,7 +447,7 @@ const yesNoOptions = [{ value: '0', label: 'No' }, { value: '1', label: 'Yes' }]
 const blankEpisode = () => ({ name: '', status: '', activities: [], charge_items: [], signals: {}, capabilities: {}, invoice: {} });
 const blankActivity = () => ({ open: false, type: 'Other', datetime: '', notes: '', item: '', item_label: '', qty: 1, uom: '', rate: '', billable: 0, stock_affecting: 0 });
 const blankVitals = () => ({ open: false, values: {} });
-const blankVaccination = () => ({ open: false, values: { vaccine: '', dose: '', route: '', administered_on: '', next_due_date: '', billable: 1, stock_affecting: 0, notes: '' } });
+const blankVaccination = () => ({ open: false, values: { vaccine: '', dose: '', route: '', administered_on: '', next_due_date: '', notes: '' } });
 const blankLab = () => ({ open: false, pending: '', selected: [], sample_notes: '' });
 const blankCare = () => ({ open: false, care_location: '', notes: '' });
 const blankStock = () => ({ open: false, postRequested: false, preview: {} });
@@ -669,7 +675,6 @@ export default {
 		},
 		openVaccination() {
 			const values = { ...blankVaccination().values, administered_on: currentLocalDatetime() };
-			if (!this.episode.capabilities?.dispensary_enabled) values.stock_affecting = 0;
 			this.vaccinationDialog = { ...blankVaccination(), open: true, values };
 		},
 		closeVaccination() { if (!this.busy) this.vaccinationDialog = blankVaccination(); },
@@ -681,7 +686,6 @@ export default {
 					...this.vaccinationDialog.values,
 					administered_on: serverDatetime(this.vaccinationDialog.values.administered_on),
 					next_due_date: serverDatetime(this.vaccinationDialog.values.next_due_date),
-					stock_affecting: this.episode.capabilities?.dispensary_enabled ? this.vaccinationDialog.values.stock_affecting : 0,
 				};
 				const result = await call(API.addVaccination, { hospitalisation_name: this.episode.name, values, modified: this.episode.modified });
 				this.applyEpisode(result?.episode || this.episode); this.vaccinationDialog = blankVaccination();
@@ -709,6 +713,7 @@ export default {
 			try {
 				const result = await call(API.addLabOrder, { hospitalisation_name: this.episode.name, lab_tests: this.labDialog.selected, sample_notes: this.labDialog.sample_notes, modified: this.episode.modified });
 				this.applyEpisode(result?.episode || this.episode); this.labDialog = blankLab();
+				if (result?.warning) frappe.show_alert({ message: result.warning, indicator: 'orange' });
 				frappe.show_alert({ message: result?.linked_order ? __('Lab Order created and linked.') : __('Lab tests added.'), indicator: 'green' });
 			} catch (error) { this.error = errorMessage(error, __('Lab tests could not be added.')); }
 			finally { this.busy = false; }
