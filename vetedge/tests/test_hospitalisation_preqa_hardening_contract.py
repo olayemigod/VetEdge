@@ -16,6 +16,14 @@ OPERATIONS_PAGE = (
     / "vetedge_hospitalisation_operations.js"
 )
 EPISODE_VUE = ROOT / "public" / "js" / "vetedge_hospitalisation_episode" / "VetEdgeHospitalisationEpisode.vue"
+CLINICAL_WORKSPACE = ROOT / "public" / "js" / "vetedge_clinical_workspace.bundle.js"
+CONSULTATION_FORM = (
+    ROOT
+    / "veterinary"
+    / "doctype"
+    / "veterinary_consultation"
+    / "veterinary_consultation.js"
+)
 CARE_LOCATION = (
     ROOT
     / "veterinary"
@@ -75,6 +83,23 @@ def test_operations_branch_column_is_informational_not_a_link():
     assert 'column["fieldtype"] = "Data"' in security
     assert 'column.pop("options", None)' in security
     assert 'column["clickable"] = False' in security
+
+
+def test_supported_hospitalisation_creation_path_starts_from_consultation():
+    workspace = read(CLINICAL_WORKSPACE)
+    native_form = read(CONSULTATION_FORM)
+
+    # EdgeSuite is the normal operational entry point. A Hospitalisation is
+    # created/linked from an eligible Consultation rather than from a generic
+    # unscoped Create button on Hospitalisation Operations.
+    assert "'Veterinary Hospitalisation':" in workspace
+    assert "createLabel: 'Admit for Hospitalisation'" in workspace
+    assert "if (doctype === 'Veterinary Hospitalisation') return openHospitalisationModal" in workspace
+    assert "vetedge.services.hospitalisation.create_hospitalisation_from_consultation" in workspace
+
+    # Preserve the native Consultation fallback for advanced/admin use.
+    assert 'frm.add_custom_button(__("Admit for Hospitalisation")' in native_form
+    assert 'method: "vetedge.services.hospitalisation.create_hospitalisation_from_consultation"' in native_form
 
 
 def test_legacy_hospitalisation_rpc_paths_are_permission_and_branch_guarded():
