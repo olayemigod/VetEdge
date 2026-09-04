@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -13,10 +14,29 @@ OPERATIONS_PAGE = (
     / "vetedge_hospitalisation_operations"
     / "vetedge_hospitalisation_operations.js"
 )
+CARE_LOCATION = (
+    ROOT
+    / "veterinary"
+    / "doctype"
+    / "veterinary_care_location"
+    / "veterinary_care_location.json"
+)
+OCCUPANCY_LOG = (
+    ROOT
+    / "veterinary"
+    / "doctype"
+    / "veterinary_care_location_occupancy_log"
+    / "veterinary_care_location_occupancy_log.json"
+)
 
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def role_permissions(path: Path, role: str) -> list[dict]:
+    data = json.loads(read(path))
+    return [row for row in data.get("permissions") or [] if row.get("role") == role]
 
 
 def test_hospitalisation_operations_failed_drillthrough_is_hardened_in_place():
@@ -26,6 +46,7 @@ def test_hospitalisation_operations_failed_drillthrough_is_hardened_in_place():
     assert "HOSPITALISATION_PATIENT_SNAPSHOT_API" in page
     assert "get_hospitalisation_patient_snapshot" in page
     assert "showHospitalisationPatientSnapshot(event.row)" in page
+    assert "field === 'patient_name' || field === 'owner'" in page
     assert "if (field === 'branch') return;" in page
     assert "openHospitalisationEpisodeRoute(event.row.hospitalisation)" in page
     assert "Patient & Pet Owner" in page
@@ -86,7 +107,24 @@ def test_legacy_hospitalisation_rpc_paths_are_permission_and_branch_guarded():
     ):
         assert expected in security
 
-    assert "ignore_permissions" not in security
+
+def test_care_location_workflow_owns_audit_mutation_without_granting_doctor_crud():
+    security = read(SECURITY)
+
+    # The caller must pass the normal Hospitalisation write/Branch boundary
+    # before the narrowly-scoped system-maintained Care Location records use
+    # elevated persistence.
+    assert "doc = _load_hospitalisation(hospitalisation_name, write=True)" in security
+    assert "_assert_not_stale(doc, modified)" in security
+    assert "service.ensure_care_location_assignable(doc, location)" in security
+    assert "ACTIVE_CARE_LOCATION_HOSPITALISATION_STATUSES" in security
+    assert "log.insert(ignore_permissions=True)" in security
+    assert "log.save(ignore_permissions=True)" in security
+    assert "location.save(ignore_permissions=True)" in security
+
+    # Ordinary Doctors still do not receive broad master/audit permissions.
+    assert role_permissions(CARE_LOCATION, "VetEdge Doctor") == []
+    assert role_permissions(OCCUPANCY_LOG, "VetEdge Doctor") == []
 
 
 def test_care_location_legacy_picker_cannot_enumerate_other_branches():
@@ -97,3 +135,28 @@ def test_care_location_legacy_picker_cannot_enumerate_other_branches():
     assert "for allowed_branch in allowed:" in security
     assert "original(branch=allowed_branch" in security
     assert "Care Location Branch must match the Hospitalisation Branch" in security
+
+
+def test_linked_clinical_record_snapshot_is_bounded_and_episode_authorised():
+    page = read(OPERATIONS_PAGE)
+    security = read(SECURITY)
+
+    assert "HOSPITALISATION_LINKED_RECORD_SNAPSHOT_API" in page
+    assert "get_hospitalisation_linked_record_snapshot" in page
+    assert "view.openDocument = (doctype, name) => showHospitalisationLinkedRecordSnapshot" in page
+    assert "LINKED_RECORD_FIELDS" in security
+    assert '"Veterinary Vital Signs"' in security
+    assert '"Veterinary Vaccination Record"' in security
+    assert '"Veterinary Lab Order"' in security
+    assert "linked_from_episode = any(" in security
+    assert "record.check_permission(\"read\")" in security
+    assert "The requested clinical record is not linked to this Hospitalisation" in security
+
+
+def test_hosted_episode_care_location_uses_authorised_workflow_api():
+    page = read(OPERATIONS_PAGE)
+
+    assert "HOSPITALISATION_ASSIGN_CARE_LOCATION_API" in page
+    assert "HOSPITALISATION_RELEASE_CARE_LOCATION_API" in page
+    assert "['assign_location', 'release_location'].includes(action)" in page
+    assert "modified: view.episode.modified" in page
