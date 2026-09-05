@@ -8,6 +8,7 @@ HOME_LOADER = REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge" / 
 HOME_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_home.bundle.js"
 HOME_COMPONENT = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_home" / "VetEdgeHome.vue"
 HOME_SERVICE = REPOSITORY_ROOT / "vetedge" / "services" / "home.py"
+ROLE_BUNDLES = REPOSITORY_ROOT / "vetedge" / "services" / "role_bundles.py"
 
 
 class TestVetEdgeHomeContract(TestCase):
@@ -23,6 +24,7 @@ class TestVetEdgeHomeContract(TestCase):
 		self.assertIn("vetedge_home.bundle.js", loader)
 		self.assertIn("window.mountVetEdgeHome", loader)
 		self.assertIn("refreshMountedVetEdgeHome", loader)
+		self.assertIn('"EdgeDataTable"', loader)
 		self.assertNotIn('const target = "/desk/vetedge-resource-center"', loader)
 		self.assertNotIn('frappe.set_route("vetedge-resource-center")', loader)
 
@@ -49,6 +51,7 @@ class TestVetEdgeHomeContract(TestCase):
 			"Quick Actions",
 			"Working as",
 			"Branch scope",
+			"Operational date",
 			"Additional access",
 			"payload.attention",
 			"payload.metrics",
@@ -88,6 +91,63 @@ class TestVetEdgeHomeContract(TestCase):
 			"cancel()",
 		):
 			self.assertNotIn(forbidden, service)
+
+	def test_home_metric_drilldown_reuses_the_server_metric_query(self):
+		service = self.read(HOME_SERVICE)
+		component = self.read(HOME_COMPONENT)
+		for contract in (
+			"def get_metric_drilldown(",
+			'query = metric["_query"]',
+			'filters = query["filters"]',
+			"_permission_count(doctype, filters)",
+			"_public_metric(metric)",
+			'"metrics": [_public_metric(metric) for metric in metrics]',
+			"limit_page_length=page_length",
+		):
+			self.assertIn(contract, service)
+		for contract in (
+			"openMetric(metric.key)",
+			"openMetric(item.key)",
+			"vetedge.services.home.get_metric_drilldown",
+			"reconcileMetricCount",
+			"Exact card records",
+			"Showing {{ drilldownFirst }}–{{ drilldownLast }} of {{ drilldown.total }}",
+		):
+			self.assertIn(contract, component)
+
+	def test_home_branch_and_operational_date_are_first_class_context(self):
+		service = self.read(HOME_SERVICE)
+		component = self.read(HOME_COMPONENT)
+		for contract in (
+			'ALL_BRANCHES_KEY = "__all__"',
+			"_resolve_operational_date",
+			"_branch_options",
+			"branch_options",
+			"operational_date",
+			"_date_range(operational_date)",
+		):
+			self.assertIn(contract, service)
+		for contract in (
+			"Working branch",
+			"Operational date",
+			"selectedBranch",
+			"selectedDate",
+			"applyContext",
+			"updateLocation",
+		):
+			self.assertIn(contract, component)
+
+	def test_waiting_queue_uses_selected_date_not_unbounded_status_backlog(self):
+		service = self.read(HOME_SERVICE)
+		self.assertIn("waiting_filters = _with(\n\t\t\tdate_filters,", service)
+		self.assertIn("waiting_for_me_filters = _with(\n\t\t\tmy_date_filters,", service)
+		self.assertIn('status=["in", ["Confirmed", "Checked In"]]', service)
+
+	def test_branch_specific_metrics_fail_closed_if_source_has_no_branch_field(self):
+		service = self.read(HOME_SERVICE)
+		self.assertIn("if branch or (assigned and not global_access):", service)
+		self.assertIn("return None", service)
+		self.assertIn("if value is None or filters is None:", service)
 
 	def test_generic_accounts_support_roles_do_not_pollute_clinical_personas(self):
 		service = self.read(HOME_SERVICE)
@@ -142,6 +202,17 @@ class TestVetEdgeHomeContract(TestCase):
 			"/desk/vetedge-executive-dashboard",
 		):
 			self.assertIn(route, service)
+
+	def test_vetedge_default_app_is_user_scoped_and_preserves_existing_preference(self):
+		role_bundles = self.read(ROLE_BUNDLES)
+		for contract in (
+			"def _ensure_vetedge_default_app(user_doc)",
+			'if getattr(user_doc, "default_app", None):',
+			'user_doc.db_set("default_app", "vetedge", update_modified=False)',
+			"_ensure_vetedge_default_app(user_doc)",
+		):
+			self.assertIn(contract, role_bundles)
+		self.assertNotIn('frappe.db.set_value("Role"', role_bundles)
 
 	def test_home_frontend_contains_no_business_document_writes(self):
 		component = self.read(HOME_COMPONENT)
