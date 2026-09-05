@@ -35,6 +35,7 @@ PERSONA_CASES = (
         "actions": ("Register / Find Patient", "Appointment Queue"),
         "metric_keys": ("today-appointments",),
         "metric_values": {"today-appointments": 1},
+        "click_metric": "today-appointments",
         "branches": (BRANCH_A,),
         "forbidden_groups": ("Accounts / Cashier",),
     },
@@ -143,7 +144,15 @@ def _new_page(context: BrowserContext, events: list[str], label: str) -> Page:
     return page
 
 
-def _login(context: BrowserContext, user: str, password: str, events: list[str], label: str) -> None:
+def _login(
+    context: BrowserContext,
+    user: str,
+    password: str,
+    events: list[str],
+    label: str,
+    *,
+    expect_vetedge_home: bool = False,
+) -> dict:
     response = context.request.post(
         f"{BASE_URL}/api/method/login",
         form={"usr": user, "pwd": password},
@@ -152,6 +161,16 @@ def _login(context: BrowserContext, user: str, password: str, events: list[str],
     events.append(f"[{label}] login: status={response.status} ok={response.ok} user={user}")
     if not response.ok:
         raise AssertionError(f"{label}: login failed for {user} with HTTP {response.status}")
+    data = response.json()
+    if not isinstance(data, dict):
+        raise AssertionError(f"{label}: login response was not an object")
+    if expect_vetedge_home:
+        home_page = str(data.get("home_page") or "").rstrip("/")
+        if home_page not in {"desk/vetedge", "/desk/vetedge"}:
+            raise AssertionError(
+                f"{label}: expected Veterinary Home login destination, got {home_page!r}"
+            )
+    return data
 
 
 def _assert_home(page: Page) -> None:
@@ -160,15 +179,29 @@ def _assert_home(page: Page) -> None:
         page.get_by_role("heading", name=heading, exact=True).wait_for()
     page.get_by_text("Working as", exact=True).wait_for()
     page.get_by_text("Branch scope", exact=True).wait_for()
+    page.get_by_text("Operational date", exact=True).first.wait_for()
     if "resource-center" in page.url:
         raise AssertionError(f"Veterinary Home redirected to Resource Center: {page.url}")
     if page.get_by_role("heading", name="Veterinary Home", exact=True).count() != 1:
         raise AssertionError("Veterinary Home mounted more than once")
 
 
-def _payload(context: BrowserContext, events: list[str], label: str) -> dict:
+def _payload(
+    context: BrowserContext,
+    events: list[str],
+    label: str,
+    *,
+    branch: str | None = None,
+    operational_date: str | None = None,
+) -> dict:
+    params = {}
+    if branch:
+        params["branch"] = branch
+    if operational_date:
+        params["operational_date"] = operational_date
     response = context.request.get(
         f"{BASE_URL}/api/method/vetedge.services.home.get_home_payload",
+        params=params,
         timeout=API_TIMEOUT_MS,
     )
     events.append(f"[{label}] payload: status={response.status} ok={response.ok}")
@@ -181,11 +214,99 @@ def _payload(context: BrowserContext, events: list[str], label: str) -> dict:
     return payload
 
 
+def _drilldown(
+    context: BrowserContext,
+    events: list[str],
+    label: str,
+    metric_key: str,
+    *,
+    branch: str | None = None,
+    operational_date: str | None = None,
+) -> dict:
+    params = {"metric_key": metric_key}
+    if branch:
+        params["branch"] = branch
+    if operational_date:
+        params["operational_date"] = operational_date
+    response = context.request.get(
+        f"{BASE_URL}/api/method/vetedge.services.home.get_metric_drilldown",
+        params=params,
+        timeout=API_TIMEOUT_MS,
+    )
+    events.append(f"[{label}] drilldown:{metric_key}: status={response.status} ok={response.ok}")
+    if not response.ok:
+        raise AssertionError(
+            f"{label}: drilldown {metric_key!r} failed with HTTP {response.status}"
+        )
+    data = response.json()
+    result = data.get("message") if isinstance(data, dict) else None
+    if not isinstance(result, dict):
+        raise AssertionError(f"{label}: drilldown response did not contain a message object")
+    return result
+
+
 def _metric_map(payload: dict) -> dict[str, dict]:
     return {row["key"]: row for row in payload.get("metrics") or []}
 
 
-def _assert_persona(page: Page, browser_context: BrowserContext, case: dict, events: list[str]) -> dict:
+def _assert_metric_reconciliation(
+    browser_context: BrowserContext,
+    payload: dict,
+    keys: tuple[str, ...],
+    events: list[str],
+    label: str,
+) -> None:
+    metrics = _metric_map(payload)
+    context = payload.get("context") or {}
+    branch = context.get("branch_value")
+    operational_date = context.get("operational_date")
+    for key in keys:
+        metric = metrics.get(key)
+        if not metric:
+            raise AssertionError(f"{label}: expected metric {key!r} is missing")
+        result = _drilldown(
+            browser_context,
+            events,
+            label,
+            key,
+            branch=branch,
+            operational_date=operational_date,
+        )
+        if result.get("total") != metric.get("value"):
+            raise AssertionError(
+                f"{label}: card/drilldown mismatch for {key!r}: "
+                f"card={metric.get('value')} drilldown={result.get('total')}"
+            )
+        if result.get("metric", {}).get("key") != key:
+            raise AssertionError(f"{label}: drilldown returned wrong metric identity for {key!r}")
+
+
+def _assert_clicked_metric(page: Page, payload: dict, metric_key: str) -> None:
+    metric = _metric_map(payload).get(metric_key)
+    if not metric:
+        raise AssertionError(f"clicked metric {metric_key!r} is missing")
+    button = page.locator(".vetedge-home-stat-button").filter(has_text=metric["label"])
+    if button.count() != 1:
+        raise AssertionError(
+            f"expected one clickable KPI for {metric[\"label\"]!r}, got {button.count()}"
+        )
+    button.click()
+    panel = page.locator(".vetedge-home-drilldown")
+    panel.get_by_role("heading", name=metric["label"], exact=True).wait_for()
+    panel.get_by_text(f"{metric['value']} total", exact=False).wait_for()
+    footer = panel.get_by_text(f"of {metric['value']}", exact=False)
+    if metric["value"] and footer.count() == 0:
+        raise AssertionError(
+            f"clicked KPI {metric_key!r} did not render a drilldown total matching {metric['value']}"
+        )
+
+
+def _assert_persona(
+    page: Page,
+    browser_context: BrowserContext,
+    case: dict,
+    events: list[str],
+) -> dict:
     _assert_home(page)
     context_panel = page.locator(".vetedge-home-context")
     context_panel.get_by_text(case["primary"], exact=True).wait_for()
@@ -219,6 +340,16 @@ def _assert_persona(page: Page, browser_context: BrowserContext, case: dict, eve
         actual = metrics.get(key, {}).get("value")
         if actual != expected:
             raise AssertionError(f"{case['key']}: metric {key!r} expected {expected}, got {actual}")
+
+    _assert_metric_reconciliation(
+        browser_context,
+        payload,
+        tuple(case.get("metric_keys", ())),
+        events,
+        f"persona:{case['key']}",
+    )
+    if case.get("click_metric"):
+        _assert_clicked_metric(page, payload, case["click_metric"])
     return payload
 
 
@@ -307,7 +438,14 @@ def _run_persona_home(browser: Browser, events: list[str], case: dict) -> dict:
     context = browser.new_context(viewport={"width": 1280, "height": 900})
     page = _new_page(context, events, label)
     try:
-        _login(context, case["email"], PERSONA_PASSWORD, events, label)
+        _login(
+            context,
+            case["email"],
+            PERSONA_PASSWORD,
+            events,
+            label,
+            expect_vetedge_home=True,
+        )
         response = page.goto(f"{BASE_URL}/app/vetedge", wait_until="domcontentloaded")
         events.append(f"[{label}] goto: status={response.status if response else 'none'} url={page.url}")
         try:
@@ -393,6 +531,9 @@ def main() -> None:
                     "personas": payload.get("personas"),
                     "context": payload.get("context"),
                     "metric_keys": [row.get("key") for row in payload.get("metrics") or []],
+                    "metric_values": {
+                        row.get("key"): row.get("value") for row in payload.get("metrics") or []
+                    },
                     "action_labels": [row.get("label") for row in payload.get("quick_actions") or []],
                 }
                 _checkpoint(events, persona_results)
