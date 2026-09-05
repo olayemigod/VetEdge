@@ -1,0 +1,437 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+import frappe
+from frappe import _
+from frappe.utils import cint, nowdate
+
+from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.services.permissions import (
+	ROLE_ACCOUNTS_CASHIER,
+	ROLE_ACCOUNTS_MANAGER,
+	ROLE_ACCOUNTS_USER,
+	ROLE_BRANCH_MANAGER,
+	ROLE_DISPENSARY_USER,
+	ROLE_LAB_TECHNICIAN,
+	ROLE_SYSTEM_MANAGER,
+	ROLE_VETEDGE_ADMINISTRATOR,
+	ROLE_VETEDGE_DOCTOR,
+	ROLE_VETEDGE_FRONT_DESK,
+	ROLE_VETEDGE_GROOMER,
+	ROLE_VETEDGE_NURSE,
+	ROLE_VETERINARY_NURSE,
+	can_access_branch_data,
+	get_assigned_branches,
+	get_user_roles,
+	is_internal_staff_user,
+	user_has_global_branch_access,
+)
+
+HOME_REFRESH_SECONDS = 30
+
+PERSONA_DEFINITIONS = (
+	{
+		"key": "administrator",
+		"label": _("Administrator"),
+		"roles": {ROLE_SYSTEM_MANAGER, ROLE_VETEDGE_ADMINISTRATOR},
+	},
+	{
+		"key": "branch-manager",
+		"label": _("Branch Manager"),
+		"roles": {ROLE_BRANCH_MANAGER, "VetEdge Branch Manager"},
+	},
+	{
+		"key": "doctor",
+		"label": _("Veterinary Doctor"),
+		"roles": {ROLE_VETEDGE_DOCTOR},
+	},
+	{
+		"key": "front-desk",
+		"label": _("Front Desk"),
+		"roles": {ROLE_VETEDGE_FRONT_DESK},
+	},
+	{
+		"key": "accounts",
+		"label": _("Accounts / Cashier"),
+		"roles": {ROLE_ACCOUNTS_CASHIER, "VetEdge Accounts/Cashier", ROLE_ACCOUNTS_MANAGER, ROLE_ACCOUNTS_USER},
+	},
+	{
+		"key": "lab",
+		"label": _("Laboratory"),
+		"roles": {ROLE_LAB_TECHNICIAN, "VetEdge Lab Technician"},
+	},
+	{
+		"key": "nurse",
+		"label": _("Veterinary Nurse"),
+		"roles": {ROLE_VETEDGE_NURSE, ROLE_VETERINARY_NURSE},
+	},
+	{
+		"key": "dispensary",
+		"label": _("Dispensary"),
+		"roles": {ROLE_DISPENSARY_USER, "VetEdge Dispensary User"},
+	},
+	{
+		"key": "groomer",
+		"label": _("Grooming"),
+		"roles": {ROLE_VETEDGE_GROOMER},
+	},
+)
+
+ACTION_DEFINITIONS = {
+	"administrator": (
+		("Executive Dashboard", "/desk/vetedge-executive-dashboard", "dashboard", None, "read"),
+		("Veterinary Administration", "/desk/vetedge-administration", "settings", None, "read"),
+		("Veterinary Settings", "/desk/veterinary-settings-center", "settings", "Veterinary Settings", "read"),
+		("Resource Center", "/desk/vetedge-resource-center", "folder", "Veterinary Patient", "read"),
+		("Training Centre", "/desk/veterinary-training-centre", "education", None, "read"),
+	),
+	"branch-manager": (
+		("Executive Dashboard", "/desk/vetedge-executive-dashboard", "dashboard", None, "read"),
+		("Front Desk Action Centre", "/desk/vetedge-front-desk-action-center", "calendar", "Veterinary Appointment", "read"),
+		("Clinical Workspace", "/desk/vetedge-clinical-workspace", "clipboard", "Veterinary Consultation", "read"),
+		("Hospitalisation Operations", "/desk/vetedge-hospitalisation-operations", "heart", "Veterinary Hospitalisation", "read"),
+		("Stock Expiry Monitor", "/desk/stock-expiry-monitor", "stock", "Item", "read"),
+	),
+	"doctor": (
+		("Start / Continue Consultation", "/desk/vetedge-clinical-workspace", "clipboard", "Veterinary Consultation", "read"),
+		("Find Patient", "/desk/vetedge-resource-center?resource=patients", "users", "Veterinary Patient", "read"),
+		("Medical & Lab Work", "/desk/vetedge-resource-center?resource=lab-orders", "assessment", "Veterinary Lab Order", "read"),
+		("Vaccinations", "/desk/vetedge-resource-center?resource=vaccinations", "heart", "Veterinary Vaccination Record", "read"),
+		("Hospitalised Patients", "/desk/vetedge-hospitalisation-operations", "home", "Veterinary Hospitalisation", "read"),
+	),
+	"front-desk": (
+		("Register / Find Patient", "/desk/vetedge-resource-center?resource=patients", "users", "Veterinary Patient", "read"),
+		("New Appointment", "/desk/vetedge-resource-center?resource=appointments&new=1", "calendar", "Veterinary Appointment", "create"),
+		("Appointment Queue", "/desk/vetedge-front-desk-action-center?tab=queue", "list", "Veterinary Appointment", "read"),
+		("Guest Booking Requests", "/desk/vetedge-front-desk-action-center?tab=guest", "globe", "Veterinary Guest Booking Request", "read"),
+		("Missed Appointments", "/desk/vetedge-front-desk-action-center?tab=missed", "alert", "Veterinary Missed Appointment", "read"),
+	),
+	"accounts": (
+		("Sales Invoices", "/desk/sales-invoice", "invoice", "Sales Invoice", "read"),
+		("Payments", "/desk/payment-entry", "payment", "Payment Entry", "read"),
+		("Patient Records", "/desk/vetedge-resource-center?resource=patients", "users", "Veterinary Patient", "read"),
+	),
+	"lab": (
+		("Pending Lab Orders", "/desk/vetedge-resource-center?resource=lab-orders", "assessment", "Veterinary Lab Order", "read"),
+	),
+	"nurse": (
+		("Patient Records", "/desk/vetedge-resource-center?resource=patients", "users", "Veterinary Patient", "read"),
+		("Clinical Workspace", "/desk/vetedge-clinical-workspace", "clipboard", "Veterinary Consultation", "read"),
+		("Lab Orders", "/desk/vetedge-resource-center?resource=lab-orders", "assessment", "Veterinary Lab Order", "read"),
+		("Vaccinations", "/desk/vetedge-resource-center?resource=vaccinations", "heart", "Veterinary Vaccination Record", "read"),
+		("Hospitalised Patients", "/desk/vetedge-hospitalisation-operations", "home", "Veterinary Hospitalisation", "read"),
+	),
+	"dispensary": (
+		("Pending Dispensary Work", "/desk/vetedge-clinical-workspace", "package", "Veterinary Consultation", "read"),
+		("Stock Expiry Monitor", "/desk/stock-expiry-monitor", "stock", "Item", "read"),
+	),
+	"groomer": (
+		("Grooming Appointments", "/desk/vetedge-resource-center?resource=grooming", "calendar", "Pet Grooming Appointment", "read"),
+		("Grooming Sessions", "/desk/vetedge-service-operations?resource=grooming-sessions", "scissors", "Pet Grooming Session", "read"),
+	),
+}
+
+
+def _require_access() -> str:
+	user = getattr(frappe.session, "user", None)
+	if not user or user == "Guest" or not is_internal_staff_user(user):
+		frappe.throw(_("Veterinary Home is available to authorised clinic staff only."), frappe.PermissionError)
+	return user
+
+
+def _existing_doctype(doctype: str) -> bool:
+	return bool(doctype and frappe.db.exists("DocType", doctype))
+
+
+def _matched_personas(roles: set[str]) -> list[dict]:
+	return [
+		{"key": definition["key"], "label": definition["label"]}
+		for definition in PERSONA_DEFINITIONS
+		if roles & definition["roles"]
+	]
+
+
+def _current_branch(user: str) -> tuple[str, list[str], bool]:
+	try:
+		branch = str(get_current_vetedge_branch() or "").strip()
+	except Exception:
+		branch = ""
+	if branch.lower() in {"all", "all branches"}:
+		branch = ""
+	if branch:
+		can_access_branch_data(user, branch, raise_exception=True)
+	assigned = list(dict.fromkeys(get_assigned_branches(user) or []))
+	return branch, assigned, user_has_global_branch_access(user)
+
+
+def _branch_field(meta) -> str:
+	for fieldname in ("service_branch", "branch", "default_branch", "reporting_branch"):
+		if meta.has_field(fieldname):
+			return fieldname
+	return ""
+
+
+def _branch_filters(doctype: str, branch: str, assigned: list[str], global_access: bool) -> dict:
+	if not _existing_doctype(doctype):
+		return {}
+	meta = frappe.get_meta(doctype)
+	fieldname = _branch_field(meta)
+	if not fieldname:
+		return {}
+	if branch:
+		return {fieldname: branch}
+	if assigned and not global_access:
+		return {fieldname: ["in", assigned]}
+	return {}
+
+
+def _permission_count(doctype: str, filters: dict | None = None) -> int | None:
+	if not _existing_doctype(doctype) or not frappe.has_permission(doctype, "read"):
+		return None
+	try:
+		rows = frappe.get_list(
+			doctype,
+			fields=[{"COUNT": "*", "as": "total"}],
+			filters=filters or {},
+			limit_page_length=1,
+		)
+		return cint(rows[0].get("total")) if rows else 0
+	except frappe.PermissionError:
+		return None
+
+
+def _with(filters: dict, **values) -> dict:
+	result = dict(filters)
+	for key, value in values.items():
+		if value is not None:
+			result[key] = value
+	return result
+
+
+def _today_range() -> list[str]:
+	today = nowdate()
+	return ["between", [f"{today} 00:00:00", f"{today} 23:59:59"]]
+
+
+def _metric(key: str, label: str, value: int | None, helper: str, route: str, tone: str = "neutral") -> dict | None:
+	if value is None:
+		return None
+	return {
+		"key": key,
+		"label": label,
+		"value": value,
+		"helper": helper,
+		"route": route,
+		"tone": tone,
+	}
+
+
+def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: list[str], global_access: bool) -> list[dict]:
+	metrics: list[dict | None] = []
+
+	appointment_filters = _branch_filters("Veterinary Appointment", branch, assigned, global_access)
+	consultation_filters = _branch_filters("Veterinary Consultation", branch, assigned, global_access)
+	lab_filters = _branch_filters("Veterinary Lab Order", branch, assigned, global_access)
+	missed_filters = _branch_filters("Veterinary Missed Appointment", branch, assigned, global_access)
+
+	if _existing_doctype("Veterinary Appointment"):
+		meta = frappe.get_meta("Veterinary Appointment")
+		if meta.has_field("appointment_datetime"):
+			metrics.append(
+				_metric(
+					"today-appointments",
+					_("Today's Appointments"),
+					_permission_count("Veterinary Appointment", _with(appointment_filters, appointment_datetime=_today_range())),
+					_("Visible in your current branch scope"),
+					"/desk/vetedge-resource-center?resource=appointments",
+				)
+			)
+		waiting_filters = _with(appointment_filters, status=["in", ["Confirmed", "Checked In"]])
+		if "doctor" in persona_keys and meta.has_field("practitioner"):
+			waiting_filters["practitioner"] = user
+		metrics.append(
+			_metric(
+				"waiting-appointments",
+				_("Waiting / Checked In"),
+				_permission_count("Veterinary Appointment", waiting_filters),
+				_("Patients requiring operational attention"),
+				"/desk/vetedge-front-desk-action-center?tab=queue",
+				"warning",
+			)
+		)
+
+	if _existing_doctype("Veterinary Consultation"):
+		meta = frappe.get_meta("Veterinary Consultation")
+		active_filters = _with(consultation_filters, status=["not in", ["Completed", "Cancelled"]])
+		completed_filters = _with(consultation_filters, status="Completed")
+		if "doctor" in persona_keys and meta.has_field("consulting_practitioner"):
+			active_filters["consulting_practitioner"] = user
+			completed_filters["consulting_practitioner"] = user
+		metrics.append(
+			_metric(
+				"active-consultations",
+				_("My Active Consultations") if "doctor" in persona_keys else _("Active Consultations"),
+				_permission_count("Veterinary Consultation", active_filters),
+				_("Not completed or cancelled"),
+				"/desk/vetedge-clinical-workspace",
+				"primary",
+			)
+		)
+		if meta.has_field("consultation_datetime"):
+			completed_filters["consultation_datetime"] = _today_range()
+			metrics.append(
+				_metric(
+					"completed-today",
+					_("Completed Today"),
+					_permission_count("Veterinary Consultation", completed_filters),
+					_("Completed consultations today"),
+					"/desk/vetedge-clinical-workspace",
+					"success",
+				)
+			)
+		if "dispensary" in persona_keys and meta.has_field("dispensary_status"):
+			metrics.append(
+				_metric(
+					"pending-dispensary",
+					_("Pending Dispensary"),
+					_permission_count("Veterinary Consultation", _with(consultation_filters, dispensary_status="Pending Dispensary")),
+					_("Consultations awaiting fulfilment"),
+					"/desk/vetedge-clinical-workspace",
+					"warning",
+				)
+			)
+
+	if _existing_doctype("Veterinary Lab Order") and frappe.get_meta("Veterinary Lab Order").has_field("status"):
+		metrics.append(
+			_metric(
+				"lab-review",
+				_("Lab Results to Review"),
+				_permission_count("Veterinary Lab Order", _with(lab_filters, status=["in", ["Result Entered", "Awaiting Review"]])),
+				_("Results ready for clinical review"),
+				"/desk/vetedge-resource-center?resource=lab-orders",
+				"warning",
+			)
+		)
+
+	if _existing_doctype("Veterinary Missed Appointment"):
+		meta = frappe.get_meta("Veterinary Missed Appointment")
+		filters = dict(missed_filters)
+		if meta.has_field("resolved"):
+			filters["resolved"] = 0
+		metrics.append(
+			_metric(
+				"missed-follow-up",
+				_("Missed Follow-up"),
+				_permission_count("Veterinary Missed Appointment", filters),
+				_("Unresolved missed appointments"),
+				"/desk/vetedge-front-desk-action-center?tab=missed",
+				"danger",
+			)
+		)
+
+	if "accounts" in persona_keys and _existing_doctype("Sales Invoice"):
+		meta = frappe.get_meta("Sales Invoice")
+		filters = _branch_filters("Sales Invoice", branch, assigned, global_access)
+		filters["docstatus"] = 1
+		if meta.has_field("outstanding_amount"):
+			filters["outstanding_amount"] = [">", 0]
+		metrics.append(
+			_metric(
+				"outstanding-invoices",
+				_("Outstanding Invoices"),
+				_permission_count("Sales Invoice", filters),
+				_("Submitted invoices with balance due"),
+				"/desk/sales-invoice",
+				"warning",
+			)
+		)
+
+	return [metric for metric in metrics if metric is not None]
+
+
+def _can_use_action(doctype: str | None, permission_type: str) -> bool:
+	if not doctype:
+		return True
+	if not _existing_doctype(doctype):
+		return False
+	return bool(frappe.has_permission(doctype, permission_type))
+
+
+def _build_actions(personas: Iterable[dict]) -> list[dict]:
+	result: list[dict] = []
+	seen_routes: set[str] = set()
+	for persona in personas:
+		for label, route, icon, doctype, permission_type in ACTION_DEFINITIONS.get(persona["key"], ()):
+			if route in seen_routes or not _can_use_action(doctype, permission_type):
+				continue
+			seen_routes.add(route)
+			result.append(
+				{
+					"key": f"{persona['key']}:{route}",
+					"group": persona["label"],
+					"label": _(label),
+					"route": route,
+					"icon": icon,
+				}
+			)
+	return result
+
+
+def _build_attention(metrics: list[dict]) -> list[dict]:
+	attention = []
+	priority = {
+		"missed-follow-up": (90, _("Follow up missed appointments")),
+		"waiting-appointments": (80, _("Patients are waiting for service")),
+		"lab-review": (70, _("Laboratory results are ready for review")),
+		"pending-dispensary": (65, _("Dispensary fulfilment is pending")),
+		"outstanding-invoices": (60, _("Outstanding invoices need collection follow-up")),
+		"active-consultations": (50, _("Consultations are still active")),
+	}
+	for metric in metrics:
+		value = cint(metric.get("value"))
+		if value <= 0 or metric.get("key") not in priority:
+			continue
+		rank, message = priority[metric["key"]]
+		attention.append(
+			{
+				"key": metric["key"],
+				"priority": rank,
+				"title": metric["label"],
+				"message": message,
+				"count": value,
+				"route": metric["route"],
+				"tone": metric.get("tone") or "warning",
+			}
+		)
+	return sorted(attention, key=lambda row: (-row["priority"], row["title"]))[:6]
+
+
+@frappe.whitelist()
+def get_home_payload() -> dict:
+	user = _require_access()
+	roles = get_user_roles(user)
+	personas = _matched_personas(roles)
+	if not personas:
+		frappe.throw(_("No Veterinary operational role is assigned to this user."), frappe.PermissionError)
+
+	branch, assigned_branches, global_access = _current_branch(user)
+	persona_keys = {persona["key"] for persona in personas}
+	metrics = _build_metrics(user, persona_keys, branch, assigned_branches, global_access)
+
+	return {
+		"user": user,
+		"primary_persona": personas[0],
+		"personas": personas,
+		"context": {
+			"branch": branch,
+			"branch_label": branch or _("All permitted branches"),
+			"assigned_branches": assigned_branches,
+			"global_branch_access": global_access,
+			"date": nowdate(),
+		},
+		"metrics": metrics,
+		"attention": _build_attention(metrics),
+		"quick_actions": _build_actions(personas),
+		"refresh_seconds": HOME_REFRESH_SECONDS,
+	}
