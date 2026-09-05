@@ -5,7 +5,8 @@
 	global.__vetedgePostQaNavigationHardeningInstalled = true;
 
 	const SHELL_SELECTOR = ".edge-app-shell[data-edge-product]";
-	const HOME_MARKER = "vetedgeDirectHome";
+	const HOME_DATASET_KEY = "vetedgeDirectHome";
+	const HOME_ATTRIBUTE = "data-vetedge-direct-home";
 	const PRODUCT_HOST_ID = "edge-product-menu-host";
 	const PRODUCT_TRIGGER_ID = "edge-product-menu-trigger";
 	const PRODUCT_PANEL_ID = "edge-product-menu-dropdown";
@@ -34,7 +35,7 @@
 	}
 
 	function directHomeTarget() {
-		return `${global.location?.pathname || ""}${global.location?.search || ""}`.startsWith("/desk/vetedge");
+		return String(global.location?.pathname || "").replace(/\/+$/, "") === "/desk/vetedge";
 	}
 
 	function navigateHome() {
@@ -62,8 +63,8 @@
 
 		const toggle = homeSection.querySelector(".edge-sidebar__section-toggle");
 		if (!toggle) return false;
-		homeSection.dataset[HOME_MARKER] = "1";
-		toggle.dataset[HOME_MARKER] = "1";
+		homeSection.dataset[HOME_DATASET_KEY] = "1";
+		toggle.dataset[HOME_DATASET_KEY] = "1";
 		toggle.disabled = false;
 		toggle.setAttribute("aria-label", "Home");
 		toggle.setAttribute("title", "Home");
@@ -238,7 +239,7 @@
 
 	function repairUnresponsiveSharedTrigger(event) {
 		const trigger = event.target?.closest?.(`#${PRODUCT_TRIGGER_ID}`);
-		if (!trigger || trigger.closest?.(`[data-${HOME_MARKER}]`)) return;
+		if (!trigger) return;
 		const panel = global.document.getElementById(PRODUCT_PANEL_ID);
 		if (!panel) return;
 		global.setTimeout(() => {
@@ -266,7 +267,7 @@
 	}
 
 	global.document?.addEventListener("click", (event) => {
-		const directHome = event.target?.closest?.(`[data-${HOME_MARKER}="1"]`);
+		const directHome = event.target?.closest?.(`[${HOME_ATTRIBUTE}="1"]`);
 		if (directHome) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -285,7 +286,7 @@
 		observer = new global.MutationObserver(() => {
 			const shell = vetedgeShell();
 			if (!shell) return;
-			const homePatched = shell.querySelector(`[data-${HOME_MARKER}="1"]`);
+			const homePatched = shell.querySelector(`[${HOME_ATTRIBUTE}="1"]`);
 			const trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
 			if (!homePatched || !trigger || !visible(trigger)) schedule(50);
 		});
@@ -304,7 +305,7 @@
 			const host = global.document?.getElementById(PRODUCT_HOST_ID);
 			return {
 				activeShell: Boolean(shell),
-				directHome: Boolean(shell?.querySelector?.(`[data-${HOME_MARKER}="1"]`)),
+				directHome: Boolean(shell?.querySelector?.(`[${HOME_ATTRIBUTE}="1"]`)),
 				productTriggerVisible: visible(global.document?.getElementById(PRODUCT_TRIGGER_ID)),
 				productMenuBridged: host?.dataset?.vetedgeProductMenuBridge === "1",
 				productMenuOpen: !global.document?.getElementById(PRODUCT_PANEL_ID)?.hidden && global.document?.documentElement?.classList?.contains(PRODUCT_OPEN_CLASS),
