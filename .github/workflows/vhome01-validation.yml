@@ -201,6 +201,19 @@ jobs:
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_appointments", 1]'
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_consultations", 1]'
 
+          # Frappe v16 tracks setup completion per application. A brand-new CI
+          # site otherwise redirects Administrator to /desk/setup-wizard/0 and
+          # never executes the Veterinary Home page script. Mark only the two
+          # installed applications that actually declare setup-wizard stages.
+          bench --site ci.localhost execute \
+            frappe.desk.page.setup_wizard.setup_wizard.enable_setup_wizard_complete \
+            --args '["frappe"]'
+          bench --site ci.localhost execute \
+            frappe.desk.page.setup_wizard.setup_wizard.enable_setup_wizard_complete \
+            --args '["erpnext"]'
+          bench --site ci.localhost clear-cache
+          bench --site ci.localhost execute frappe.is_setup_complete | grep -Eq 'True|1'
+
       - name: Run Veterinary Home browser smoke
         working-directory: frappe-bench
         env:
