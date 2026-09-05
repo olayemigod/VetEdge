@@ -63,6 +63,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_hospitalisation_same_page_navigation_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_resource_center_loading_regression.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
@@ -93,7 +94,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: e40ea4d7dc000d17443a0571c1e246b61bfd3e1d
+          ref: 8ba77eaee73ebd4466ec25dd27afb55154bd97cd
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -124,7 +125,7 @@ jobs:
       - name: Build, migrate, and verify shared runtime
         working-directory: frappe-bench
         run: |
-          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "e40ea4d7dc000d17443a0571c1e246b61bfd3e1d"
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "8ba77eaee73ebd4466ec25dd27afb55154bd97cd"
           grep -Eq '^__version__ = "1\.1\.0"$' apps/edgesuite_ui/edgesuite_ui/__init__.py
           bench build --app edgesuite_ui
           bench build --app vetedge
@@ -153,11 +154,6 @@ jobs:
             bench --site ci.localhost run-tests --app vetedge --module "$module"
           done
 
-      # The broad historical suite is retained as a diagnostic only. It currently
-      # contains pre-existing environment/path, optional-CoreEdge and stale-fixture
-      # failures that are independent of the EdgeSuite UI candidate. Candidate
-      # compatibility is gated by the consumer contracts above plus clean install,
-      # build and migration; the diagnostic log remains available for VetEdge debt.
       - name: Run broad VetEdge suite diagnostic
         continue-on-error: true
         working-directory: frappe-bench
