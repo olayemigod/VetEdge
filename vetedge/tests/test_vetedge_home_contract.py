@@ -10,6 +10,9 @@ HOME_COMPONENT = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_home" 
 HOME_SERVICE = REPOSITORY_ROOT / "vetedge" / "services" / "home.py"
 ROLE_BUNDLES = REPOSITORY_ROOT / "vetedge" / "services" / "role_bundles.py"
 INSTALL_FOUNDATION = REPOSITORY_ROOT / "vetedge" / "install" / "__init__.py"
+SERVICE_OPERATIONS_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_service_operations.bundle.js"
+SERVICE_OPERATIONS_COMPONENT = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_service_operations" / "VetEdgeServiceOperations.vue"
+SERVICE_OPERATIONS_PAGE = REPOSITORY_ROOT / "vetedge" / "veterinary" / "page" / "vetedge_service_operations" / "vetedge_service_operations.js"
 
 
 class TestVetEdgeHomeContract(TestCase):
@@ -119,6 +122,41 @@ class TestVetEdgeHomeContract(TestCase):
 				self.assertIn("of {{ drilldown.total }}", component)
 			else:
 				self.assertIn(contract, component)
+
+	def test_home_drilldown_rows_open_exact_approved_record_destinations(self):
+		bundle = self.read(HOME_BUNDLE)
+		for contract in (
+			"APPROVED_DRILLDOWN_ROUTES",
+			"approvedDrilldownRoute",
+			"'Veterinary Appointment': (name) => `/desk/vetedge-resource-center?resource=appointments&name=${encodeURIComponent(name)}`",
+			"'Veterinary Consultation': (name) => `/desk/vetedge-clinical-workspace?consultation=${encodeURIComponent(name)}`",
+			"'Veterinary Lab Order': (name) => `/desk/vetedge-resource-center?resource=lab-orders&name=${encodeURIComponent(name)}`",
+			"'Veterinary Missed Appointment': (name) => `/desk/vetedge-front-desk-action-center?tab=missed&name=${encodeURIComponent(name)}`",
+			"'Pet Grooming Appointment': (name) => `/desk/vetedge-service-operations?resource=grooming-appointments&name=${encodeURIComponent(name)}`",
+			"'Sales Invoice': (name) => `/desk/sales-invoice/${encodeURIComponent(name)}`",
+			"this.openRoute(route)",
+			"does not have an approved Veterinary Home drill-through",
+		):
+			self.assertIn(contract, bundle)
+		self.assertNotIn("frappe.set_route('Form'", bundle)
+		self.assertNotIn('frappe.set_route("Form"', bundle)
+
+	def test_grooming_drilldown_deep_link_opens_service_detail_not_retired_list(self):
+		bundle = self.read(SERVICE_OPERATIONS_BUNDLE)
+		component = self.read(SERVICE_OPERATIONS_COMPONENT)
+		page = self.read(SERVICE_OPERATIONS_PAGE)
+
+		for contract in (
+			"GROOMING_APPOINTMENTS_TAB",
+			"value: 'grooming-appointments'",
+			"state.resource = GROOMING_APPOINTMENTS_TAB.value",
+			"requestedServiceResource()",
+		):
+			self.assertIn(contract, bundle)
+		self.assertIn("'grooming-appointments'", page)
+		self.assertIn('requestedName: params.get("name") || ""', component)
+		self.assertIn('await this.openDetail({ name });', component)
+		self.assertIn("if (this.requestedName && this.resource !== \"availability\")", component)
 
 	def test_home_branch_and_operational_date_are_first_class_context(self):
 		service = self.read(HOME_SERVICE)
