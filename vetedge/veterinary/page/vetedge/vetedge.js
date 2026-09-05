@@ -2,6 +2,18 @@ const VETEDGE_HOME_REFRESH_MAX_AGE_MS = 30000;
 const VETEDGE_HOME_DRILLDOWN_METHOD = "vetedge.services.home_postqa.get_metric_drilldown";
 const VETEDGE_HOME_DRILLDOWN_PAGE_LENGTH = 25;
 
+async function refreshMountedVetEdgeHome(wrapper) {
+	const view = wrapper.vue_app?.view;
+	if (!view) return false;
+	installVetEdgeHomeFinalQaFixes(view);
+	const stale = Date.now() - Number(wrapper.vetedge_home_last_refresh_at || 0) >= VETEDGE_HOME_REFRESH_MAX_AGE_MS;
+	if (stale) {
+		await view.loadHome?.();
+		wrapper.vetedge_home_last_refresh_at = Date.now();
+	}
+	return true;
+}
+
 function exactVetEdgeHomeRecordRoute(doctype, name) {
 	const record = encodeURIComponent(String(name || "").trim());
 	if (!record) return "";
@@ -82,18 +94,6 @@ function installVetEdgeHomeFinalQaFixes(view) {
 	return true;
 }
 
-async function refreshMountedVetEdgeHome(wrapper) {
-	const view = wrapper.vue_app?.view;
-	if (!view) return false;
-	installVetEdgeHomeFinalQaFixes(view);
-	const stale = Date.now() - Number(wrapper.vetedge_home_last_refresh_at || 0) >= VETEDGE_HOME_REFRESH_MAX_AGE_MS;
-	if (stale) {
-		await view.loadHome?.();
-		wrapper.vetedge_home_last_refresh_at = Date.now();
-	}
-	return true;
-}
-
 frappe.pages["vetedge"].on_page_load = function (wrapper) {
 	wrapper.page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -145,7 +145,7 @@ frappe.pages["vetedge"].on_page_show = function (wrapper) {
 			showFailure(
 				missing.length
 					? __("Veterinary Home requires the current EdgeSuite UI runtime. Missing: {0}", [missing.join(", ")])
-					: __("The standalone EdgeSuite UI runtime is unavailable.")
+					: __("The standalone EdgeSuite UI runtime is unavailable."),
 			);
 			return;
 		}
