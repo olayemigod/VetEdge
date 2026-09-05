@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
@@ -36,6 +37,7 @@ PERSONA_CASES = (
         "metric_keys": ("today-appointments",),
         "metric_values": {"today-appointments": 1},
         "click_metric": "today-appointments",
+        "verify_date_context": True,
         "branches": (BRANCH_A,),
         "forbidden_groups": ("Accounts / Cashier",),
     },
@@ -106,6 +108,7 @@ PERSONA_CASES = (
         "actions": ("Appointment Queue",),
         "metric_keys": ("today-appointments",),
         "metric_values": {"today-appointments": 2},
+        "verify_branch_switch": True,
         "branches": (BRANCH_A, BRANCH_B),
         "forbidden_groups": ("Accounts / Cashier",),
     },
@@ -180,6 +183,8 @@ def _assert_home(page: Page) -> None:
     page.get_by_text("Working as", exact=True).wait_for()
     page.get_by_text("Branch scope", exact=True).wait_for()
     page.get_by_text("Operational date", exact=True).first.wait_for()
+    page.locator("#vetedge-home-branch").wait_for()
+    page.locator("#vetedge-home-date").wait_for()
     if "resource-center" in page.url:
         raise AssertionError(f"Veterinary Home redirected to Resource Center: {page.url}")
     if page.get_by_role("heading", name="Veterinary Home", exact=True).count() != 1:
@@ -285,20 +290,90 @@ def _assert_clicked_metric(page: Page, payload: dict, metric_key: str) -> None:
     metric = _metric_map(payload).get(metric_key)
     if not metric:
         raise AssertionError(f"clicked metric {metric_key!r} is missing")
-    button = page.locator(".vetedge-home-stat-button").filter(has_text=metric["label"])
+    metric_label = metric["label"]
+    button = page.locator(".vetedge-home-stat-button").filter(has_text=metric_label)
     if button.count() != 1:
         raise AssertionError(
-            f"expected one clickable KPI for {metric[\"label\"]!r}, got {button.count()}"
+            f"expected one clickable KPI for {metric_label!r}, got {button.count()}"
         )
     button.click()
     panel = page.locator(".vetedge-home-drilldown")
-    panel.get_by_role("heading", name=metric["label"], exact=True).wait_for()
+    panel.get_by_role("heading", name=metric_label, exact=True).wait_for()
     panel.get_by_text(f"{metric['value']} total", exact=False).wait_for()
     footer = panel.get_by_text(f"of {metric['value']}", exact=False)
     if metric["value"] and footer.count() == 0:
         raise AssertionError(
             f"clicked KPI {metric_key!r} did not render a drilldown total matching {metric['value']}"
         )
+
+
+def _assert_branch_switching(
+    page: Page,
+    browser_context: BrowserContext,
+    payload: dict,
+    events: list[str],
+    label: str,
+) -> None:
+    operational_date = payload.get("context", {}).get("operational_date")
+    selector = page.locator("#vetedge-home-branch")
+    for branch, expected in ((BRANCH_A, 1), (BRANCH_B, 1), ("__all__", 2)):
+        selector.select_option(branch)
+        expected_label = "All permitted branches" if branch == "__all__" else branch
+        page.locator(".vetedge-home-context").get_by_text(expected_label, exact=True).wait_for()
+        branch_payload = _payload(
+            browser_context,
+            events,
+            f"{label}:branch:{branch}",
+            branch=branch,
+            operational_date=operational_date,
+        )
+        actual = _metric_map(branch_payload).get("today-appointments", {}).get("value")
+        if actual != expected:
+            raise AssertionError(
+                f"{label}: branch {branch!r} expected  {expected} today's appointments, got {actual}"
+            )
+        _assert_metric_reconciliation(
+            browser_context,
+            branch_payload,
+            ("today-appointments",),
+            events,
+            f"{label}:branch:{branch}",
+        )
+
+
+def _assert_operational_date_context(
+    page: Page,
+    browser_context: BrowserContext,
+    payload: dict,
+    events: list[str],
+    label: str,
+) -> None:
+    today_value = payload.get("context", {}).get("operational_date")
+    if today_value != date.today().isoformat():
+        raise AssertionError(
+            f"{label}: operational date should default to today; got {today_value!r}"
+        )
+    previous = (date.fromisoformat(today_value) - timedelta(days=1)).isoformat()
+    date_input = page.locator("#vetedge-home-date")
+    date_input.fill(previous)
+    date_input.dispatch_event("change")
+    page.get_by_text(previous, exact=True).last.wait_for()
+    branch = payload.get("context", {}).get("branch_value")
+    previous_payload = _payload(
+        browser_context,
+        events,
+        f"{label}:date:{previous}",
+        branch=branch,
+        operational_date=previous,
+    )
+    previous_count = _metric_map(previous_payload).get("today-appointments", {}).get("value")
+    if previous_count != 0:
+        raise AssertionError(
+            f"{label}: disposable fixture expected zero appointments on {previous}, got {previous_count}"
+        )
+    date_input.fill(today_value)
+    date_input.dispatch_event("change")
+    page.get_by_text(today_value, exact=True).last.wait_for()
 
 
 def _assert_persona(
@@ -350,6 +425,10 @@ def _assert_persona(
     )
     if case.get("click_metric"):
         _assert_clicked_metric(page, payload, case["click_metric"])
+    if case.get("verify_branch_switch"):
+        _assert_branch_switching(page, browser_context, payload, events, f"persona:{case['key']}")
+    if case.get("verify_date_context"):
+        _assert_operational_date_context(page, browser_context, payload, events, f"persona:{case['key']}")
     return payload
 
 
