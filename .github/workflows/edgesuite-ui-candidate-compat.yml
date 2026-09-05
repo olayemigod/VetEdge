@@ -63,6 +63,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_hospitalisation_same_page_navigation_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_resource_center_loading_regression.py \
             vetedge/tests/test_shared_billing_workflow_contract.py \
@@ -93,7 +94,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: e40ea4d7dc000d17443a0571c1e246b61bfd3e1d
+          ref: 821f093e893737c20eec2288ea8cf1b0f06d65ed
           token: ${{ secrets.EDGESUITE_UI_TOKEN }}
           path: edgesuite-ui-source
 
@@ -124,7 +125,7 @@ jobs:
       - name: Build, migrate, and verify shared runtime
         working-directory: frappe-bench
         run: |
-          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "e40ea4d7dc000d17443a0571c1e246b61bfd3e1d"
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "821f093e893737c20eec2288ea8cf1b0f06d65ed"
           grep -Eq '^__version__ = "1\.1\.0"$' apps/edgesuite_ui/edgesuite_ui/__init__.py
           bench build --app edgesuite_ui
           bench build --app vetedge
