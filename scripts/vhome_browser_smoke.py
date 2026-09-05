@@ -51,8 +51,18 @@ def main() -> None:
 		context = browser.new_context(viewport={"width": 1440, "height": 1000})
 		page = context.new_page()
 		events: list[str] = []
+
+		def record_page_error(error: Exception) -> None:
+			stack = getattr(error, "stack", "") or ""
+			events.append(f"pageerror: {error}\nstack: {stack}")
+
+		def record_response(response) -> None:
+			if response.status >= 400:
+				events.append(f"http:{response.status}: {response.request.method} {response.url}")
+
 		page.on("console", lambda message: events.append(f"console:{message.type}: {message.text}"))
-		page.on("pageerror", lambda error: events.append(f"pageerror: {error}"))
+		page.on("pageerror", record_page_error)
+		page.on("response", record_response)
 		page.on("requestfailed", lambda request: events.append(f"requestfailed: {request.method} {request.url} {request.failure}"))
 		try:
 			login = context.request.post(
