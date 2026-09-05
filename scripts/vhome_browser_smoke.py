@@ -92,7 +92,7 @@ PERSONA_CASES = (
         "email": "vhome-browser-manager-doctor@example.com",
         "primary": "Branch Manager",
         "additional": ("Veterinary Doctor",),
-        "actions": ("Executive Dashboard", "Start / Continue Consultation"),
+        "actions": ("Executive Dashboard", "Clinical Workspace", "Find Patient"),
         "metric_keys": ("today-appointments", "my-appointments-today"),
         "metric_values": {"today-appointments": 2},
         "branches": (BRANCH_A, BRANCH_B),
