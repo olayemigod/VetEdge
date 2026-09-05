@@ -193,10 +193,11 @@ jobs:
         working-directory: frappe-bench
         env:
           VHOME_BASE_URL: http://ci.localhost:8000
+          VHOME_ADMIN_PASSWORD: admin
           VHOME_ARTIFACT_DIR: ${{ github.workspace }}/browser-artifacts
         run: |
           mkdir -p "$VHOME_ARTIFACT_DIR"
-          bench --site ci.localhost serve --port 8000 > "$VHOME_ARTIFACT_DIR/server.log" 2>&1 &
+          PYTHONUNBUFFERED=1 bench --site ci.localhost serve --port 8000 > "$VHOME_ARTIFACT_DIR/server.log" 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
