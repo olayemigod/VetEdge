@@ -4,9 +4,9 @@ from collections.abc import Iterable
 
 import frappe
 from frappe import _
-from frappe.utils import cint, nowdate
+from frappe.utils import cint, getdate, nowdate
 
-from vetedge.coreedge_adapter import get_current_vetedge_branch
+from vetedge.coreedge_adapter import get_current_vetedge_branch, get_current_vetedge_company
 from vetedge.services.permissions import (
 	ROLE_ACCOUNTS_CASHIER,
 	ROLE_ACCOUNTS_MANAGER,
@@ -30,6 +30,9 @@ from vetedge.services.permissions import (
 )
 
 HOME_REFRESH_SECONDS = 30
+HOME_PAGE_LENGTH = 25
+HOME_PAGE_LENGTH_MAX = 100
+ALL_BRANCHES_KEY = "__all__"
 GENERIC_ACCOUNTS_ROLES = {ROLE_ACCOUNTS_MANAGER, ROLE_ACCOUNTS_USER}
 
 PERSONA_DEFINITIONS = (
@@ -146,6 +149,69 @@ FEATURE_ROUTE_FLAGS = (
 	("/desk/vetedge-service-operations?resource=grooming-sessions", "enable_grooming"),
 )
 
+DRILLDOWN_FIELD_CANDIDATES = {
+	"Veterinary Appointment": (
+		"patient",
+		"appointment_datetime",
+		"status",
+		"practitioner",
+		"service_branch",
+		"branch",
+	),
+	"Veterinary Consultation": (
+		"patient",
+		"consultation_datetime",
+		"status",
+		"consulting_practitioner",
+		"service_branch",
+		"branch",
+	),
+	"Veterinary Lab Order": (
+		"patient",
+		"consultation",
+		"status",
+		"ordered_on",
+		"sample_collected_on",
+		"service_branch",
+		"branch",
+	),
+	"Veterinary Missed Appointment": (
+		"appointment",
+		"patient",
+		"status",
+		"missed_on",
+		"resolved",
+		"service_branch",
+		"branch",
+	),
+	"Pet Grooming Appointment": (
+		"patient",
+		"pet",
+		"scheduled_datetime",
+		"status",
+		"groomer",
+		"service_branch",
+		"branch",
+	),
+	"Sales Invoice": (
+		"customer",
+		"posting_date",
+		"status",
+		"grand_total",
+		"outstanding_amount",
+		"branch",
+	),
+}
+
+DRILLDOWN_ORDER_CANDIDATES = {
+	"Veterinary Appointment": ("appointment_datetime", "modified"),
+	"Veterinary Consultation": ("consultation_datetime", "modified"),
+	"Veterinary Lab Order": ("ordered_on", "modified"),
+	"Veterinary Missed Appointment": ("missed_on", "modified"),
+	"Pet Grooming Appointment": ("scheduled_datetime", "modified"),
+	"Sales Invoice": ("posting_date", "modified"),
+}
+
 
 def _require_access() -> str:
 	user = getattr(frappe.session, "user", None)
@@ -189,17 +255,111 @@ def _matched_personas(roles: set[str]) -> list[dict]:
 	return personas
 
 
-def _current_branch(user: str) -> tuple[str, list[str], bool]:
+def _resolve_operational_date(value: str | None) -> str:
+	if not value:
+		return nowdate()
 	try:
-		branch = str(get_current_vetedge_branch() or "").strip()
+		return str(getdate(value))
 	except Exception:
-		branch = ""
+		frappe.throw(_("Select a valid operational date."), frappe.ValidationError)
+
+
+def _current_branch(
+	user: str,
+	requested_branch: str | None = None,
+) -> tuple[str, list[str], bool]:
+	assigned = list(dict.fromkeys(get_assigned_branches(user) or []))
+	global_access = user_has_global_branch_access(user)
+
+	if requested_branch == ALL_BRANCHES_KEY:
+		return "", assigned, global_access
+
+	branch = str(requested_branch or "").strip()
+	if not branch:
+		try:
+			branch = str(get_current_vetedge_branch() or "").strip()
+		except Exception:
+			branch = ""
+	if not branch:
+		try:
+			branch = str(frappe.defaults.get_user_default("branch") or "").strip()
+		except Exception:
+			branch = ""
+	if not branch and len(assigned) == 1:
+		branch = assigned[0]
+
 	if branch.lower() in {"all", "all branches"}:
 		branch = ""
+
 	if branch:
 		can_access_branch_data(user, branch, raise_exception=True)
-	assigned = list(dict.fromkeys(get_assigned_branches(user) or []))
-	return branch, assigned, user_has_global_branch_access(user)
+
+	return branch, assigned, global_access
+
+
+def _branch_options(
+	user: str,
+	assigned: list[str],
+	global_access: bool,
+	current_branch: str,
+) -> list[dict]:
+	options = [{"value": ALL_BRANCHES_KEY, "label": _("All permitted branches"), "company": ""}]
+	if not _existing_doctype("Branch"):
+		return options + [{"value": name, "label": name, "company": ""} for name in assigned if name]
+
+	meta = frappe.get_meta("Branch")
+	fields = ["name"]
+	if meta.has_field("branch"):
+		fields.append("branch")
+	if meta.has_field("company"):
+		fields.append("company")
+
+	filters: dict = {}
+	if assigned and not global_access:
+		filters["name"] = ["in", assigned]
+	else:
+		try:
+			company = str(get_current_vetedge_company() or "").strip()
+		except Exception:
+			company = ""
+		if company and meta.has_field("company"):
+			filters["company"] = company
+
+	rows = []
+	if frappe.has_permission("Branch", "read"):
+		try:
+			rows = frappe.get_list(
+				"Branch",
+				fields=fields,
+				filters=filters,
+				order_by="name asc",
+				limit_page_length=500,
+			)
+		except frappe.PermissionError:
+			rows = []
+
+	names_seen = set()
+	for row in rows:
+		name = row.get("name")
+		if not name or name in names_seen:
+			continue
+		names_seen.add(name)
+		options.append(
+			{
+				"value": name,
+				"label": row.get("branch") or name,
+				"company": row.get("company") or "",
+			}
+		)
+
+	for name in [*assigned, current_branch]:
+		if name and name not in names_seen:
+			names_seen.add(name)
+			options.append({"value": name, "label": name, "company": ""})
+
+	if len(options) == 2 and options[1]["value"] != ALL_BRANCHES_KEY:
+		return options[1:]
+	return options
 
 
 def _branch_field(meta) -> str:
@@ -209,12 +369,21 @@ def _branch_field(meta) -> str:
 	return ""
 
 
-def _branch_filters(doctype: str, branch: str, assigned: list[str], global_access: bool) -> dict:
+def _branch_filters(
+	doctype: str,
+	branch: str,
+	assigned: list[str],
+	global_access: bool,
+) -> dict | None:
 	if not _existing_doctype(doctype):
 		return {}
 	meta = frappe.get_meta(doctype)
 	fieldname = _branch_field(meta)
 	if not fieldname:
+		# Do not present a company-wide number under an explicit/restricted branch
+		# label when the source DocType cannot be branch-filtered.
+		if branch or (assigned and not global_access):
+			return None
 		return {}
 	if branch:
 		return {fieldname: branch}
@@ -224,7 +393,7 @@ def _branch_filters(doctype: str, branch: str, assigned: list[str], global_acces
 
 
 def _permission_count(doctype: str, filters: dict | None = None) -> int | None:
-	if not _existing_doctype(doctype) or not frappe.has_permission(doctype, "read"):
+	if filters is None or not _existing_doctype(doctype) or not frappe.has_permission(doctype, "read"):
 		return None
 	try:
 		rows = frappe.get_list(
@@ -238,7 +407,9 @@ def _permission_count(doctype: str, filters: dict | None = None) -> int | None:
 		return None
 
 
-def _with(filters: dict, **values) -> dict:
+def _with(filters: dict | None, **values) -> dict | None:
+	if filters is None:
+		return None
 	result = dict(filters)
 	for key, value in values.items():
 		if value is not None:
@@ -246,9 +417,46 @@ def _with(filters: dict, **values) -> dict:
 	return result
 
 
-def _today_range() -> list:
-	today = nowdate()
-	return ["between", [f"{today} 00:00:00", f"{today} 23:59:59"]]
+def _date_range(operational_date: str) -> list:
+	return [
+		"between",
+		[f"{operational_date} 00:00:00", f"{operational_date} 23:59:59"],
+	]
+
+
+def _date_metric_label(today_label: str, dated_label: str, operational_date: str) -> str:
+	return _(today_label) if operational_date == nowdate() else _(dated_label).format(date=operational_date)
+
+
+def _drilldown_fields(doctype: str) -> tuple[list[str], list[dict]]:
+	if not _existing_doctype(doctype):
+		return ["name"], [{"fieldname": "name", "label": doctype}]
+	meta = frappe.get_meta(doctype)
+	fields = ["name"]
+	columns = [{"fieldname": "name", "label": meta.name}]
+	for fieldname in DRILLDOWN_FIELD_CANDIDATES.get(doctype, ()):
+		if fieldname in fields or not meta.has_field(fieldname):
+			continue
+		field = meta.get_field(fieldname)
+		fields.append(fieldname)
+		columns.append(
+			{
+				"fieldname": fieldname,
+				"label": field.label or fieldname.replace("_", " ").title(),
+				"fieldtype": field.fieldtype or "Data",
+			}
+		)
+	return fields, columns
+
+
+def _drilldown_order_by(doctype: str) -> str:
+	if not _existing_doctype(doctype):
+		return "modified desc"
+	meta = frappe.get_meta(doctype)
+	for fieldname in DRILLDOWN_ORDER_CANDIDATES.get(doctype, ("modified",)):
+		if fieldname == "modified" or meta.has_field(fieldname):
+			return f"{fieldname} desc"
+	return "modified desc"
 
 
 def _metric(
@@ -257,9 +465,14 @@ def _metric(
 	value: int | None,
 	helper: str,
 	route: str,
+	*,
+	doctype: str,
+	filters: dict | None,
+	date_scope: str,
+	scope_label: str,
 	tone: str = "neutral",
 ) -> dict | None:
-	if value is None:
+	if value is None or filters is None:
 		return None
 	return {
 		"key": key,
@@ -268,6 +481,14 @@ def _metric(
 		"helper": helper,
 		"route": route,
 		"tone": tone,
+		"date_scope": date_scope,
+		"scope_label": scope_label,
+		"drilldown_available": True,
+		"_query": {
+			"doctype": doctype,
+			"filters": filters,
+			"order_by": _drilldown_order_by(doctype),
+		},
 	}
 
 
@@ -280,39 +501,51 @@ def _build_appointment_metrics(
 	metrics: list[dict | None],
 	user: str,
 	persona_keys: set[str],
-	filters: dict,
+	filters: dict | None,
+	operational_date: str,
 ) -> None:
-	if not _feature_enabled("enable_appointments") or not _existing_doctype("Veterinary Appointment"):
+	if filters is None or not _feature_enabled("enable_appointments") or not _existing_doctype("Veterinary Appointment"):
 		return
 
 	meta = frappe.get_meta("Veterinary Appointment")
+	date_filters = dict(filters)
+	if meta.has_field("appointment_datetime"):
+		date_filters["appointment_datetime"] = _date_range(operational_date)
+
 	broad_personas = {"administrator", "branch-manager", "front-desk", "nurse"}
 	if persona_keys & broad_personas:
-		today_filters = dict(filters)
-		if meta.has_field("appointment_datetime"):
-			today_filters["appointment_datetime"] = _today_range()
-			_append_metric(
-				metrics,
-				_metric(
-					"today-appointments",
-					_("Today's Appointments"),
-					_permission_count("Veterinary Appointment", today_filters),
-					_("Visible in your current branch scope"),
-					"/desk/vetedge-resource-center?resource=appointments",
-				),
-			)
+		label = _date_metric_label("Today's Appointments", "Appointments — {date}", operational_date)
+		_append_metric(
+			metrics,
+			_metric(
+				"today-appointments",
+				label,
+				_permission_count("Veterinary Appointment", date_filters),
+				_("Appointments on the selected operational date"),
+				"/desk/vetedge-resource-center?resource=appointments",
+				doctype="Veterinary Appointment",
+				filters=date_filters,
+				date_scope="operational_date",
+				scope_label=_("Selected operational date"),
+			),
+		)
+		waiting_filters = _with(
+			date_filters,
+			status=["in", ["Confirmed", "Checked In"]],
+		)
 		_append_metric(
 			metrics,
 			_metric(
 				"waiting-appointments",
-				_("Waiting / Checked In"),
-				_permission_count(
-					"Veterinary Appointment",
-					_with(filters, status=["in", ["Confirmed", "Checked In"]]),
-				),
-				_("Patients requiring operational attention"),
+				_date_metric_label("Waiting / Checked In Today", "Waiting / Checked In — {date}", operational_date),
+				_permission_count("Veterinary Appointment", waiting_filters),
+				_("Confirmed or checked-in appointments on the selected date"),
 				"/desk/vetedge-front-desk-action-center?tab=queue",
-				"warning",
+				doctype="Veterinary Appointment",
+				filters=waiting_filters,
+				date_scope="operational_date",
+				scope_label=_("Selected operational date"),
+				tone="warning",
 			),
 		)
 
@@ -320,31 +553,40 @@ def _build_appointment_metrics(
 		my_filters = dict(filters)
 		if meta.has_field("practitioner"):
 			my_filters["practitioner"] = user
-		my_today_filters = dict(my_filters)
+		my_date_filters = dict(my_filters)
 		if meta.has_field("appointment_datetime"):
-			my_today_filters["appointment_datetime"] = _today_range()
-			_append_metric(
-				metrics,
-				_metric(
-					"my-appointments-today",
-					_("My Appointments Today"),
-					_permission_count("Veterinary Appointment", my_today_filters),
-					_("Appointments assigned to you today"),
-					"/desk/vetedge-resource-center?resource=appointments",
-				),
-			)
+			my_date_filters["appointment_datetime"] = _date_range(operational_date)
+		_append_metric(
+			metrics,
+			_metric(
+				"my-appointments-today",
+				_date_metric_label("My Appointments Today", "My Appointments — {date}", operational_date),
+				_permission_count("Veterinary Appointment", my_date_filters),
+				_("Appointments assigned to you on the selected date"),
+				"/desk/vetedge-resource-center?resource=appointments",
+				doctype="Veterinary Appointment",
+				filters=my_date_filters,
+				date_scope="operational_date",
+				scope_label=_("Selected operational date"),
+			),
+		)
+		waiting_for_me_filters = _with(
+			my_date_filters,
+			status=["in", ["Confirmed", "Checked In"]],
+		)
 		_append_metric(
 			metrics,
 			_metric(
 				"waiting-for-me",
-				_("Waiting for Me"),
-				_permission_count(
-					"Veterinary Appointment",
-					_with(my_filters, status=["in", ["Confirmed", "Checked In"]]),
-				),
-				_("Your confirmed or checked-in patients"),
+				_date_metric_label("Waiting for Me Today", "Waiting for Me — {date}", operational_date),
+				_permission_count("Veterinary Appointment", waiting_for_me_filters),
+				_("Your confirmed or checked-in patients on the selected date"),
 				"/desk/vetedge-front-desk-action-center?tab=queue",
-				"warning",
+				doctype="Veterinary Appointment",
+				filters=waiting_for_me_filters,
+				date_scope="operational_date",
+				scope_label=_("Selected operational date"),
+				tone="warning",
 			),
 		)
 
@@ -353,41 +595,50 @@ def _build_consultation_metrics(
 	metrics: list[dict | None],
 	user: str,
 	persona_keys: set[str],
-	filters: dict,
+	filters: dict | None,
+	operational_date: str,
 ) -> None:
-	if not _feature_enabled("enable_consultations") or not _existing_doctype("Veterinary Consultation"):
+	if filters is None or not _feature_enabled("enable_consultations") or not _existing_doctype("Veterinary Consultation"):
 		return
 
 	meta = frappe.get_meta("Veterinary Consultation")
 	broad_personas = {"administrator", "branch-manager", "nurse"}
 	if persona_keys & broad_personas:
+		active_filters = _with(filters, status=["not in", ["Completed", "Cancelled"]])
 		_append_metric(
 			metrics,
 			_metric(
 				"active-consultations",
 				_("Active Consultations"),
-				_permission_count(
-					"Veterinary Consultation",
-					_with(filters, status=["not in", ["Completed", "Cancelled"]]),
-				),
-				_("Not completed or cancelled"),
+				_permission_count("Veterinary Consultation", active_filters),
+				_("Current open work; not limited to the selected date"),
 				"/desk/vetedge-clinical-workspace",
-				"primary",
+				doctype="Veterinary Consultation",
+				filters=active_filters,
+				date_scope="current_open",
+				scope_label=_("Current open work"),
+				tone="primary",
 			),
 		)
 		if meta.has_field("consultation_datetime"):
+			completed_filters = _with(
+				filters,
+				status="Completed",
+				consultation_datetime=_date_range(operational_date),
+			)
 			_append_metric(
 				metrics,
 				_metric(
 					"completed-today",
-					_("Completed Today"),
-					_permission_count(
-						"Veterinary Consultation",
-						_with(filters, status="Completed", consultation_datetime=_today_range()),
-					),
-					_("Completed consultations today"),
+					_date_metric_label("Completed Today", "Completed — {date}", operational_date),
+					_permission_count("Veterinary Consultation", completed_filters),
+					_("Completed consultations on the selected date"),
 					"/desk/vetedge-clinical-workspace",
-					"success",
+					doctype="Veterinary Consultation",
+					filters=completed_filters,
+					date_scope="operational_date",
+					scope_label=_("Selected operational date"),
+					tone="success",
 				),
 			)
 
@@ -395,49 +646,59 @@ def _build_consultation_metrics(
 		my_filters = dict(filters)
 		if meta.has_field("consulting_practitioner"):
 			my_filters["consulting_practitioner"] = user
+		my_active_filters = _with(my_filters, status=["not in", ["Completed", "Cancelled"]])
 		_append_metric(
 			metrics,
 			_metric(
 				"my-active-consultations",
 				_("My Active Consultations"),
-				_permission_count(
-					"Veterinary Consultation",
-					_with(my_filters, status=["not in", ["Completed", "Cancelled"]]),
-				),
-				_("Your consultations not completed or cancelled"),
+				_permission_count("Veterinary Consultation", my_active_filters),
+				_("Your current open consultations; not limited to the selected date"),
 				"/desk/vetedge-clinical-workspace",
-				"primary",
+				doctype="Veterinary Consultation",
+				filters=my_active_filters,
+				date_scope="current_open",
+				scope_label=_("Current open work"),
+				tone="primary",
 			),
 		)
 		if meta.has_field("consultation_datetime"):
+			my_completed_filters = _with(
+				my_filters,
+				status="Completed",
+				consultation_datetime=_date_range(operational_date),
+			)
 			_append_metric(
 				metrics,
 				_metric(
 					"my-completed-today",
-					_("My Completed Today"),
-					_permission_count(
-						"Veterinary Consultation",
-						_with(my_filters, status="Completed", consultation_datetime=_today_range()),
-					),
-					_("Your consultations completed today"),
+					_date_metric_label("My Completed Today", "My Completed — {date}", operational_date),
+					_permission_count("Veterinary Consultation", my_completed_filters),
+					_("Your consultations completed on the selected date"),
 					"/desk/vetedge-clinical-workspace",
-					"success",
+					doctype="Veterinary Consultation",
+					filters=my_completed_filters,
+					date_scope="operational_date",
+					scope_label=_("Selected operational date"),
+					tone="success",
 				),
 			)
 
 	if "dispensary" in persona_keys and _feature_enabled("enable_dispensary_flow") and meta.has_field("dispensary_status"):
+		pending_filters = _with(filters, dispensary_status="Pending Dispensary")
 		_append_metric(
 			metrics,
 			_metric(
 				"pending-dispensary",
 				_("Pending Dispensary"),
-				_permission_count(
-					"Veterinary Consultation",
-					_with(filters, dispensary_status="Pending Dispensary"),
-				),
-				_("Consultations awaiting fulfilment"),
+				_permission_count("Veterinary Consultation", pending_filters),
+				_("Current consultations awaiting fulfilment"),
 				"/desk/vetedge-clinical-workspace",
-				"warning",
+				doctype="Veterinary Consultation",
+				filters=pending_filters,
+				date_scope="current_open",
+				scope_label=_("Current open work"),
+				tone="warning",
 			),
 		)
 
@@ -448,6 +709,7 @@ def _build_metrics(
 	branch: str,
 	assigned: list[str],
 	global_access: bool,
+	operational_date: str,
 ) -> list[dict]:
 	metrics: list[dict | None] = []
 
@@ -456,71 +718,85 @@ def _build_metrics(
 	lab_filters = _branch_filters("Veterinary Lab Order", branch, assigned, global_access)
 	missed_filters = _branch_filters("Veterinary Missed Appointment", branch, assigned, global_access)
 
-	_build_appointment_metrics(metrics, user, persona_keys, appointment_filters)
-	_build_consultation_metrics(metrics, user, persona_keys, consultation_filters)
+	_build_appointment_metrics(metrics, user, persona_keys, appointment_filters, operational_date)
+	_build_consultation_metrics(metrics, user, persona_keys, consultation_filters, operational_date)
 
 	if (
-		_feature_enabled("enable_vetedge")
+		lab_filters is not None
+		and _feature_enabled("enable_vetedge")
 		and _existing_doctype("Veterinary Lab Order")
 		and frappe.get_meta("Veterinary Lab Order").has_field("status")
 	):
 		if persona_keys & {"lab"}:
+			pending_filters = _with(
+				lab_filters,
+				status=[
+					"in",
+					["Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending"],
+				],
+			)
 			_append_metric(
 				metrics,
 				_metric(
 					"lab-pending",
 					_("Pending Lab Work"),
-					_permission_count(
-						"Veterinary Lab Order",
-						_with(
-							lab_filters,
-							status=[
-								"in",
-								["Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending"],
-							],
-						),
-					),
-					_("Laboratory orders still requiring processing"),
+					_permission_count("Veterinary Lab Order", pending_filters),
+					_("Current laboratory orders still requiring processing"),
 					"/desk/vetedge-resource-center?resource=lab-orders",
-					"warning",
+					doctype="Veterinary Lab Order",
+					filters=pending_filters,
+					date_scope="current_open",
+					scope_label=_("Current open work"),
+					tone="warning",
 				),
 			)
 		if persona_keys & {"administrator", "branch-manager", "doctor", "nurse"}:
+			review_filters = _with(
+				lab_filters,
+				status=["in", ["Result Entered", "Awaiting Review"]],
+			)
 			_append_metric(
 				metrics,
 				_metric(
 					"lab-review",
 					_("Lab Results to Review"),
-					_permission_count(
-						"Veterinary Lab Order",
-						_with(lab_filters, status=["in", ["Result Entered", "Awaiting Review"]]),
-					),
-					_("Results ready for clinical review"),
+					_permission_count("Veterinary Lab Order", review_filters),
+					_("Current results ready for clinical review"),
 					"/desk/vetedge-resource-center?resource=lab-orders",
-					"warning",
+					doctype="Veterinary Lab Order",
+					filters=review_filters,
+					date_scope="current_open",
+					scope_label=_("Current open work"),
+					tone="warning",
 				),
 			)
 
 	if "groomer" in persona_keys and _feature_enabled("enable_grooming") and _existing_doctype("Pet Grooming Appointment"):
 		meta = frappe.get_meta("Pet Grooming Appointment")
 		filters = _branch_filters("Pet Grooming Appointment", branch, assigned, global_access)
-		if meta.has_field("groomer"):
-			filters["groomer"] = user
-		if meta.has_field("scheduled_datetime"):
-			filters["scheduled_datetime"] = _today_range()
-		_append_metric(
-			metrics,
-			_metric(
-				"grooming-today",
-				_("My Grooming Appointments Today"),
-				_permission_count("Pet Grooming Appointment", filters),
-				_("Grooming appointments assigned to you today"),
-				"/desk/vetedge-resource-center?resource=grooming",
-			),
-		)
+		if filters is not None:
+			if meta.has_field("groomer"):
+				filters["groomer"] = user
+			if meta.has_field("scheduled_datetime"):
+				filters["scheduled_datetime"] = _date_range(operational_date)
+			_append_metric(
+				metrics,
+				_metric(
+					"grooming-today",
+					_date_metric_label("My Grooming Appointments Today", "My Grooming Appointments — {date}", operational_date),
+					_permission_count("Pet Grooming Appointment", filters),
+					_("Grooming appointments assigned to you on the selected date"),
+					"/desk/vetedge-resource-center?resource=grooming",
+					doctype="Pet Grooming Appointment",
+					filters=filters,
+					date_scope="operational_date",
+					scope_label=_("Selected operational date"),
+				),
+			)
 
 	if (
-		persona_keys & {"administrator", "branch-manager", "front-desk"}
+		missed_filters is not None
+		and persona_keys & {"administrator", "branch-manager", "front-desk"}
 		and _feature_enabled("enable_appointments")
 		and _existing_doctype("Veterinary Missed Appointment")
 	):
@@ -534,31 +810,44 @@ def _build_metrics(
 				"missed-follow-up",
 				_("Missed Follow-up"),
 				_permission_count("Veterinary Missed Appointment", filters),
-				_("Unresolved missed appointments"),
+				_("Current unresolved missed appointments"),
 				"/desk/vetedge-front-desk-action-center?tab=missed",
-				"danger",
+				doctype="Veterinary Missed Appointment",
+				filters=filters,
+				date_scope="current_open",
+				scope_label=_("Current open work"),
+				tone="danger",
 			),
 		)
 
 	if persona_keys & {"accounts", "branch-manager", "administrator"} and _existing_doctype("Sales Invoice"):
 		meta = frappe.get_meta("Sales Invoice")
 		filters = _branch_filters("Sales Invoice", branch, assigned, global_access)
-		filters["docstatus"] = 1
-		if meta.has_field("outstanding_amount"):
-			filters["outstanding_amount"] = [">", 0]
-		_append_metric(
-			metrics,
-			_metric(
-				"outstanding-invoices",
-				_("Outstanding Invoices"),
-				_permission_count("Sales Invoice", filters),
-				_("Submitted invoices with balance due"),
-				"/desk/sales-invoice",
-				"warning",
-			),
-		)
+		if filters is not None:
+			filters["docstatus"] = 1
+			if meta.has_field("outstanding_amount"):
+				filters["outstanding_amount"] = [">", 0]
+			_append_metric(
+				metrics,
+				_metric(
+					"outstanding-invoices",
+					_("Outstanding Invoices"),
+					_permission_count("Sales Invoice", filters),
+					_("Current submitted invoices with balance due"),
+					"/desk/sales-invoice",
+					doctype="Sales Invoice",
+					filters=filters,
+					date_scope="current_open",
+					scope_label=_("Current open work"),
+					tone="warning",
+				),
+			)
 
 	return [metric for metric in metrics if metric is not None]
+
+
+def _public_metric(metric: dict) -> dict:
+	return {key: value for key, value in metric.items() if not key.startswith("_")}
 
 
 def _can_use_action(doctype: str | None, permission_type: str) -> bool:
@@ -616,36 +905,146 @@ def _build_attention(metrics: list[dict]) -> list[dict]:
 				"count": value,
 				"route": metric["route"],
 				"tone": metric.get("tone") or "warning",
+				"date_scope": metric.get("date_scope"),
+				"scope_label": metric.get("scope_label"),
 			}
 		)
 	return sorted(attention, key=lambda row: (-row["priority"], row["title"]))[:6]
 
 
-@frappe.whitelist()
-def get_home_payload() -> dict:
+def _home_state(
+	operational_date: str | None = None,
+	branch: str | None = None,
+) -> tuple[str, list[dict], str, list[str], bool, str, list[dict]]:
 	user = _require_access()
 	roles = get_user_roles(user)
 	personas = _matched_personas(roles)
 	if not personas:
 		frappe.throw(_("No Veterinary operational role is assigned to this user."), frappe.PermissionError)
 
-	branch, assigned_branches, global_access = _current_branch(user)
+	resolved_date = _resolve_operational_date(operational_date)
+	resolved_branch, assigned_branches, global_access = _current_branch(user, branch)
 	persona_keys = {persona["key"] for persona in personas}
-	metrics = _build_metrics(user, persona_keys, branch, assigned_branches, global_access)
+	metrics = _build_metrics(
+		user,
+		persona_keys,
+		resolved_branch,
+		assigned_branches,
+		global_access,
+		resolved_date,
+	)
+	return (
+		user,
+		personas,
+		resolved_branch,
+		assigned_branches,
+		global_access,
+		resolved_date,
+		metrics,
+	)
+
+
+@frappe.whitelist()
+def get_home_payload(
+	operational_date: str | None = None,
+	branch: str | None = None,
+) -> dict:
+	(
+		user,
+		personas,
+		resolved_branch,
+		assigned_branches,
+		global_access,
+		resolved_date,
+		metrics,
+	) = _home_state(operational_date, branch)
+
+	branch_options = _branch_options(user, assigned_branches, global_access, resolved_branch)
+	selected_branch_value = resolved_branch or ALL_BRANCHES_KEY
 
 	return {
 		"user": user,
 		"primary_persona": personas[0],
 		"personas": personas,
 		"context": {
-			"branch": branch,
-			"branch_label": branch or _("All permitted branches"),
+			"branch": resolved_branch,
+			"branch_value": selected_branch_value,
+			"branch_label": resolved_branch or _("All permitted branches"),
+			"branch_options": branch_options,
 			"assigned_branches": assigned_branches,
 			"global_branch_access": global_access,
-			"date": nowdate(),
+			"date": resolved_date,
+			"operational_date": resolved_date,
+			"today": nowdate(),
+			"all_branches_key": ALL_BRANCHES_KEY,
 		},
-		"metrics": metrics,
+		"metrics": [_public_metric(metric) for metric in metrics],
 		"attention": _build_attention(metrics),
 		"quick_actions": _build_actions(personas),
 		"refresh_seconds": HOME_REFRESH_SECONDS,
+	}
+
+
+@frappe.whitelist()
+def get_metric_drilldown(
+	metric_key: str,
+	operational_date: str | None = None,
+	branch: str | None = None,
+	limit_start: int = 0,
+	limit_page_length: int = HOME_PAGE_LENGTH,
+) -> dict:
+	if not metric_key:
+		frappe.throw(_("Select a Veterinary Home metric to open."), frappe.ValidationError)
+
+	(
+		_user,
+		_personas,
+		resolved_branch,
+		assigned_branches,
+		global_access,
+		resolved_date,
+		metrics,
+	) = _home_state(operational_date, branch)
+
+	metric = next((row for row in metrics if row.get("key") == metric_key), None)
+	if not metric or not metric.get("_query"):
+		frappe.throw(_("This Veterinary Home metric is not available in your current access."), frappe.PermissionError)
+
+	query = metric["_query"]
+	doctype = query["doctype"]
+	filters = query["filters"]
+	total = _permission_count(doctype, filters)
+	if total is None:
+		frappe.throw(_("You do not have permission to view this Veterinary Home metric."), frappe.PermissionError)
+
+	start = max(0, cint(limit_start))
+	page_length = min(HOME_PAGE_LENGTH_MAX, max(1, cint(limit_page_length) or HOME_PAGE_LENGTH))
+	fields, columns = _drilldown_fields(doctype)
+	try:
+		rows = frappe.get_list(
+			doctype,
+			fields=fields,
+			filters=filters,
+			order_by=query["order_by"],
+			limit_start=start,
+			limit_page_length=page_length,
+		)
+	except frappe.PermissionError:
+		frappe.throw(_("You do not have permission to view this Veterinary Home metric."), frappe.PermissionError)
+
+	return {
+		"metric": _public_metric(metric),
+		"doctype": doctype,
+		"total": cint(total),
+		"rows": rows,
+		"columns": columns,
+		"limit_start": start,
+		"limit_page_length": page_length,
+		"context": {
+			"branch": resolved_branch,
+			"branch_label": resolved_branch or _("All permitted branches"),
+			"assigned_branches": assigned_branches,
+			"global_branch_access": global_access,
+			"operational_date": resolved_date,
+		},
 	}
