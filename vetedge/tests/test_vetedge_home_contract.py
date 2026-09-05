@@ -103,8 +103,26 @@ class TestVetEdgeHomeContract(TestCase):
 			'consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}',
 			'if persona_keys & {"lab"}',
 			'"lab-pending"',
-			'if persona_keys & {"administrator", "branch-manager", "front-desk"}',
-			'if persona_keys & {"accounts", "branch-manager", "administrator"}',
+			'persona_keys & {"administrator", "branch-manager", "front-desk"}',
+			'persona_keys & {"accounts", "branch-manager", "administrator"}',
+		):
+			self.assertIn(contract, service)
+
+	def test_home_respects_existing_veterinary_feature_switches(self):
+		service = self.read(HOME_SERVICE)
+		for contract in (
+			"get_veterinary_settings_flag",
+			"FEATURE_ROUTE_FLAGS",
+			"_route_feature_enabled",
+			'_feature_enabled("enable_appointments")',
+			'_feature_enabled("enable_consultations")',
+			'_feature_enabled("enable_dispensary_flow")',
+			'_feature_enabled("enable_vetedge")',
+			'("/desk/vetedge-resource-center?resource=vaccinations", "enable_vaccination")',
+			'("/desk/vetedge-hospitalisation-operations", "enable_veterinary_hospitalisation")',
+			'("/desk/stock-expiry-monitor", "enable_stock_expiry_monitor")',
+			'("/desk/vetedge-resource-center?resource=grooming", "enable_grooming")',
+			"not _route_feature_enabled(route)",
 		):
 			self.assertIn(contract, service)
 
