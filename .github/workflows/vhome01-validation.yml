@@ -10,6 +10,7 @@ on:
       - "vetedge/public/js/vetedge_home.bundle.js"
       - "vetedge/public/js/vetedge_home/**"
       - "vetedge/tests/test_vetedge_home_contract.py"
+      - "vetedge/tests/test_vetedge_home_runtime.py"
       - "vetedge/tests/test_vetedge_professional_ui_contract.py"
       - ".github/workflows/vhome01-validation.yml"
   workflow_dispatch:
@@ -48,7 +49,8 @@ jobs:
         run: |
           ruff check --ignore I001 \
             vetedge/services/home.py \
-            vetedge/tests/test_vetedge_home_contract.py
+            vetedge/tests/test_vetedge_home_contract.py \
+            vetedge/tests/test_vetedge_home_runtime.py
 
       - name: Check Home JavaScript syntax
         run: |
@@ -60,3 +62,116 @@ jobs:
           python -m pytest -q \
             vetedge/tests/test_vetedge_home_contract.py \
             vetedge/tests/test_vetedge_professional_ui_contract.py
+
+  frappe-v16:
+    name: VHOME-01 Frappe v16 standalone
+    needs: source-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install bench prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev pkg-config redis-tools
+          python -m pip install --upgrade frappe-bench
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create clean Frappe v16 bench
+        run: |
+          bench init \
+            --frappe-branch version-16 \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            frappe-bench
+
+          cd frappe-bench
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Check out authoritative EdgeSuite UI main
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          ref: main
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
+
+      - name: Fetch ERPNext, Payments and local applications
+        working-directory: frappe-bench
+        run: |
+          bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
+          bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
+          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "$GITHUB_WORKSPACE"
+
+      - name: Create standalone VetEdge site
+        working-directory: frappe-bench
+        run: |
+          bench new-site ci.localhost \
+            --db-host 127.0.0.1 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
+          bench --site ci.localhost install-app edgesuite_ui
+          bench --site ci.localhost install-app vetedge
+          bench --site ci.localhost set-config edge_platform_mode standalone
+          bench --site ci.localhost set-config coreedge_required 0
+
+      - name: Build and migrate exact PR head
+        working-directory: frappe-bench
+        run: |
+          bench build --app edgesuite_ui
+          bench build --app vetedge
+          bench --site ci.localhost migrate
+
+      - name: Run Veterinary Home installed-site tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_home_runtime
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_home_contract
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_professional_ui_contract
