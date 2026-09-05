@@ -1,0 +1,62 @@
+name: VetEdge VHOME-01 Validation
+
+on:
+  pull_request:
+    branches:
+      - qa/vetedge-full-implementation-2026-08-29
+    paths:
+      - "vetedge/services/home.py"
+      - "vetedge/veterinary/page/vetedge/vetedge.js"
+      - "vetedge/public/js/vetedge_home.bundle.js"
+      - "vetedge/public/js/vetedge_home/**"
+      - "vetedge/tests/test_vetedge_home_contract.py"
+      - "vetedge/tests/test_vetedge_professional_ui_contract.py"
+      - ".github/workflows/vhome01-validation.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: vhome01-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    name: VHOME-01 source contracts
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile Home backend
+        run: python -m py_compile vetedge/services/home.py
+
+      - name: Lint Home contracts
+        run: |
+          ruff check --ignore I001 \
+            vetedge/services/home.py \
+            vetedge/tests/test_vetedge_home_contract.py
+
+      - name: Check Home JavaScript syntax
+        run: |
+          node --check vetedge/veterinary/page/vetedge/vetedge.js
+          node --check vetedge/public/js/vetedge_home.bundle.js
+
+      - name: Run Home source contracts
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_vetedge_home_contract.py \
+            vetedge/tests/test_vetedge_professional_ui_contract.py
