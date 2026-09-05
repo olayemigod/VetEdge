@@ -55,34 +55,47 @@
 		return String(labelNode?.textContent || toggle?.textContent || "").trim();
 	}
 
+	function syncDirectHomeState(item) {
+		if (!item) return false;
+		item.dataset[HOME_DATASET_KEY] = "1";
+		item.setAttribute("aria-label", "Home");
+		item.setAttribute("title", "Home");
+		item.removeAttribute("aria-expanded");
+		item.removeAttribute("aria-controls");
+		const active = directHomeTarget();
+		item.classList.toggle("active", active);
+		if (active) item.setAttribute("aria-current", "page");
+		else item.removeAttribute("aria-current");
+		return true;
+	}
+
 	function patchDirectHome(shell) {
+		const existing = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (existing) return syncDirectHomeState(existing);
+
 		const homeSection = Array.from(shell.querySelectorAll(".edge-sidebar__section")).find((section) => {
 			return sectionLabel(section.querySelector(".edge-sidebar__section-toggle")) === "Home";
 		});
 		if (!homeSection) return false;
 
 		const toggle = homeSection.querySelector(".edge-sidebar__section-toggle");
-		if (!toggle) return false;
-		homeSection.dataset[HOME_DATASET_KEY] = "1";
-		toggle.dataset[HOME_DATASET_KEY] = "1";
-		toggle.disabled = false;
-		toggle.setAttribute("aria-label", "Home");
-		toggle.setAttribute("title", "Home");
-		// Keep the accordion runtime from programmatically clicking this one-item
-		// section while presenting it to the user as a direct navigation control.
-		toggle.setAttribute("aria-expanded", "true");
-		if (directHomeTarget()) toggle.setAttribute("aria-current", "page");
-		else toggle.removeAttribute("aria-current");
+		const nestedItem = homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
+		if (!toggle && !nestedItem) return false;
 
-		const icons = toggle.querySelectorAll(".edge-icon");
-		if (icons.length > 1) icons[icons.length - 1].remove();
-
-		const nestedItems = homeSection.querySelector(".edge-sidebar__items");
-		if (nestedItems) {
-			nestedItems.hidden = true;
-			nestedItems.setAttribute("aria-hidden", "true");
-			nestedItems.querySelectorAll("button, a, [tabindex]").forEach((node) => node.setAttribute("tabindex", "-1"));
-		}
+		// Home is navigation, not a category. Replace the one-item accordion
+		// section with the actual sidebar item so there is no chevron, expansion
+		// state, hidden child, or second click required. Clone the generated child
+		// when available so EdgeSuite keeps its canonical icon/label markup.
+		const directItem = nestedItem?.cloneNode(true) || toggle.cloneNode(true);
+		directItem.classList.remove("edge-sidebar__section-toggle");
+		directItem.classList.add("edge-sidebar-item");
+		if (directItem.tagName === "BUTTON") directItem.type = "button";
+		if (directItem.tagName === "A") directItem.setAttribute("href", "/desk/vetedge");
+		directItem.querySelectorAll(".edge-icon").forEach((icon, index) => {
+			if (index > 0) icon.remove();
+		});
+		syncDirectHomeState(directItem);
+		homeSection.replaceWith(directItem);
 		return true;
 	}
 
