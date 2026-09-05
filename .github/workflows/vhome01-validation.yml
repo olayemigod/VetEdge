@@ -12,6 +12,7 @@ on:
       - "vetedge/tests/test_vetedge_home_contract.py"
       - "vetedge/tests/test_vetedge_home_runtime.py"
       - "vetedge/tests/test_vetedge_professional_ui_contract.py"
+      - "vetedge/tests/vhome_browser_fixture.py"
       - "scripts/vhome_browser_smoke.py"
       - ".github/workflows/vhome01-validation.yml"
   workflow_dispatch:
@@ -46,6 +47,7 @@ jobs:
       - name: Compile Home backend and browser smoke
         run: |
           python -m py_compile vetedge/services/home.py
+          python -m py_compile vetedge/tests/vhome_browser_fixture.py
           python -m py_compile scripts/vhome_browser_smoke.py
 
       - name: Lint Home contracts
@@ -54,6 +56,7 @@ jobs:
             vetedge/services/home.py \
             vetedge/tests/test_vetedge_home_contract.py \
             vetedge/tests/test_vetedge_home_runtime.py \
+            vetedge/tests/vhome_browser_fixture.py \
             scripts/vhome_browser_smoke.py
 
       - name: Check Home JavaScript syntax
@@ -183,6 +186,8 @@ jobs:
 
       - name: Prepare Veterinary Home browser smoke
         working-directory: frappe-bench
+        env:
+          VHOME_PERSONA_PASSWORD: VHOME-01-ci-only!2026
         run: |
           # The clean bench was initialized with --skip-assets. Build the core
           # Desk bundles before launching a real browser so Frappe can resolve
@@ -200,6 +205,8 @@ jobs:
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_vetedge", 1]'
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_appointments", 1]'
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_consultations", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_grooming", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_dispensary_flow", 1]'
 
           # Frappe v16 tracks setup completion per application. A brand-new CI
           # site otherwise redirects Administrator to /desk/setup-wizard/0 and
@@ -214,11 +221,20 @@ jobs:
           bench --site ci.localhost clear-cache
           bench --site ci.localhost execute frappe.is_setup_complete | grep -Eq '^(true|True|1)$'
 
+          # Create disposable role/branch fixtures only on this ephemeral CI site.
+          # The fixture uses the real VetEdge starter bundles and existing guest
+          # appointment service so persona and branch counts exercise production
+          # access logic rather than frontend-only mocks.
+          bench --site ci.localhost execute \
+            vetedge.tests.vhome_browser_fixture.prepare_browser_fixture \
+            --args "[\"$VHOME_PERSONA_PASSWORD\"]"
+
       - name: Run Veterinary Home browser smoke
         working-directory: frappe-bench
         env:
           VHOME_BASE_URL: http://ci.localhost:8000
           VHOME_ADMIN_PASSWORD: admin
+          VHOME_PERSONA_PASSWORD: VHOME-01-ci-only!2026
           VHOME_ARTIFACT_DIR: ${{ github.workspace }}/browser-artifacts
         run: |
           mkdir -p "$VHOME_ARTIFACT_DIR"
