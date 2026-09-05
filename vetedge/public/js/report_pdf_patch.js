@@ -76,7 +76,6 @@ frappe.render_pdf = function (html, opts = {}) {
 	xhr.send(formData);
 };
 
-// Global Desk compatibility guard: product navigation must never survive on native ERPNext pages.
 frappe.require("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1");
 frappe.require("/assets/vetedge/js/vetedge_postqa_navigation_hardening.js?v=20260905-1");
 frappe.require("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
