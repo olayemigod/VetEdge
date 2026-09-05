@@ -110,10 +110,11 @@ window.EdgeUI = window.EdgeSuiteUI;
 		await page.add_script_tag(content=patch_source)
 		await page.wait_for_function("window.VetEdgePostQaNavigation?.state().directHome === true")
 
-		home = page.locator('[data-vetedge-direct-home="1"].edge-sidebar__section-toggle')
+		home = page.locator('[data-vetedge-direct-home="1"].edge-sidebar-item')
 		assert await home.count() == 1
-		assert await home.locator(".edge-icon").count() == 1
-		assert await page.locator('.edge-sidebar__section[data-vetedge-direct-home="1"] .edge-sidebar__items').is_hidden()
+		assert await page.locator('[data-vetedge-direct-home="1"].edge-sidebar__section-toggle').count() == 0
+		assert await page.locator('.edge-sidebar__section[data-vetedge-direct-home="1"]').count() == 0
+		assert await home.get_attribute("aria-expanded") is None
 
 		await home.click()
 		await page.wait_for_function("window.__events.routes.includes('/desk/vetedge')")
