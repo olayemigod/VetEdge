@@ -70,3 +70,34 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 		frappe.set_user(user)
 		payload = get_home_payload()
 		self.assertEqual(payload["primary_persona"]["key"], "accounts")
+
+	def test_disabled_appointments_hide_front_desk_actions_and_metrics(self):
+		original_enable_vetedge = frappe.db.get_single_value("Veterinary Settings", "enable_vetedge")
+		original_enable_appointments = frappe.db.get_single_value("Veterinary Settings", "enable_appointments")
+		try:
+			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_appointments", 0, update_modified=False)
+			user = self.ensure_user(
+				"vhome-frontdesk-feature@example.com",
+				("VetEdge Front Desk", "Desk User", "Accounts User", "Sales User"),
+			)
+			frappe.set_user(user)
+			payload = get_home_payload()
+			action_routes = {action["route"] for action in payload["quick_actions"]}
+			metric_keys = {metric["key"] for metric in payload["metrics"]}
+
+			self.assertNotIn("/desk/vetedge-resource-center?resource=appointments&new=1", action_routes)
+			self.assertNotIn("/desk/vetedge-front-desk-action-center?tab=queue", action_routes)
+			self.assertNotIn("/desk/vetedge-front-desk-action-center?tab=guest", action_routes)
+			self.assertNotIn("/desk/vetedge-front-desk-action-center?tab=missed", action_routes)
+			self.assertNotIn("today-appointments", metric_keys)
+			self.assertNotIn("waiting-appointments", metric_keys)
+			self.assertNotIn("missed-follow-up", metric_keys)
+		finally:
+			frappe.set_user("Administrator")
+			frappe.db.set_single_value(
+				"Veterinary Settings", "enable_vetedge", original_enable_vetedge or 0, update_modified=False
+			)
+			frappe.db.set_single_value(
+				"Veterinary Settings", "enable_appointments", original_enable_appointments or 0, update_modified=False
+			)
