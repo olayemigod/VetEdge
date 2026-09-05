@@ -501,6 +501,24 @@ def _build_metrics(
 				),
 			)
 
+	if "groomer" in persona_keys and _feature_enabled("enable_grooming") and _existing_doctype("Pet Grooming Appointment"):
+		meta = frappe.get_meta("Pet Grooming Appointment")
+		filters = _branch_filters("Pet Grooming Appointment", branch, assigned, global_access)
+		if meta.has_field("groomer"):
+			filters["groomer"] = user
+		if meta.has_field("scheduled_datetime"):
+			filters["scheduled_datetime"] = _today_range()
+		_append_metric(
+			metrics,
+			_metric(
+				"grooming-today",
+				_("My Grooming Appointments Today"),
+				_permission_count("Pet Grooming Appointment", filters),
+				_("Grooming appointments assigned to you today"),
+				"/desk/vetedge-resource-center?resource=grooming",
+			),
+		)
+
 	if (
 		persona_keys & {"administrator", "branch-manager", "front-desk"}
 		and _feature_enabled("enable_appointments")
