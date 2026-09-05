@@ -29,6 +29,7 @@ from vetedge.services.permissions import (
 )
 
 HOME_REFRESH_SECONDS = 30
+GENERIC_ACCOUNTS_ROLES = {ROLE_ACCOUNTS_MANAGER, ROLE_ACCOUNTS_USER}
 
 PERSONA_DEFINITIONS = (
 	{
@@ -54,7 +55,7 @@ PERSONA_DEFINITIONS = (
 	{
 		"key": "accounts",
 		"label": _("Accounts / Cashier"),
-		"roles": {ROLE_ACCOUNTS_CASHIER, "VetEdge Accounts/Cashier", ROLE_ACCOUNTS_MANAGER, ROLE_ACCOUNTS_USER},
+		"roles": {ROLE_ACCOUNTS_CASHIER, "VetEdge Accounts/Cashier"},
 	},
 	{
 		"key": "lab",
@@ -145,11 +146,19 @@ def _existing_doctype(doctype: str) -> bool:
 
 
 def _matched_personas(roles: set[str]) -> list[dict]:
-	return [
+	personas = [
 		{"key": definition["key"], "label": definition["label"]}
 		for definition in PERSONA_DEFINITIONS
 		if roles & definition["roles"]
 	]
+
+	# VetEdge starter bundles deliberately add generic ERPNext support roles such
+	# as Accounts User to Doctors, Front Desk and Administrators. Those generic
+	# roles must not silently turn a clinical/front-desk Home into Accounts.
+	if not personas and roles & GENERIC_ACCOUNTS_ROLES:
+		personas.append({"key": "accounts", "label": _("Accounts / Cashier")})
+
+	return personas
 
 
 def _current_branch(user: str) -> tuple[str, list[str], bool]:
@@ -209,12 +218,19 @@ def _with(filters: dict, **values) -> dict:
 	return result
 
 
-def _today_range() -> list[str]:
+def _today_range() -> list:
 	today = nowdate()
 	return ["between", [f"{today} 00:00:00", f"{today} 23:59:59"]]
 
 
-def _metric(key: str, label: str, value: int | None, helper: str, route: str, tone: str = "neutral") -> dict | None:
+def _metric(
+	key: str,
+	label: str,
+	value: int | None,
+	helper: str,
+	route: str,
+	tone: str = "neutral",
+) -> dict | None:
 	if value is None:
 		return None
 	return {
@@ -227,7 +243,13 @@ def _metric(key: str, label: str, value: int | None, helper: str, route: str, to
 	}
 
 
-def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: list[str], global_access: bool) -> list[dict]:
+def _build_metrics(
+	user: str,
+	persona_keys: set[str],
+	branch: str,
+	assigned: list[str],
+	global_access: bool,
+) -> list[dict]:
 	metrics: list[dict | None] = []
 
 	appointment_filters = _branch_filters("Veterinary Appointment", branch, assigned, global_access)
@@ -235,25 +257,32 @@ def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: lis
 	lab_filters = _branch_filters("Veterinary Lab Order", branch, assigned, global_access)
 	missed_filters = _branch_filters("Veterinary Missed Appointment", branch, assigned, global_access)
 
-	if _existing_doctype("Veterinary Appointment"):
+	appointment_personas = {"administrator", "branch-manager", "doctor", "front-desk", "nurse"}
+	if persona_keys & appointment_personas and _existing_doctype("Veterinary Appointment"):
 		meta = frappe.get_meta("Veterinary Appointment")
+		today_filters = dict(appointment_filters)
+		waiting_filters = _with(appointment_filters, status=["in", ["Confirmed", "Checked In"]])
+
+		if "doctor" in persona_keys and meta.has_field("practitioner"):
+			today_filters["practitioner"] = user
+			waiting_filters["practitioner"] = user
+
 		if meta.has_field("appointment_datetime"):
+			today_filters["appointment_datetime"] = _today_range()
 			metrics.append(
 				_metric(
 					"today-appointments",
-					_("Today's Appointments"),
-					_permission_count("Veterinary Appointment", _with(appointment_filters, appointment_datetime=_today_range())),
-					_("Visible in your current branch scope"),
+					_("My Appointments Today") if "doctor" in persona_keys else _("Today's Appointments"),
+					_permission_count("Veterinary Appointment", today_filters),
+					_("Visible in your current access scope"),
 					"/desk/vetedge-resource-center?resource=appointments",
 				)
 			)
-		waiting_filters = _with(appointment_filters, status=["in", ["Confirmed", "Checked In"]])
-		if "doctor" in persona_keys and meta.has_field("practitioner"):
-			waiting_filters["practitioner"] = user
+
 		metrics.append(
 			_metric(
 				"waiting-appointments",
-				_("Waiting / Checked In"),
+				_("Waiting for Me") if "doctor" in persona_keys else _("Waiting / Checked In"),
 				_permission_count("Veterinary Appointment", waiting_filters),
 				_("Patients requiring operational attention"),
 				"/desk/vetedge-front-desk-action-center?tab=queue",
@@ -261,41 +290,50 @@ def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: lis
 			)
 		)
 
-	if _existing_doctype("Veterinary Consultation"):
+	consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}
+	if persona_keys & consultation_personas and _existing_doctype("Veterinary Consultation"):
 		meta = frappe.get_meta("Veterinary Consultation")
 		active_filters = _with(consultation_filters, status=["not in", ["Completed", "Cancelled"]])
 		completed_filters = _with(consultation_filters, status="Completed")
+
 		if "doctor" in persona_keys and meta.has_field("consulting_practitioner"):
 			active_filters["consulting_practitioner"] = user
 			completed_filters["consulting_practitioner"] = user
-		metrics.append(
-			_metric(
-				"active-consultations",
-				_("My Active Consultations") if "doctor" in persona_keys else _("Active Consultations"),
-				_permission_count("Veterinary Consultation", active_filters),
-				_("Not completed or cancelled"),
-				"/desk/vetedge-clinical-workspace",
-				"primary",
-			)
-		)
-		if meta.has_field("consultation_datetime"):
-			completed_filters["consultation_datetime"] = _today_range()
+
+		if "dispensary" not in persona_keys or persona_keys & {"administrator", "branch-manager", "doctor", "nurse"}:
 			metrics.append(
 				_metric(
-					"completed-today",
-					_("Completed Today"),
-					_permission_count("Veterinary Consultation", completed_filters),
-					_("Completed consultations today"),
+					"active-consultations",
+					_("My Active Consultations") if "doctor" in persona_keys else _("Active Consultations"),
+					_permission_count("Veterinary Consultation", active_filters),
+					_("Not completed or cancelled"),
 					"/desk/vetedge-clinical-workspace",
-					"success",
+					"primary",
 				)
 			)
+
+			if meta.has_field("consultation_datetime"):
+				completed_filters["consultation_datetime"] = _today_range()
+				metrics.append(
+					_metric(
+						"completed-today",
+						_("Completed Today"),
+						_permission_count("Veterinary Consultation", completed_filters),
+						_("Completed consultations today"),
+						"/desk/vetedge-clinical-workspace",
+						"success",
+					)
+				)
+
 		if "dispensary" in persona_keys and meta.has_field("dispensary_status"):
 			metrics.append(
 				_metric(
 					"pending-dispensary",
 					_("Pending Dispensary"),
-					_permission_count("Veterinary Consultation", _with(consultation_filters, dispensary_status="Pending Dispensary")),
+					_permission_count(
+						"Veterinary Consultation",
+						_with(consultation_filters, dispensary_status="Pending Dispensary"),
+					),
 					_("Consultations awaiting fulfilment"),
 					"/desk/vetedge-clinical-workspace",
 					"warning",
@@ -303,18 +341,44 @@ def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: lis
 			)
 
 	if _existing_doctype("Veterinary Lab Order") and frappe.get_meta("Veterinary Lab Order").has_field("status"):
-		metrics.append(
-			_metric(
-				"lab-review",
-				_("Lab Results to Review"),
-				_permission_count("Veterinary Lab Order", _with(lab_filters, status=["in", ["Result Entered", "Awaiting Review"]])),
-				_("Results ready for clinical review"),
-				"/desk/vetedge-resource-center?resource=lab-orders",
-				"warning",
+		if persona_keys & {"lab"}:
+			metrics.append(
+				_metric(
+					"lab-pending",
+					_("Pending Lab Work"),
+					_permission_count(
+						"Veterinary Lab Order",
+						_with(
+							lab_filters,
+							status=[
+								"in",
+								["Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending"],
+							],
+						),
+					),
+					_("Laboratory orders still requiring processing"),
+					"/desk/vetedge-resource-center?resource=lab-orders",
+					"warning",
+				)
 			)
-		)
+		if persona_keys & {"administrator", "branch-manager", "doctor", "nurse"}:
+			metrics.append(
+				_metric(
+					"lab-review",
+					_("Lab Results to Review"),
+					_permission_count(
+						"Veterinary Lab Order",
+						_with(lab_filters, status=["in", ["Result Entered", "Awaiting Review"]]),
+					),
+					_("Results ready for clinical review"),
+					"/desk/vetedge-resource-center?resource=lab-orders",
+					"warning",
+				)
+			)
 
-	if _existing_doctype("Veterinary Missed Appointment"):
+	if persona_keys & {"administrator", "branch-manager", "front-desk"} and _existing_doctype(
+		"Veterinary Missed Appointment"
+	):
 		meta = frappe.get_meta("Veterinary Missed Appointment")
 		filters = dict(missed_filters)
 		if meta.has_field("resolved"):
@@ -330,7 +394,7 @@ def _build_metrics(user: str, persona_keys: set[str], branch: str, assigned: lis
 			)
 		)
 
-	if "accounts" in persona_keys and _existing_doctype("Sales Invoice"):
+	if persona_keys & {"accounts", "branch-manager", "administrator"} and _existing_doctype("Sales Invoice"):
 		meta = frappe.get_meta("Sales Invoice")
 		filters = _branch_filters("Sales Invoice", branch, assigned, global_access)
 		filters["docstatus"] = 1
@@ -384,6 +448,7 @@ def _build_attention(metrics: list[dict]) -> list[dict]:
 		"missed-follow-up": (90, _("Follow up missed appointments")),
 		"waiting-appointments": (80, _("Patients are waiting for service")),
 		"lab-review": (70, _("Laboratory results are ready for review")),
+		"lab-pending": (68, _("Laboratory orders still require processing")),
 		"pending-dispensary": (65, _("Dispensary fulfilment is pending")),
 		"outstanding-invoices": (60, _("Outstanding invoices need collection follow-up")),
 		"active-consultations": (50, _("Consultations are still active")),
