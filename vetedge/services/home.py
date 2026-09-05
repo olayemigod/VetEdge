@@ -24,6 +24,7 @@ from vetedge.services.permissions import (
 	can_access_branch_data,
 	get_assigned_branches,
 	get_user_roles,
+	get_veterinary_settings_flag,
 	is_internal_staff_user,
 	user_has_global_branch_access,
 )
@@ -133,6 +134,20 @@ ACTION_DEFINITIONS = {
 	),
 }
 
+# Keep operational Home composition aligned with existing Veterinary Settings.
+# Routes without a feature mapping remain governed by role/DocType permissions.
+FEATURE_ROUTE_FLAGS = (
+	("/desk/vetedge-front-desk-action-center", "enable_appointments"),
+	("/desk/vetedge-resource-center?resource=appointments", "enable_appointments"),
+	("/desk/vetedge-clinical-workspace", "enable_consultations"),
+	("/desk/vetedge-resource-center?resource=lab-orders", "enable_vetedge"),
+	("/desk/vetedge-resource-center?resource=vaccinations", "enable_vaccination"),
+	("/desk/vetedge-hospitalisation-operations", "enable_veterinary_hospitalisation"),
+	("/desk/stock-expiry-monitor", "enable_stock_expiry_monitor"),
+	("/desk/vetedge-resource-center?resource=grooming", "enable_grooming"),
+	("/desk/vetedge-service-operations?resource=grooming-sessions", "enable_grooming"),
+)
+
 
 def _require_access() -> str:
 	user = getattr(frappe.session, "user", None)
@@ -143,6 +158,21 @@ def _require_access() -> str:
 
 def _existing_doctype(doctype: str) -> bool:
 	return bool(doctype and frappe.db.exists("DocType", doctype))
+
+
+def _feature_enabled(fieldname: str) -> bool:
+	# Existing installations may pre-date a field. In that case preserve current
+	# compatibility rather than removing a capability solely because Home is new.
+	if fieldname != "enable_vetedge" and not get_veterinary_settings_flag("enable_vetedge", default=True):
+		return False
+	return get_veterinary_settings_flag(fieldname, default=True)
+
+
+def _route_feature_enabled(route: str) -> bool:
+	for prefix, fieldname in FEATURE_ROUTE_FLAGS:
+		if route.startswith(prefix):
+			return _feature_enabled(fieldname)
+	return True
 
 
 def _matched_personas(roles: set[str]) -> list[dict]:
@@ -258,7 +288,11 @@ def _build_metrics(
 	missed_filters = _branch_filters("Veterinary Missed Appointment", branch, assigned, global_access)
 
 	appointment_personas = {"administrator", "branch-manager", "doctor", "front-desk", "nurse"}
-	if persona_keys & appointment_personas and _existing_doctype("Veterinary Appointment"):
+	if (
+		persona_keys & appointment_personas
+		and _feature_enabled("enable_appointments")
+		and _existing_doctype("Veterinary Appointment")
+	):
 		meta = frappe.get_meta("Veterinary Appointment")
 		today_filters = dict(appointment_filters)
 		waiting_filters = _with(appointment_filters, status=["in", ["Confirmed", "Checked In"]])
@@ -291,7 +325,11 @@ def _build_metrics(
 		)
 
 	consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}
-	if persona_keys & consultation_personas and _existing_doctype("Veterinary Consultation"):
+	if (
+		persona_keys & consultation_personas
+		and _feature_enabled("enable_consultations")
+		and _existing_doctype("Veterinary Consultation")
+	):
 		meta = frappe.get_meta("Veterinary Consultation")
 		active_filters = _with(consultation_filters, status=["not in", ["Completed", "Cancelled"]])
 		completed_filters = _with(consultation_filters, status="Completed")
@@ -325,7 +363,11 @@ def _build_metrics(
 					)
 				)
 
-		if "dispensary" in persona_keys and meta.has_field("dispensary_status"):
+		if (
+			"dispensary" in persona_keys
+			and _feature_enabled("enable_dispensary_flow")
+			and meta.has_field("dispensary_status")
+		):
 			metrics.append(
 				_metric(
 					"pending-dispensary",
@@ -340,7 +382,11 @@ def _build_metrics(
 				)
 			)
 
-	if _existing_doctype("Veterinary Lab Order") and frappe.get_meta("Veterinary Lab Order").has_field("status"):
+	if (
+		_feature_enabled("enable_vetedge")
+		and _existing_doctype("Veterinary Lab Order")
+		and frappe.get_meta("Veterinary Lab Order").has_field("status")
+	):
 		if persona_keys & {"lab"}:
 			metrics.append(
 				_metric(
@@ -376,8 +422,10 @@ def _build_metrics(
 				)
 			)
 
-	if persona_keys & {"administrator", "branch-manager", "front-desk"} and _existing_doctype(
-		"Veterinary Missed Appointment"
+	if (
+		persona_keys & {"administrator", "branch-manager", "front-desk"}
+		and _feature_enabled("enable_appointments")
+		and _existing_doctype("Veterinary Missed Appointment")
 	):
 		meta = frappe.get_meta("Veterinary Missed Appointment")
 		filters = dict(missed_filters)
@@ -427,7 +475,7 @@ def _build_actions(personas: Iterable[dict]) -> list[dict]:
 	seen_routes: set[str] = set()
 	for persona in personas:
 		for label, route, icon, doctype, permission_type in ACTION_DEFINITIONS.get(persona["key"], ()):
-			if route in seen_routes or not _can_use_action(doctype, permission_type):
+			if route in seen_routes or not _route_feature_enabled(route) or not _can_use_action(doctype, permission_type):
 				continue
 			seen_routes.add(route)
 			result.append(
