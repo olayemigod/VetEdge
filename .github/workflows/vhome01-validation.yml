@@ -184,6 +184,18 @@ jobs:
       - name: Prepare Veterinary Home browser smoke
         working-directory: frappe-bench
         run: |
+          # The clean bench was initialized with --skip-assets. Build the core
+          # Desk bundles before launching a real browser so Frappe can resolve
+          # logical names such as desk.bundle.js and erpnext.bundle.css through
+          # sites/assets/assets.json instead of emitting broken root-relative URLs.
+          bench build --app frappe
+          bench build --app erpnext
+          grep -q 'desk.bundle.js' sites/assets/assets.json
+          grep -q 'libs.bundle.js' sites/assets/assets.json
+          grep -q 'report.bundle.css' sites/assets/assets.json
+          grep -q 'erpnext.bundle.js' sites/assets/assets.json
+          grep -q 'erpnext.bundle.css' sites/assets/assets.json
+
           python -m pip install --upgrade playwright
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_vetedge", 1]'
           bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_appointments", 1]'
