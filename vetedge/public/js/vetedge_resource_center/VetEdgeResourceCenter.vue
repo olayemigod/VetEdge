@@ -600,7 +600,7 @@ export default {
 					frappe.show_alert({ message: __(result.message), indicator: "green" });
 				}
 				if (result.open?.route) {
-					this.openRoute(result.open.route);
+					window.location.assign(result.open.route);
 					return;
 				}
 				if (result.mutated) {

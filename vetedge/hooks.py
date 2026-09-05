@@ -15,7 +15,7 @@ add_to_apps_screen = [
 	{
 		"name": app_name,
 		"logo": app_logo_url,
-		"title": app_title,
+		"title": "Veterinary",
 		"route": app_home,
 	}
 ]
@@ -53,6 +53,10 @@ app_include_js = [
 	"/assets/vetedge/js/veterinary_unread_badge.js",
 ]
 
+doctype_js = {
+	"Veterinary Hospitalisation": "public/js/vetedge_hospitalisation_preqa.js",
+}
+
 get_website_user_home_page = "vetedge.services.portal_access.get_vetedge_website_user_home_page"
 
 after_install = "vetedge.install.after_install"
@@ -67,6 +71,8 @@ permission_query_conditions = {
 	"Veterinary Appointment": "vetedge.services.permissions.get_veterinary_appointment_query",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.get_veterinary_missed_appointment_query",
 	"Veterinary Consultation": "vetedge.services.permissions.get_veterinary_consultation_query",
+	"Veterinary Hospitalisation": "vetedge.services.hospitalisation_permissions.get_hospitalisation_query",
+	"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.get_outbreak_query",
 	"Veterinary Vital Signs": "vetedge.services.permissions.get_veterinary_vital_signs_query",
 	"Veterinary Lab Order": "vetedge.services.permissions.get_veterinary_lab_order_query",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.get_veterinary_vaccination_record_query",
@@ -81,6 +87,8 @@ permission_query_conditions = {
 
 has_permission = {
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
+	"Veterinary Hospitalisation": "vetedge.services.hospitalisation_permissions.has_hospitalisation_permission",
+	"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.has_outbreak_permission",
 	"Sales Invoice": "vetedge.services.permissions.has_sales_invoice_permission",
 	"Veterinary Vaccination Record": "vetedge.services.permissions.has_veterinary_vaccination_record_permission",
 	"Veterinary Missed Appointment": "vetedge.services.permissions.has_veterinary_missed_appointment_permission",
@@ -117,6 +125,29 @@ override_whitelisted_methods = {
 	"vetedge.services.grooming.transition_grooming_session_status": "vetedge.services.grooming_payment_workflow.transition_grooming_session_status",
 	"vetedge.services.service_operations.get_service_operation_detail": "vetedge.services.service_operations_state.get_service_operation_detail",
 	"vetedge.services.service_operations.transition_grooming_session": "vetedge.services.service_operations_state.transition_grooming_session",
+	"vetedge.services.hospitalisation_operations.get_hospitalisation_operations": "vetedge.services.hospitalisation_preqa_security.get_hospitalisation_operations",
+	"vetedge.services.hospitalisation.get_hospitalisation_patient_context": "vetedge.services.hospitalisation_preqa_security.get_hospitalisation_patient_context",
+	"vetedge.services.hospitalisation.create_hospitalisation_from_consultation": "vetedge.services.hospitalisation_preqa_security.create_hospitalisation_from_consultation",
+	"vetedge.services.hospitalisation.get_hospitalisation_medication_item_context": "vetedge.services.hospitalisation_preqa_security.get_hospitalisation_medication_item_context",
+	"vetedge.services.hospitalisation.build_hospitalisation_charge_items": "vetedge.services.hospitalisation_preqa_security.build_hospitalisation_charge_items",
+	"vetedge.services.hospitalisation.create_or_link_hospitalisation_invoice": "vetedge.services.hospitalisation_preqa_security.create_or_link_hospitalisation_invoice",
+	"vetedge.services.hospitalisation.sync_hospitalisation_charges_to_invoice": "vetedge.services.hospitalisation_preqa_security.sync_hospitalisation_charges_to_invoice",
+	"vetedge.services.hospitalisation.assign_hospitalisation_care_location": "vetedge.services.hospitalisation_preqa_security.assign_hospitalisation_care_location",
+	"vetedge.services.hospitalisation.release_hospitalisation_care_location": "vetedge.services.hospitalisation_preqa_security.release_hospitalisation_care_location",
+	"vetedge.services.hospitalisation.get_available_care_locations": "vetedge.services.hospitalisation_preqa_security.get_available_care_locations",
+	"vetedge.services.hospitalisation_episode.get_hospitalisation_episode": "vetedge.services.hospitalisation_episode_policy.get_hospitalisation_episode",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_activity": "vetedge.services.hospitalisation_item_policy.add_hospitalisation_activity",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_vitals": "vetedge.services.hospitalisation_episode_policy.add_hospitalisation_vitals",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_vaccination": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_vaccination",
+	"vetedge.services.hospitalisation_episode.add_hospitalisation_lab_order": "vetedge.services.hospitalisation_episode_policy_v2.add_hospitalisation_lab_order",
+	"vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options": "vetedge.services.hospitalisation_form_integrity.search_hospitalisation_episode_options",
+	"vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action": "vetedge.services.hospitalisation_episode_policy_v2.perform_hospitalisation_episode_action",
+	"vetedge.services.hospitalisation.get_hospitalisation_stock_posting_preview": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_stock_posting_preview",
+	"vetedge.services.hospitalisation.post_hospitalisation_activity_stock": "vetedge.services.hospitalisation_episode_policy_v2.post_hospitalisation_activity_stock",
+	"vetedge.services.hospitalisation.generate_hospitalisation_daily_charges": "vetedge.services.hospitalisation_episode_policy_v2.generate_hospitalisation_daily_charges",
+	"vetedge.services.hospitalisation.admit_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.admit_hospitalisation",
+	"vetedge.services.hospitalisation.get_hospitalisation_discharge_readiness": "vetedge.services.hospitalisation_episode_policy_v2.get_hospitalisation_discharge_readiness",
+	"vetedge.services.hospitalisation.discharge_hospitalisation": "vetedge.services.hospitalisation_episode_policy_v2.discharge_hospitalisation",
 }
 
 doc_events = {
@@ -150,6 +181,7 @@ doc_events = {
 			"vetedge.services.vaccination.update_vaccination_status_from_invoice",
 			"vetedge.services.grooming.update_grooming_status_from_invoice",
 			"vetedge.services.billing_core.update_billing_sessions_from_invoice",
+			"vetedge.services.invoice_cancellation_recovery.reopen_active_service_billing_after_invoice_cancel",
 		],
 	},
 	"Payment Entry": {

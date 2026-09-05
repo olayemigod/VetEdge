@@ -9,6 +9,8 @@ from frappe.modules.import_file import import_file_by_path
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
 VETEDGE_DESK_ROUTE = "/desk/vetedge"
+HOSPITALISATION_OPERATIONS_PAGE = "vetedge-hospitalisation-operations"
+RETIRED_HOSPITALISATION_DASHBOARD_PAGE = "veterinary-hospitalisation-dashboard"
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -26,14 +28,14 @@ SIDEBAR_TARGET_DOCTYPES = {
 }
 
 REMOVED_STANDARD_PAGES = {
-	"veterinary-hospitalisation-dashboard",
+	RETIRED_HOSPITALISATION_DASHBOARD_PAGE,
 }
 
 # The obsolete Hospitalisation Dashboard must not reappear during recurring
-# standard sidebar synchronization. Operational Hospital & Services links and
-# Veterinary Vital Signs remain valid Veterinary navigation destinations.
+# standard sidebar synchronization. Its position is reused by the Operations
+# workbench when the new standard Page is available.
 REMOVED_SIDEBAR_LINKS = {
-	("Page", "veterinary-hospitalisation-dashboard"),
+	("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE),
 }
 
 
@@ -89,6 +91,36 @@ def _should_keep_sidebar_item(item) -> bool:
 	return _sidebar_target_exists(link_type, link_to)
 
 
+def _replace_retired_hospitalisation_dashboard(items: list[dict]) -> list[dict]:
+	"""Keep the old dashboard retired while preserving its sidebar position.
+
+	The checked-in sidebar still contains the historical dashboard item for
+	backward-compatible standard-file history. At runtime/migrate we replace that
+	item with the EdgeSuite Hospitalisation Operations Page once the Page exists.
+	"""
+	result = []
+	operations_available = _sidebar_target_exists("Page", HOSPITALISATION_OPERATIONS_PAGE)
+	for item in items:
+		link_type = str(item.get("link_type") or "")
+		link_to = str(item.get("link_to") or "")
+		if (link_type, link_to) != ("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE):
+			result.append(item)
+			continue
+		if not operations_available:
+			continue
+		replacement = dict(item)
+		replacement.update(
+			{
+				"label": "Hospitalisation Operations",
+				"link_to": HOSPITALISATION_OPERATIONS_PAGE,
+				"link_type": "Page",
+				"icon": "hospital",
+			}
+		)
+		result.append(replacement)
+	return result
+
+
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
 
@@ -113,6 +145,7 @@ FINANCIAL_DASHBOARD_FILES = (
 
 SIDEBAR_PAGE_FILES = (
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "vetedge_hospitalisation_operations", "vetedge_hospitalisation_operations.json"),
 )
 
 
@@ -164,7 +197,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 	standard_doc["title"] = "Veterinary"
 
-	standard_items = standard_doc.get("items") or []
+	standard_items = _replace_retired_hospitalisation_dashboard(standard_doc.get("items") or [])
 	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):

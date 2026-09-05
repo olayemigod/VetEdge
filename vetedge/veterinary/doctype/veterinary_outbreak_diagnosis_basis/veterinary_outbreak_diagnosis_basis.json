@@ -1,0 +1,16 @@
+{
+ "actions": [],
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["basis_of_diagnosis", "supporting_lab_order", "notes"],
+ "fields": [
+  {"fieldname": "basis_of_diagnosis", "fieldtype": "Select", "in_list_view": 1, "label": "Basis of Diagnosis", "options": "Advanced laboratory test(s)\nBasic laboratory test(s)\nClinical\nOwner's claim\nPost-mortem", "reqd": 1},
+  {"fieldname": "supporting_lab_order", "fieldtype": "Link", "label": "Supporting Lab Order", "options": "Veterinary Lab Order"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Outbreak Diagnosis Basis"
+}

@@ -43,17 +43,20 @@ class TestVetEdgePerformancePageReuse(TestCase):
 		self.assertIn("wrapper.vue_view = wrapper.vue_app.mount(root[0])", loader)
 		self.assertIn("branchChanged || stale", loader)
 
-	def test_stock_expiry_cold_metadata_is_not_reloaded_by_page_reuse_path(self):
+	def test_stock_expiry_reuse_path_avoids_metadata_remount_and_full_preload(self):
 		loader = self.read("vetedge/veterinary/page/stock_expiry_monitor/stock_expiry_monitor.js")
 		component = self.read("vetedge/public/js/vetedge_stock_expiry_monitor/VetedgeStockExpiryMonitor.vue")
 
-		# The current component still has cold-mount metadata queries. This slice
-		# deliberately prevents repeated page remounts so these calls are not made
-		# again merely because the user navigated away and back.
-		self.assertIn("this.fetchMetadata();", component)
-		self.assertIn("limit_page_length: 500", component)
+		# Stock Expiry now uses bounded remote Link searches instead of cold-mount
+		# 500-row metadata preloads. Reusing the mounted page must also avoid asset
+		# reload/unmount work when the user navigates away and back.
+		self.assertNotIn("this.fetchMetadata();", component)
+		self.assertNotIn("limit_page_length: 500", component)
+		self.assertIn("searchStockFilter(field, term)", component)
+		self.assertIn("search_stock_expiry_filter_options", component)
+		self.assertIn("page_length: 20", component)
 		reuse_start = loader.index("if (wrapper.vue_app && wrapper.vue_view)")
-		reuse_end = loader.index("// Backward-compatible cleanup", reuse_start)
+		reuse_end = loader.index("if (wrapper.vue_app) {", reuse_start + 1)
 		reuse_block = loader[reuse_start:reuse_end]
 		self.assertNotIn("frappe.require(", reuse_block)
 		self.assertNotIn("unmount()", reuse_block)
@@ -98,7 +101,9 @@ class TestVetEdgePerformancePageReuse(TestCase):
 			"SUM(",
 		):
 			self.assertIn(contract, service)
-		self.assertIn("CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC", service)
+		self.assertIn('DEFAULT_SORT = {"field": "expiry_date", "direction": "asc"}', service)
+		self.assertIn('parts.append(f"CASE WHEN {source} IS NULL THEN 1 ELSE 0 END ASC")', service)
+		self.assertIn("ORDER BY {order_by}", service)
 		self.assertIn("DATEDIFF(expiry_date, %(today)s) AS days_to_expiry", service)
 
 	def test_stock_expiry_interactive_query_preserves_operational_filters(self):

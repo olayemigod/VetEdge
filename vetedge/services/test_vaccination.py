@@ -136,6 +136,65 @@ class VaccinationPermissionTests(TestCase):
 		):
 			self.assertFalse(vaccination.can_administer_vaccine("frontdesk@example.com", SimpleNamespace(service_branch="Main")))
 
+	def test_administered_by_accepts_valid_vaccination_staff(self):
+		doc = DictDoc(
+			administered_by="doctor@example.com",
+			service_branch="Main Branch",
+		)
+		frappe_stub = SimpleNamespace(
+			ValidationError=Exception,
+			throw=Mock(side_effect=Exception("blocked")),
+			db=SimpleNamespace(
+				get_value=Mock(
+					return_value=SimpleNamespace(
+						enabled=1,
+						user_type="System User",
+					)
+				)
+			),
+		)
+
+		with patch.object(vaccination, "frappe", frappe_stub), patch.object(
+			vaccination,
+			"can_administer_vaccine",
+			return_value=True,
+		) as can_administer:
+			vaccination.validate_administered_by_user(doc)
+
+		can_administer.assert_called_once_with(
+			"doctor@example.com",
+			doc,
+			raise_exception=False,
+		)
+
+	def test_administered_by_rejects_unauthorised_user(self):
+		doc = DictDoc(
+			administered_by="frontdesk@example.com",
+			service_branch="Main Branch",
+		)
+		frappe_stub = SimpleNamespace(
+			ValidationError=Exception,
+			throw=Mock(side_effect=Exception("blocked")),
+			db=SimpleNamespace(
+				get_value=Mock(
+					return_value=SimpleNamespace(
+						enabled=1,
+						user_type="System User",
+					)
+				)
+			),
+		)
+
+		with patch.object(vaccination, "frappe", frappe_stub), patch.object(
+			vaccination,
+			"can_administer_vaccine",
+			return_value=False,
+		):
+			with self.assertRaises(Exception):
+				vaccination.validate_administered_by_user(doc)
+
+		frappe_stub.throw.assert_called_once()
+
 	def test_administered_record_is_read_only_for_non_admin(self):
 		doc = SimpleNamespace(
 			doctype="Veterinary Vaccination Record",

@@ -337,11 +337,11 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "activity",
+   "icon": "hospital",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Hospitalisation Dashboard",
-   "link_to": "veterinary-hospitalisation-dashboard",
+   "label": "Hospitalisation Operations",
+   "link_to": "vetedge-hospitalisation-operations",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link"

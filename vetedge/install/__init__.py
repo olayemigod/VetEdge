@@ -5,6 +5,7 @@ import frappe
 from vetedge.install.custom_fields import ensure_custom_fields
 from vetedge.install.dashboard import ensure_financial_dashboard
 from vetedge.install.print_formats import ensure_print_formats
+from vetedge.install.regulatory_reporting import ensure_regulatory_reporting_navigation
 from vetedge.seed.master_data import seed_master_data
 from vetedge.setup.email_templates import sync_vetedge_email_templates
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
@@ -39,6 +40,7 @@ def setup_foundation() -> None:
 	seed_master_data()
 	sync_vetedge_email_templates()
 	ensure_financial_dashboard()
+	ensure_regulatory_reporting_navigation()
 
 
 def ensure_vetedge_roles() -> None:

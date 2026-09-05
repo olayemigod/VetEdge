@@ -18,6 +18,7 @@ from vetedge.services.permissions import (
 	can_apply_role_bundle,
 	can_manage_role_bundles,
 )
+from vetedge.services.role_bundle_security import validate_role_bundle_document
 
 
 STARTER_ROLE_BUNDLES = {
@@ -165,6 +166,11 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 	bundle = frappe.get_doc("Veterinary Role Bundle", bundle_name)
 	if cint(getattr(bundle, "is_active", 1)) != 1:
 		frappe.throw("Only active role bundles can be applied.", frappe.ValidationError)
+
+	# Revalidate at application time as well as on bundle save. This blocks a
+	# Veterinary administrator from applying any historical or externally-created
+	# bundle containing a role that only System Manager may delegate.
+	validate_role_bundle_document(bundle, user=acting_user)
 
 	user_doc = frappe.get_doc("User", target_user)
 	existing_roles = {row.role for row in user_doc.get("roles") or []}

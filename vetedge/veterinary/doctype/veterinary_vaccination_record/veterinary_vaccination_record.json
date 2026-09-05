@@ -21,6 +21,7 @@
   "linked_consultation",
   "linked_appointment",
   "clinical_section",
+  "vaccination_reason",
   "dose",
   "route",
   "next_due_date",
@@ -158,6 +159,13 @@
    "fieldname": "clinical_section",
    "fieldtype": "Section Break",
    "label": "Clinical Details"
+  },
+  {
+   "description": "Regulatory classification used by the official NADIS vaccination report. Existing records may remain blank until reviewed for reporting.",
+   "fieldname": "vaccination_reason",
+   "fieldtype": "Select",
+   "label": "Reason for Vaccination",
+   "options": "\nControl/Emergency vaccination\nPreventive/Routine vaccination"
   },
   {
    "fieldname": "dose",

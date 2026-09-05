@@ -4,6 +4,7 @@ import frappe
 
 from vetedge.services.clinical_consultation_context import decorate_consultation_link_field
 from vetedge.services.display_labels import get_display_label
+from vetedge.services.nadis_vaccination_editor import extend_vaccination_editor_config
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -116,6 +117,13 @@ def _align_vaccination_state(state: dict) -> dict:
     if next_due:
         next_due["read_only"] = int(stock_posted and administered)
 
+    reason = fields.get("vaccination_reason")
+    if reason:
+        reason["description"] = (
+            "Regulatory classification used by the official NADIS vaccination report. "
+            "It does not change billing, stock posting or administration evidence."
+        )
+
     state["can_save"] = bool(
         state.get("can_save") and any(not field.get("read_only") for field in fields.values())
     )
@@ -137,9 +145,10 @@ def _align_lab_state(state: dict) -> dict:
 @frappe.whitelist()
 def get_clinical_record_editor(doctype: str, name: str) -> dict:
     require_internal_user()
-    from vetedge.services.clinical_record_state import get_clinical_record_editor as original
+    from vetedge.services import clinical_record_editor
 
-    state = _align_link_labels(original(doctype=doctype, name=name))
+    extend_vaccination_editor_config(clinical_record_editor.RECORD_CONFIG)
+    state = _align_link_labels(clinical_record_editor.get_clinical_record_editor(doctype=doctype, name=name))
     if doctype == "Veterinary Lab Order":
         state = _align_lab_state(state)
     if doctype == "Veterinary Vaccination Record":
