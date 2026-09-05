@@ -7,6 +7,10 @@ on:
     paths:
       - "vetedge/public/js/vetedge_postqa_navigation_hardening.js"
       - "vetedge/public/js/report_pdf_patch.js"
+      - "vetedge/public/js/vetedge_home.bundle.js"
+      - "vetedge/public/js/vetedge_service_operations.bundle.js"
+      - "vetedge/tests/test_vetedge_home_contract.py"
+      - "vetedge/tests/test_service_operations_completion.py"
       - "scripts/vhome_postqa_navigation_smoke.py"
       - ".github/workflows/vhome01b-navigation-validation.yml"
   workflow_dispatch:
@@ -39,6 +43,8 @@ jobs:
         run: |
           node --check vetedge/public/js/vetedge_postqa_navigation_hardening.js
           node --check vetedge/public/js/report_pdf_patch.js
+          node --check vetedge/public/js/vetedge_home.bundle.js
+          node --check vetedge/public/js/vetedge_service_operations.bundle.js
           python -m py_compile scripts/vhome_postqa_navigation_smoke.py
 
       - name: Lock post-QA navigation loader and safety contract
@@ -50,12 +56,22 @@ jobs:
           grep -Fq 'edge-product-menu-dropdown' vetedge/public/js/vetedge_postqa_navigation_hardening.js
           grep -Fq 'getProductMenuConfig' vetedge/public/js/vetedge_postqa_navigation_hardening.js
           grep -Fq 'config?.navigate' vetedge/public/js/vetedge_postqa_navigation_hardening.js
+          grep -Fq 'APPROVED_DRILLDOWN_ROUTES' vetedge/public/js/vetedge_home.bundle.js
+          grep -Fq 'resource=grooming-appointments&name=' vetedge/public/js/vetedge_home.bundle.js
+          grep -Fq 'consultation=${encodeURIComponent(name)}' vetedge/public/js/vetedge_home.bundle.js
+          grep -Fq 'GROOMING_APPOINTMENTS_TAB' vetedge/public/js/vetedge_service_operations.bundle.js
           ! grep -Fq 'ignore_permissions' vetedge/public/js/vetedge_postqa_navigation_hardening.js
 
-      - name: Install Playwright
+      - name: Install test dependencies
         run: |
-          python -m pip install --upgrade playwright
+          python -m pip install --upgrade pytest playwright
           python -m playwright install --with-deps chromium
+
+      - name: Run post-QA source contracts
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_vetedge_home_contract.py \
+            vetedge/tests/test_service_operations_completion.py
 
       - name: Run Home and product-menu browser smoke
         run: python scripts/vhome_postqa_navigation_smoke.py
