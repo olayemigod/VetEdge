@@ -4,8 +4,10 @@ async function refreshMountedVetEdgeHome(wrapper) {
 	const view = wrapper.vue_app?.view;
 	if (!view) return false;
 	const stale = Date.now() - Number(wrapper.vetedge_home_last_refresh_at || 0) >= VETEDGE_HOME_REFRESH_MAX_AGE_MS;
-	if (stale) await view.loadHome?.();
-	wrapper.vetedge_home_last_refresh_at = Date.now();
+	if (stale) {
+		await view.loadHome?.();
+		wrapper.vetedge_home_last_refresh_at = Date.now();
+	}
 	return true;
 }
 
