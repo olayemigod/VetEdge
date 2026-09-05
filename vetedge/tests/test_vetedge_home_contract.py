@@ -78,6 +78,25 @@ class TestVetEdgeHomeContract(TestCase):
 		):
 			self.assertNotIn(forbidden, service)
 
+	def test_generic_accounts_support_roles_do_not_pollute_clinical_personas(self):
+		service = self.read(HOME_SERVICE)
+		self.assertIn('GENERIC_ACCOUNTS_ROLES = {ROLE_ACCOUNTS_MANAGER, ROLE_ACCOUNTS_USER}', service)
+		self.assertIn('"roles": {ROLE_ACCOUNTS_CASHIER, "VetEdge Accounts/Cashier"}', service)
+		self.assertIn("if not personas and roles & GENERIC_ACCOUNTS_ROLES", service)
+		self.assertIn("starter bundles deliberately add generic ERPNext support roles", service)
+
+	def test_role_specific_metrics_do_not_turn_every_permission_into_dashboard_content(self):
+		service = self.read(HOME_SERVICE)
+		for contract in (
+			'appointment_personas = {"administrator", "branch-manager", "doctor", "front-desk", "nurse"}',
+			'consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}',
+			'if persona_keys & {"lab"}',
+			'"lab-pending"',
+			'if persona_keys & {"administrator", "branch-manager", "front-desk"}',
+			'if persona_keys & {"accounts", "branch-manager", "administrator"}',
+		):
+			self.assertIn(contract, service)
+
 	def test_home_reuses_existing_operational_routes_instead_of_rebuilding_workflows(self):
 		service = self.read(HOME_SERVICE)
 		for route in (
