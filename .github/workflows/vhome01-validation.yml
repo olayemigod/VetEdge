@@ -14,6 +14,7 @@ on:
       - "vetedge/tests/test_vetedge_professional_ui_contract.py"
       - "vetedge/tests/vhome_browser_fixture.py"
       - "scripts/vhome_browser_smoke.py"
+      - "scripts/vhome_browser_runner.py"
       - ".github/workflows/vhome01-validation.yml"
   workflow_dispatch:
 
@@ -49,6 +50,7 @@ jobs:
           python -m py_compile vetedge/services/home.py
           python -m py_compile vetedge/tests/vhome_browser_fixture.py
           python -m py_compile scripts/vhome_browser_smoke.py
+          python -m py_compile scripts/vhome_browser_runner.py
 
       - name: Lint Home contracts
         run: |
@@ -57,7 +59,8 @@ jobs:
             vetedge/tests/test_vetedge_home_contract.py \
             vetedge/tests/test_vetedge_home_runtime.py \
             vetedge/tests/vhome_browser_fixture.py \
-            scripts/vhome_browser_smoke.py
+            scripts/vhome_browser_smoke.py \
+            scripts/vhome_browser_runner.py
 
       - name: Check Home JavaScript syntax
         run: |
@@ -259,7 +262,7 @@ jobs:
           # The script checkpoints progress after each persona so a timeout still
           # leaves useful evidence instead of an empty artifact.
           PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=15s 20m \
-            python "$GITHUB_WORKSPACE/scripts/vhome_browser_smoke.py"
+            python "$GITHUB_WORKSPACE/scripts/vhome_browser_runner.py"
 
       - name: Upload Veterinary Home browser evidence
         if: always()
