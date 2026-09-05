@@ -11,9 +11,12 @@ from vetedge.setup.email_templates import sync_vetedge_email_templates
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
 from vetedge.services.portal_access import normalize_owner_portal_users
 from vetedge.services.role_bundles import (
+	STARTER_BUNDLE_PRIMARY_ROLES,
 	ensure_existing_internal_users_have_starter_bundle_roles,
 	ensure_starter_role_bundles,
 )
+
+VETEDGE_HOME_PAGE = "desk/vetedge"
 
 
 def after_install() -> None:
@@ -30,6 +33,7 @@ def before_tests() -> None:
 
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
+	ensure_vetedge_role_home_pages()
 	ensure_starter_role_bundles()
 	ensure_existing_internal_users_have_starter_bundle_roles()
 	ensure_custom_fields()
@@ -68,6 +72,22 @@ def ensure_vetedge_roles() -> None:
 				"desk_access": desk_access,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_vetedge_role_home_pages() -> None:
+	"""Make Veterinary Home the normal login landing for VetEdge starter personas.
+
+	Frappe password login uses Role.home_page through get_home_page(). Preserve any
+	explicit role home page already configured by an administrator; only blank
+	starter-primary roles receive the VetEdge landing.
+	"""
+	for role in dict.fromkeys(STARTER_BUNDLE_PRIMARY_ROLES.values()):
+		if not role or not frappe.db.exists("Role", role):
+			continue
+		current_home = frappe.db.get_value("Role", role, "home_page")
+		if current_home:
+			continue
+		frappe.db.set_value("Role", role, "home_page", VETEDGE_HOME_PAGE, update_modified=False)
 
 
 def ensure_erpnext_test_price_lists_are_idempotent() -> None:
