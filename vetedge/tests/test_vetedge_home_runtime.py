@@ -50,6 +50,17 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 		self.assertIn("attention", payload)
 		self.assertIn("quick_actions", payload)
 
+	def test_guest_cannot_load_veterinary_home_payload(self):
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			get_home_payload()
+
+	def test_non_veterinary_desk_user_cannot_load_home_payload(self):
+		user = self.ensure_user("vhome-desk-only@example.com", ("Desk User",))
+		frappe.set_user(user)
+		with self.assertRaises(frappe.PermissionError):
+			get_home_payload()
+
 	def test_doctor_starter_support_role_does_not_add_accounts_persona(self):
 		user = self.ensure_user(
 			"vhome-doctor@example.com",
