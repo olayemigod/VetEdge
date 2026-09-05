@@ -30,6 +30,17 @@ class TestVetEdgeHomeContract(TestCase):
 		self.assertIn("window.mountVetEdgeHome", bundle)
 		self.assertIn('active-route="/desk/vetedge"', component)
 
+	def test_warm_navigation_refresh_age_only_moves_after_real_refresh(self):
+		loader = self.read(HOME_LOADER)
+		stale_block = loader[loader.index("if (stale) {") : loader.index("return true;")]
+		self.assertIn("await view.loadHome?.();", stale_block)
+		self.assertIn("wrapper.vetedge_home_last_refresh_at = Date.now();", stale_block)
+		self.assertLess(
+			stale_block.index("await view.loadHome?.();"),
+			stale_block.index("wrapper.vetedge_home_last_refresh_at = Date.now();"),
+		)
+		self.assertEqual(stale_block.count("wrapper.vetedge_home_last_refresh_at = Date.now();"), 1)
+
 	def test_home_exposes_action_center_mini_dashboard_and_access_context(self):
 		component = self.read(HOME_COMPONENT)
 		for contract in (
