@@ -86,6 +86,19 @@ def test_veterinary_desktop_icon_opens_new_home_directly():
 
     assert 'VETEDGE_HOME_ROUTE = "/desk/vetedge"' in install
     assert 'VETEDGE_DESKTOP_ICON = "VetEdge"' in install
+    assert 'VETEDGE_DESKTOP_LABEL = "Veterinary"' in install
     assert "ensure_veterinary_desktop_icon_home()" in install
     assert '"link": VETEDGE_HOME_ROUTE' in install
     assert '"link_type": "External"' in install
+
+
+def test_saved_desktop_layout_cannot_keep_veterinary_on_sidebar_first_link():
+    install = read("vetedge/install/__init__.py")
+
+    assert "_repair_saved_veterinary_desktop_layouts()" in install
+    assert 'frappe.get_all("Desktop Layout", fields=["name", "layout"])' in install
+    assert '"link_type": "External"' in install
+    assert '"link": VETEDGE_HOME_ROUTE' in install
+    assert 'for stale_field in ("link_to", "sidebar")' in install
+    assert 'frappe.cache.delete_key("desktop_icons")' in install
+    assert 'frappe.cache.delete_key("bootinfo")' in install
