@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import nowdate
 
-from vetedge.services.home import get_home_payload
+from vetedge.services.home import (
+	ALL_BRANCHES_KEY,
+	_build_metrics,
+	get_home_payload,
+	get_metric_drilldown,
+)
 
 
 class TestVetEdgeHomeRuntime(FrappeTestCase):
@@ -49,6 +55,14 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 		self.assertIn("metrics", payload)
 		self.assertIn("attention", payload)
 		self.assertIn("quick_actions", payload)
+		self.assertEqual(payload["context"]["operational_date"], nowdate())
+		self.assertIn("branch_options", payload["context"])
+
+	def test_home_accepts_explicit_operational_date_and_all_branch_scope(self):
+		payload = get_home_payload(operational_date="2026-09-04", branch=ALL_BRANCHES_KEY)
+		self.assertEqual(payload["context"]["operational_date"], "2026-09-04")
+		self.assertEqual(payload["context"]["branch"], "")
+		self.assertEqual(payload["context"]["branch_value"], ALL_BRANCHES_KEY)
 
 	def test_guest_cannot_load_veterinary_home_payload(self):
 		frappe.set_user("Guest")
@@ -118,6 +132,52 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 			self.assertIn("my-active-consultations", metric_keys)
 		finally:
 			self.restore_flags(original)
+
+	def test_waiting_appointment_metric_is_bounded_to_operational_date(self):
+		original = self.save_flags("enable_vetedge", "enable_appointments")
+		try:
+			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_appointments", 1, update_modified=False)
+			metrics = _build_metrics(
+				"Administrator",
+				{"administrator"},
+				"",
+				[],
+				True,
+				"2026-09-04",
+			)
+			waiting = next(metric for metric in metrics if metric["key"] == "waiting-appointments")
+			filters = waiting["_query"]["filters"]
+			self.assertEqual(filters["status"], ["in", ["Confirmed", "Checked In"]])
+			self.assertEqual(
+				filters["appointment_datetime"],
+				["between", ["2026-09-04 00:00:00", "2026-09-04 23:59:59"]],
+			)
+		finally:
+			self.restore_flags(original)
+
+	def test_card_count_matches_exact_metric_drilldown_total(self):
+		original = self.save_flags("enable_vetedge", "enable_appointments")
+		try:
+			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_appointments", 1, update_modified=False)
+			payload = get_home_payload(operational_date=nowdate(), branch=ALL_BRANCHES_KEY)
+			metric = next(row for row in payload["metrics"] if row["key"] == "today-appointments")
+			drilldown = get_metric_drilldown(
+				"today-appointments",
+				operational_date=nowdate(),
+				branch=ALL_BRANCHES_KEY,
+			)
+			self.assertEqual(metric["value"], drilldown["total"])
+			self.assertEqual(drilldown["metric"]["key"], "today-appointments")
+			self.assertEqual(drilldown["doctype"], "Veterinary Appointment")
+			self.assertLessEqual(len(drilldown["rows"]), drilldown["total"])
+		finally:
+			self.restore_flags(original)
+
+	def test_unknown_metric_cannot_be_used_as_generic_doctype_browser(self):
+		with self.assertRaises(frappe.PermissionError):
+			get_metric_drilldown("not-a-vetedge-home-metric")
 
 	def test_groomer_receives_permission_safe_operational_snapshot(self):
 		original = self.save_flags("enable_vetedge", "enable_grooming")
