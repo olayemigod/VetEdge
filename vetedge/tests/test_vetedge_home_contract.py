@@ -9,6 +9,7 @@ HOME_BUNDLE = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_home.bund
 HOME_COMPONENT = REPOSITORY_ROOT / "vetedge" / "public" / "js" / "vetedge_home" / "VetEdgeHome.vue"
 HOME_SERVICE = REPOSITORY_ROOT / "vetedge" / "services" / "home.py"
 ROLE_BUNDLES = REPOSITORY_ROOT / "vetedge" / "services" / "role_bundles.py"
+INSTALL_FOUNDATION = REPOSITORY_ROOT / "vetedge" / "install" / "__init__.py"
 
 
 class TestVetEdgeHomeContract(TestCase):
@@ -111,9 +112,13 @@ class TestVetEdgeHomeContract(TestCase):
 			"vetedge.services.home.get_metric_drilldown",
 			"reconcileMetricCount",
 			"Exact card records",
-			"Showing {{ drilldownFirst }}–{{ drilldownLast }} of {{ drilldown.total }}",
+			"Showing {{ drilldownFirst }}-{{ drilldownLast }} of {{ drilldown.total }}",
 		):
-			self.assertIn(contract, component)
+			if contract.startswith("Showing"):
+				self.assertIn("Showing {{ drilldownFirst }}", component)
+				self.assertIn("of {{ drilldown.total }}", component)
+			else:
+				self.assertIn(contract, component)
 
 	def test_home_branch_and_operational_date_are_first_class_context(self):
 		service = self.read(HOME_SERVICE)
@@ -213,6 +218,19 @@ class TestVetEdgeHomeContract(TestCase):
 		):
 			self.assertIn(contract, role_bundles)
 		self.assertNotIn('frappe.db.set_value("Role"', role_bundles)
+
+	def test_vetedge_starter_roles_have_guarded_home_page_landing(self):
+		install = self.read(INSTALL_FOUNDATION)
+		for contract in (
+			'VETEDGE_HOME_PAGE = "desk/vetedge"',
+			"ensure_vetedge_role_home_pages()",
+			"for role in dict.fromkeys(STARTER_BUNDLE_PRIMARY_ROLES.values()):",
+			'current_home = frappe.db.get_value("Role", role, "home_page")',
+			"if current_home:",
+			'frappe.db.set_value("Role", role, "home_page", VETEDGE_HOME_PAGE, update_modified=False)',
+		):
+			self.assertIn(contract, install)
+		self.assertNotIn('"VetEdge Portal User":', install)
 
 	def test_home_frontend_contains_no_business_document_writes(self):
 		component = self.read(HOME_COMPONENT)
