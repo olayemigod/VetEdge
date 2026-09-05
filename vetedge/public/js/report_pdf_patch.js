@@ -77,7 +77,38 @@ frappe.render_pdf = function (html, opts = {}) {
 };
 
 
-frappe.require("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1");
-frappe.require("/assets/vetedge/js/vetedge_postqa_navigation_hardening.js?v=20260905-1");
-frappe.require("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
-frappe.require("/assets/vetedge/js/vetedge_report_scheduling_management_ui.js");
+// Navigation hardening is operational shell infrastructure, not reporting
+// functionality. Load it independently before any optional frappe.require()
+// calls so a failure in another late-loaded VetEdge helper cannot prevent the
+// direct Veterinary Home/sidebar repair from installing.
+(function loadVetEdgePostQaNavigationHardening() {
+	if (window.__vetedgePostQaNavigationHardeningInstalled) return;
+	if (document.querySelector('script[data-vetedge-postqa-navigation="1"]')) return;
+
+	const script = document.createElement("script");
+	script.src = "/assets/vetedge/js/vetedge_postqa_navigation_hardening.js?v=20260905-1";
+	script.async = false;
+	script.dataset.vetedgePostqaNavigation = "1";
+	script.onload = function () {
+		window.VetEdgePostQaNavigation?.reconcile?.();
+	};
+	script.onerror = function () {
+		console.error("VetEdge navigation hardening asset failed to load:", script.src);
+	};
+	(document.head || document.documentElement).appendChild(script);
+})();
+
+function vetedgeSafeRequire(path) {
+	try {
+		const pending = frappe.require(path);
+		if (pending && typeof pending.catch === "function") {
+			pending.catch((error) => console.error(`VetEdge optional asset failed to load: ${path}`, error));
+		}
+	} catch (error) {
+		console.error(`VetEdge optional asset failed to load: ${path}`, error);
+	}
+}
+
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1");
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_management_ui.js");
