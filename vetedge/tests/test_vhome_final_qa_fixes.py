@@ -73,6 +73,7 @@ def test_sidebar_primary_groups_use_veterinary_operational_labels_and_order():
 def test_veterinary_desktop_icon_opens_new_home_directly():
     icon = json.loads(read("vetedge/desktop_icon/vetedge.json"))
     hooks = read("vetedge/hooks.py")
+    install = read("vetedge/install/__init__.py")
 
     assert icon["label"] == "Veterinary"
     assert icon["icon_type"] == "App"
@@ -82,3 +83,9 @@ def test_veterinary_desktop_icon_opens_new_home_directly():
     assert 'app_home = "/desk/vetedge"' in hooks
     assert '"route": app_home' in hooks
     assert "/desk/vetedge-executive-dashboard" not in icon.get("link", "")
+
+    assert 'VETEDGE_HOME_ROUTE = "/desk/vetedge"' in install
+    assert 'VETEDGE_DESKTOP_ICON = "VetEdge"' in install
+    assert "ensure_veterinary_desktop_icon_home()" in install
+    assert '"link": VETEDGE_HOME_ROUTE' in install
+    assert '"link_type": "External"' in install
