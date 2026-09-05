@@ -7,6 +7,12 @@
 	const SHELL_SELECTOR = ".edge-app-shell[data-edge-product]";
 	const HOME_DATASET_KEY = "vetedgeDirectHome";
 	const HOME_ATTRIBUTE = "data-vetedge-direct-home";
+	const HOME_LABEL = "Veterinary Home";
+	const PRIMARY_SECTION_LABELS = Object.freeze({
+		Clinical: "Clinical Operations",
+		"Front Desk": "Appointments",
+	});
+	const PRIMARY_SECTION_ORDER = Object.freeze(["Dashboard", "Clinical Operations", "Appointments"]);
 	const PRODUCT_HOST_ID = "edge-product-menu-host";
 	const PRODUCT_TRIGGER_ID = "edge-product-menu-trigger";
 	const PRODUCT_PANEL_ID = "edge-product-menu-dropdown";
@@ -50,16 +56,41 @@
 		return true;
 	}
 
+	function visibleLabelNode(element) {
+		return Array.from(element?.children || []).find((node) => !node.classList?.contains("edge-icon")) || null;
+	}
+
 	function sectionLabel(toggle) {
-		const labelNode = Array.from(toggle?.children || []).find((node) => !node.classList?.contains("edge-icon"));
+		const labelNode = visibleLabelNode(toggle);
 		return String(labelNode?.textContent || toggle?.textContent || "").trim();
+	}
+
+	function setVisibleLabel(element, label) {
+		if (!element) return false;
+		const labelNode = visibleLabelNode(element);
+		if (labelNode) {
+			if (String(labelNode.textContent || "").trim() !== label) labelNode.textContent = label;
+			return true;
+		}
+		const textNode = Array.from(element.childNodes || []).find((node) => node.nodeType === 3 && String(node.textContent || "").trim());
+		if (textNode) {
+			if (String(textNode.textContent || "").trim() !== label) textNode.textContent = label;
+			return true;
+		}
+		const span = global.document?.createElement?.("span");
+		if (!span) return false;
+		span.className = "edge-sidebar-item__label";
+		span.textContent = label;
+		element.appendChild(span);
+		return true;
 	}
 
 	function syncDirectHomeState(item) {
 		if (!item) return false;
 		item.dataset[HOME_DATASET_KEY] = "1";
-		item.setAttribute("aria-label", "Home");
-		item.setAttribute("title", "Home");
+		setVisibleLabel(item, HOME_LABEL);
+		item.setAttribute("aria-label", HOME_LABEL);
+		item.setAttribute("title", HOME_LABEL);
 		item.removeAttribute("aria-expanded");
 		item.removeAttribute("aria-controls");
 		const active = directHomeTarget();
@@ -74,7 +105,8 @@
 		if (existing) return syncDirectHomeState(existing);
 
 		const homeSection = Array.from(shell.querySelectorAll(".edge-sidebar__section")).find((section) => {
-			return sectionLabel(section.querySelector(".edge-sidebar__section-toggle")) === "Home";
+			const label = sectionLabel(section.querySelector(".edge-sidebar__section-toggle"));
+			return label === "Home" || label === HOME_LABEL;
 		});
 		if (!homeSection) return false;
 
@@ -82,7 +114,7 @@
 		const nestedItem = homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
 		if (!toggle && !nestedItem) return false;
 
-		// Home is navigation, not a category. Replace the one-item accordion
+		// Veterinary Home is navigation, not a category. Replace the one-item accordion
 		// section with the actual sidebar item so there is no chevron, expansion
 		// state, hidden child, or second click required. Clone the generated child
 		// when available so EdgeSuite keeps its canonical icon/label markup.
@@ -96,6 +128,33 @@
 		});
 		syncDirectHomeState(directItem);
 		homeSection.replaceWith(directItem);
+		return true;
+	}
+
+	function normalizePrimarySections(shell) {
+		const sections = Array.from(shell.querySelectorAll(".edge-sidebar__section"));
+		sections.forEach((section) => {
+			const toggle = section.querySelector(".edge-sidebar__section-toggle");
+			const currentLabel = sectionLabel(toggle);
+			const desiredLabel = PRIMARY_SECTION_LABELS[currentLabel];
+			if (!desiredLabel) return;
+			setVisibleLabel(toggle, desiredLabel);
+			toggle?.setAttribute("aria-label", desiredLabel);
+			toggle?.setAttribute("title", desiredLabel);
+		});
+
+		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (!directHome?.parentElement) return false;
+		let anchor = directHome;
+		const orderedSections = Array.from(shell.querySelectorAll(".edge-sidebar__section"));
+		for (const label of PRIMARY_SECTION_ORDER) {
+			const section = orderedSections.find((candidate) => {
+				return sectionLabel(candidate.querySelector(".edge-sidebar__section-toggle")) === label;
+			});
+			if (!section || section.parentElement !== anchor.parentElement) continue;
+			if (anchor.nextElementSibling !== section) anchor.insertAdjacentElement("afterend", section);
+			anchor = section;
+		}
 		return true;
 	}
 
@@ -270,6 +329,7 @@
 		const shell = vetedgeShell();
 		if (!shell) return false;
 		patchDirectHome(shell);
+		normalizePrimarySections(shell);
 		ensureProductMenu(shell);
 		return true;
 	}

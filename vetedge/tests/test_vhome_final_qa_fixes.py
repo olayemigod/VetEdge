@@ -48,14 +48,26 @@ def test_downstream_pages_accept_the_record_query_contract():
     assert "quickEditorView?.open?.({" in resource_bundle
 
 
-def test_sidebar_home_is_a_true_direct_item_not_a_hidden_accordion():
+def test_sidebar_veterinary_home_is_a_true_direct_item_not_a_hidden_accordion():
     hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
 
+    assert 'const HOME_LABEL = "Veterinary Home";' in hardening
     assert 'homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item")' in hardening
     assert 'directItem.classList.add("edge-sidebar-item")' in hardening
+    assert "setVisibleLabel(item, HOME_LABEL);" in hardening
+    assert 'item.setAttribute("aria-label", HOME_LABEL)' in hardening
     assert "homeSection.replaceWith(directItem);" in hardening
     assert 'item.removeAttribute("aria-expanded")' in hardening
     assert "nestedItems.hidden = true" not in hardening
+
+
+def test_sidebar_primary_groups_use_veterinary_operational_labels_and_order():
+    hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
+
+    assert 'Clinical: "Clinical Operations"' in hardening
+    assert '"Front Desk": "Appointments"' in hardening
+    assert 'Object.freeze(["Dashboard", "Clinical Operations", "Appointments"])' in hardening
+    assert "normalizePrimarySections(shell);" in hardening
 
 
 def test_veterinary_desktop_icon_opens_new_home_directly():

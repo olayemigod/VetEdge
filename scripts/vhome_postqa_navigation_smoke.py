@@ -43,6 +43,12 @@ body { margin: 0; font-family: sans-serif; }
       </div>
     </section>
     <section class="edge-sidebar__section">
+      <button class="edge-sidebar__section-toggle" type="button" aria-expanded="false"><span>Dashboard</span><span class="edge-icon">V</span></button>
+    </section>
+    <section class="edge-sidebar__section">
+      <button class="edge-sidebar__section-toggle" type="button" aria-expanded="false"><span>Front Desk</span><span class="edge-icon">V</span></button>
+    </section>
+    <section class="edge-sidebar__section">
       <button class="edge-sidebar__section-toggle" type="button" aria-expanded="false"><span>Clinical</span><span class="edge-icon">V</span></button>
     </section>
   </aside>
@@ -112,9 +118,23 @@ window.EdgeUI = window.EdgeSuiteUI;
 
 		home = page.locator('[data-vetedge-direct-home="1"].edge-sidebar-item')
 		assert await home.count() == 1
+		assert (await home.inner_text()).strip() == "Veterinary Home"
+		assert await home.get_attribute("aria-label") == "Veterinary Home"
 		assert await page.locator('[data-vetedge-direct-home="1"].edge-sidebar__section-toggle').count() == 0
 		assert await page.locator('.edge-sidebar__section[data-vetedge-direct-home="1"]').count() == 0
 		assert await home.get_attribute("aria-expanded") is None
+
+		primary_labels = await page.locator(".edge-sidebar").evaluate(
+			"""sidebar => Array.from(sidebar.children).map(node => {
+			  const target = node.matches('[data-vetedge-direct-home="1"]')
+			    ? node
+			    : node.querySelector('.edge-sidebar__section-toggle');
+			  if (!target) return '';
+			  const label = Array.from(target.children || []).find(child => !child.classList.contains('edge-icon'));
+			  return (label?.textContent || target.textContent || '').trim();
+			})"""
+		)
+		assert primary_labels[:4] == ["Veterinary Home", "Dashboard", "Clinical Operations", "Appointments"]
 
 		await home.click()
 		await page.wait_for_function("window.__events.routes.includes('/desk/vetedge')")
@@ -143,7 +163,7 @@ window.EdgeUI = window.EdgeSuiteUI;
 		assert state["productMenuBridged"] is True
 		assert events["opened"] >= 1
 		assert events["closed"] >= 1
-		print(json.dumps({"state": state, "events": events}, indent=2, sort_keys=True))
+		print(json.dumps({"state": state, "events": events, "primary_labels": primary_labels}, indent=2, sort_keys=True))
 		await browser.close()
 
 
