@@ -31,6 +31,17 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 				user.add_roles(role)
 		return email
 
+	def save_flags(self, *fieldnames: str) -> dict[str, object]:
+		return {
+			fieldname: frappe.db.get_single_value("Veterinary Settings", fieldname)
+			for fieldname in fieldnames
+		}
+
+	def restore_flags(self, values: dict[str, object]) -> None:
+		frappe.set_user("Administrator")
+		for fieldname, value in values.items():
+			frappe.db.set_single_value("Veterinary Settings", fieldname, value or 0, update_modified=False)
+
 	def test_administrator_home_payload_executes_on_installed_site(self):
 		payload = get_home_payload()
 		self.assertEqual(payload["primary_persona"]["key"], "administrator")
@@ -71,9 +82,34 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 		payload = get_home_payload()
 		self.assertEqual(payload["primary_persona"]["key"], "accounts")
 
+	def test_manager_doctor_receives_branch_and_personal_metric_scopes(self):
+		original = self.save_flags("enable_vetedge", "enable_appointments", "enable_consultations")
+		try:
+			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_appointments", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_consultations", 1, update_modified=False)
+			user = self.ensure_user(
+				"vhome-manager-doctor@example.com",
+				("Branch Manager", "VetEdge Doctor", "Desk User", "Accounts User", "Sales User", "Stock User"),
+			)
+			frappe.set_user(user)
+			payload = get_home_payload()
+			persona_keys = {persona["key"] for persona in payload["personas"]}
+			metric_keys = {metric["key"] for metric in payload["metrics"]}
+
+			self.assertEqual(payload["primary_persona"]["key"], "branch-manager")
+			self.assertIn("doctor", persona_keys)
+			self.assertIn("today-appointments", metric_keys)
+			self.assertIn("my-appointments-today", metric_keys)
+			self.assertIn("waiting-appointments", metric_keys)
+			self.assertIn("waiting-for-me", metric_keys)
+			self.assertIn("active-consultations", metric_keys)
+			self.assertIn("my-active-consultations", metric_keys)
+		finally:
+			self.restore_flags(original)
+
 	def test_disabled_appointments_hide_front_desk_actions_and_metrics(self):
-		original_enable_vetedge = frappe.db.get_single_value("Veterinary Settings", "enable_vetedge")
-		original_enable_appointments = frappe.db.get_single_value("Veterinary Settings", "enable_appointments")
+		original = self.save_flags("enable_vetedge", "enable_appointments")
 		try:
 			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
 			frappe.db.set_single_value("Veterinary Settings", "enable_appointments", 0, update_modified=False)
@@ -94,10 +130,4 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 			self.assertNotIn("waiting-appointments", metric_keys)
 			self.assertNotIn("missed-follow-up", metric_keys)
 		finally:
-			frappe.set_user("Administrator")
-			frappe.db.set_single_value(
-				"Veterinary Settings", "enable_vetedge", original_enable_vetedge or 0, update_modified=False
-			)
-			frappe.db.set_single_value(
-				"Veterinary Settings", "enable_appointments", original_enable_appointments or 0, update_modified=False
-			)
+			self.restore_flags(original)
