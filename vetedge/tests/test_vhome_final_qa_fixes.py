@@ -40,7 +40,7 @@ def test_downstream_pages_accept_the_record_query_contract():
     resource_bundle = read("vetedge/public/js/vetedge_resource_center.bundle.js")
 
     assert 'params.get("consultation")' in clinical
-    assert 'params.get("name")' in front_desk
+    assert "params.get('name')" in front_desk
     assert "view.openMissedDetail?.({ name: requested.name })" in front_desk
     assert "const requestedName = valueFrom(requestedRoute, 'name');" in resource_bundle
     assert "resourceView.openClinicalRecord?.({ name: state.name });" in resource_bundle
@@ -53,5 +53,5 @@ def test_sidebar_home_is_a_true_direct_item_not_a_hidden_accordion():
     assert 'homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item")' in hardening
     assert 'directItem.classList.add("edge-sidebar-item")' in hardening
     assert "homeSection.replaceWith(directItem);" in hardening
-    assert 'directItem.removeAttribute("aria-expanded")' in hardening
+    assert 'item.removeAttribute("aria-expanded")' in hardening
     assert "nestedItems.hidden = true" not in hardening
