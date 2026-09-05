@@ -96,14 +96,17 @@ class TestVetEdgeHomeContract(TestCase):
 		self.assertIn("if not personas and roles & GENERIC_ACCOUNTS_ROLES", service)
 		self.assertIn("starter bundles deliberately add generic ERPNext support roles", service)
 
-	def test_role_specific_metrics_do_not_turn_every_permission_into_dashboard_content(self):
+	def test_role_specific_and_multi_role_metrics_keep_distinct_scopes(self):
 		service = self.read(HOME_SERVICE)
 		for contract in (
-			'appointment_personas = {"administrator", "branch-manager", "doctor", "front-desk", "nurse"}',
-			'consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}',
-			'if persona_keys & {"lab"}',
-			'"lab-pending"',
-			'persona_keys & {"administrator", "branch-manager", "front-desk"}',
+			"_build_appointment_metrics",
+			'broad_personas = {"administrator", "branch-manager", "front-desk", "nurse"}',
+			'"my-appointments-today"',
+			'"waiting-for-me"',
+			"_build_consultation_metrics",
+			'broad_personas = {"administrator", "branch-manager", "nurse"}',
+			'"my-active-consultations"',
+			'"my-completed-today"',
 			'persona_keys & {"accounts", "branch-manager", "administrator"}',
 		):
 			self.assertIn(contract, service)
