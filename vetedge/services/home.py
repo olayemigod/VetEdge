@@ -134,8 +134,6 @@ ACTION_DEFINITIONS = {
 	),
 }
 
-# Keep operational Home composition aligned with existing Veterinary Settings.
-# Routes without a feature mapping remain governed by role/DocType permissions.
 FEATURE_ROUTE_FLAGS = (
 	("/desk/vetedge-front-desk-action-center", "enable_appointments"),
 	("/desk/vetedge-resource-center?resource=appointments", "enable_appointments"),
@@ -161,8 +159,8 @@ def _existing_doctype(doctype: str) -> bool:
 
 
 def _feature_enabled(fieldname: str) -> bool:
-	# Existing installations may pre-date a field. In that case preserve current
-	# compatibility rather than removing a capability solely because Home is new.
+	# Existing installations may pre-date a field. Preserve compatibility when
+	# the switch itself is absent, but respect an explicitly disabled master.
 	if fieldname != "enable_vetedge" and not get_veterinary_settings_flag("enable_vetedge", default=True):
 		return False
 	return get_veterinary_settings_flag(fieldname, default=True)
@@ -273,6 +271,177 @@ def _metric(
 	}
 
 
+def _append_metric(metrics: list[dict | None], metric: dict | None) -> None:
+	if metric is not None:
+		metrics.append(metric)
+
+
+def _build_appointment_metrics(
+	metrics: list[dict | None],
+	user: str,
+	persona_keys: set[str],
+	filters: dict,
+) -> None:
+	if not _feature_enabled("enable_appointments") or not _existing_doctype("Veterinary Appointment"):
+		return
+
+	meta = frappe.get_meta("Veterinary Appointment")
+	broad_personas = {"administrator", "branch-manager", "front-desk", "nurse"}
+	if persona_keys & broad_personas:
+		today_filters = dict(filters)
+		if meta.has_field("appointment_datetime"):
+			today_filters["appointment_datetime"] = _today_range()
+			_append_metric(
+				metrics,
+				_metric(
+					"today-appointments",
+					_("Today's Appointments"),
+					_permission_count("Veterinary Appointment", today_filters),
+					_("Visible in your current branch scope"),
+					"/desk/vetedge-resource-center?resource=appointments",
+				),
+			)
+		_append_metric(
+			metrics,
+			_metric(
+				"waiting-appointments",
+				_("Waiting / Checked In"),
+				_permission_count(
+					"Veterinary Appointment",
+					_with(filters, status=["in", ["Confirmed", "Checked In"]]),
+				),
+				_("Patients requiring operational attention"),
+				"/desk/vetedge-front-desk-action-center?tab=queue",
+				"warning",
+			),
+		)
+
+	if "doctor" in persona_keys:
+		my_filters = dict(filters)
+		if meta.has_field("practitioner"):
+			my_filters["practitioner"] = user
+		my_today_filters = dict(my_filters)
+		if meta.has_field("appointment_datetime"):
+			my_today_filters["appointment_datetime"] = _today_range()
+			_append_metric(
+				metrics,
+				_metric(
+					"my-appointments-today",
+					_("My Appointments Today"),
+					_permission_count("Veterinary Appointment", my_today_filters),
+					_("Appointments assigned to you today"),
+					"/desk/vetedge-resource-center?resource=appointments",
+				),
+			)
+		_append_metric(
+			metrics,
+			_metric(
+				"waiting-for-me",
+				_("Waiting for Me"),
+				_permission_count(
+					"Veterinary Appointment",
+					_with(my_filters, status=["in", ["Confirmed", "Checked In"]]),
+				),
+				_("Your confirmed or checked-in patients"),
+				"/desk/vetedge-front-desk-action-center?tab=queue",
+				"warning",
+			),
+		)
+
+
+def _build_consultation_metrics(
+	metrics: list[dict | None],
+	user: str,
+	persona_keys: set[str],
+	filters: dict,
+) -> None:
+	if not _feature_enabled("enable_consultations") or not _existing_doctype("Veterinary Consultation"):
+		return
+
+	meta = frappe.get_meta("Veterinary Consultation")
+	broad_personas = {"administrator", "branch-manager", "nurse"}
+	if persona_keys & broad_personas:
+		_append_metric(
+			metrics,
+			_metric(
+				"active-consultations",
+				_("Active Consultations"),
+				_permission_count(
+					"Veterinary Consultation",
+					_with(filters, status=["not in", ["Completed", "Cancelled"]]),
+				),
+				_("Not completed or cancelled"),
+				"/desk/vetedge-clinical-workspace",
+				"primary",
+			),
+		)
+		if meta.has_field("consultation_datetime"):
+			_append_metric(
+				metrics,
+				_metric(
+					"completed-today",
+					_("Completed Today"),
+					_permission_count(
+						"Veterinary Consultation",
+						_with(filters, status="Completed", consultation_datetime=_today_range()),
+					),
+					_("Completed consultations today"),
+					"/desk/vetedge-clinical-workspace",
+					"success",
+				),
+			)
+
+	if "doctor" in persona_keys:
+		my_filters = dict(filters)
+		if meta.has_field("consulting_practitioner"):
+			my_filters["consulting_practitioner"] = user
+		_append_metric(
+			metrics,
+			_metric(
+				"my-active-consultations",
+				_("My Active Consultations"),
+				_permission_count(
+					"Veterinary Consultation",
+					_with(my_filters, status=["not in", ["Completed", "Cancelled"]]),
+				),
+				_("Your consultations not completed or cancelled"),
+				"/desk/vetedge-clinical-workspace",
+				"primary",
+			),
+		)
+		if meta.has_field("consultation_datetime"):
+			_append_metric(
+				metrics,
+				_metric(
+					"my-completed-today",
+					_("My Completed Today"),
+					_permission_count(
+						"Veterinary Consultation",
+						_with(my_filters, status="Completed", consultation_datetime=_today_range()),
+					),
+					_("Your consultations completed today"),
+					"/desk/vetedge-clinical-workspace",
+					"success",
+				),
+			)
+
+	if "dispensary" in persona_keys and _feature_enabled("enable_dispensary_flow") and meta.has_field("dispensary_status"):
+		_append_metric(
+			metrics,
+			_metric(
+				"pending-dispensary",
+				_("Pending Dispensary"),
+				_permission_count(
+					"Veterinary Consultation",
+					_with(filters, dispensary_status="Pending Dispensary"),
+				),
+				_("Consultations awaiting fulfilment"),
+				"/desk/vetedge-clinical-workspace",
+				"warning",
+			),
+		)
+
+
 def _build_metrics(
 	user: str,
 	persona_keys: set[str],
@@ -287,100 +456,8 @@ def _build_metrics(
 	lab_filters = _branch_filters("Veterinary Lab Order", branch, assigned, global_access)
 	missed_filters = _branch_filters("Veterinary Missed Appointment", branch, assigned, global_access)
 
-	appointment_personas = {"administrator", "branch-manager", "doctor", "front-desk", "nurse"}
-	if (
-		persona_keys & appointment_personas
-		and _feature_enabled("enable_appointments")
-		and _existing_doctype("Veterinary Appointment")
-	):
-		meta = frappe.get_meta("Veterinary Appointment")
-		today_filters = dict(appointment_filters)
-		waiting_filters = _with(appointment_filters, status=["in", ["Confirmed", "Checked In"]])
-
-		if "doctor" in persona_keys and meta.has_field("practitioner"):
-			today_filters["practitioner"] = user
-			waiting_filters["practitioner"] = user
-
-		if meta.has_field("appointment_datetime"):
-			today_filters["appointment_datetime"] = _today_range()
-			metrics.append(
-				_metric(
-					"today-appointments",
-					_("My Appointments Today") if "doctor" in persona_keys else _("Today's Appointments"),
-					_permission_count("Veterinary Appointment", today_filters),
-					_("Visible in your current access scope"),
-					"/desk/vetedge-resource-center?resource=appointments",
-				)
-			)
-
-		metrics.append(
-			_metric(
-				"waiting-appointments",
-				_("Waiting for Me") if "doctor" in persona_keys else _("Waiting / Checked In"),
-				_permission_count("Veterinary Appointment", waiting_filters),
-				_("Patients requiring operational attention"),
-				"/desk/vetedge-front-desk-action-center?tab=queue",
-				"warning",
-			)
-		)
-
-	consultation_personas = {"administrator", "branch-manager", "doctor", "nurse", "dispensary"}
-	if (
-		persona_keys & consultation_personas
-		and _feature_enabled("enable_consultations")
-		and _existing_doctype("Veterinary Consultation")
-	):
-		meta = frappe.get_meta("Veterinary Consultation")
-		active_filters = _with(consultation_filters, status=["not in", ["Completed", "Cancelled"]])
-		completed_filters = _with(consultation_filters, status="Completed")
-
-		if "doctor" in persona_keys and meta.has_field("consulting_practitioner"):
-			active_filters["consulting_practitioner"] = user
-			completed_filters["consulting_practitioner"] = user
-
-		if "dispensary" not in persona_keys or persona_keys & {"administrator", "branch-manager", "doctor", "nurse"}:
-			metrics.append(
-				_metric(
-					"active-consultations",
-					_("My Active Consultations") if "doctor" in persona_keys else _("Active Consultations"),
-					_permission_count("Veterinary Consultation", active_filters),
-					_("Not completed or cancelled"),
-					"/desk/vetedge-clinical-workspace",
-					"primary",
-				)
-			)
-
-			if meta.has_field("consultation_datetime"):
-				completed_filters["consultation_datetime"] = _today_range()
-				metrics.append(
-					_metric(
-						"completed-today",
-						_("Completed Today"),
-						_permission_count("Veterinary Consultation", completed_filters),
-						_("Completed consultations today"),
-						"/desk/vetedge-clinical-workspace",
-						"success",
-					)
-				)
-
-		if (
-			"dispensary" in persona_keys
-			and _feature_enabled("enable_dispensary_flow")
-			and meta.has_field("dispensary_status")
-		):
-			metrics.append(
-				_metric(
-					"pending-dispensary",
-					_("Pending Dispensary"),
-					_permission_count(
-						"Veterinary Consultation",
-						_with(consultation_filters, dispensary_status="Pending Dispensary"),
-					),
-					_("Consultations awaiting fulfilment"),
-					"/desk/vetedge-clinical-workspace",
-					"warning",
-				)
-			)
+	_build_appointment_metrics(metrics, user, persona_keys, appointment_filters)
+	_build_consultation_metrics(metrics, user, persona_keys, consultation_filters)
 
 	if (
 		_feature_enabled("enable_vetedge")
@@ -388,7 +465,8 @@ def _build_metrics(
 		and frappe.get_meta("Veterinary Lab Order").has_field("status")
 	):
 		if persona_keys & {"lab"}:
-			metrics.append(
+			_append_metric(
+				metrics,
 				_metric(
 					"lab-pending",
 					_("Pending Lab Work"),
@@ -405,10 +483,11 @@ def _build_metrics(
 					_("Laboratory orders still requiring processing"),
 					"/desk/vetedge-resource-center?resource=lab-orders",
 					"warning",
-				)
+				),
 			)
 		if persona_keys & {"administrator", "branch-manager", "doctor", "nurse"}:
-			metrics.append(
+			_append_metric(
+				metrics,
 				_metric(
 					"lab-review",
 					_("Lab Results to Review"),
@@ -419,7 +498,7 @@ def _build_metrics(
 					_("Results ready for clinical review"),
 					"/desk/vetedge-resource-center?resource=lab-orders",
 					"warning",
-				)
+				),
 			)
 
 	if (
@@ -431,7 +510,8 @@ def _build_metrics(
 		filters = dict(missed_filters)
 		if meta.has_field("resolved"):
 			filters["resolved"] = 0
-		metrics.append(
+		_append_metric(
+			metrics,
 			_metric(
 				"missed-follow-up",
 				_("Missed Follow-up"),
@@ -439,7 +519,7 @@ def _build_metrics(
 				_("Unresolved missed appointments"),
 				"/desk/vetedge-front-desk-action-center?tab=missed",
 				"danger",
-			)
+			),
 		)
 
 	if persona_keys & {"accounts", "branch-manager", "administrator"} and _existing_doctype("Sales Invoice"):
@@ -448,7 +528,8 @@ def _build_metrics(
 		filters["docstatus"] = 1
 		if meta.has_field("outstanding_amount"):
 			filters["outstanding_amount"] = [">", 0]
-		metrics.append(
+		_append_metric(
+			metrics,
 			_metric(
 				"outstanding-invoices",
 				_("Outstanding Invoices"),
@@ -456,7 +537,7 @@ def _build_metrics(
 				_("Submitted invoices with balance due"),
 				"/desk/sales-invoice",
 				"warning",
-			)
+			),
 		)
 
 	return [metric for metric in metrics if metric is not None]
@@ -494,11 +575,13 @@ def _build_attention(metrics: list[dict]) -> list[dict]:
 	attention = []
 	priority = {
 		"missed-follow-up": (90, _("Follow up missed appointments")),
+		"waiting-for-me": (85, _("Your patients are waiting for service")),
 		"waiting-appointments": (80, _("Patients are waiting for service")),
 		"lab-review": (70, _("Laboratory results are ready for review")),
 		"lab-pending": (68, _("Laboratory orders still require processing")),
 		"pending-dispensary": (65, _("Dispensary fulfilment is pending")),
 		"outstanding-invoices": (60, _("Outstanding invoices need collection follow-up")),
+		"my-active-consultations": (55, _("You have consultations still in progress")),
 		"active-consultations": (50, _("Consultations are still active")),
 	}
 	for metric in metrics:
