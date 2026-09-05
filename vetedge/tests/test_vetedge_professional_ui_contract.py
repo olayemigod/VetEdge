@@ -98,11 +98,15 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		self.assertNotIn("coreedge/", content.lower())
 		self.assertNotIn("window.history.pushState", content)
 
-	def test_vetedge_home_stays_in_desk_and_routes_to_resource_center(self):
+	def test_vetedge_home_stays_in_desk_and_mounts_role_aware_workspace(self):
 		content = self.read(VETEDGE_HOME)
 		self.assertIn('title: __("Veterinary Home")', content)
-		self.assertIn('const target = "/desk/vetedge-resource-center";', content)
-		self.assertIn('frappe.set_route("vetedge-resource-center")', content)
+		self.assertIn('frappe.require("edgeui.bundle.js"', content)
+		self.assertIn('frappe.require("vetedge_home.bundle.js"', content)
+		self.assertIn("window.mountVetEdgeHome", content)
+		self.assertIn("VETEDGE_HOME_REFRESH_MAX_AGE_MS", content)
+		self.assertNotIn('const target = "/desk/vetedge-resource-center";', content)
+		self.assertNotIn('frappe.set_route("vetedge-resource-center")', content)
 		self.assertNotIn("window.location.replace", content)
 
 	def test_consumer_adapter_installs_professional_shell_and_menu_contract(self):
