@@ -255,7 +255,11 @@ jobs:
             exit 1
           fi
 
-          python "$GITHUB_WORKSPACE/scripts/vhome_browser_smoke.py"
+          # Keep the browser phase bounded well inside the overall job timeout.
+          # The script checkpoints progress after each persona so a timeout still
+          # leaves useful evidence instead of an empty artifact.
+          PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=15s 20m \
+            python "$GITHUB_WORKSPACE/scripts/vhome_browser_smoke.py"
 
       - name: Upload Veterinary Home browser evidence
         if: always()
