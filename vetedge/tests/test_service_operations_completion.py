@@ -11,6 +11,7 @@ def read(path: str) -> str:
 def test_service_operations_exposes_boarding_and_grooming_business_documents():
     service = read("vetedge/services/service_operations.py")
     component = read("vetedge/public/js/vetedge_service_operations/VetEdgeServiceOperations.vue")
+    bundle = read("vetedge/public/js/vetedge_service_operations.bundle.js")
 
     assert '"boarding-bookings"' in service
     assert '"doctype": "Pet Boarding Booking"' in service
@@ -20,10 +21,24 @@ def test_service_operations_exposes_boarding_and_grooming_business_documents():
     assert '"editor_resource": "grooming"' in service
 
     assert 'value: "boarding-bookings"' in component
-    assert 'value: "grooming-appointments"' in component
+    assert "GROOMING_APPOINTMENTS_TAB" in bundle
+    assert "value: 'grooming-appointments'" in bundle
+    assert "state.resource = GROOMING_APPOINTMENTS_TAB.value" in bundle
     assert "New Boarding Booking" in component
-    assert "New Grooming Appointment" in component
+    assert "New Grooming Appointment" in bundle
     assert "/desk/vetedge-resource-center?resource=" in component
+
+
+def test_grooming_appointment_deep_link_stays_in_service_operations_detail():
+    bundle = read("vetedge/public/js/vetedge_service_operations.bundle.js")
+    component = read("vetedge/public/js/vetedge_service_operations/VetEdgeServiceOperations.vue")
+    page = read("vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js")
+
+    assert "'grooming-appointments'" in page
+    assert "requestedServiceResource() === GROOMING_APPOINTMENTS_TAB.value" in bundle
+    assert 'requestedName: params.get("name") || ""' in component
+    assert 'if (this.requestedName && this.resource !== "availability")' in component
+    assert "await this.openDetail({ name });" in component
 
 
 def test_boarding_actions_reuse_server_workflow_and_billing_truth():
