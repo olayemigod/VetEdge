@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,3 +56,17 @@ def test_sidebar_home_is_a_true_direct_item_not_a_hidden_accordion():
     assert "homeSection.replaceWith(directItem);" in hardening
     assert 'item.removeAttribute("aria-expanded")' in hardening
     assert "nestedItems.hidden = true" not in hardening
+
+
+def test_veterinary_desktop_icon_opens_new_home_directly():
+    icon = json.loads(read("vetedge/desktop_icon/vetedge.json"))
+    hooks = read("vetedge/hooks.py")
+
+    assert icon["label"] == "Veterinary"
+    assert icon["icon_type"] == "App"
+    assert icon["link_type"] == "External"
+    assert icon["link"] == "/desk/vetedge"
+    assert not icon.get("link_to")
+    assert 'app_home = "/desk/vetedge"' in hooks
+    assert '"route": app_home' in hooks
+    assert "/desk/vetedge-executive-dashboard" not in icon.get("link", "")
