@@ -16,7 +16,9 @@ from vetedge.services.role_bundles import (
 	ensure_starter_role_bundles,
 )
 
-VETEDGE_HOME_PAGE = "desk/vetedge"
+VETEDGE_HOME_ROUTE = "/desk/vetedge"
+VETEDGE_HOME_PAGE = VETEDGE_HOME_ROUTE.lstrip("/")
+VETEDGE_DESKTOP_ICON = "VetEdge"
 
 
 def after_install() -> None:
@@ -34,6 +36,7 @@ def before_tests() -> None:
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
 	ensure_vetedge_role_home_pages()
+	ensure_veterinary_desktop_icon_home()
 	ensure_starter_role_bundles()
 	ensure_existing_internal_users_have_starter_bundle_roles()
 	ensure_custom_fields()
@@ -88,6 +91,41 @@ def ensure_vetedge_role_home_pages() -> None:
 		if current_home:
 			continue
 		frappe.db.set_value("Role", role, "home_page", VETEDGE_HOME_PAGE, update_modified=False)
+
+
+def ensure_veterinary_desktop_icon_home() -> None:
+	"""Keep the standard Veterinary desktop icon aligned to Veterinary Home.
+
+	Standard Desktop Icon JSON is the source of truth, but existing QA/client sites
+	can retain older database values until migrate synchronises standard records.
+	This idempotent after-install/after-migrate guard makes the user-facing launcher
+	contract deterministic without creating or renaming any desktop icon.
+	"""
+	if not frappe.db.exists("DocType", "Desktop Icon"):
+		return
+	if not frappe.db.exists("Desktop Icon", VETEDGE_DESKTOP_ICON):
+		return
+
+	current = frappe.db.get_value(
+		"Desktop Icon",
+		VETEDGE_DESKTOP_ICON,
+		["label", "icon_type", "link_type", "link"],
+		as_dict=True,
+	) or {}
+	desired = {
+		"label": "Veterinary",
+		"icon_type": "App",
+		"link_type": "External",
+		"link": VETEDGE_HOME_ROUTE,
+	}
+	changes = {field: value for field, value in desired.items() if current.get(field) != value}
+	if changes:
+		frappe.db.set_value(
+			"Desktop Icon",
+			VETEDGE_DESKTOP_ICON,
+			changes,
+			update_modified=False,
+		)
 
 
 def ensure_erpnext_test_price_lists_are_idempotent() -> None:
