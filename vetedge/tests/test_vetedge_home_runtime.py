@@ -119,6 +119,26 @@ class TestVetEdgeHomeRuntime(FrappeTestCase):
 		finally:
 			self.restore_flags(original)
 
+	def test_groomer_receives_permission_safe_operational_snapshot(self):
+		original = self.save_flags("enable_vetedge", "enable_grooming")
+		try:
+			frappe.db.set_single_value("Veterinary Settings", "enable_vetedge", 1, update_modified=False)
+			frappe.db.set_single_value("Veterinary Settings", "enable_grooming", 1, update_modified=False)
+			user = self.ensure_user(
+				"vhome-groomer@example.com",
+				("VetEdge Groomer", "Desk User"),
+			)
+			frappe.set_user(user)
+			payload = get_home_payload()
+			metric_keys = {metric["key"] for metric in payload["metrics"]}
+			action_routes = {action["route"] for action in payload["quick_actions"]}
+
+			self.assertEqual(payload["primary_persona"]["key"], "groomer")
+			self.assertIn("grooming-today", metric_keys)
+			self.assertIn("/desk/vetedge-resource-center?resource=grooming", action_routes)
+		finally:
+			self.restore_flags(original)
+
 	def test_disabled_appointments_hide_front_desk_actions_and_metrics(self):
 		original = self.save_flags("enable_vetedge", "enable_appointments")
 		try:
