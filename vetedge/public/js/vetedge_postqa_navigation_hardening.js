@@ -16,7 +16,15 @@
 		Clinical: "Clinical Operations",
 		"Front Desk": "Appointments",
 	});
-	const PRIMARY_SECTION_ORDER = Object.freeze(["Dashboard", "Clinical Operations", "Appointments"]);
+	const PRIMARY_SECTION_ORDER = Object.freeze([
+		"Appointments",
+		"Clinical Operations",
+		"Hospital & Services",
+		"Inventory / Pharmacy",
+		"Billing Center",
+		"Dashboard",
+		"Reports",
+	]);
 	const PRODUCT_HOST_ID = "edge-product-menu-host";
 	const PRODUCT_TRIGGER_ID = "edge-product-menu-trigger";
 	const PRODUCT_PANEL_ID = "edge-product-menu-dropdown";
