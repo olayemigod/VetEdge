@@ -70,35 +70,55 @@ def test_sidebar_primary_groups_use_veterinary_operational_labels_and_order():
     assert "normalizePrimarySections(shell);" in hardening
 
 
-def test_veterinary_desktop_icon_opens_new_home_directly():
+def test_veterinary_desktop_icon_opens_home_in_same_tab():
     icon = json.loads(read("vetedge/desktop_icon/vetedge.json"))
     hooks = read("vetedge/hooks.py")
     install = read("vetedge/install/__init__.py")
+    dashboard = read("vetedge/install/dashboard.py")
 
     assert icon["label"] == "Veterinary"
-    assert icon["icon_type"] == "App"
-    assert icon["link_type"] == "External"
-    assert icon["link"] == "/desk/vetedge"
-    assert not icon.get("link_to")
+    assert icon["icon_type"] == "Link"
+    assert icon["link_type"] == "Workspace Sidebar"
+    assert icon["link_to"] == "VetEdge"
+    assert icon.get("link", "") == ""
     assert 'app_home = "/desk/vetedge"' in hooks
     assert '"route": app_home' in hooks
-    assert "/desk/vetedge-executive-dashboard" not in icon.get("link", "")
+
+    # The legacy Desktop Icons screen opens a Workspace Sidebar in the current
+    # tab and resolves it to its first Link. That first Link must be a relative
+    # URL to Veterinary Home, never Executive Dashboard or an External route.
+    assert 'def _prepend_veterinary_home_link' in dashboard
+    assert '"label": "Veterinary Home"' in dashboard
+    assert '"link_type": "URL"' in dashboard
+    assert '"url": VETEDGE_DESK_ROUTE' in dashboard
+    assert 'return [home, *remaining]' in dashboard
 
     assert 'VETEDGE_HOME_ROUTE = "/desk/vetedge"' in install
     assert 'VETEDGE_DESKTOP_ICON = "VetEdge"' in install
     assert 'VETEDGE_DESKTOP_LABEL = "Veterinary"' in install
-    assert "ensure_veterinary_desktop_icon_home()" in install
-    assert '"link": VETEDGE_HOME_ROUTE' in install
-    assert '"link_type": "External"' in install
+    assert '"icon_type": "Link"' in install
+    assert '"link_type": "Workspace Sidebar"' in install
+    assert '"link_to": VETEDGE_DESKTOP_ICON' in install
+    assert '"link": ""' in install
 
 
-def test_saved_desktop_layout_cannot_keep_veterinary_on_sidebar_first_link():
+def test_saved_desktop_layouts_use_same_tab_veterinary_launcher_contract():
     install = read("vetedge/install/__init__.py")
 
     assert "_repair_saved_veterinary_desktop_layouts()" in install
     assert 'frappe.get_all("Desktop Layout", fields=["name", "layout"])' in install
-    assert '"link_type": "External"' in install
-    assert '"link": VETEDGE_HOME_ROUTE' in install
-    assert 'for stale_field in ("link_to", "sidebar")' in install
+    assert '"icon_type": "Link"' in install
+    assert '"link_type": "Workspace Sidebar"' in install
+    assert '"link_to": VETEDGE_DESKTOP_ICON' in install
+    assert '"link": ""' in install
+    assert 'if icon.get("sidebar")' in install
     assert 'frappe.cache.delete_key("desktop_icons")' in install
     assert 'frappe.cache.delete_key("bootinfo")' in install
+
+
+def test_desktop_launcher_repair_runs_after_sidebar_sync():
+    install = read("vetedge/install/__init__.py")
+    dashboard_index = install.index("\tensure_financial_dashboard()")
+    launcher_index = install.index("\tensure_veterinary_desktop_icon_home()")
+
+    assert launcher_index > dashboard_index
