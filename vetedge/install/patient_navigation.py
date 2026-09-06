@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import frappe
+from frappe.modules.import_file import import_file_by_path
 
 PATIENT_LABEL = "Patients"
 PATIENT_DOCTYPE = "Veterinary Patient"
+BILLING_CENTER_LABEL = "Billing Center"
+BILLING_SESSION_LABEL = "Billing Session"
+BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"
+BILLING_SESSIONS_PAGE = "vetedge-billing-sessions"
 SIDEBAR_NAME = "VetEdge"
 PRIMARY_GROUP_ORDER = (
 	("Patients",),
@@ -184,6 +190,27 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	return [*remaining[:insert_at], *_patient_group(template), *remaining[insert_at:]]
 
 
+def organize_billing_session_navigation(items: list[Any]) -> list[dict]:
+	"""Route the VetEdge Billing Session menu to its EdgeSuite worklist Page."""
+	clean = [_clean_item(item) for item in items]
+	current_section = ""
+	for item in clean:
+		if _is_section(item):
+			current_section = str(item.get("label") or "").strip()
+			continue
+		if current_section != BILLING_CENTER_LABEL or item.get("type") != "Link":
+			continue
+		label = str(item.get("label") or "").strip()
+		link_to = str(item.get("link_to") or "").strip()
+		if label != BILLING_SESSION_LABEL and link_to != BILLING_SESSION_DOCTYPE:
+			continue
+		item["label"] = BILLING_SESSION_LABEL
+		item["link_type"] = "Page"
+		item["link_to"] = BILLING_SESSIONS_PAGE
+		item.pop("url", None)
+	return clean
+
+
 def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
 	"""Apply the approved top-level order while preserving all group contents.
 
@@ -225,16 +252,33 @@ def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
 	return [*leading, *(item for block in ordered for item in block)]
 
 
+def _ensure_billing_sessions_page() -> None:
+	"""Import the standard Billing Sessions Page before assigning sidebar links."""
+	if frappe.db.exists("Page", BILLING_SESSIONS_PAGE):
+		return
+	file_path = frappe.get_app_path(
+		"vetedge",
+		"veterinary",
+		"page",
+		"vetedge_billing_sessions",
+		"vetedge_billing_sessions.json",
+	)
+	if os.path.exists(file_path):
+		import_file_by_path(file_path, force=True, ignore_version=True)
+
+
 def ensure_direct_patient_navigation() -> bool:
-	"""Apply direct Patients and approved top-level order after normal sidebar sync."""
+	"""Apply direct Patients, Billing Sessions Page and approved top-level order."""
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists(
 		"Workspace Sidebar", SIDEBAR_NAME
 	):
 		return False
 
+	_ensure_billing_sessions_page()
 	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 	current = [_clean_item(item) for item in (sidebar.get("items") or [])]
 	updated = organize_direct_patient_navigation(current)
+	updated = organize_billing_session_navigation(updated)
 	updated = organize_primary_navigation_order(updated)
 	if updated == current:
 		return False
