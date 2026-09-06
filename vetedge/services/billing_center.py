@@ -221,6 +221,7 @@ def get_billing_center_link_options(
 	query: str = "",
 	company: str | None = None,
 	branch: str | None = None,
+	customer: str | None = None,
 ) -> list[dict]:
 	"""Return only values relevant to the caller's permitted billing scope."""
 	user = _require_billing_center_access()
@@ -228,7 +229,14 @@ def get_billing_center_link_options(
 	if field not in LINK_FIELDS:
 		frappe.throw(_("Unsupported Billing Center filter field."), frappe.ValidationError)
 
-	base_filters, scope = _build_session_filters({"company": company, "branch": branch}, user)
+	context = {
+		"company": cstr(company or "").strip(),
+		"branch": cstr(branch or "").strip(),
+	}
+	if field == "animal":
+		context["customer"] = cstr(customer or "").strip()
+
+	base_filters, scope = _build_session_filters(context, user)
 	search = cstr(query or "").strip()
 
 	# Do not overwrite the server-authoritative Branch restriction with a text
