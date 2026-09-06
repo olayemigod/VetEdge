@@ -38,33 +38,13 @@ Billing Center remains read/management only over existing Billing Session and ER
 
 ## Billing Session EdgeSuite detail
 
-The EdgeSuite detail mode shows:
-
-- Billing Session identity
-- Customer
-- friendly pet name plus patient ID
-- Branch and Company
-- Status, Payment Status and Payment Gate
-- Created From and Source Context
-- Charges, Invoiced, Paid and Outstanding totals
-- charge rows and their invoice/status references
-- Open Latest Invoice when the user has Sales Invoice read permission
-- Back to Billing Sessions
+The EdgeSuite detail mode shows Billing Session identity, Customer, friendly pet name plus patient ID, Branch and Company, Status, Payment Status and Payment Gate, Created From and Source Context, Charges/Invoiced/Paid/Outstanding totals, charge rows and invoice/status references, Open Latest Invoice when permitted, and Back to Billing Sessions.
 
 `vetedge.services.billing_session_page.get_billing_session_detail` is read-only and branch-safe. It first resolves the caller's permitted Billing Session through permission-aware `frappe.get_list`, then loads child charge rows only for that authorized parent. Zero-Branch operational users fail closed.
 
 ## Billing Center presentation hardening
 
-This slice also includes:
-
-- same-tab Billing Center and Billing Sessions routing;
-- Product Menu item click handling;
-- approved sidebar order and runtime re-render drift correction;
-- plain currency KPI formatting instead of literal HTML;
-- removal of duplicate shortcut buttons above KPI cards;
-- fuzzy Date Range presets using `frappe.EdgeSuite.DateRanges`;
-- patient search by friendly pet name or Veterinary Patient ID;
-- friendly patient display with patient ID for disambiguation.
+This slice also includes same-tab Billing Center/Billing Sessions routing, Product Menu item click handling, approved sidebar order and re-render drift correction, plain currency KPI formatting, removal of duplicate shortcut buttons, fuzzy Date Range presets, patient search by friendly name or ID, and friendly patient display with ID for disambiguation.
 
 ## Fuzzy date contract
 
@@ -78,13 +58,7 @@ Billing Center and Billing Sessions support Today, Yesterday, This Week, Last We
 
 Billing Center defaults to `Actionable Billing` rather than treating every persisted Billing Session as an operationally open billing item.
 
-Session Activity options are:
-
-- `Actionable Billing` — any financial movement or draft/latest invoice link.
-- `All Sessions` — full visible Billing Session history.
-- `No Billing Activity` — zero charges, zero invoiced, zero paid, zero outstanding and no draft/latest invoice link.
-
-Empty sessions remain inspectable and are not deleted, cancelled or auto-closed. `billing_core.get_or_create_billing_session()` remains unchanged pending installed-site Billing Core regression evidence.
+Session Activity options are `Actionable Billing`, `All Sessions`, and `No Billing Activity`. Empty sessions remain inspectable and are not deleted, cancelled or auto-closed. `billing_core.get_or_create_billing_session()` remains unchanged pending installed-site Billing Core regression evidence.
 
 ## Branch and permission safety
 
@@ -93,12 +67,12 @@ Empty sessions remain inspectable and are not deleted, cancelled or auto-closed.
 - zero assigned Branches fails closed;
 - Branch search cannot reveal other branches;
 - Patient options cascade through Company → Branch → Customer and Session Activity;
-- the Billing Session detail endpoint cannot load a session outside permitted Branch scope;
+- Billing Session detail cannot load a session outside permitted Branch scope;
 - no raw SQL or `ignore_permissions=True` is used in Billing Center/detail services.
 
 ## Automated validation
 
-Latest validated code/test candidate: `a1f7e352e8d47df3bd99cdd318ccbb3272362594`
+Validated code/test candidate: `a1f7e352e8d47df3bd99cdd318ccbb3272362594`
 
 Workflow: `VFD-BILL-01 Validation`
 Run: `34065453165`
@@ -110,6 +84,8 @@ Result:
 - existing VFD-BILL-01 source contracts: PASS
 - QA defect regression contracts: PASS
 - EdgeSuite Billing Session detail routing/read-model contracts: PASS
+
+The commits after `a1f7e352e8d47df3bd99cdd318ccbb3272362594` are documentation-only; no source or test code changed after the green run.
 
 ## QA Center cases
 
