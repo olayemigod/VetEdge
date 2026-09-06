@@ -137,6 +137,32 @@ def test_product_menu_and_billing_routes_are_same_tab_and_clickable():
 	assert "target=\"_blank\"" not in hardening
 
 
+def test_browser_guard_repairs_product_menu_search_same_tab_billing_and_native_session_routes():
+	guard = read("vetedge/public/js/edgesuite_date_ranges.js")
+
+	for marker in (
+		"installVetEdgeBillingNavigationGuard",
+		'const BILLING_CENTER_ROUTE = "/desk/vetedge-billing-center"',
+		'const BILLING_SESSIONS_ROUTE = "/desk/vetedge-billing-sessions"',
+		'const NATIVE_BILLING_SESSION_PATH = "/desk/veterinary-billing-session"',
+		"function filterProductMenu(panel, query)",
+		"function routeProductItem(node)",
+		"function reconcileBillingSidebar()",
+		"function redirectNativeBillingSession()",
+		'anchor.setAttribute("target", "_self")',
+		'global.document?.addEventListener("input"',
+		'global.document?.addEventListener("click"',
+		'global.frappe?.router?.on?.("change"',
+		"billingSessionDetailRoute(name)",
+	):
+		assert marker in guard
+
+	assert 'global.location.assign(next)' in guard
+	assert 'global.location.replace(next)' in guard
+	assert 'window.open(' not in guard
+	assert 'target="_blank"' not in guard
+
+
 def test_rendered_sidebar_rechecks_approved_primary_order_after_dom_changes():
 	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
 
