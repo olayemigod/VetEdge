@@ -15,9 +15,12 @@ def read(path: Path) -> str:
 	return path.read_text(encoding="utf-8")
 
 
+def source_items() -> list[dict]:
+	return json.loads(read(SIDEBAR)).get("items") or []
+
+
 def transformed_items() -> list[dict]:
-	source = json.loads(read(SIDEBAR))
-	return _organize_veterinary_navigation(source.get("items") or [])
+	return _organize_veterinary_navigation(source_items())
 
 
 def labels_in_section(items: list[dict], section: str) -> list[str]:
@@ -34,6 +37,12 @@ def labels_in_section(items: list[dict], section: str) -> list[str]:
 
 def link_by_label(items: list[dict], label: str) -> dict:
 	matches = [item for item in items if item.get("type") == "Link" and item.get("label") == label]
+	assert len(matches) == 1, (label, matches)
+	return matches[0]
+
+
+def section_by_label(items: list[dict], label: str) -> dict:
+	matches = [item for item in items if item.get("type") == "Section Break" and item.get("label") == label]
 	assert len(matches) == 1, (label, matches)
 	return matches[0]
 
@@ -103,6 +112,27 @@ def test_billing_center_is_a_separate_menu_group_with_requested_links():
 		link = link_by_label(items, label)
 		assert link.get("link_type") == link_type
 		assert link.get("link_to") == link_to
+
+
+def test_regrouping_preserves_existing_link_visibility_and_limits_new_billing_workspace():
+	source = source_items()
+	items = transformed_items()
+
+	assert link_by_label(items, "Customers").get("display_depends_on") == link_by_label(source, "Customer").get("display_depends_on")
+	assert link_by_label(items, "Sales Invoice").get("display_depends_on") == link_by_label(source, "Sales Invoice").get("display_depends_on")
+	assert link_by_label(items, "Payment Entry").get("display_depends_on") == link_by_label(source, "Payment Entry").get("display_depends_on")
+	assert link_by_label(items, "Pet Boarding Booking").get("display_depends_on") == link_by_label(source, "Pet Boarding Booking").get("display_depends_on")
+
+	section_visibility = section_by_label(items, "Billing Center").get("display_depends_on", "")
+	for role in ("VetEdge Front Desk", "VetEdge Doctor", "Accounts/Cashier", "Accounts Manager", "Branch Manager"):
+		assert role in section_visibility
+
+	for label in ("Billing Session", "Billing Center"):
+		visibility = link_by_label(items, label).get("display_depends_on", "")
+		for role in ("System Manager", "VetEdge Administrator", "VetEdge Front Desk", "Accounts/Cashier", "Accounts User", "Branch Manager"):
+			assert role in visibility
+		assert "VetEdge Doctor" not in visibility
+		assert "Accounts Manager" not in visibility
 
 
 def test_dedicated_front_desk_pages_share_one_fixed_mode_shell():
