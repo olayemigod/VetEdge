@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(relative: str) -> str:
+	return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def load_json(relative: str) -> dict:
+	return json.loads(read(relative))
+
+
+def page_roles(relative: str) -> set[str]:
+	return {row.get("role") for row in load_json(relative).get("roles") or []}
+
+
+def test_billing_center_removes_duplicate_shortcuts_and_html_currency_formatter():
+	component = read("vetedge/public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
+
+	assert "billing-shortcuts" not in component
+	assert "openList(" not in component
+	assert "frappe.format?.(" not in component
+	assert "new Intl.NumberFormat('en-NG'" in component
+	assert ":value=\"formatCurrency(summary.outstanding_amount)\"" in component
+	assert ":value=\"formatCurrency(summary.total_paid)\"" in component
+
+
+def test_billing_sessions_is_a_real_edgesuite_page_reusing_safe_dataset():
+	loader = read("vetedge/veterinary/page/vetedge_billing_sessions/vetedge_billing_sessions.js")
+	page = load_json("vetedge/veterinary/page/vetedge_billing_sessions/vetedge_billing_sessions.json")
+	center_page = load_json("vetedge/veterinary/page/vetedge_billing_center/vetedge_billing_center.json")
+	component = read("vetedge/public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
+
+	assert "edgeui.bundle.js" in loader
+	assert "vetedge_billing_center.bundle.js" in loader
+	assert "mountVetEdgeBillingCenter" in loader
+	assert page.get("name") == "vetedge-billing-sessions"
+	assert page.get("title") == "Billing Sessions"
+	assert page_roles("vetedge/veterinary/page/vetedge_billing_sessions/vetedge_billing_sessions.json") == page_roles(
+		"vetedge/veterinary/page/vetedge_billing_center/vetedge_billing_center.json"
+	)
+	assert center_page.get("name") == "vetedge-billing-center"
+	assert "'/desk/vetedge-billing-sessions'" in component
+	assert "pageTitle() { return this.isSessionsPage ? 'Billing Sessions' : 'Billing Center'; }" in component
+
+
+def test_product_menu_and_billing_routes_are_same_tab_and_clickable():
+	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
+
+	for marker in (
+		'const BILLING_CENTER_ROUTE = "/desk/vetedge-billing-center"',
+		'const BILLING_SESSIONS_ROUTE = "/desk/vetedge-billing-sessions"',
+		'const BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"',
+		"function bindSharedProductMenuNavigation(panel)",
+		"function sidebarSameTabRoute(item)",
+		"return navigateRoute(BILLING_CENTER_ROUTE)",
+		"return navigateRoute(BILLING_SESSIONS_ROUTE)",
+		"event.stopImmediatePropagation();",
+	):
+		assert marker in hardening
+
+	assert "window.open(" not in hardening
+	assert "target=\"_blank\"" not in hardening
+
+
+def test_rendered_sidebar_rechecks_approved_primary_order_after_dom_changes():
+	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
+
+	for label in (
+		"Appointments",
+		"Clinical Operations",
+		"Hospital & Services",
+		"Inventory / Pharmacy",
+		"Billing Center",
+		"Dashboard",
+		"Reports",
+	):
+		assert f'\t\t"{label}",' in hardening
+
+	assert "function primaryOrderAligned(shell)" in hardening
+	assert "!primaryOrderAligned(shell)" in hardening
+	assert "primaryOrderAligned: Boolean(shell && primaryOrderAligned(shell))" in hardening
