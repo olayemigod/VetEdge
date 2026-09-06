@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "vetedge"
 
@@ -46,6 +45,12 @@ def test_dedicated_front_desk_pages_reuse_one_fixed_mode_bundle():
 	assert "buildFrontDeskRoot(runtime, options = {})" in bundle
 	assert "state.fixedTab = fixedTab" in bundle
 	assert 'v-if="!fixedTab"' in component
+	for route in (
+		"/desk/vetedge-front-desk-queue",
+		"/desk/vetedge-front-desk-guest-bookings",
+		"/desk/vetedge-front-desk-missed-appointments",
+	):
+		assert route in bundle
 
 	for relative, mode in (
 		("vetedge/veterinary/page/vetedge_front_desk_queue/vetedge_front_desk_queue.js", "queue"),
