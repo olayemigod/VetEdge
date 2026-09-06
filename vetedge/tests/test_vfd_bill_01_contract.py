@@ -78,6 +78,18 @@ def test_patients_is_a_separate_primary_navigation_group():
 	assert section_by_label(items, "Patients").get("display_depends_on") == patient.get("display_depends_on")
 
 
+def test_customized_patients_section_is_preserved_unchanged():
+	items = dashboard_items()
+	patient = dict(link_by_label(items, "Patients"))
+	custom = [
+		{"type": "Section Break", "child": 0, "label": "Patients"},
+		patient,
+		{"type": "Link", "child": 1, "label": "Patient Import", "link_type": "Page", "link_to": "patient-import"},
+		*items,
+	]
+	assert organize_direct_patient_navigation(custom) == custom
+
+
 def test_patients_shell_contract_is_direct_and_non_collapsible():
 	hardening = read(APP / "public/js/vetedge_postqa_navigation_hardening.js")
 
