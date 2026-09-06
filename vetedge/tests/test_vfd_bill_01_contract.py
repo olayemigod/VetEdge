@@ -69,6 +69,7 @@ def test_patients_is_a_separate_primary_navigation_group():
 	assert sections[0] == "Patients"
 	assert sections.index("Patients") < sections.index("Dashboard")
 	assert labels_in_section(items, "Patients") == ["Patients"]
+	assert "Patients" not in labels_in_section(items, "Front Desk")
 
 	patient = link_by_label(items, "Patients")
 	assert patient.get("link_type") == "DocType"
