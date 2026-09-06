@@ -19,8 +19,10 @@ from vetedge.services.permissions import (
 from vetedge.services.portal_access import require_internal_user
 
 BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"
+PATIENT_DOCTYPE = "Veterinary Patient"
 PAGE_LENGTH_DEFAULT = 25
 PAGE_LENGTH_MAX = 100
+PATIENT_SEARCH_CANDIDATE_LIMIT = 50
 BILLING_CENTER_ROLES = {
 	*ELEVATED_ROLES,
 	*FRONT_DESK_ROLES,
@@ -148,6 +150,93 @@ def _company_currency(company: str | None) -> str:
 	return cstr(frappe.defaults.get_global_default("currency") or "NGN")
 
 
+def _patient_display_map(patient_ids: list[str]) -> dict[str, str]:
+	patient_ids = sorted({cstr(value).strip() for value in patient_ids if cstr(value).strip()})
+	if not patient_ids:
+		return {}
+
+	# Patient ids come only from Billing Sessions already visible to the caller.
+	# This lookup decorates those known ids with friendly names; it never expands
+	# the caller's Billing Session scope or returns unrelated patient records.
+	rows = frappe.get_all(
+		PATIENT_DOCTYPE,
+		filters={"name": ["in", patient_ids]},
+		fields=["name", "patient_name"],
+		limit_page_length=min(len(patient_ids), PAGE_LENGTH_MAX),
+	)
+	return {
+		cstr(row.get("name") or "").strip(): cstr(row.get("patient_name") or row.get("name") or "").strip()
+		for row in rows
+		if cstr(row.get("name") or "").strip()
+	}
+
+
+def _decorate_patient_names(rows: list[dict]) -> list[dict]:
+	labels = _patient_display_map([row.get("animal") for row in rows])
+	for row in rows:
+		patient_id = cstr(row.get("animal") or "").strip()
+		patient_name = labels.get(patient_id) or patient_id
+		row["patient_name"] = patient_name
+		row["patient_display"] = f"{patient_name} ({patient_id})" if patient_name and patient_id and patient_name != patient_id else patient_id
+	return rows
+
+
+def _patient_link_options(base_filters: dict, search: str) -> list[dict]:
+	search = cstr(search or "").strip()
+	if search:
+		pattern = f"%{search}%"
+		candidate_rows = frappe.get_all(
+			PATIENT_DOCTYPE,
+			filters={},
+			or_filters={"patient_name": ["like", pattern], "name": ["like", pattern]},
+			fields=["name", "patient_name"],
+			order_by="patient_name asc, name asc",
+			limit_page_length=PATIENT_SEARCH_CANDIDATE_LIMIT,
+		)
+		candidate_ids = [cstr(row.get("name") or "").strip() for row in candidate_rows if cstr(row.get("name") or "").strip()]
+		if not candidate_ids:
+			return []
+		visible_filters = dict(base_filters)
+		visible_filters["animal"] = ["in", candidate_ids]
+		visible_rows = frappe.get_list(
+			BILLING_SESSION_DOCTYPE,
+			filters=visible_filters,
+			fields=["animal"],
+			group_by="animal",
+			page_length=20,
+		)
+		visible_ids = {cstr(row.get("animal") or "").strip() for row in visible_rows if cstr(row.get("animal") or "").strip()}
+		return [
+			{
+				"value": patient_id,
+				"label": f"{patient_name} ({patient_id})" if patient_name and patient_name != patient_id else patient_id,
+			}
+			for row in candidate_rows
+			if (patient_id := cstr(row.get("name") or "").strip()) in visible_ids
+			for patient_name in [cstr(row.get("patient_name") or patient_id).strip()]
+		][:20]
+
+	visible_filters = dict(base_filters)
+	visible_filters["animal"] = ["is", "set"]
+	visible_rows = frappe.get_list(
+		BILLING_SESSION_DOCTYPE,
+		filters=visible_filters,
+		fields=["animal"],
+		order_by="animal asc",
+		group_by="animal",
+		page_length=20,
+	)
+	patient_ids = [cstr(row.get("animal") or "").strip() for row in visible_rows if cstr(row.get("animal") or "").strip()]
+	labels = _patient_display_map(patient_ids)
+	return [
+		{
+			"value": patient_id,
+			"label": f"{labels.get(patient_id)} ({patient_id})" if labels.get(patient_id) and labels.get(patient_id) != patient_id else patient_id,
+		}
+		for patient_id in patient_ids
+	]
+
+
 @frappe.whitelist()
 def get_billing_center(filters: str | dict | None = None, start: int = 0, page_length: int = PAGE_LENGTH_DEFAULT) -> dict:
 	"""Return a bounded, permission-aware Billing Session management read model.
@@ -188,6 +277,7 @@ def get_billing_center(filters: str | dict | None = None, start: int = 0, page_l
 		start=start,
 		page_length=page_length,
 	)
+	rows = _decorate_patient_names(rows)
 
 	summary = _aggregate(session_filters)
 	open_filters = dict(session_filters)
@@ -247,6 +337,9 @@ def get_billing_center_link_options(
 			for value in scope.get("permitted_branches") or []
 			if not needle or needle in value.casefold()
 		][:20]
+
+	if field == "animal":
+		return _patient_link_options(base_filters, search)
 
 	if search:
 		base_filters[field] = ["like", f"%{search}%"]
