@@ -36,11 +36,17 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 
 	for marker in (
 		'def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:',
+		'def organize_primary_navigation_order(items: list[Any]) -> list[dict]:',
 		'PATIENT_LABEL = "Patients"',
 		'PATIENT_DOCTYPE = "Veterinary Patient"',
-		'"display_depends_on"',
+		'("Front Desk", "Appointments")',
+		'("Clinical", "Clinical Operations")',
+		'("Hospital & Services",)',
+		'("Inventory / Pharmacy", "Inventory / Dispensary")',
+		'("Billing Center",)',
+		'("Dashboard",)',
+		'("Reports",)',
 		'ensure_direct_patient_navigation',
-		'not _is_patient_link(item)',
 	):
 		assert marker in patient_navigation
 
@@ -49,7 +55,7 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 	assert install.index('ensure_financial_dashboard()') < install.index('ensure_direct_patient_navigation()')
 
 
-def test_patients_is_direct_in_sidebar_and_separate_in_product_navigation():
+def test_patients_is_direct_and_primary_shell_order_is_exact():
 	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
 
 	for marker in (
@@ -62,8 +68,27 @@ def test_patients_is_direct_in_sidebar_and_separate_in_product_navigation():
 		'directHome.insertAdjacentElement("afterend", directItem)',
 		'navigatePatients',
 		'directPatients',
+		'"Appointments",',
+		'"Clinical Operations",',
+		'"Hospital & Services",',
+		'"Inventory / Pharmacy",',
+		'"Billing Center",',
+		'"Dashboard",',
+		'"Reports",',
 	):
 		assert marker in hardening
+
+	order_markers = [
+		'"Appointments",',
+		'"Clinical Operations",',
+		'"Hospital & Services",',
+		'"Inventory / Pharmacy",',
+		'"Billing Center",',
+		'"Dashboard",',
+		'"Reports",',
+	]
+	positions = [hardening.index(marker, hardening.index("const PRIMARY_SECTION_ORDER")) for marker in order_markers]
+	assert positions == sorted(positions)
 
 
 def test_dedicated_front_desk_pages_reuse_one_fixed_mode_bundle():
