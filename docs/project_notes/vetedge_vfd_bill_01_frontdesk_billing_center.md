@@ -12,28 +12,29 @@ Do not retarget this PR to `main` or merge divergent PR #47/#50/#51 histories wh
 
 ## Final navigation contract
 
-### Direct primary items
-
-The Veterinary sidebar starts with:
+The Veterinary top-level menu order is now:
 
 1. Veterinary Home
 2. Patients
-3. Dashboard
+3. Appointments
 4. Clinical Operations
-5. Appointments
-6. Billing Center
+5. Hospital & Services
+6. Inventory / Pharmacy
+7. Billing Center
+8. Dashboard
+9. Reports
 
-Veterinary Home and Patients are direct one-click controls. They must have no chevron, expand/collapse behavior, hidden child, `aria-expanded` state, or second-click requirement.
+All other existing menu groups remain after Reports in their existing relative order. This is an ordering change only: no group contents, routes, permissions, business logic, or accounting behavior are changed by this order update.
 
-Patients opens the existing Patient Resource Center at `/desk/vetedge-resource-center?resource=patients`. No new Patient page, DocType, permission model, or patient data model is introduced.
+Veterinary Home and Patients remain direct one-click controls. They have no chevron, expand/collapse behavior, hidden child, `aria-expanded` state, or second-click requirement. Patients opens the existing Patient Resource Center at `/desk/vetedge-resource-center?resource=patients`.
 
-The persisted Workspace Sidebar stores Patients as its own one-item section so Product Menu also presents Patients separately. The EdgeSuite sidebar shell flattens that one-item section into a direct control immediately after Veterinary Home.
+The persisted Workspace Sidebar uses `Front Desk` as the underlying section identity, while the EdgeSuite UI continues presenting that section as `Appointments`. `Clinical` similarly continues presenting as `Clinical Operations`. This preserves stable internal configuration while giving users the approved labels.
 
-The existing Patients `display_depends_on` visibility expression is preserved. A customized Patients section containing additional administrator-added links is deliberately left unchanged rather than partially rewritten.
+The persisted order is also used by Product Menu, so Product Menu and sidebar must show the same primary sequence. A customized Patients section containing additional administrator-added links remains protected from destructive rewriting.
 
 ### Appointments / Front Desk
 
-Front Desk contains only appointment/booking work:
+Appointments contains only appointment/booking work:
 
 1. Appointment Queue
 2. Appointments
@@ -41,11 +42,11 @@ Front Desk contains only appointment/booking work:
 4. Guest Booking Requests
 5. Missed Appointments
 
-Patients is no longer under Front Desk/Appointments. Customer, Sales Invoice and Payment Entry remain removed from Front Desk. Pet Boarding Booking remains immediately after Appointments. Pet Grooming Appointment remains hidden from product navigation only; its DocType/history/workflow are unchanged.
+Patients is no longer under Appointments. Customer, Sales Invoice and Payment Entry remain removed. Pet Grooming Appointment remains hidden from product navigation only; its DocType/history/workflow are unchanged.
 
 ### Dedicated Front Desk pages
 
-The existing shared EdgeSuite Front Desk implementation supplies:
+The shared EdgeSuite Front Desk implementation supplies:
 
 - `/desk/vetedge-front-desk-queue`
 - `/desk/vetedge-front-desk-guest-bookings`
@@ -57,55 +58,54 @@ Old action-center tab URLs and the legacy Appointment Queue page remain compatib
 
 Billing Center contains Customers, Sales Invoice, Payment Entry, Billing Session and Billing Center.
 
-Billing Center V1 remains a read/management surface anchored on `Veterinary Billing Session`. It does not submit/cancel invoices, mutate submitted accounting documents, create/allocate payments, post GL entries, bypass Frappe permissions, use raw SQL, or create another billing ledger.
+Billing Center V1 remains read/management only over `Veterinary Billing Session`. It does not submit/cancel invoices, mutate submitted accounting documents, create/allocate payments, post GL entries, bypass Frappe permissions, use raw SQL, or create another billing ledger.
 
-Branch-restricted users remain fail-closed; Branch Link search cannot reveal unassigned branches; Patient filter options are constrained by Company, Branch and selected Customer.
+## Navigation implementation
 
-## Patient navigation implementation
+`vetedge.install.patient_navigation.ensure_direct_patient_navigation` runs after normal sidebar synchronization during install/migrate. It now performs two bounded steps:
 
-The proven VFD-BILL-01 dashboard/sidebar transformation remains unchanged. `vetedge.install.patient_navigation.ensure_direct_patient_navigation` runs after normal sidebar synchronization during install/migrate.
+1. preserve the direct Patients contract; and
+2. reorder only the approved named primary groups.
 
-For the standard VetEdge sidebar it finds the existing Patients link, preserves visibility, removes it from Front Desk, creates exactly one dedicated Patients section before Dashboard, preserves Veterinary Home first, and is idempotent. A customized Patients section with additional links is preserved unchanged.
+The order helper recognizes stable/visible aliases (`Front Desk`/`Appointments`, `Clinical`/`Clinical Operations`, and `Inventory / Pharmacy`/`Inventory / Dispensary`). Unlisted groups are appended after Reports without changing their relative order.
 
-`vetedge_postqa_navigation_hardening.js` flattens the canonical Patients section to a direct EdgeSuite sidebar item, routes it in the same Desk tab, maintains active state, and positions it immediately after Veterinary Home.
+`vetedge_postqa_navigation_hardening.js` mirrors the approved order in the rendered EdgeSuite shell after Veterinary Home and Patients are flattened into direct controls.
 
 ## Migration
 
-No business-data or accounting-data migration is introduced. `bench --site vetedge.local migrate` rebuilds the normal VetEdge sidebar and then applies the direct Patients post-sync arrangement. Existing Patient, appointment, billing and accounting records remain unchanged.
+No business-data or accounting-data migration is introduced. `bench --site vetedge.local migrate` rebuilds the normal VetEdge sidebar, applies the direct Patients arrangement, and applies the approved top-level order. Existing records and workflows remain unchanged.
 
 ## Frozen automated validation
 
-Frozen code/test candidate:
+Latest code/test candidate:
 
 - workflow: `VFD-BILL-01 Validation`
-- run: `34058140083`
-- validated code/test head: `7f2d698cf9ee6eff51b9342a0843d0373a378ed8`
+- run: `34058750193`
+- validated code/test head: `bfeb04488c528e50c5ddf30442f51c55db0d7d99`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - source-contract tests: PASS
 
-The installed-site test contract also verifies Patients is separate from Front Desk, the dedicated Patients section is unique, existing visibility is preserved, direct/non-collapsible shell markers exist, and customized Patients sections are not destructively rewritten.
+The source contract locks the rendered order as Appointments → Clinical Operations → Hospital & Services → Inventory / Pharmacy → Billing Center → Dashboard → Reports after direct Veterinary Home and Patients. The installed-site test contract also validates the persisted Workspace Sidebar/Product Menu order.
 
-Any commit after `7f2d698cf9ee6eff51b9342a0843d0373a378ed8` must be documentation-only or source validation must be rerun.
+Any later source/test change requires a fresh green validation run.
 
 ## QA Center update
 
-Keep this menu change inside the existing VFD-BILL-01 QA campaign. Add these cases to its Navigation section:
+Keep this inside the existing VFD-BILL-01 QA campaign. The Navigation cases are now:
 
-- **VFDNAV-001 — Direct Patients placement:** Veterinary Home first; Patients immediately second; Dashboard, Clinical Operations and Appointments follow.
+- **VFDNAV-001 — Primary menu order:** exactly Veterinary Home → Patients → Appointments → Clinical Operations → Hospital & Services → Inventory / Pharmacy → Billing Center → Dashboard → Reports. Any remaining groups follow Reports in their previous relative order.
 - **VFDNAV-002 — Direct Patients behavior:** no chevron/expand behavior; one click opens `/desk/vetedge-resource-center?resource=patients` in the same tab.
-- **VFDNAV-003 — Product Menu separation:** Patients is its own Product Menu section/item and is absent from Appointments/Front Desk.
-- **VFDNAV-004 — Access preservation:** entitled personas retain Patients visibility; no unauthorized persona gains access.
-- **VFDNAV-005 — Active/navigation state:** Patients remains correctly active through Patient Resource Center/list/detail navigation; no duplicate active item; Back/Forward works.
-- **VFDNAV-006 — Migration/idempotency:** repeated migrate/sidebar sync does not duplicate Patients or return it to Front Desk.
+- **VFDNAV-003 — Product Menu parity:** Product Menu presents the same approved primary order; Patients remains separate from Appointments; no group contents change.
+- **VFDNAV-004 — Access preservation:** existing visibility/permissions are unchanged; no unauthorized persona gains access from reordering.
+- **VFDNAV-005 — Active/navigation state:** active menu state, Patient navigation and browser Back/Forward remain correct.
+- **VFDNAV-006 — Migration/idempotency:** repeated migrate/sidebar sync preserves the exact approved order without duplicates, lost groups or moved-back Patients.
 
-These supplement the existing VFD-BILL-01 Front Desk, Billing Center, role, branch-isolation and accounting-safety cases.
+These supplement all existing Front Desk, Billing Center, branch-isolation, role, accounting-safety, responsive, light/dark and performance checks.
 
-The authoritative QA Center is on local `vetedge.local`. The repository defines the six case IDs and acceptance contract, but GitHub cannot write records into that local site; the cases must be added/recorded there when this candidate is installed.
+The authoritative QA Center remains on local `vetedge.local`; GitHub defines these case contracts but cannot write the corresponding local QA records directly.
 
 ## Local acceptance
-
-Run on `vetedge.local`:
 
 ```bash
 bench --site vetedge.local migrate
@@ -116,10 +116,11 @@ bench --site vetedge.local run-tests \
 bench --site vetedge.local clear-cache
 ```
 
-Manual QA must execute VFDNAV-001 through VFDNAV-006 plus all existing VFD-BILL-01 checks, including Front Desk routes/actions, legacy redirects, role compatibility, Billing Center branch isolation, contextual filters, totals/drill-through, accounting immutability, responsive layout, light/dark mode and absence of unnecessary polling.
+Manual QA must verify both sidebar and Product Menu order exactly, then confirm all remaining groups stay after Reports in their existing relative order.
 
 ## Out of scope
 
+- changing any group contents other than the already-approved VFD-BILL-01 membership changes;
 - new Patient page/data model;
 - Veterinary Patient permission changes;
 - accounting workflow replacement;
