@@ -6,9 +6,9 @@ Separate front-desk appointment work from billing/accounting navigation, give Ap
 
 ## Branch and composition safety
 
-This slice is stacked on the current PR #60 Veterinary Home head `e9b1c63bc1ec44483a93f26e10bff485fab43913`.
+This slice is stacked on PR #60 Veterinary Home branch `feature/vetedge-smart-home-vhome01` at exact base `e9b1c63bc1ec44483a93f26e10bff485fab43913`.
 
-PR #60 itself is not modified by this work. The new work remains on `feature/vetedge-frontdesk-billing-center-vfd-bill-01` so the VHOME QA evidence is not repointed or overwritten.
+PR #60 itself is not modified by this work. VFD-BILL-01 remains on `feature/vetedge-frontdesk-billing-center-vfd-bill-01` so VHOME QA evidence is not repointed or overwritten.
 
 Do not merge divergent PR #47/#50/#51 histories to obtain this scope. The branch inherits the reconciled VetEdge composition through PR #60.
 
@@ -31,6 +31,8 @@ Front Desk contains operational booking work:
 
 `Pet Grooming Appointment` is removed from product navigation only. Its DocType, historical records and workflow integration are not deleted or renamed.
 
+Existing role-visibility expressions are preserved when established links move sections. The new Billing Session and Billing Center links use their own bounded visibility contract rather than inheriting unrelated Front Desk access.
+
 ### Dedicated Front Desk pages
 
 The three workflow views reuse one EdgeSuite Front Desk component in fixed-page mode:
@@ -41,7 +43,11 @@ The three workflow views reuse one EdgeSuite Front Desk component in fixed-page 
 
 The dedicated pages do not show the old queue/guest/missed tab switcher. They keep the same permission-aware backend services, branch filtering, optimistic timestamp checks and authoritative appointment/guest/missed actions.
 
+The shared bundle publishes canonical `/desk/...` active routes for all three dedicated pages.
+
 The old `/desk/vetedge-front-desk-action-center?tab=...` route is compatibility-only and redirects to the matching canonical page. `veterinary-appointment-queue` also redirects to the new Appointment Queue page.
+
+Page roles preserve the access contract of the links they replace. In particular, Veterinary Nurse and Dispensary User retain Appointment Queue access where previously allowed, and Veterinary Nurse retains Missed Appointments access. The legacy Action Centre Page also retains those redirect-only personas so old bookmarks can reach the compatibility redirect instead of failing before its script executes.
 
 ### Billing Center menu group
 
@@ -68,7 +74,7 @@ It provides:
 - outstanding amount;
 - amount collected according to Billing Session truth;
 - paginated Billing Session visibility;
-- Customer, Patient, Company, Branch, status and creation-date filters;
+- Company, Branch, Customer, Patient, status and creation-date filters;
 - relevant, bounded Link searches;
 - current draft and latest invoice visibility;
 - drill-through to Billing Session and Sales Invoice;
@@ -99,7 +105,7 @@ All accounting mutations remain in existing ERPNext/VetEdge workflows.
 
 ## Branch and permission safety
 
-Billing Center requires an internal VetEdge user with an approved Front Desk, Branch Manager, Accounts/Cashier/Accounts, VetEdge Administrator or System Manager role and read permission on Veterinary Billing Session.
+Billing Center requires an internal VetEdge user with an approved Front Desk, Branch Manager, Accounts/Cashier/Accounts User, VetEdge Administrator or System Manager role and read permission on Veterinary Billing Session.
 
 Elevated VetEdge administrators retain global Branch visibility.
 
@@ -108,9 +114,12 @@ For non-global operational users:
 - explicit Branch selection must be one of the user's active Branch assignments;
 - no Branch selection scopes queries to all assigned Branches;
 - zero assigned Branches fails closed to an empty Billing Center scope;
-- Branch filter search never replaces the server-authoritative Branch restriction.
+- Branch filter search never replaces or overwrites the server-authoritative Branch restriction;
+- restricted Branch Link search returns only the caller's assigned Branch names.
 
 All primary Billing Session reads use `frappe.get_list`, preserving Frappe permission-query conditions.
+
+Billing Center Page roles are aligned with actual Billing Session data access. Accounts Manager is intentionally not advertised as a standalone Billing Center Page role unless the underlying Billing Session permission contract is later expanded deliberately.
 
 ## Smart filtering
 
@@ -118,13 +127,15 @@ Billing Center filters cascade:
 
 - changing Company clears Branch, Customer and Patient;
 - changing Branch clears Customer and Patient;
-- changing Customer clears Patient.
+- changing Customer clears Patient;
+- Patient Link search is server-filtered by the selected Customer as well as Company/Branch context;
+- Branch Link search cannot leak unassigned Branch names.
 
 Link option APIs return values from permitted Billing Session context and are capped at 20 options. Billing Session rows are capped at 100 per request and default to 25.
 
 ## Migration and backward compatibility
 
-No data migration or accounting data rewrite is required.
+No business-data migration or accounting data rewrite is required.
 
 `bench --site vetedge.local migrate` must:
 
@@ -135,9 +146,22 @@ No data migration or accounting data rewrite is required.
 
 Rollback of the UI slice does not require reversing business data because no new accounting or clinical data model is introduced.
 
-## Automated validation required
+## Automated validation
 
-Run at minimum:
+A stacked-PR-specific source gate exists at `.github/workflows/vfd-bill-01-validation.yml` because the repository's general CI listens only to PRs targeting `main`.
+
+Green source validation evidence:
+
+- workflow: `VFD-BILL-01 Validation`
+- run: `34055770231`
+- head: `105fc767f4b2c331c39855f38e48c7888905a6c8`
+- Python compile: PASS
+- Ruff focused validation: PASS
+- pure source-contract tests: PASS
+
+The source gate does not replace installed-site QA.
+
+Run on the authoritative local site before merge:
 
 ```bash
 bench --site vetedge.local run-tests \
@@ -147,8 +171,6 @@ bench --site vetedge.local run-tests \
 bench --site vetedge.local migrate
 bench build --app vetedge
 ```
-
-Then run the repository's normal focused/source validation applicable to the stacked branch.
 
 ## Manual browser QA
 
@@ -162,28 +184,31 @@ Test on `vetedge.local` after migration and asset build.
 - Pet Boarding Booking appears once, under Front Desk, directly after Appointments.
 - Pet Grooming Appointment does not appear in product navigation.
 - Boarding Stay, Boarding Care Record and Grooming Session remain under Hospital & Services.
+- Queue/Missed visibility remains correct for Veterinary Nurse; Queue visibility remains correct for Dispensary User.
 
 ### Front Desk pages
 
 For Appointment Queue, Guest Booking Requests and Missed Appointments:
 
-- each sidebar item opens its own URL in the same Desk tab;
+- each sidebar item opens its own `/desk/...` URL in the same Desk tab;
 - the EdgeSuite Front Desk shell remains visible;
 - no queue/guest/missed tab strip is shown;
 - Company/Branch and permission behavior remains correct;
 - existing actions work and timestamp-conflict protection still prevents overwrites;
 - browser Back/Forward behavior is sane;
 - old Action Center tab URLs redirect to the correct new page;
-- old Appointment Queue bookmarks still work.
+- old Appointment Queue bookmarks still work, including previously entitled Nurse/Dispensary personas.
 
 ### Billing Center
 
-Test Administrator, VetEdge Administrator, Front Desk, Branch Manager and Accounts/Cashier personas as applicable:
+Test Administrator, VetEdge Administrator, Front Desk, Branch Manager, Accounts/Cashier and Accounts User personas as applicable:
 
 - permitted sessions load;
 - zero-branch operational user sees no cross-branch data;
 - Branch A user cannot select or retrieve Branch B billing sessions;
+- Branch A user cannot discover Branch B through Branch Link search;
 - Company → Branch → Customer → Patient filtering cascades correctly;
+- selected Customer restricts Patient Link options server-side;
 - paging does not exceed configured limits;
 - session totals reconcile to the source Billing Sessions;
 - Open Session opens the authoritative Veterinary Billing Session;
@@ -191,7 +216,7 @@ Test Administrator, VetEdge Administrator, Front Desk, Branch Manager and Accoun
 - Customer/Sales Invoice/Payment Entry shortcuts respect native ERPNext permissions;
 - no action on the page directly submits, cancels or mutates an accounting document.
 
-### Presentation
+### Presentation / performance
 
 Verify desktop and narrower widths in light and dark mode. Confirm no unnecessary polling or repeated background requests.
 
