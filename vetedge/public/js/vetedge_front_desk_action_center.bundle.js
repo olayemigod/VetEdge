@@ -6,6 +6,8 @@ const SMART_APPOINTMENT_API = Object.freeze({
 	perform: 'vetedge.services.appointment_actions.perform_appointment_action',
 });
 
+const FRONT_DESK_TABS = new Set(['queue', 'guest', 'missed']);
+
 async function loadSmartAppointmentState(view) {
 	const payload = view.detail?.payload;
 	if (view.detail?.type !== 'queue' || !payload?.name) return null;
@@ -94,11 +96,29 @@ VetEdgeFrontDeskActionCenter.methods.executeAction = async function executeActio
 
 applyWorkspaceSafety(VetEdgeFrontDeskActionCenter);
 
-export function mountVetEdgeFrontDeskActionCenter(target) {
+function buildFrontDeskRoot(runtime, options = {}) {
+	const requested = String(options.fixedTab || '').trim();
+	const fixedTab = FRONT_DESK_TABS.has(requested) ? requested : '';
+	const originalData = VetEdgeFrontDeskActionCenter.data;
+	return {
+		...VetEdgeFrontDeskActionCenter,
+		components: { ...runtime.components, ...(VetEdgeFrontDeskActionCenter.components || {}) },
+		data() {
+			const state = typeof originalData === 'function' ? originalData.call(this) : {};
+			if (fixedTab) {
+				state.tab = fixedTab;
+				state.fixedTab = fixedTab;
+			}
+			return state;
+		},
+	};
+}
+
+export function mountVetEdgeFrontDeskActionCenter(target, options = {}) {
 	const runtime = window.EdgeSuiteUI || window.EdgeUI;
 	if (!runtime || typeof runtime.createEdgeApp !== 'function') throw new Error('Standalone EdgeSuite UI runtime is unavailable.');
-	VetEdgeFrontDeskActionCenter.components = runtime.components;
-	const app = runtime.createEdgeApp(VetEdgeFrontDeskActionCenter);
+	const Root = buildFrontDeskRoot(runtime, options);
+	const app = runtime.createEdgeApp(Root);
 	const view = app.mount(target);
 	return { view, unmount: () => app.unmount() };
 }
