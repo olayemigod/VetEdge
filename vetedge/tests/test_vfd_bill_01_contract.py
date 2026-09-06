@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from vetedge.install.dashboard import _organize_veterinary_navigation
+from vetedge.install.patient_navigation import organize_direct_patient_navigation
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,8 +20,12 @@ def source_items() -> list[dict]:
 	return json.loads(read(SIDEBAR)).get("items") or []
 
 
-def transformed_items() -> list[dict]:
+def dashboard_items() -> list[dict]:
 	return _organize_veterinary_navigation(source_items())
+
+
+def transformed_items() -> list[dict]:
+	return organize_direct_patient_navigation(dashboard_items())
 
 
 def labels_in_section(items: list[dict], section: str) -> list[str]:
@@ -47,19 +52,55 @@ def section_by_label(items: list[dict], label: str) -> dict:
 	return matches[0]
 
 
-def test_navigation_transform_is_idempotent():
-	first = transformed_items()
-	second = _organize_veterinary_navigation(first)
+def test_navigation_transforms_are_idempotent():
+	dashboard = dashboard_items()
+	assert _organize_veterinary_navigation(dashboard) == dashboard
+
+	first = organize_direct_patient_navigation(dashboard)
+	second = organize_direct_patient_navigation(first)
 	assert second == first
 
 
-def test_front_desk_contains_booking_work_not_accounting_links():
+def test_patients_is_a_separate_primary_navigation_group():
+	source = source_items()
+	items = transformed_items()
+	sections = [item.get("label") for item in items if item.get("type") == "Section Break"]
+
+	assert sections[0] == "Patients"
+	assert sections.index("Patients") < sections.index("Dashboard")
+	assert labels_in_section(items, "Patients") == ["Patients"]
+
+	patient = link_by_label(items, "Patients")
+	assert patient.get("link_type") == "DocType"
+	assert patient.get("link_to") == "Veterinary Patient"
+	assert patient.get("display_depends_on") == link_by_label(source, "Patients").get("display_depends_on")
+	assert section_by_label(items, "Patients").get("display_depends_on") == patient.get("display_depends_on")
+
+
+def test_patients_shell_contract_is_direct_and_non_collapsible():
+	hardening = read(APP / "public/js/vetedge_postqa_navigation_hardening.js")
+
+	for marker in (
+		'const PATIENTS_ATTRIBUTE = "data-vetedge-direct-patients"',
+		'const PATIENTS_ROUTE = "/desk/vetedge-resource-center?resource=patients"',
+		"function patchDirectPatients(shell)",
+		'item.removeAttribute("aria-expanded")',
+		'item.removeAttribute("aria-controls")',
+		'patchDirectPatients(shell);',
+		"navigatePatients",
+		"directPatients",
+	):
+		assert marker in hardening
+
+	assert 'directHome.insertAdjacentElement("afterend", directItem)' in hardening
+
+
+def test_front_desk_contains_booking_work_not_accounting_or_patient_links():
 	items = transformed_items()
 	front_desk = labels_in_section(items, "Front Desk")
 
 	for expected in (
 		"Appointment Queue",
-		"Patients",
 		"Appointments",
 		"Pet Boarding Booking",
 		"Guest Booking Requests",
@@ -67,7 +108,7 @@ def test_front_desk_contains_booking_work_not_accounting_links():
 	):
 		assert expected in front_desk
 
-	for removed in ("Customer", "Customers", "Sales Invoice", "Payment Entry"):
+	for removed in ("Patients", "Customer", "Customers", "Sales Invoice", "Payment Entry"):
 		assert removed not in front_desk
 
 	assert front_desk.index("Pet Boarding Booking") == front_desk.index("Appointments") + 1
@@ -122,6 +163,7 @@ def test_regrouping_preserves_existing_link_visibility_and_limits_new_billing_wo
 	assert link_by_label(items, "Sales Invoice").get("display_depends_on") == link_by_label(source, "Sales Invoice").get("display_depends_on")
 	assert link_by_label(items, "Payment Entry").get("display_depends_on") == link_by_label(source, "Payment Entry").get("display_depends_on")
 	assert link_by_label(items, "Pet Boarding Booking").get("display_depends_on") == link_by_label(source, "Pet Boarding Booking").get("display_depends_on")
+	assert link_by_label(items, "Patients").get("display_depends_on") == link_by_label(source, "Patients").get("display_depends_on")
 
 	section_visibility = section_by_label(items, "Billing Center").get("display_depends_on", "")
 	for role in ("VetEdge Front Desk", "VetEdge Doctor", "Accounts/Cashier", "Accounts Manager", "Branch Manager"):
