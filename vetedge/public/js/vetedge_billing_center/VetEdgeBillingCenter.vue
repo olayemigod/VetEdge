@@ -18,7 +18,7 @@
 						<EdgeLinkField :model-value="filters.company" label="Company" placeholder="All visible companies" :searcher="(query) => linkSearch('company', query)" @update:model-value="(value) => setFilter('company', value)" />
 						<EdgeLinkField :model-value="filters.branch" label="Branch" placeholder="All permitted branches" :searcher="(query) => linkSearch('branch', query)" @update:model-value="(value) => setFilter('branch', value)" />
 						<EdgeLinkField :model-value="filters.customer" label="Customer" placeholder="All relevant customers" :searcher="(query) => linkSearch('customer', query)" @update:model-value="(value) => setFilter('customer', value)" />
-						<EdgeLinkField :model-value="filters.animal" label="Patient" placeholder="All relevant patients" :searcher="(query) => linkSearch('animal', query)" @update:model-value="(value) => setFilter('animal', value)" />
+						<EdgeLinkField :model-value="filters.animal" label="Patient" placeholder="Search pet name or patient ID" :searcher="(query) => linkSearch('animal', query)" @update:model-value="(value) => setFilter('animal', value)" />
 						<EdgeDropdown :model-value="filters.status" label="Status" placeholder="All statuses" :options="statusOptions" @update:model-value="(value) => setFilter('status', value)" />
 						<EdgeDropdown :model-value="datePreset" label="Date Range" placeholder="Choose date range" :options="datePresetOptions" @update:model-value="setDatePreset" />
 						<EdgeInput :model-value="filters.from_date" type="date" label="From Date" @update:model-value="(value) => setDateField('from_date', value)" />
@@ -99,7 +99,7 @@ export default {
 			columns: [
 				{ key: 'name', label: 'Billing Session' },
 				{ key: 'customer', label: 'Customer' },
-				{ key: 'animal', label: 'Patient' },
+				{ key: 'patient_name', label: 'Patient' },
 				{ key: 'branch', label: 'Branch' },
 				{ key: 'status', label: 'Status', type: 'status' },
 				{ key: 'total_charges', label: 'Charges', type: 'currency' },
