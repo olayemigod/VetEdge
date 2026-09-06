@@ -40,6 +40,7 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 		'PATIENT_DOCTYPE = "Veterinary Patient"',
 		'"display_depends_on"',
 		'ensure_direct_patient_navigation',
+		'not _is_patient_link(item)',
 	):
 		assert marker in patient_navigation
 
