@@ -1,21 +1,15 @@
-# VFD-BILL-01 — Front Desk Navigation and Billing Center
+# VFD-BILL-01 — Front Desk, Direct Patients & Billing Center
 
-## Goal
+## Business goal
 
-Separate first-class Patient access, appointment/front-desk work, and billing/accounting navigation while preserving existing VetEdge workflows, permissions, branch controls, and ERPNext accounting truth.
+Separate patient access, appointments/front-desk work and billing/accounting navigation without changing ERPNext accounting truth or widening operational permissions.
 
-## Branch safety
+## Primary navigation contract
 
-This slice remains stacked on PR #60 branch `feature/vetedge-smart-home-vhome01` at exact base `e9b1c63bc1ec44483a93f26e10bff485fab43913`.
+The approved primary order is:
 
-Do not retarget this PR to `main` or merge divergent PR #47/#50/#51 histories wholesale. PR #60's VHOME acceptance remains separate.
-
-## Final navigation contract
-
-The Veterinary top-level menu order is now:
-
-1. Veterinary Home
-2. Patients
+1. Veterinary Home — direct, non-collapsible
+2. Patients — direct, non-collapsible
 3. Appointments
 4. Clinical Operations
 5. Hospital & Services
@@ -24,17 +18,11 @@ The Veterinary top-level menu order is now:
 8. Dashboard
 9. Reports
 
-All other existing menu groups remain after Reports in their existing relative order. This is an ordering change only: no group contents, routes, permissions, business logic, or accounting behavior are changed by this order update.
+All other existing navigation groups remain after Reports in their prior relative order.
 
-Veterinary Home and Patients remain direct one-click controls. They have no chevron, expand/collapse behavior, hidden child, `aria-expanded` state, or second-click requirement. Patients opens the existing Patient Resource Center at `/desk/vetedge-resource-center?resource=patients`.
+## Appointments / Front Desk
 
-The persisted Workspace Sidebar uses `Front Desk` as the underlying section identity, while the EdgeSuite UI continues presenting that section as `Appointments`. `Clinical` similarly continues presenting as `Clinical Operations`. This preserves stable internal configuration while giving users the approved labels.
-
-The persisted order is also used by Product Menu, so Product Menu and sidebar must show the same primary sequence. A customized Patients section containing additional administrator-added links remains protected from destructive rewriting.
-
-### Appointments / Front Desk
-
-Appointments contains only appointment/booking work:
+Appointments contains:
 
 1. Appointment Queue
 2. Appointments
@@ -42,70 +30,139 @@ Appointments contains only appointment/booking work:
 4. Guest Booking Requests
 5. Missed Appointments
 
-Patients is no longer under Appointments. Customer, Sales Invoice and Payment Entry remain removed. Pet Grooming Appointment remains hidden from product navigation only; its DocType/history/workflow are unchanged.
+Patients is not nested under Appointments. Customer, Sales Invoice and Payment Entry are not exposed under Appointments. Pet Grooming Appointment remains hidden from product navigation only; its DocType, workflow and history remain intact.
 
-### Dedicated Front Desk pages
+## Dedicated Front Desk Pages
 
-The shared EdgeSuite Front Desk implementation supplies:
+The dedicated routes are:
 
 - `/desk/vetedge-front-desk-queue`
 - `/desk/vetedge-front-desk-guest-bookings`
 - `/desk/vetedge-front-desk-missed-appointments`
 
-Old action-center tab URLs and the legacy Appointment Queue page remain compatibility redirects. Existing backend permissions, branch restrictions, actions and timestamp-conflict protection remain authoritative.
+They share the same Front Desk EdgeSuite component in fixed-workflow mode. Legacy Front Desk Action Center and appointment queue URLs remain compatibility redirects.
 
-### Billing Center
+## Billing Center
 
-Billing Center contains Customers, Sales Invoice, Payment Entry, Billing Session and Billing Center.
+Billing Center navigation contains:
 
-Billing Center V1 remains read/management only over `Veterinary Billing Session`. It does not submit/cancel invoices, mutate submitted accounting documents, create/allocate payments, post GL entries, bypass Frappe permissions, use raw SQL, or create another billing ledger.
+1. Customers
+2. Sales Invoice
+3. Payment Entry
+4. Billing Session
+5. Billing Center
 
-## Navigation implementation
+`Billing Session` targets the EdgeSuite Page `/desk/vetedge-billing-sessions`. Billing Center targets `/desk/vetedge-billing-center`. Both remain in the current Desk window.
 
-`vetedge.install.patient_navigation.ensure_direct_patient_navigation` runs after normal sidebar synchronization during install/migrate. It now performs two bounded steps:
+Billing Center is read/management only over existing `Veterinary Billing Session` and ERPNext accounting truth. It does not submit, cancel, mutate or reconstruct submitted Sales Invoices, Payment Entries or GL entries.
 
-1. preserve the direct Patients contract; and
-2. reorder only the approved named primary groups.
+## Billing Center presentation hardening
 
-The order helper recognizes stable/visible aliases (`Front Desk`/`Appointments`, `Clinical`/`Clinical Operations`, and `Inventory / Pharmacy`/`Inventory / Dispensary`). Unlisted groups are appended after Reports without changing their relative order.
+The local browser QA defects closed in this slice include:
 
-`vetedge_postqa_navigation_hardening.js` mirrors the approved order in the rendered EdgeSuite shell after Veterinary Home and Patients are flattened into direct controls.
+- Billing Center and Billing Sessions same-tab routing.
+- Product Menu item click handling.
+- requested sidebar ordering and re-render drift detection.
+- plain currency KPI formatting instead of literal HTML produced by `frappe.format()`.
+- removal of redundant Customers / Sales Invoices / Payment Entries / Billing Sessions shortcut buttons above KPI cards.
+- real EdgeSuite Billing Sessions worklist Page.
+- fuzzy Date Range presets using the shared `frappe.EdgeSuite.DateRanges` helper.
+- patient search by friendly pet name or Veterinary Patient ID.
+- patient list display as friendly name with patient ID for disambiguation.
 
-## Migration
+## Fuzzy date contract
 
-No business-data or accounting-data migration is introduced. `bench --site vetedge.local migrate` rebuilds the normal VetEdge sidebar, applies the direct Patients arrangement, and applies the approved top-level order. Existing records and workflows remain unchanged.
+Billing Center and Billing Sessions support:
 
-## Frozen automated validation
+- Today
+- Yesterday
+- This Week
+- Last Week
+- This Month
+- Last Month
+- This Quarter
+- Last Quarter
+- This Year
+- Last Year
+- Full History
+- Custom Range
 
-Latest code/test candidate:
+Selecting a preset fills From/To. Manual date edits switch to Custom. Reset returns to Full History. Existing backend date validation remains authoritative.
 
-- workflow: `VFD-BILL-01 Validation`
-- run: `34058750193`
-- validated code/test head: `bfeb04488c528e50c5ddf30442f51c55db0d7d99`
+## Friendly patient contract
+
+`Veterinary Patient.name` remains the stored/filter value. `Veterinary Patient.patient_name` is the friendly display/search value.
+
+Patient search is bounded and then intersected with Billing Sessions visible in the caller's branch/company/customer/activity scope. Results display for example `Bruno (VP-2026-00027)`.
+
+The Billing Center list uses the same friendly display while retaining the authoritative patient ID for disambiguation.
+
+## Billing Session activity lifecycle hardening
+
+### Why zero-value sessions exist
+
+Current billing-core continuity can create an Active Billing Session before a source ultimately produces a billable payload. A consultation may therefore leave an empty session when billing is disabled/not applicable, no payload is produced, or previously pending charges are later retired. The parent Billing Session is intentionally not deleted by the totals refresh.
+
+### Operational correction in this PR
+
+Billing Center now defaults to `Actionable Billing` rather than treating every persisted Billing Session as an operationally open billing item.
+
+Session Activity options are:
+
+- `Actionable Billing` — any financial movement or draft/latest invoice link.
+- `All Sessions` — full visible Billing Session history.
+- `No Billing Activity` — zero charges, zero invoiced, zero paid, zero outstanding and no draft/latest invoice link.
+
+Empty sessions remain inspectable and are not deleted, cancelled or auto-closed. This protects historical/source continuity while preventing placeholders from inflating the default work queue and Open Sessions KPI.
+
+When Actionable Billing is selected, Billing Center reports how many no-activity sessions are hidden and directs the user to All Sessions or No Billing Activity for review.
+
+Patient/customer link searches follow the selected Session Activity scope so dependent filters remain relevant.
+
+### Deferred core-lifecycle change
+
+This slice deliberately does not change `billing_core.get_or_create_billing_session()` or delete existing sessions. Preventing creation of a new session before charge payload materiality is proven changes billing continuity semantics and must be validated with installed-site Billing Core tests first. The current operational hardening is reversible/read-only and does not alter accounting documents.
+
+## Branch and permission safety
+
+Billing Center remains permission-aware and branch-safe:
+
+- global/elevated users may use unrestricted scope unless an explicit Branch is selected;
+- branch-restricted users can only query assigned Branches;
+- zero assigned Branches fails closed;
+- Branch search cannot reveal other branches;
+- Patient options cascade through Company → Branch → Customer and Session Activity;
+- APIs use permission-aware Billing Session queries and bounded result sizes;
+- no raw SQL or `ignore_permissions=True` is used in Billing Center.
+
+## Migration and backward compatibility
+
+- Existing DocTypes and submitted accounting documents are unchanged.
+- Existing Front Desk legacy routes redirect to the new dedicated Pages.
+- Existing patient IDs and Billing Session links remain authoritative.
+- Sidebar synchronization remains idempotent.
+- Custom Patients sections with additional administrator-added links are preserved.
+
+## Automated validation
+
+Latest source/test candidate: `f7cf50d2538c9d645106a2d27080d25eb3a00715`
+
+Workflow: `VFD-BILL-01 Validation`
+Run: `34064531074`
+
+Result:
+
 - Python compile: PASS
 - Ruff focused validation: PASS
-- source-contract tests: PASS
-
-The source contract locks the rendered order as Appointments → Clinical Operations → Hospital & Services → Inventory / Pharmacy → Billing Center → Dashboard → Reports after direct Veterinary Home and Patients. The installed-site test contract also validates the persisted Workspace Sidebar/Product Menu order.
-
-Any later source/test change requires a fresh green validation run.
-
-## QA Center update
-
-Keep this inside the existing VFD-BILL-01 QA campaign. The Navigation cases are now:
-
-- **VFDNAV-001 — Primary menu order:** exactly Veterinary Home → Patients → Appointments → Clinical Operations → Hospital & Services → Inventory / Pharmacy → Billing Center → Dashboard → Reports. Any remaining groups follow Reports in their previous relative order.
-- **VFDNAV-002 — Direct Patients behavior:** no chevron/expand behavior; one click opens `/desk/vetedge-resource-center?resource=patients` in the same tab.
-- **VFDNAV-003 — Product Menu parity:** Product Menu presents the same approved primary order; Patients remains separate from Appointments; no group contents change.
-- **VFDNAV-004 — Access preservation:** existing visibility/permissions are unchanged; no unauthorized persona gains access from reordering.
-- **VFDNAV-005 — Active/navigation state:** active menu state, Patient navigation and browser Back/Forward remain correct.
-- **VFDNAV-006 — Migration/idempotency:** repeated migrate/sidebar sync preserves the exact approved order without duplicates, lost groups or moved-back Patients.
-
-These supplement all existing Front Desk, Billing Center, branch-isolation, role, accounting-safety, responsive, light/dark and performance checks.
-
-The authoritative QA Center remains on local `vetedge.local`; GitHub defines these case contracts but cannot write the corresponding local QA records directly.
+- original VFD-BILL-01 source contracts: PASS
+- QA defect regression contracts: PASS
+- fuzzy date contract: PASS
+- friendly patient search/list contract: PASS
+- actionable/empty Billing Session activity contract: PASS
 
 ## Local acceptance
+
+On `vetedge.local` run:
 
 ```bash
 bench --site vetedge.local migrate
@@ -116,15 +173,32 @@ bench --site vetedge.local run-tests \
 bench --site vetedge.local clear-cache
 ```
 
-Manual QA must verify both sidebar and Product Menu order exactly, then confirm all remaining groups stay after Reports in their existing relative order.
+Then hard-refresh or use a fresh Incognito window.
+
+### QA cases
+
+- `VFDNAV-001` exact primary navigation order.
+- `VFDNAV-002` Patients direct/non-collapsible/same-tab.
+- `VFDNAV-003` Product Menu items navigate and mirror approved order.
+- `VFDNAV-004` role visibility unchanged.
+- `VFDNAV-005` active state and Back/Forward behavior.
+- `VFDNAV-006` migrate/sidebar synchronization idempotency.
+- `VFDBILL-UI-001` Billing Center opens same-tab.
+- `VFDBILL-UI-002` Billing Sessions opens EdgeSuite worklist.
+- `VFDBILL-UI-003` currency KPIs contain no HTML markup.
+- `VFDBILL-UI-004` redundant shortcut row absent.
+- `VFDBILL-DATE-001` fuzzy date presets populate valid From/To dates and Custom works.
+- `VFDBILL-PAT-001` search by pet friendly name and patient ID returns only visible/relevant patients.
+- `VFDBILL-PAT-002` list shows friendly pet name plus ID.
+- `VFDBILL-ACT-001` default Actionable Billing excludes zero/no-invoice placeholders from rows, totals and Open Sessions.
+- `VFDBILL-ACT-002` All Sessions restores full visible history.
+- `VFDBILL-ACT-003` No Billing Activity shows only zero/no-invoice sessions.
+- `VFDBILL-ACT-004` no activity filter widens Branch/company/customer permissions.
 
 ## Out of scope
 
-- changing any group contents other than the already-approved VFD-BILL-01 membership changes;
-- new Patient page/data model;
-- Veterinary Patient permission changes;
-- accounting workflow replacement;
-- submitted accounting mutation;
-- deleting Pet Grooming Appointment data/DocType;
-- rebuilding Boarding/Grooming/Appointment workflows;
-- broad reporting redesign.
+- deleting legacy empty Billing Sessions;
+- automatically cancelling/closing empty sessions;
+- changing submitted Sales Invoices or Payment Entries;
+- changing Billing Core continuity semantics before installed-site validation;
+- broad navigation rewrites outside the bounded VFD-BILL-01 contract.
