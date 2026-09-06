@@ -7,6 +7,11 @@ const SMART_APPOINTMENT_API = Object.freeze({
 });
 
 const FRONT_DESK_TABS = new Set(['queue', 'guest', 'missed']);
+const FRONT_DESK_ROUTES = Object.freeze({
+	queue: '/desk/vetedge-front-desk-queue',
+	guest: '/desk/vetedge-front-desk-guest-bookings',
+	missed: '/desk/vetedge-front-desk-missed-appointments',
+});
 
 async function loadSmartAppointmentState(view) {
 	const payload = view.detail?.payload;
@@ -103,6 +108,14 @@ function buildFrontDeskRoot(runtime, options = {}) {
 	return {
 		...VetEdgeFrontDeskActionCenter,
 		components: { ...runtime.components, ...(VetEdgeFrontDeskActionCenter.components || {}) },
+		computed: {
+			...(VetEdgeFrontDeskActionCenter.computed || {}),
+			activeRoute() {
+				return this.fixedTab && FRONT_DESK_ROUTES[this.tab]
+					? FRONT_DESK_ROUTES[this.tab]
+					: '/desk/vetedge-front-desk-action-center';
+			},
+		},
 		data() {
 			const state = typeof originalData === 'function' ? originalData.call(this) : {};
 			if (fixedTab) {
