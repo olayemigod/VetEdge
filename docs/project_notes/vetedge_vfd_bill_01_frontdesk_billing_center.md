@@ -85,7 +85,7 @@ Result:
 - QA defect regression contracts: PASS
 - EdgeSuite Billing Session detail routing/read-model contracts: PASS
 
-The branch commits after `a1f7e352e8d47df3bd99cdd318ccbb3272362594` are documentation-only. Current QA pull candidate may therefore use the latest PR head while retaining this validated code/test evidence.
+The branch commits after `a1f7e352e8d47df3bd99cdd318ccbb3272362594` are documentation-only. Current QA checkout candidate: `26f28fec2b538332f9c80c172be4abfe41f08370`.
 
 ## QA Center cases
 
