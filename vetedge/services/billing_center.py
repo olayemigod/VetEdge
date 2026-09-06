@@ -337,7 +337,7 @@ def get_billing_center(filters: str | dict | None = None, start: int = 0, page_l
 	open_filters["status"] = ["in", list(OPEN_SESSION_STATUSES)]
 	summary["open_sessions"] = _count(open_filters, activity_or_filters)
 	summary["outstanding_sessions"] = _count({**session_filters, "outstanding_amount": [">", 0]}, activity_or_filters)
-	empty_filters, _, _ = _activity_query({"activity": "empty"})
+	empty_filters, _empty_or_filters, _empty_activity = _activity_query({"activity": "empty"})
 	summary["no_billing_activity_sessions"] = _count({**base_filters, **empty_filters})
 
 	scope["activity"] = activity
@@ -383,7 +383,7 @@ def get_billing_center_link_options(
 		context["customer"] = cstr(customer or "").strip()
 
 	base_filters, scope = _build_session_filters(context, user)
-	activity_filters, activity_or_filters, _ = _activity_query({"activity": activity or DEFAULT_ACTIVITY_FILTER})
+	activity_filters, activity_or_filters, _activity_name = _activity_query({"activity": activity or DEFAULT_ACTIVITY_FILTER})
 	base_filters.update(activity_filters)
 	search = cstr(query or "").strip()
 
