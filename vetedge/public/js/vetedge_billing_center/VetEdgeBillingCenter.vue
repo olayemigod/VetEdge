@@ -159,7 +159,7 @@ export default {
 		formatCurrency(value) { return frappe.format?.(Number(value || 0), { fieldtype: 'Currency', options: this.currency }) || `${this.currency} ${Number(value || 0).toLocaleString()}`; },
 		openSession(row) { if (row?.name) frappe.set_route('Form', 'Veterinary Billing Session', row.name); },
 		handleRowAction(payload) {
-			const action = payload?.action || payload?.key;
+			const action = typeof payload?.action === 'string' ? payload.action : (payload?.action?.key || payload?.key);
 			const row = payload?.row;
 			if (action === 'open_invoice') {
 				const invoice = row?.latest_invoice || row?.current_draft_invoice;
