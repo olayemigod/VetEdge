@@ -145,7 +145,7 @@ Billing Center remains permission-aware and branch-safe:
 
 ## Automated validation
 
-Latest source/test candidate: `f7cf50d2538c9d645106a2d27080d25eb3a00715`
+Validated code/test candidate: `f7cf50d2538c9d645106a2d27080d25eb3a00715`
 
 Workflow: `VFD-BILL-01 Validation`
 Run: `34064531074`
@@ -159,6 +159,8 @@ Result:
 - fuzzy date contract: PASS
 - friendly patient search/list contract: PASS
 - actionable/empty Billing Session activity contract: PASS
+
+The commits after that validated code/test head are documentation-only.
 
 ## Local acceptance
 
