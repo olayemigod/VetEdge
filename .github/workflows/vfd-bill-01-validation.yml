@@ -9,6 +9,7 @@ on:
       - "vetedge/install/dashboard.py"
       - "vetedge/install/patient_navigation.py"
       - "vetedge/services/billing_center.py"
+      - "vetedge/services/billing_session_page.py"
       - "vetedge/public/js/vetedge_billing_center/**"
       - "vetedge/public/js/vetedge_billing_center.bundle.js"
       - "vetedge/public/js/vetedge_front_desk_action_center/**"
@@ -60,6 +61,7 @@ jobs:
             vetedge/install/__init__.py \
             vetedge/install/patient_navigation.py \
             vetedge/services/billing_center.py \
+            vetedge/services/billing_session_page.py \
             tests/test_vfd_bill_01_source_contract.py \
             tests/test_vfd_bill_01_qa_defects.py
 
