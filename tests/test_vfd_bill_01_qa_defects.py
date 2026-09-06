@@ -34,16 +34,40 @@ def test_billing_center_uses_friendly_pet_names_for_search_and_list():
 	service = read("vetedge/services/billing_center.py")
 
 	assert 'placeholder="Search pet name or patient ID"' in component
-	assert "{ key: 'patient_name', label: 'Patient' }" in component
+	assert "{ key: 'patient_display', label: 'Patient' }" in component
 	assert 'PATIENT_DOCTYPE = "Veterinary Patient"' in service
 	assert "def _patient_display_map(patient_ids: list[str])" in service
-	assert "def _patient_link_options(base_filters: dict, search: str)" in service
+	assert "def _patient_link_options(base_filters: dict, search: str, or_filters: dict | None = None)" in service
 	assert 'fields=["name", "patient_name"]' in service
 	assert 'or_filters={"patient_name": ["like", pattern], "name": ["like", pattern]}' in service
 	assert 'row["patient_name"] = patient_name' in service
 	assert 'row["patient_display"]' in service
 	assert 'if field == "animal":' in service
-	assert "return _patient_link_options(base_filters, search)" in service
+	assert "return _patient_link_options(base_filters, search, activity_or_filters)" in service
+
+
+def test_billing_center_defaults_to_actionable_sessions_and_keeps_empty_sessions_diagnostic():
+	component = read("vetedge/public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
+	service = read("vetedge/services/billing_center.py")
+
+	assert 'DEFAULT_ACTIVITY_FILTER = "actionable"' in service
+	assert 'ALLOWED_ACTIVITY_FILTERS = {"actionable", "all", "empty"}' in service
+	assert "def _activity_query(filters: dict)" in service
+	assert '"total_charges": ["!=", 0]' in service
+	assert '"total_invoiced": ["!=", 0]' in service
+	assert '"current_draft_invoice": ["is", "set"]' in service
+	assert '"latest_invoice": ["is", "set"]' in service
+	assert '"current_draft_invoice": ["is", "not set"]' in service
+	assert '"latest_invoice": ["is", "not set"]' in service
+	assert 'summary["no_billing_activity_sessions"]' in service
+	assert 'scope["activity"] = activity' in service
+	assert 'label="Session Activity"' in component
+	assert "{ value: 'actionable', label: 'Actionable Billing' }" in component
+	assert "{ value: 'all', label: 'All Sessions' }" in component
+	assert "{ value: 'empty', label: 'No Billing Activity' }" in component
+	assert "activity: 'actionable'" in component
+	assert "activity: this.filters.activity || 'actionable'" in component
+	assert "Actionable billing view" in component
 
 
 def test_billing_center_has_fuzzy_date_presets_reusing_shared_date_ranges():
