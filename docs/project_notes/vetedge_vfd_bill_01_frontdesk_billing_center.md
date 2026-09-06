@@ -150,11 +150,11 @@ Rollback of the UI slice does not require reversing business data because no new
 
 A stacked-PR-specific source gate exists at `.github/workflows/vfd-bill-01-validation.yml` because the repository's general CI listens only to PRs targeting `main`.
 
-Green source validation evidence:
+Latest green source validation evidence:
 
 - workflow: `VFD-BILL-01 Validation`
-- run: `34055770231`
-- head: `105fc767f4b2c331c39855f38e48c7888905a6c8`
+- run: `34055850616`
+- head: `81e263afdc4f660aae385e9d259599845d432ab7`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - pure source-contract tests: PASS
