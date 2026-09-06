@@ -1,5 +1,5 @@
 <template>
-	<EdgeAppShell product="vetedge" title="Veterinary" :tenant-name="identity.tenant_name || ''" :branch-name="branchName" :user-name="userName" active-route="/app/vetedge-billing-center" @navigate="openRoute">
+	<EdgeAppShell product="vetedge" title="Veterinary" :tenant-name="identity.tenant_name || ''" :branch-name="branchName" :user-name="userName" active-route="/desk/vetedge-billing-center" @navigate="openRoute">
 		<EdgePageLayout>
 			<template #header>
 				<EdgePageHeader eyebrow="Billing Operations" title="Billing Center" subtitle="Consolidated Veterinary billing visibility with safe drill-through to authoritative ERPNext accounting workflows." action-label="Refresh" @action="refresh" />
@@ -150,7 +150,13 @@ export default {
 			}
 		},
 		async linkSearch(fieldname, query) {
-			return (await call(API.links, { fieldname, query, company: this.filters.company || undefined, branch: this.filters.branch || undefined })) || [];
+			return (await call(API.links, {
+				fieldname,
+				query,
+				company: this.filters.company || undefined,
+				branch: this.filters.branch || undefined,
+				customer: this.filters.customer || undefined,
+			})) || [];
 		},
 		applyFilters() { this.start = 0; this.refresh(); },
 		resetFilters() { this.filters = blankFilters(); this.start = 0; this.refresh(); },
