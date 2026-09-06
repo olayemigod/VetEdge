@@ -29,6 +29,35 @@ def test_billing_center_removes_duplicate_shortcuts_and_html_currency_formatter(
 	assert ":value=\"formatCurrency(summary.total_paid)\"" in component
 
 
+def test_billing_center_has_fuzzy_date_presets_reusing_shared_date_ranges():
+	component = read("vetedge/public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
+	ranges = read("vetedge/public/js/edgesuite_date_ranges.js")
+
+	assert 'label="Date Range"' in component
+	assert "const dateRanges = () => frappe.EdgeSuite?.DateRanges || null;" in component
+	assert "datePreset: 'full_history'" in component
+	assert "dateRanges()?.getOptions?.()" in component
+	assert "dateRanges()?.getRange?.(this.datePreset)" in component
+	assert "setDatePreset(value)" in component
+	assert "setDateField(field, value)" in component
+	assert "this.datePreset = 'custom'" in component
+	assert "this.datePreset = 'full_history'" in component
+	for preset in (
+		"today",
+		"yesterday",
+		"this_week",
+		"last_week",
+		"this_month",
+		"last_month",
+		"this_quarter",
+		"last_quarter",
+		"this_year",
+		"last_year",
+		"full_history",
+	):
+		assert f'case "{preset}":' in ranges
+
+
 def test_billing_sessions_is_a_real_edgesuite_page_reusing_safe_dataset():
 	loader = read("vetedge/veterinary/page/vetedge_billing_sessions/vetedge_billing_sessions.js")
 	page = load_json("vetedge/veterinary/page/vetedge_billing_sessions/vetedge_billing_sessions.json")
