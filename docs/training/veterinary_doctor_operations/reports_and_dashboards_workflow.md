@@ -139,6 +139,7 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Veterinary Home and EdgeSuite Daily Start](training-module:shared-veterinary-home)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Role Access Matrix](training-module:role-access)
 - [Troubleshooting and Common Errors](training-module:troubleshooting)

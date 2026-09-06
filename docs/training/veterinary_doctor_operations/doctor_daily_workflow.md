@@ -8,7 +8,7 @@ Train veterinary doctors to use VetEdge for a normal clinic day: login, queue re
 
 After this module, the doctor should be able to:
 
-- Open the Veterinary workspace and review daily work.
+- Open Veterinary Home and review role-aware daily work.
 - Use the Appointment Queue safely.
 - Review patient history before treatment.
 - Move from consultation to lab, vaccination, Hospitalisation, or follow-up.
@@ -20,8 +20,8 @@ After this module, the doctor should be able to:
 
 ```mermaid
 flowchart TD
-    A[Login] --> B[Open Veterinary Workspace]
-    B --> C[Review Notifications]
+    A[Login] --> B[Open Veterinary Home]
+    B --> C[Confirm Branch and Review Attention Cards]
     C --> D[Open Appointment Queue]
     D --> E{Patient Checked In?}
     E -->|Yes| F[Open Patient and Consultation]
@@ -48,8 +48,8 @@ flowchart TD
 
 ## Step-by-Step Training Guide
 
-1. Login and open the Veterinary workspace.
-2. Check Veterinary notifications for urgent lab results, treatment reviews, payment gate alerts, missed appointments, vaccination reminders, and Hospitalisation actions.
+1. Sign in and open Veterinary Home at `/desk/vetedge`.
+2. Confirm the current company, branch and practitioner context; review attention cards and Veterinary notifications for urgent lab results, treatment reviews, payment gate alerts, missed appointments, vaccination reminders, and Hospitalisation actions.
 3. Open Appointment Queue or Appointments.
 4. Review today's patients by Branch, practitioner, appointment type, and status.
 5. For a checked-in patient, open the existing patient record and consultation.
@@ -62,7 +62,7 @@ flowchart TD
 12. If grooming staff reports wounds, parasites, skin infection, pain, or handling risk, review the patient and recommend consultation if needed.
 13. If boarding staff reports overdue vaccination, unclear medication/feeding instructions, illness, injury, or abnormal behaviour, review the patient and escalate to consultation or Hospitalisation if needed.
 14. Complete the consultation or hand off to the correct team.
-15. Before handover or end of day, review relevant dashboards and open items.
+15. Before handover or end of day, refresh Veterinary Home, reconcile the remaining cards to source rows and review relevant dashboards.
 
 ## Trainer Notes
 
@@ -130,6 +130,9 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Veterinary Home and EdgeSuite Daily Start](training-module:shared-veterinary-home)
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Safe Workflow Handoffs](training-module:shared-safe-handoffs)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Patient Medical Record Workflow](training-module:patient-record)
 - [Consultation Workflow](training-module:consultation)

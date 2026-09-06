@@ -51,12 +51,20 @@ class TestVetEdgeTrainingCentreShellContract(unittest.TestCase):
 
         for selector in (
             ".vtc-toolbar",
+            ".vtc-role-filter",
             ".vtc-grid",
             ".vtc-card",
             ".vtc-reader",
             ".vtc-markdown",
         ):
             self.assertIn(selector, text)
+
+    def test_role_group_filter_is_available(self):
+        text = COMPONENT.read_text(encoding="utf-8")
+
+        self.assertIn('v-model="roleFilter"', text)
+        self.assertIn("availableRoleGroups", text)
+        self.assertIn("module.role_group !== this.roleFilter", text)
 
 
 if __name__ == "__main__":

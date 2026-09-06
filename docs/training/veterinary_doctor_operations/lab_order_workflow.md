@@ -38,12 +38,14 @@ sequenceDiagram
 2. Click New Lab Order.
 3. Select one or more clinically necessary active lab tests.
 4. Add sample notes if useful.
-5. Submit the lab order request.
+5. Save the Lab Order and select **Order Lab Tests** to move it from Draft to Ordered.
 6. Use View Lab Orders from the consultation to review linked orders.
 7. Open the lab order and check status, requested date, requested by, service Branch, tests, and linked invoice if visible.
-8. Allow Lab Technician or lab staff to collect samples, process tests, and enter results.
-9. Review the lab order after results are entered.
-10. Return to the consultation and update assessment, diagnosis, treatment plan, follow-up, or Hospitalisation plan if results change care.
+8. Allow the authorised Lab Technician or lab staff to progress Sample Collected, Sent to Lab, In Progress and Result Entered.
+9. Review the result in clinical context and select the permitted review action.
+10. Select **Complete Lab Order** only after result entry, clinical review and the complete order workflow are finished.
+11. Return to the consultation and update assessment, diagnosis, treatment plan, follow-up, or Hospitalisation plan if results change care.
+12. Confirm the laboratory event appears in Medical History only after workflow status reaches `Completed`.
 
 ## Trainer Notes
 
@@ -70,11 +72,13 @@ Expected outcome: The doctor can request lab work and complete the result-review
 | Status | Meaning |
 |---|---|
 | Draft | Order exists but is not requested. |
-| Requested | Doctor has requested tests. |
+| Ordered | Doctor has ordered the selected tests. |
 | Sample Collected | Sample has been collected. |
+| Sent to Lab | Sample has been handed into laboratory processing. |
 | In Progress | Lab work is underway. |
 | Result Entered | Results have been entered and need review. |
 | Reviewed | Doctor review is complete. |
+| Completed | Result entry, review and the Lab Order workflow are complete; the event may appear in Medical History. |
 | Cancelled | Lab order is cancelled. |
 
 ## Common Mistakes
@@ -113,6 +117,8 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Laboratory Operations](training-module:laboratory-operations)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Consultation Workflow](training-module:consultation)
 - [Troubleshooting and Common Errors](training-module:troubleshooting)

@@ -72,8 +72,10 @@ Expected outcome: The doctor records preventive care correctly and uses the righ
 | Draft | Vaccination record exists but is not ready or administered. |
 | Awaiting Payment | Payment must be resolved if payment-before-administration is enforced. |
 | Pending Administration | Record is ready for administration. |
-| Administered | Vaccine has been administered. |
+| Administered | Vaccine has been clinically administered; the event may now appear in Medical History. |
 | Cancelled | Vaccination record is cancelled. |
+
+Draft, Awaiting Payment and Pending Administration are operational work and do not appear as completed vaccination history.
 
 ## Common Mistakes
 
@@ -112,6 +114,8 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Dispensary and Stock Operations](training-module:dispensary-stock-operations)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Consultation Workflow](training-module:consultation)
 - [Reports and Dashboards Workflow](training-module:reports-dashboards)
