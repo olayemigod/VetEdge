@@ -64,6 +64,7 @@ jobs:
             tests/test_vfd_bill_01_qa_defects.py
 
       - name: Validate VFD-BILL-01 source contracts
-        run: python -m pytest -q \
-          tests/test_vfd_bill_01_source_contract.py \
-          tests/test_vfd_bill_01_qa_defects.py
+        run: |
+          python -m pytest -q \
+            tests/test_vfd_bill_01_source_contract.py \
+            tests/test_vfd_bill_01_qa_defects.py
