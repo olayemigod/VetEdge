@@ -121,6 +121,37 @@ def _replace_retired_hospitalisation_dashboard(items: list[dict]) -> list[dict]:
 	return result
 
 
+def _prepend_veterinary_home_link(items: list[dict]) -> list[dict]:
+	"""Make Veterinary Home the first navigable sidebar item.
+
+	Frappe's legacy Desktop Icons screen resolves a Workspace Sidebar launcher to
+	the sidebar's first Link. A relative URL is intentionally used here: Frappe
+	keeps relative routes in the current tab, while External Desktop Icon routes
+	are expanded to an absolute URL and opened in a new tab.
+	"""
+	home = {
+		"child": 0,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"label": "Veterinary Home",
+		"link_type": "URL",
+		"show_arrow": 0,
+		"type": "Link",
+		"url": VETEDGE_DESK_ROUTE,
+		"icon": "home",
+	}
+	remaining = []
+	for item in items:
+		label = str(item.get("label") or "").strip()
+		url = str(item.get("url") or "").strip()
+		link_to = str(item.get("link_to") or "").strip()
+		if label == "Veterinary Home" or url == VETEDGE_DESK_ROUTE or link_to == "vetedge":
+			continue
+		remaining.append(item)
+	return [home, *remaining]
+
+
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
 
@@ -198,6 +229,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc["title"] = "Veterinary"
 
 	standard_items = _replace_retired_hospitalisation_dashboard(standard_doc.get("items") or [])
+	standard_items = _prepend_veterinary_home_link(standard_items)
 	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):

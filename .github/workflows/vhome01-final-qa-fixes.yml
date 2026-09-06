@@ -1,0 +1,51 @@
+name: VetEdge VHOME-01 Final QA Fixes
+
+on:
+  pull_request:
+    branches:
+      - qa/vetedge-full-implementation-2026-08-29
+    paths:
+      - "vetedge/services/home_postqa.py"
+      - "vetedge/veterinary/page/vetedge/vetedge.js"
+      - "vetedge/public/js/vetedge_postqa_navigation_hardening.js"
+      - "vetedge/tests/test_vhome_final_qa_fixes.py"
+      - ".github/workflows/vhome01-final-qa-fixes.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: vhome01-final-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  source-contracts:
+    name: Final VHOME QA source contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile and lint final QA backend
+        run: |
+          python -m py_compile vetedge/services/home_postqa.py
+          ruff check vetedge/services/home_postqa.py vetedge/tests/test_vhome_final_qa_fixes.py
+
+      - name: Check final QA JavaScript syntax
+        run: |
+          node --check vetedge/veterinary/page/vetedge/vetedge.js
+          node --check vetedge/public/js/vetedge_postqa_navigation_hardening.js
+
+      - name: Run final QA source contracts
+        run: python -m pytest -q vetedge/tests/test_vhome_final_qa_fixes.py

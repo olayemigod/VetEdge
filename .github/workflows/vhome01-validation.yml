@@ -1,0 +1,273 @@
+name: VetEdge VHOME-01 Validation
+
+on:
+  pull_request:
+    branches:
+      - qa/vetedge-full-implementation-2026-08-29
+    paths:
+      - "vetedge/services/home.py"
+      - "vetedge/veterinary/page/vetedge/vetedge.js"
+      - "vetedge/public/js/vetedge_home.bundle.js"
+      - "vetedge/public/js/vetedge_home/**"
+      - "vetedge/tests/test_vetedge_home_contract.py"
+      - "vetedge/tests/test_vetedge_home_runtime.py"
+      - "vetedge/tests/test_vetedge_professional_ui_contract.py"
+      - "vetedge/tests/vhome_browser_fixture.py"
+      - "scripts/vhome_browser_smoke.py"
+      - "scripts/vhome_browser_runner.py"
+      - ".github/workflows/vhome01-validation.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: vhome01-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    name: VHOME-01 source contracts
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pytest ruff
+
+      - name: Compile Home backend and browser smoke
+        run: |
+          python -m py_compile vetedge/services/home.py
+          python -m py_compile vetedge/tests/vhome_browser_fixture.py
+          python -m py_compile scripts/vhome_browser_smoke.py
+          python -m py_compile scripts/vhome_browser_runner.py
+
+      - name: Lint Home contracts
+        run: |
+          ruff check --ignore I001 \
+            vetedge/services/home.py \
+            vetedge/tests/test_vetedge_home_contract.py \
+            vetedge/tests/test_vetedge_home_runtime.py \
+            vetedge/tests/vhome_browser_fixture.py \
+            scripts/vhome_browser_smoke.py \
+            scripts/vhome_browser_runner.py
+
+      - name: Check Home JavaScript syntax
+        run: |
+          node --check vetedge/veterinary/page/vetedge/vetedge.js
+          node --check vetedge/public/js/vetedge_home.bundle.js
+
+      - name: Run Home source contracts
+        run: |
+          python -m pytest -q \
+            vetedge/tests/test_vetedge_home_contract.py \
+            vetedge/tests/test_vetedge_professional_ui_contract.py
+
+  frappe-v16:
+    name: VHOME-01 Frappe v16 standalone
+    needs: source-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install bench prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev pkg-config redis-tools
+          python -m pip install --upgrade frappe-bench
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create clean Frappe v16 bench
+        run: |
+          bench init \
+            --frappe-branch version-16 \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            frappe-bench
+
+          cd frappe-bench
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Check out authoritative EdgeSuite UI candidate
+        uses: actions/checkout@v5
+        with:
+          repository: olayemigod/processedge-edge-suite-ui
+          ref: 8ba77eaee73ebd4466ec25dd27afb55154bd97cd
+          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          path: edgesuite-ui-source
+
+      - name: Fetch ERPNext, Payments and local applications
+        working-directory: frappe-bench
+        run: |
+          bench get-app --branch version-16 --skip-assets https://github.com/frappe/erpnext.git
+          bench get-app --branch develop --skip-assets https://github.com/frappe/payments.git
+          bench get-app --skip-assets "$GITHUB_WORKSPACE/edgesuite-ui-source"
+          bench get-app --skip-assets "$GITHUB_WORKSPACE"
+
+      - name: Create standalone VetEdge site
+        working-directory: frappe-bench
+        run: |
+          bench new-site ci.localhost \
+            --db-host 127.0.0.1 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site ci.localhost install-app erpnext
+          bench --site ci.localhost install-app payments
+          bench --site ci.localhost install-app edgesuite_ui
+          bench --site ci.localhost install-app vetedge
+          bench --site ci.localhost set-config edge_platform_mode standalone
+          bench --site ci.localhost set-config coreedge_required 0
+
+      - name: Build and migrate exact PR head
+        working-directory: frappe-bench
+        run: |
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "8ba77eaee73ebd4466ec25dd27afb55154bd97cd"
+          bench build --app edgesuite_ui
+          bench build --app vetedge
+          bench --site ci.localhost migrate
+
+      - name: Run Veterinary Home installed-site tests
+        working-directory: frappe-bench
+        run: |
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_home_runtime
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_home_contract
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_vetedge_professional_ui_contract
+
+      - name: Prepare Veterinary Home browser smoke
+        working-directory: frappe-bench
+        env:
+          VHOME_PERSONA_PASSWORD: VHOME-01-ci-only!2026
+        run: |
+          # The clean bench was initialized with --skip-assets. Build the core
+          # Desk bundles before launching a real browser so Frappe can resolve
+          # logical names such as desk.bundle.js and erpnext.bundle.css through
+          # sites/assets/assets.json instead of emitting broken root-relative URLs.
+          bench build --app frappe
+          bench build --app erpnext
+          grep -q 'desk.bundle.js' sites/assets/assets.json
+          grep -q 'libs.bundle.js' sites/assets/assets.json
+          grep -q 'report.bundle.css' sites/assets/assets.json
+          grep -q 'erpnext.bundle.js' sites/assets/assets.json
+          grep -q 'erpnext.bundle.css' sites/assets/assets.json
+
+          python -m pip install --upgrade playwright
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_vetedge", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_appointments", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_consultations", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_grooming", 1]'
+          bench --site ci.localhost execute frappe.db.set_single_value --args '["Veterinary Settings", "enable_dispensary_flow", 1]'
+
+          # Frappe v16 tracks setup completion per application. A brand-new CI
+          # site otherwise redirects Administrator to /desk/setup-wizard/0 and
+          # never executes the Veterinary Home page script. Mark only the two
+          # installed applications that actually declare setup-wizard stages.
+          bench --site ci.localhost execute \
+            frappe.desk.page.setup_wizard.setup_wizard.enable_setup_wizard_complete \
+            --args '["frappe"]'
+          bench --site ci.localhost execute \
+            frappe.desk.page.setup_wizard.setup_wizard.enable_setup_wizard_complete \
+            --args '["erpnext"]'
+          bench --site ci.localhost clear-cache
+          bench --site ci.localhost execute frappe.is_setup_complete | grep -Eq '^(true|True|1)$'
+
+          # Create disposable role/branch fixtures only on this ephemeral CI site.
+          # The fixture uses the real VetEdge starter bundles and existing guest
+          # appointment service so persona and branch counts exercise production
+          # access logic rather than frontend-only mocks.
+          bench --site ci.localhost execute \
+            vetedge.tests.vhome_browser_fixture.prepare_browser_fixture \
+            --args "[\"$VHOME_PERSONA_PASSWORD\"]"
+
+      - name: Run Veterinary Home browser smoke
+        working-directory: frappe-bench
+        env:
+          VHOME_BASE_URL: http://ci.localhost:8000
+          VHOME_ADMIN_PASSWORD: admin
+          VHOME_PERSONA_PASSWORD: VHOME-01-ci-only!2026
+          VHOME_ARTIFACT_DIR: ${{ github.workspace }}/browser-artifacts
+        run: |
+          mkdir -p "$VHOME_ARTIFACT_DIR"
+          PYTHONUNBUFFERED=1 bench --site ci.localhost serve --port 8000 > "$VHOME_ARTIFACT_DIR/server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          READY=0
+          for attempt in $(seq 1 90); do
+            if curl -fsS -H 'Host: ci.localhost' http://127.0.0.1:8000/api/method/ping >/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            cat "$VHOME_ARTIFACT_DIR/server.log"
+            exit 1
+          fi
+
+          # Keep the browser phase bounded well inside the overall job timeout.
+          # The script checkpoints progress after each persona so a timeout still
+          # leaves useful evidence instead of an empty artifact.
+          PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=15s 20m \
+            python "$GITHUB_WORKSPACE/scripts/vhome_browser_runner.py"
+
+      - name: Upload Veterinary Home browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vhome01-browser-smoke
+          path: browser-artifacts
+          if-no-files-found: ignore
