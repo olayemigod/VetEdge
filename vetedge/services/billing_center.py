@@ -23,6 +23,8 @@ PATIENT_DOCTYPE = "Veterinary Patient"
 PAGE_LENGTH_DEFAULT = 25
 PAGE_LENGTH_MAX = 100
 PATIENT_SEARCH_CANDIDATE_LIMIT = 50
+DEFAULT_ACTIVITY_FILTER = "actionable"
+ALLOWED_ACTIVITY_FILTERS = {"actionable", "all", "empty"}
 BILLING_CENTER_ROLES = {
 	*ELEVATED_ROLES,
 	*FRONT_DESK_ROLES,
@@ -111,10 +113,55 @@ def _build_session_filters(filters: dict, user: str) -> tuple[dict, dict]:
 	}
 
 
-def _aggregate(filters: dict) -> dict:
+def _normalize_activity_filter(value: str | None) -> str:
+	activity = cstr(value or DEFAULT_ACTIVITY_FILTER).strip().lower()
+	if activity not in ALLOWED_ACTIVITY_FILTERS:
+		frappe.throw(_("Invalid Billing Center activity filter."), frappe.ValidationError)
+	return activity
+
+
+def _activity_query(filters: dict) -> tuple[dict, dict | None, str]:
+	"""Return query conditions for operational Billing Session activity.
+
+	Actionable Billing includes any session with financial movement or an invoice
+	link. Empty sessions remain queryable for diagnostics but do not belong in the
+	default operational work queue or Open Sessions KPI.
+	"""
+	activity = _normalize_activity_filter(filters.get("activity"))
+	if activity == "all":
+		return {}, None, activity
+	if activity == "empty":
+		return (
+			{
+				"total_charges": 0,
+				"total_invoiced": 0,
+				"total_paid": 0,
+				"outstanding_amount": 0,
+				"current_draft_invoice": ["is", "not set"],
+				"latest_invoice": ["is", "not set"],
+			},
+			None,
+			activity,
+		)
+	return (
+		{},
+		{
+			"total_charges": ["!=", 0],
+			"total_invoiced": ["!=", 0],
+			"total_paid": ["!=", 0],
+			"outstanding_amount": ["!=", 0],
+			"current_draft_invoice": ["is", "set"],
+			"latest_invoice": ["is", "set"],
+		},
+		activity,
+	)
+
+
+def _aggregate(filters: dict, or_filters: dict | None = None) -> dict:
 	rows = frappe.get_list(
 		BILLING_SESSION_DOCTYPE,
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			{"COUNT": "*", "as": "session_count"},
 			{"SUM": "total_charges", "as": "total_charges"},
@@ -134,10 +181,11 @@ def _aggregate(filters: dict) -> dict:
 	}
 
 
-def _count(filters: dict) -> int:
+def _count(filters: dict, or_filters: dict | None = None) -> int:
 	rows = frappe.get_list(
 		BILLING_SESSION_DOCTYPE,
 		filters=filters,
+		or_filters=or_filters,
 		fields=[{"COUNT": "*", "as": "total"}],
 		limit_page_length=1,
 	)
@@ -181,7 +229,7 @@ def _decorate_patient_names(rows: list[dict]) -> list[dict]:
 	return rows
 
 
-def _patient_link_options(base_filters: dict, search: str) -> list[dict]:
+def _patient_link_options(base_filters: dict, search: str, or_filters: dict | None = None) -> list[dict]:
 	search = cstr(search or "").strip()
 	if search:
 		pattern = f"%{search}%"
@@ -201,6 +249,7 @@ def _patient_link_options(base_filters: dict, search: str) -> list[dict]:
 		visible_rows = frappe.get_list(
 			BILLING_SESSION_DOCTYPE,
 			filters=visible_filters,
+			or_filters=or_filters,
 			fields=["animal"],
 			group_by="animal",
 			page_length=20,
@@ -221,6 +270,7 @@ def _patient_link_options(base_filters: dict, search: str) -> list[dict]:
 	visible_rows = frappe.get_list(
 		BILLING_SESSION_DOCTYPE,
 		filters=visible_filters,
+		or_filters=or_filters,
 		fields=["animal"],
 		order_by="animal asc",
 		group_by="animal",
@@ -247,12 +297,15 @@ def get_billing_center(filters: str | dict | None = None, start: int = 0, page_l
 	"""
 	user = _require_billing_center_access()
 	parsed = _parse_filters(filters)
-	session_filters, scope = _build_session_filters(parsed, user)
+	base_filters, scope = _build_session_filters(parsed, user)
+	activity_filters, activity_or_filters, activity = _activity_query(parsed)
+	session_filters = {**base_filters, **activity_filters}
 	start, page_length = _page_values(start, page_length)
 
 	rows = frappe.get_list(
 		BILLING_SESSION_DOCTYPE,
 		filters=session_filters,
+		or_filters=activity_or_filters,
 		fields=[
 			"name",
 			"customer",
@@ -279,12 +332,15 @@ def get_billing_center(filters: str | dict | None = None, start: int = 0, page_l
 	)
 	rows = _decorate_patient_names(rows)
 
-	summary = _aggregate(session_filters)
+	summary = _aggregate(session_filters, activity_or_filters)
 	open_filters = dict(session_filters)
 	open_filters["status"] = ["in", list(OPEN_SESSION_STATUSES)]
-	summary["open_sessions"] = _count(open_filters)
-	summary["outstanding_sessions"] = _count({**session_filters, "outstanding_amount": [">", 0]})
+	summary["open_sessions"] = _count(open_filters, activity_or_filters)
+	summary["outstanding_sessions"] = _count({**session_filters, "outstanding_amount": [">", 0]}, activity_or_filters)
+	empty_filters, _, _ = _activity_query({"activity": "empty"})
+	summary["no_billing_activity_sessions"] = _count({**base_filters, **empty_filters})
 
+	scope["activity"] = activity
 	company = cstr(parsed.get("company") or "").strip()
 	return {
 		"rows": rows,
@@ -311,6 +367,7 @@ def get_billing_center_link_options(
 	company: str | None = None,
 	branch: str | None = None,
 	customer: str | None = None,
+	activity: str | None = None,
 ) -> list[dict]:
 	"""Return only values relevant to the caller's permitted billing scope."""
 	user = _require_billing_center_access()
@@ -326,6 +383,8 @@ def get_billing_center_link_options(
 		context["customer"] = cstr(customer or "").strip()
 
 	base_filters, scope = _build_session_filters(context, user)
+	activity_filters, activity_or_filters, _ = _activity_query({"activity": activity or DEFAULT_ACTIVITY_FILTER})
+	base_filters.update(activity_filters)
 	search = cstr(query or "").strip()
 
 	# Do not overwrite the server-authoritative Branch restriction with a text
@@ -339,7 +398,7 @@ def get_billing_center_link_options(
 		][:20]
 
 	if field == "animal":
-		return _patient_link_options(base_filters, search)
+		return _patient_link_options(base_filters, search, activity_or_filters)
 
 	if search:
 		base_filters[field] = ["like", f"%{search}%"]
@@ -349,6 +408,7 @@ def get_billing_center_link_options(
 	rows = frappe.get_list(
 		BILLING_SESSION_DOCTYPE,
 		filters=base_filters,
+		or_filters=activity_or_filters,
 		fields=[field],
 		order_by=f"{field} asc",
 		group_by=field,
