@@ -179,7 +179,9 @@ def test_billing_center_ui_uses_canonical_route_and_full_filter_cascade():
 	component = read("vetedge/public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
 	bundle = read("vetedge/public/js/vetedge_billing_center.bundle.js")
 
-	assert 'active-route="/desk/vetedge-billing-center"' in component
+	assert ':active-route="activeRoute"' in component
+	assert "'/desk/vetedge-billing-center'" in component
+	assert "'/desk/vetedge-billing-sessions'" in component
 	assert "customer: this.filters.customer || undefined" in component
 	assert "this.filters.branch = ''" in component
 	assert "this.filters.customer = ''" in component
