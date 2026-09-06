@@ -8,6 +8,10 @@
 	const HOME_DATASET_KEY = "vetedgeDirectHome";
 	const HOME_ATTRIBUTE = "data-vetedge-direct-home";
 	const HOME_LABEL = "Veterinary Home";
+	const PATIENTS_DATASET_KEY = "vetedgeDirectPatients";
+	const PATIENTS_ATTRIBUTE = "data-vetedge-direct-patients";
+	const PATIENTS_LABEL = "Patients";
+	const PATIENTS_ROUTE = "/desk/vetedge-resource-center?resource=patients";
 	const PRIMARY_SECTION_LABELS = Object.freeze({
 		Clinical: "Clinical Operations",
 		"Front Desk": "Appointments",
@@ -44,6 +48,14 @@
 		return String(global.location?.pathname || "").replace(/\/+$/, "") === "/desk/vetedge";
 	}
 
+	function directPatientsTarget() {
+		const path = String(global.location?.pathname || "").replace(/\/+$/, "");
+		if (path === "/desk/veterinary-patient" || path.startsWith("/desk/veterinary-patient/")) return true;
+		if (path !== "/desk/vetedge-resource-center") return false;
+		const params = new URLSearchParams(global.location?.search || "");
+		return (params.get("resource") || "patients") === "patients";
+	}
+
 	function navigateHome() {
 		if (global.VetEdgeNavigationRecovery?.navigate?.("/desk/vetedge")) return true;
 		const adapter = runtime()?.getAdapter?.("navigation:vetedge") || runtime()?.getAdapter?.("navigation:veterinary");
@@ -53,6 +65,14 @@
 			return true;
 		}
 		global.location?.assign?.("/desk/vetedge");
+		return true;
+	}
+
+	function navigatePatients() {
+		if (global.VetEdgeNavigationRecovery?.navigate?.(PATIENTS_ROUTE)) return true;
+		const adapter = runtime()?.getAdapter?.("navigation:vetedge") || runtime()?.getAdapter?.("navigation:veterinary");
+		if (adapter?.open?.(PATIENTS_ROUTE)) return true;
+		global.location?.assign?.(PATIENTS_ROUTE);
 		return true;
 	}
 
@@ -100,6 +120,30 @@
 		return true;
 	}
 
+	function syncDirectPatientsState(item) {
+		if (!item) return false;
+		item.dataset[PATIENTS_DATASET_KEY] = "1";
+		setVisibleLabel(item, PATIENTS_LABEL);
+		item.setAttribute("aria-label", PATIENTS_LABEL);
+		item.setAttribute("title", PATIENTS_LABEL);
+		item.removeAttribute("aria-expanded");
+		item.removeAttribute("aria-controls");
+		const active = directPatientsTarget();
+		item.classList.toggle("active", active);
+		if (active) {
+			const shell = item.closest?.(SHELL_SELECTOR);
+			shell?.querySelectorAll?.(".edge-sidebar-item").forEach((candidate) => {
+				if (candidate === item) return;
+				candidate.classList.remove("active");
+				candidate.removeAttribute("aria-current");
+			});
+			item.setAttribute("aria-current", "page");
+		} else {
+			item.removeAttribute("aria-current");
+		}
+		return true;
+	}
+
 	function patchDirectHome(shell) {
 		const existing = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
 		if (existing) return syncDirectHomeState(existing);
@@ -131,6 +175,38 @@
 		return true;
 	}
 
+	function patchDirectPatients(shell) {
+		const existing = shell.querySelector(`.edge-sidebar-item[${PATIENTS_ATTRIBUTE}="1"]`);
+		if (existing) return syncDirectPatientsState(existing);
+
+		const patientsSection = Array.from(shell.querySelectorAll(".edge-sidebar__section")).find((section) => {
+			const label = sectionLabel(section.querySelector(".edge-sidebar__section-toggle"));
+			return label === PATIENTS_LABEL;
+		});
+		if (!patientsSection) return false;
+
+		const toggle = patientsSection.querySelector(".edge-sidebar__section-toggle");
+		const nestedItem = patientsSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
+		if (!toggle && !nestedItem) return false;
+
+		const directItem = nestedItem?.cloneNode(true) || toggle.cloneNode(true);
+		directItem.classList.remove("edge-sidebar__section-toggle");
+		directItem.classList.add("edge-sidebar-item");
+		if (directItem.tagName === "BUTTON") directItem.type = "button";
+		if (directItem.tagName === "A") directItem.setAttribute("href", PATIENTS_ROUTE);
+		directItem.querySelectorAll(".edge-icon").forEach((icon, index) => {
+			if (index > 0) icon.remove();
+		});
+		syncDirectPatientsState(directItem);
+		patientsSection.replaceWith(directItem);
+
+		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (directHome?.parentElement === directItem.parentElement && directHome.nextElementSibling !== directItem) {
+			directHome.insertAdjacentElement("afterend", directItem);
+		}
+		return true;
+	}
+
 	function normalizePrimarySections(shell) {
 		const sections = Array.from(shell.querySelectorAll(".edge-sidebar__section"));
 		sections.forEach((section) => {
@@ -145,7 +221,12 @@
 
 		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
 		if (!directHome?.parentElement) return false;
+		const directPatients = shell.querySelector(`.edge-sidebar-item[${PATIENTS_ATTRIBUTE}="1"]`);
 		let anchor = directHome;
+		if (directPatients?.parentElement === directHome.parentElement) {
+			if (directHome.nextElementSibling !== directPatients) directHome.insertAdjacentElement("afterend", directPatients);
+			anchor = directPatients;
+		}
 		const orderedSections = Array.from(shell.querySelectorAll(".edge-sidebar__section"));
 		for (const label of PRIMARY_SECTION_ORDER) {
 			const section = orderedSections.find((candidate) => {
@@ -329,6 +410,7 @@
 		const shell = vetedgeShell();
 		if (!shell) return false;
 		patchDirectHome(shell);
+		patchDirectPatients(shell);
 		normalizePrimarySections(shell);
 		ensureProductMenu(shell);
 		return true;
@@ -348,6 +430,14 @@
 			navigateHome();
 			return;
 		}
+		const directPatients = event.target?.closest?.(`[${PATIENTS_ATTRIBUTE}="1"]`);
+		if (directPatients) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			navigatePatients();
+			return;
+		}
 		repairUnresponsiveSharedTrigger(event);
 	}, true);
 
@@ -360,8 +450,9 @@
 			const shell = vetedgeShell();
 			if (!shell) return;
 			const homePatched = shell.querySelector(`[${HOME_ATTRIBUTE}="1"]`);
+			const patientsPatched = shell.querySelector(`[${PATIENTS_ATTRIBUTE}="1"]`);
 			const trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
-			if (!homePatched || !trigger || !visible(trigger)) schedule(50);
+			if (!homePatched || !patientsPatched || !trigger || !visible(trigger)) schedule(50);
 		});
 		observer.observe(global.document.body, { childList: true, subtree: true });
 	}
@@ -373,12 +464,14 @@
 			return shell ? ensureProductMenu(shell) : false;
 		},
 		navigateHome,
+		navigatePatients,
 		state() {
 			const shell = vetedgeShell();
 			const host = global.document?.getElementById(PRODUCT_HOST_ID);
 			return {
 				activeShell: Boolean(shell),
 				directHome: Boolean(shell?.querySelector?.(`[${HOME_ATTRIBUTE}="1"]`)),
+				directPatients: Boolean(shell?.querySelector?.(`[${PATIENTS_ATTRIBUTE}="1"]`)),
 				productTriggerVisible: visible(global.document?.getElementById(PRODUCT_TRIGGER_ID)),
 				productMenuBridged: host?.dataset?.vetedgeProductMenuBridge === "1",
 				productMenuOpen: !global.document?.getElementById(PRODUCT_PANEL_ID)?.hidden && global.document?.documentElement?.classList?.contains(PRODUCT_OPEN_CLASS),
