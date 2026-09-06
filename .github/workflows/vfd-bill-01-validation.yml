@@ -16,6 +16,7 @@ on:
       - "vetedge/public/js/vetedge_front_desk_page_host.js"
       - "vetedge/public/js/vetedge_postqa_navigation_hardening.js"
       - "vetedge/veterinary/page/vetedge_billing_center/**"
+      - "vetedge/veterinary/page/vetedge_billing_sessions/**"
       - "vetedge/veterinary/page/vetedge_front_desk_action_center/**"
       - "vetedge/veterinary/page/vetedge_front_desk_guest_bookings/**"
       - "vetedge/veterinary/page/vetedge_front_desk_missed_appointments/**"
@@ -23,6 +24,7 @@ on:
       - "vetedge/veterinary/page/veterinary_appointment_queue/**"
       - "vetedge/tests/test_vfd_bill_01_contract.py"
       - "tests/test_vfd_bill_01_source_contract.py"
+      - "tests/test_vfd_bill_01_qa_defects.py"
       - ".github/workflows/vfd-bill-01-validation.yml"
   workflow_dispatch:
 
@@ -58,7 +60,10 @@ jobs:
             vetedge/install/__init__.py \
             vetedge/install/patient_navigation.py \
             vetedge/services/billing_center.py \
-            tests/test_vfd_bill_01_source_contract.py
+            tests/test_vfd_bill_01_source_contract.py \
+            tests/test_vfd_bill_01_qa_defects.py
 
       - name: Validate VFD-BILL-01 source contracts
-        run: python -m pytest -q tests/test_vfd_bill_01_source_contract.py
+        run: python -m pytest -q \
+          tests/test_vfd_bill_01_source_contract.py \
+          tests/test_vfd_bill_01_qa_defects.py
