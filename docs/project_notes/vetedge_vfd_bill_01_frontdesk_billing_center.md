@@ -154,10 +154,12 @@ Latest green source validation evidence:
 
 - workflow: `VFD-BILL-01 Validation`
 - run: `34055850616`
-- head: `81e263afdc4f660aae385e9d259599845d432ab7`
+- validated code head: `81e263afdc4f660aae385e9d259599845d432ab7`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - pure source-contract tests: PASS
+
+Subsequent commit `66e08f690e7c835e7e1ec809080412202e906049` updates this documentation only; no validated runtime/source code changed after the green run.
 
 The source gate does not replace installed-site QA.
 
