@@ -158,44 +158,6 @@ def _front_desk_boarding_item(template: dict | None = None) -> dict:
 	return item
 
 
-def _patients_navigation_items(template: dict | None = None) -> list[dict]:
-	"""Build the dedicated Patients navigation group without broadening visibility."""
-	if not template:
-		return []
-
-	visibility = template.get("display_depends_on")
-	section = {
-		"child": 0,
-		"collapsible": 1,
-		"icon": "users-round",
-		"indent": 1,
-		"keep_closed": 0,
-		"label": "Patients",
-		"link_type": "DocType",
-		"show_arrow": 0,
-		"type": "Section Break",
-	}
-	if visibility:
-		section["display_depends_on"] = visibility
-
-	item = dict(template)
-	item.update(
-		{
-			"child": 1,
-			"collapsible": 0,
-			"icon": "users-round",
-			"indent": 0,
-			"keep_closed": 0,
-			"label": "Patients",
-			"link_to": "Veterinary Patient",
-			"link_type": "DocType",
-			"show_arrow": 0,
-			"type": "Link",
-		}
-	)
-	return [section, item]
-
-
 def _billing_link(
 	label: str,
 	link_to: str,
@@ -262,10 +224,9 @@ def _billing_center_items(templates: dict[str, dict] | None = None) -> list[dict
 	]
 
 
-def _navigation_templates(items: list[dict]) -> tuple[dict[str, dict], dict | None, dict | None]:
+def _navigation_templates(items: list[dict]) -> tuple[dict[str, dict], dict | None]:
 	billing_templates: dict[str, dict] = {}
 	boarding_template = None
-	patients_template = None
 	for original in items:
 		if original.get("type") != "Link":
 			continue
@@ -276,9 +237,7 @@ def _navigation_templates(items: list[dict]) -> tuple[dict[str, dict], dict | No
 			billing_templates[label] = dict(original)
 		if label == "Pet Boarding Booking":
 			boarding_template = dict(original)
-		if label == "Patients":
-			patients_template = dict(original)
-	return billing_templates, boarding_template, patients_template
+	return billing_templates, boarding_template
 
 
 def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
@@ -287,26 +246,16 @@ def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
 	The checked-in sidebar is still useful as the long-lived standard source, but
 	this transformation is authoritative at install/migrate time. It is deliberately
 	idempotent because recurring sidebar synchronization must never recreate the old
-	Front Desk accounting links, duplicate Boarding, restore Grooming Appointment,
-	or move Patients back under appointment/front-desk work. Existing link visibility
-	rules are preserved when links move sections.
+	Front Desk accounting links, duplicate Boarding, or restore Grooming Appointment.
+	Existing link visibility rules are preserved when links move sections.
 	"""
-	billing_templates, boarding_template, patients_template = _navigation_templates(items)
+	billing_templates, boarding_template = _navigation_templates(items)
 	result: list[dict] = []
 	current_section = ""
 	front_desk_seen = False
 	billing_inserted = False
 	boarding_inserted = False
-	patients_inserted = False
 	skip_billing_children = False
-	skip_patients_children = False
-
-	def insert_patients() -> None:
-		nonlocal patients_inserted
-		if patients_inserted:
-			return
-		result.extend(_patients_navigation_items(patients_template))
-		patients_inserted = True
 
 	def insert_billing_center() -> None:
 		nonlocal billing_inserted
@@ -321,37 +270,20 @@ def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
 		is_section = item.get("type") == "Section Break" and not int(item.get("child") or 0)
 
 		if is_section:
-			if not patients_inserted:
-				insert_patients()
 			if current_section == "Front Desk" and label != "Front Desk":
 				insert_billing_center()
-			if label == "Patients":
-				current_section = "Patients"
-				skip_patients_children = True
-				skip_billing_children = False
-				continue
 			if label == "Billing Center":
 				current_section = "Billing Center"
 				skip_billing_children = True
-				skip_patients_children = False
 				continue
 			current_section = label
 			skip_billing_children = False
-			skip_patients_children = False
 			if label == "Front Desk":
 				front_desk_seen = True
 			result.append(item)
 			continue
 
 		if skip_billing_children or current_section == "Billing Center":
-			continue
-		if skip_patients_children or current_section == "Patients":
-			continue
-
-		# Patients is a primary product resource, not an appointment sub-workflow.
-		# Its dedicated group is inserted once before Dashboard and flattened into
-		# a direct sidebar control by the shared navigation hardening layer.
-		if label == "Patients":
 			continue
 
 		# Grooming appointment is an implementation detail of the appointment flow;
@@ -377,11 +309,6 @@ def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
 				continue
 
 		result.append(item)
-
-	if not patients_inserted:
-		patient_items = _patients_navigation_items(patients_template)
-		if patient_items:
-			result[0:0] = patient_items
 
 	if front_desk_seen and not billing_inserted:
 		insert_billing_center()
@@ -547,7 +474,7 @@ def ensure_vetedge_desktop_icon() -> None:
 
 	# Clean up duplicate if both exist
 	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
-		frappe.delete_doc("Workspace Sidebar", "Veterinary", force=True)
+		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	from vetedge.services.branding import get_branding
 
