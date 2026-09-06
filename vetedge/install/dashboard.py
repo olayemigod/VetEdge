@@ -11,6 +11,11 @@ SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modif
 VETEDGE_DESK_ROUTE = "/desk/vetedge"
 HOSPITALISATION_OPERATIONS_PAGE = "vetedge-hospitalisation-operations"
 RETIRED_HOSPITALISATION_DASHBOARD_PAGE = "veterinary-hospitalisation-dashboard"
+FRONT_DESK_PAGE_ROUTES = {
+	"Appointment Queue": "vetedge-front-desk-queue",
+	"Guest Booking Requests": "vetedge-front-desk-guest-bookings",
+	"Missed Appointments": "vetedge-front-desk-missed-appointments",
+}
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -121,6 +126,144 @@ def _replace_retired_hospitalisation_dashboard(items: list[dict]) -> list[dict]:
 	return result
 
 
+def _front_desk_boarding_item() -> dict:
+	return {
+		"child": 1,
+		"collapsible": 0,
+		"icon": "hotel",
+		"indent": 0,
+		"keep_closed": 0,
+		"label": "Pet Boarding Booking",
+		"link_to": "Pet Boarding Booking",
+		"link_type": "DocType",
+		"show_arrow": 0,
+		"type": "Link",
+	}
+
+
+def _billing_center_items() -> list[dict]:
+	section = {
+		"child": 0,
+		"collapsible": 1,
+		"indent": 1,
+		"keep_closed": 1,
+		"label": "Billing Center",
+		"link_type": "DocType",
+		"show_arrow": 0,
+		"type": "Section Break",
+	}
+	links = [
+		("Customers", "Customer", "DocType", "customer"),
+		("Sales Invoice", "Sales Invoice", "DocType", "receipt-text"),
+		("Payment Entry", "Payment Entry", "DocType", "money-coins-1"),
+		("Billing Session", "Veterinary Billing Session", "DocType", "file-text"),
+		("Billing Center", "vetedge-billing-center", "Page", "landmark"),
+	]
+	return [
+		section,
+		*[
+			{
+				"child": 1,
+				"collapsible": 0,
+				"icon": icon,
+				"indent": 0,
+				"keep_closed": 0,
+				"label": label,
+				"link_to": link_to,
+				"link_type": link_type,
+				"show_arrow": 0,
+				"type": "Link",
+			}
+			for label, link_to, link_type, icon in links
+		],
+	]
+
+
+def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
+	"""Apply the VFD-BILL-01 menu contract without disturbing unrelated sections.
+
+	The checked-in sidebar is still useful as the long-lived standard source, but
+	this transformation is authoritative at install/migrate time. It is deliberately
+	idempotent because recurring sidebar synchronization must never recreate the old
+	Front Desk accounting links, duplicate Boarding, or restore Grooming Appointment.
+	"""
+	result: list[dict] = []
+	current_section = ""
+	front_desk_seen = False
+	billing_inserted = False
+	boarding_inserted = False
+	skip_billing_children = False
+
+	def insert_billing_center() -> None:
+		nonlocal billing_inserted
+		if billing_inserted:
+			return
+		result.extend(_billing_center_items())
+		billing_inserted = True
+
+	for original in items:
+		item = dict(original)
+		label = str(item.get("label") or "").strip()
+		is_section = item.get("type") == "Section Break" and not int(item.get("child") or 0)
+
+		if is_section:
+			if current_section == "Front Desk" and label != "Front Desk":
+				insert_billing_center()
+			if label == "Billing Center":
+				current_section = "Billing Center"
+				skip_billing_children = True
+				continue
+			current_section = label
+			skip_billing_children = False
+			if label == "Front Desk":
+				front_desk_seen = True
+			result.append(item)
+			continue
+
+		if skip_billing_children or current_section == "Billing Center":
+			continue
+
+		# Grooming appointment is an implementation detail of the appointment flow;
+		# keep its DocType/history intact but remove the duplicate product-menu entry.
+		if label == "Pet Grooming Appointment":
+			continue
+
+		# Boarding Booking is a Front Desk booking activity. Remove any historical
+		# copy first, then add exactly one copy immediately after Appointments.
+		if label == "Pet Boarding Booking":
+			continue
+
+		if current_section == "Front Desk":
+			if label in {"Customer", "Customers", "Sales Invoice", "Payment Entry"}:
+				continue
+			if label in FRONT_DESK_PAGE_ROUTES:
+				item["link_type"] = "Page"
+				item["link_to"] = FRONT_DESK_PAGE_ROUTES[label]
+			if label == "Appointments":
+				result.append(item)
+				result.append(_front_desk_boarding_item())
+				boarding_inserted = True
+				continue
+
+		result.append(item)
+
+	if front_desk_seen and not billing_inserted:
+		insert_billing_center()
+
+	# Defensive fallback for unusually customized source files that lost the
+	# Appointments row but still contain Front Desk. This keeps Boarding visible
+	# without duplicating it in another section.
+	if front_desk_seen and not boarding_inserted:
+		front_index = next((index for index, row in enumerate(result) if str(row.get("label") or "").strip() == "Front Desk"), -1)
+		if front_index >= 0:
+			insert_at = front_index + 1
+			while insert_at < len(result) and int(result[insert_at].get("child") or 0):
+				insert_at += 1
+			result.insert(insert_at, _front_desk_boarding_item())
+
+	return result
+
+
 def _prepend_veterinary_home_link(items: list[dict]) -> list[dict]:
 	"""Make Veterinary Home the first navigable sidebar item.
 
@@ -177,6 +320,10 @@ FINANCIAL_DASHBOARD_FILES = (
 SIDEBAR_PAGE_FILES = (
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
 	("veterinary", "page", "vetedge_hospitalisation_operations", "vetedge_hospitalisation_operations.json"),
+	("veterinary", "page", "vetedge_front_desk_queue", "vetedge_front_desk_queue.json"),
+	("veterinary", "page", "vetedge_front_desk_guest_bookings", "vetedge_front_desk_guest_bookings.json"),
+	("veterinary", "page", "vetedge_front_desk_missed_appointments", "vetedge_front_desk_missed_appointments.json"),
+	("veterinary", "page", "vetedge_billing_center", "vetedge_billing_center.json"),
 )
 
 
@@ -229,6 +376,7 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc["title"] = "Veterinary"
 
 	standard_items = _replace_retired_hospitalisation_dashboard(standard_doc.get("items") or [])
+	standard_items = _organize_veterinary_navigation(standard_items)
 	standard_items = _prepend_veterinary_home_link(standard_items)
 	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
