@@ -156,6 +156,21 @@ def test_dedicated_front_desk_pages_share_one_fixed_mode_shell():
 		assert marker in loader
 
 
+def test_front_desk_page_roles_preserve_replaced_link_access():
+	queue = json.loads(read(APP / "veterinary/page/vetedge_front_desk_queue/vetedge_front_desk_queue.json"))
+	missed = json.loads(read(APP / "veterinary/page/vetedge_front_desk_missed_appointments/vetedge_front_desk_missed_appointments.json"))
+	legacy = json.loads(read(APP / "veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.json"))
+
+	queue_roles = {row.get("role") for row in queue.get("roles") or []}
+	missed_roles = {row.get("role") for row in missed.get("roles") or []}
+	legacy_roles = {row.get("role") for row in legacy.get("roles") or []}
+
+	for role in ("Veterinary Nurse", "Dispensary User"):
+		assert role in queue_roles
+		assert role in legacy_roles
+	assert "Veterinary Nurse" in missed_roles
+
+
 def test_old_action_center_and_queue_are_compatibility_only():
 	old_center = read(APP / "veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js")
 	old_queue = read(APP / "veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js")
