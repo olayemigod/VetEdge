@@ -62,11 +62,7 @@ def _is_patient_link(item: dict) -> bool:
 
 
 def _dedicated_patient_section_ranges(items: list[dict]) -> set[int]:
-	"""Return indexes for canonical/legacy one-item Patients sections only.
-
-	A customized Patients section containing any other link is left intact. This
-	prevents the navigation cleanup from deleting administrator-added content.
-	"""
+	"""Return indexes for canonical/legacy one-item Patients sections only."""
 	remove: set[int] = set()
 	index = 0
 	while index < len(items):
@@ -79,11 +75,32 @@ def _dedicated_patient_section_ranges(items: list[dict]) -> set[int]:
 		while end < len(items) and not _is_section(items[end]):
 			end += 1
 		children = items[index + 1 : end]
-		meaningful = [child for child in children if child.get("type") == "Link"]
-		if meaningful and all(_is_patient_link(child) for child in meaningful):
+		links = [child for child in children if child.get("type") == "Link"]
+		if links and all(_is_patient_link(child) for child in links):
 			remove.update(range(index, end))
 		index = end
 	return remove
+
+
+def _custom_patient_section_indexes(items: list[dict]) -> set[int]:
+	"""Protect customized Patients sections that include non-Patient links."""
+	protected: set[int] = set()
+	index = 0
+	while index < len(items):
+		item = items[index]
+		if not (_is_section(item) and str(item.get("label") or "").strip() == PATIENT_LABEL):
+			index += 1
+			continue
+
+		end = index + 1
+		while end < len(items) and not _is_section(items[end]):
+			end += 1
+		children = items[index + 1 : end]
+		links = [child for child in children if child.get("type") == "Link"]
+		if any(not _is_patient_link(child) for child in links):
+			protected.update(range(index, end))
+		index = end
+	return protected
 
 
 def _patient_group(template: dict) -> list[dict]:
@@ -125,9 +142,14 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	"""Move Patients out of Front Desk into its own first-class navigation group.
 
 	The returned structure is idempotent. Existing Patients visibility is copied
-	from the source link so this layout change never broadens role access.
+	from the source link so this layout change never broadens role access. A
+	customized Patients section containing additional links is preserved unchanged.
 	"""
 	clean = [_clean_item(item) for item in items]
+	custom_indexes = _custom_patient_section_indexes(clean)
+	if custom_indexes:
+		return clean
+
 	template = next((dict(item) for item in clean if _is_patient_link(item)), None)
 	if not template:
 		return clean
