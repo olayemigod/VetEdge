@@ -128,13 +128,15 @@ A stacked-PR-specific source gate exists at `.github/workflows/vfd-bill-01-valid
 Latest green source validation evidence for the direct Patients implementation:
 
 - workflow: `VFD-BILL-01 Validation`
-- run: `34057713347`
-- validated code head: `51c3b2e62471a4388eafc402a7a317d5946373ac`
+- run: `34057820286`
+- validated code head: `77a1887aa62c18043b5d96c2c8c6dde4415f70dc`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - pure source-contract tests: PASS
 
-The source gate explicitly covers direct Patients post-sync wiring, direct/non-collapsible shell behavior, placement after Veterinary Home, preservation of patient visibility, Front Desk removal, and the existing VFD-BILL-01 billing/front-desk contracts.
+The source gate explicitly covers direct Patients post-sync wiring, direct/non-collapsible shell behavior, placement after Veterinary Home, preservation of patient visibility, removal from Front Desk, and the existing VFD-BILL-01 billing/front-desk contracts.
+
+Any commit after the validated code head must be documentation-only or the source gate must be rerun before local acceptance.
 
 The source gate does not replace installed-site QA.
 
