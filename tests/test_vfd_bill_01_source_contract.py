@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "vetedge"
 
 
 def read(relative: str) -> str:
@@ -21,6 +20,8 @@ def page_roles(relative: str) -> set[str]:
 
 def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 	dashboard = read("vetedge/install/dashboard.py")
+	patient_navigation = read("vetedge/install/patient_navigation.py")
+	install = read("vetedge/install/__init__.py")
 	for marker in (
 		'"Appointment Queue": "vetedge-front-desk-queue"',
 		'"Guest Booking Requests": "vetedge-front-desk-guest-bookings"',
@@ -33,7 +34,35 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 	):
 		assert marker in dashboard
 
+	for marker in (
+		'def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:',
+		'PATIENT_LABEL = "Patients"',
+		'PATIENT_DOCTYPE = "Veterinary Patient"',
+		'"display_depends_on"',
+		'ensure_direct_patient_navigation',
+	):
+		assert marker in patient_navigation
+
 	assert 'standard_items = _organize_veterinary_navigation(standard_items)' in dashboard
+	assert 'ensure_direct_patient_navigation()' in install
+	assert install.index('ensure_financial_dashboard()') < install.index('ensure_direct_patient_navigation()')
+
+
+def test_patients_is_direct_in_sidebar_and_separate_in_product_navigation():
+	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
+
+	for marker in (
+		'const PATIENTS_ATTRIBUTE = "data-vetedge-direct-patients"',
+		'const PATIENTS_ROUTE = "/desk/vetedge-resource-center?resource=patients"',
+		'function patchDirectPatients(shell)',
+		'item.removeAttribute("aria-expanded")',
+		'item.removeAttribute("aria-controls")',
+		'patchDirectPatients(shell);',
+		'directHome.insertAdjacentElement("afterend", directItem)',
+		'navigatePatients',
+		'directPatients',
+	):
+		assert marker in hardening
 
 
 def test_dedicated_front_desk_pages_reuse_one_fixed_mode_bundle():
