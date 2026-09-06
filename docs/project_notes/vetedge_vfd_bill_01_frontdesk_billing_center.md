@@ -33,7 +33,7 @@ The existing Patients `display_depends_on` visibility expression is preserved. A
 
 ### Appointments / Front Desk
 
-Front Desk now contains only appointment/booking work:
+Front Desk contains only appointment/booking work:
 
 1. Appointment Queue
 2. Appointments
@@ -41,29 +41,21 @@ Front Desk now contains only appointment/booking work:
 4. Guest Booking Requests
 5. Missed Appointments
 
-Patients is no longer under Front Desk/Appointments.
-
-Customer, Sales Invoice and Payment Entry remain removed from Front Desk. Pet Boarding Booking remains moved from Hospital & Services to immediately after Appointments. Pet Grooming Appointment remains removed from product navigation only; its DocType/history/workflow are unchanged.
+Patients is no longer under Front Desk/Appointments. Customer, Sales Invoice and Payment Entry remain removed from Front Desk. Pet Boarding Booking remains immediately after Appointments. Pet Grooming Appointment remains hidden from product navigation only; its DocType/history/workflow are unchanged.
 
 ### Dedicated Front Desk pages
 
-The existing shared EdgeSuite Front Desk implementation supplies three canonical pages:
+The existing shared EdgeSuite Front Desk implementation supplies:
 
 - `/desk/vetedge-front-desk-queue`
 - `/desk/vetedge-front-desk-guest-bookings`
 - `/desk/vetedge-front-desk-missed-appointments`
 
-The old action-center tab URLs and legacy Appointment Queue page remain compatibility redirects. Existing backend permissions, branch restrictions, workflow actions and timestamp-conflict protection remain authoritative.
+Old action-center tab URLs and the legacy Appointment Queue page remain compatibility redirects. Existing backend permissions, branch restrictions, actions and timestamp-conflict protection remain authoritative.
 
 ### Billing Center
 
-Billing Center contains:
-
-1. Customers
-2. Sales Invoice
-3. Payment Entry
-4. Billing Session
-5. Billing Center
+Billing Center contains Customers, Sales Invoice, Payment Entry, Billing Session and Billing Center.
 
 Billing Center V1 remains a read/management surface anchored on `Veterinary Billing Session`. It does not submit/cancel invoices, mutate submitted accounting documents, create/allocate payments, post GL entries, bypass Frappe permissions, use raw SQL, or create another billing ledger.
 
@@ -73,48 +65,43 @@ Branch-restricted users remain fail-closed; Branch Link search cannot reveal una
 
 The proven VFD-BILL-01 dashboard/sidebar transformation remains unchanged. `vetedge.install.patient_navigation.ensure_direct_patient_navigation` runs after normal sidebar synchronization during install/migrate.
 
-For the standard VetEdge sidebar it:
+For the standard VetEdge sidebar it finds the existing Patients link, preserves visibility, removes it from Front Desk, creates exactly one dedicated Patients section before Dashboard, preserves Veterinary Home first, and is idempotent. A customized Patients section with additional links is preserved unchanged.
 
-- finds the existing Patients link;
-- preserves its visibility expression;
-- removes it from Front Desk;
-- creates exactly one dedicated Patients one-item section before Dashboard;
-- preserves Veterinary Home as the leading direct item;
-- is idempotent.
-
-`vetedge_postqa_navigation_hardening.js` then flattens the canonical Patients section to a direct EdgeSuite sidebar item, routes it in the same Desk tab, maintains active state, and places it immediately after Veterinary Home.
+`vetedge_postqa_navigation_hardening.js` flattens the canonical Patients section to a direct EdgeSuite sidebar item, routes it in the same Desk tab, maintains active state, and positions it immediately after Veterinary Home.
 
 ## Migration
 
-No business-data or accounting-data migration is introduced. `bench --site vetedge.local migrate` must rebuild the normal VetEdge sidebar and then apply the direct Patients post-sync arrangement. Existing Patient, appointment, billing and accounting records remain unchanged.
+No business-data or accounting-data migration is introduced. `bench --site vetedge.local migrate` rebuilds the normal VetEdge sidebar and then applies the direct Patients post-sync arrangement. Existing Patient, appointment, billing and accounting records remain unchanged.
 
-## Final automated source validation
+## Frozen automated validation
 
-Final source candidate:
+Frozen code/test candidate:
 
 - workflow: `VFD-BILL-01 Validation`
-- run: `34058059059`
-- validated code head: `4e30239b5b41d8a3dc44b99aeabd8b9dfb9a8961`
+- run: `34058140083`
+- validated code/test head: `7f2d698cf9ee6eff51b9342a0843d0373a378ed8`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - source-contract tests: PASS
 
-Any commit after `4e30239b5b41d8a3dc44b99aeabd8b9dfb9a8961` must be documentation-only or source validation must be rerun.
+The installed-site test contract also verifies Patients is separate from Front Desk, the dedicated Patients section is unique, existing visibility is preserved, direct/non-collapsible shell markers exist, and customized Patients sections are not destructively rewritten.
+
+Any commit after `7f2d698cf9ee6eff51b9342a0843d0373a378ed8` must be documentation-only or source validation must be rerun.
 
 ## QA Center update
 
-Keep the menu change inside the existing VFD-BILL-01 QA campaign. Do not create a separate divergent campaign. Add these Navigation cases:
+Keep this menu change inside the existing VFD-BILL-01 QA campaign. Add these cases to its Navigation section:
 
 - **VFDNAV-001 — Direct Patients placement:** Veterinary Home first; Patients immediately second; Dashboard, Clinical Operations and Appointments follow.
 - **VFDNAV-002 — Direct Patients behavior:** no chevron/expand behavior; one click opens `/desk/vetedge-resource-center?resource=patients` in the same tab.
 - **VFDNAV-003 — Product Menu separation:** Patients is its own Product Menu section/item and is absent from Appointments/Front Desk.
-- **VFDNAV-004 — Access preservation:** existing entitled personas retain Patients visibility; no previously unauthorized persona gains access.
-- **VFDNAV-005 — Active/navigation state:** Patients remains correctly active through Patient Resource Center/list/detail navigation; no duplicate active sidebar item; Back/Forward works.
-- **VFDNAV-006 — Migration/idempotency:** repeated migrate/sidebar synchronization does not duplicate Patients or return it to Front Desk.
+- **VFDNAV-004 — Access preservation:** entitled personas retain Patients visibility; no unauthorized persona gains access.
+- **VFDNAV-005 — Active/navigation state:** Patients remains correctly active through Patient Resource Center/list/detail navigation; no duplicate active item; Back/Forward works.
+- **VFDNAV-006 — Migration/idempotency:** repeated migrate/sidebar sync does not duplicate Patients or return it to Front Desk.
 
 These supplement the existing VFD-BILL-01 Front Desk, Billing Center, role, branch-isolation and accounting-safety cases.
 
-The repository defines the QA contract and case IDs. The authoritative QA Center is on local `vetedge.local`, so its campaign records must be updated there after this candidate is installed; GitHub cannot directly write records into that local site.
+The authoritative QA Center is on local `vetedge.local`. The repository defines the six case IDs and acceptance contract, but GitHub cannot write records into that local site; the cases must be added/recorded there when this candidate is installed.
 
 ## Local acceptance
 
@@ -129,7 +116,7 @@ bench --site vetedge.local run-tests \
 bench --site vetedge.local clear-cache
 ```
 
-Manual QA must confirm the six VFDNAV cases plus all existing VFD-BILL-01 checks, including Front Desk routes/actions, legacy redirects, role compatibility, Billing Center branch isolation, contextual filters, totals/drill-through, accounting immutability, responsive layout, light/dark mode and absence of unnecessary polling.
+Manual QA must execute VFDNAV-001 through VFDNAV-006 plus all existing VFD-BILL-01 checks, including Front Desk routes/actions, legacy redirects, role compatibility, Billing Center branch isolation, contextual filters, totals/drill-through, accounting immutability, responsive layout, light/dark mode and absence of unnecessary polling.
 
 ## Out of scope
 
