@@ -19,7 +19,7 @@ from vetedge.services.role_bundles import (
 )
 
 VETEDGE_HOME_ROUTE = "/desk/vetedge"
-VETEDGE_HOME_PAGE = VETEDGE_HOME_ROUTE.lstrip("/")
+VETEDGE_HOME_PAGE = "desk/vetedge"
 VETEDGE_DESKTOP_ICON = "VetEdge"
 VETEDGE_DESKTOP_LABEL = "Veterinary"
 
