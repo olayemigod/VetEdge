@@ -12,6 +12,9 @@
 	const PATIENTS_ATTRIBUTE = "data-vetedge-direct-patients";
 	const PATIENTS_LABEL = "Patients";
 	const PATIENTS_ROUTE = "/desk/vetedge-resource-center?resource=patients";
+	const BILLING_CENTER_ROUTE = "/desk/vetedge-billing-center";
+	const BILLING_SESSIONS_ROUTE = "/desk/vetedge-billing-sessions";
+	const BILLING_SESSION_DOCTYPE = "Veterinary Billing Session";
 	const PRIMARY_SECTION_LABELS = Object.freeze({
 		Clinical: "Clinical Operations",
 		"Front Desk": "Appointments",
@@ -64,24 +67,21 @@
 		return (params.get("resource") || "patients") === "patients";
 	}
 
-	function navigateHome() {
-		if (global.VetEdgeNavigationRecovery?.navigate?.("/desk/vetedge")) return true;
+	function navigateRoute(route) {
+		if (!route) return false;
+		if (global.VetEdgeNavigationRecovery?.navigate?.(route)) return true;
 		const adapter = runtime()?.getAdapter?.("navigation:vetedge") || runtime()?.getAdapter?.("navigation:veterinary");
-		if (adapter?.open?.("/desk/vetedge")) return true;
-		if (typeof global.frappe?.set_route === "function") {
-			global.frappe.set_route("vetedge");
-			return true;
-		}
-		global.location?.assign?.("/desk/vetedge");
+		if (adapter?.open?.(route)) return true;
+		global.location?.assign?.(route);
 		return true;
 	}
 
+	function navigateHome() {
+		return navigateRoute("/desk/vetedge");
+	}
+
 	function navigatePatients() {
-		if (global.VetEdgeNavigationRecovery?.navigate?.(PATIENTS_ROUTE)) return true;
-		const adapter = runtime()?.getAdapter?.("navigation:vetedge") || runtime()?.getAdapter?.("navigation:veterinary");
-		if (adapter?.open?.(PATIENTS_ROUTE)) return true;
-		global.location?.assign?.(PATIENTS_ROUTE);
-		return true;
+		return navigateRoute(PATIENTS_ROUTE);
 	}
 
 	function visibleLabelNode(element) {
@@ -166,10 +166,6 @@
 		const nestedItem = homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
 		if (!toggle && !nestedItem) return false;
 
-		// Veterinary Home is navigation, not a category. Replace the one-item accordion
-		// section with the actual sidebar item so there is no chevron, expansion
-		// state, hidden child, or second click required. Clone the generated child
-		// when available so EdgeSuite keeps its canonical icon/label markup.
 		const directItem = nestedItem?.cloneNode(true) || toggle.cloneNode(true);
 		directItem.classList.remove("edge-sidebar__section-toggle");
 		directItem.classList.add("edge-sidebar-item");
@@ -213,6 +209,26 @@
 			directHome.insertAdjacentElement("afterend", directItem);
 		}
 		return true;
+	}
+
+	function primaryNodeLabel(node) {
+		if (node?.matches?.(`[${HOME_ATTRIBUTE}="1"]`)) return HOME_LABEL;
+		if (node?.matches?.(`[${PATIENTS_ATTRIBUTE}="1"]`)) return PATIENTS_LABEL;
+		if (node?.classList?.contains("edge-sidebar__section")) {
+			return sectionLabel(node.querySelector(".edge-sidebar__section-toggle"));
+		}
+		return "";
+	}
+
+	function primaryOrderAligned(shell) {
+		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (!directHome?.parentElement) return false;
+		const expectedOrder = [HOME_LABEL, PATIENTS_LABEL, ...PRIMARY_SECTION_ORDER];
+		const actual = Array.from(directHome.parentElement.children)
+			.map(primaryNodeLabel)
+			.filter((label) => expectedOrder.includes(label));
+		const expected = expectedOrder.filter((label) => actual.includes(label));
+		return actual.join("|") === expected.join("|");
 	}
 
 	function normalizePrimarySections(shell) {
@@ -314,12 +330,32 @@
 			link_to: node?.dataset?.linkTo || "",
 			route: node?.dataset?.route || "",
 		};
+		if (item.link_to === BILLING_SESSION_DOCTYPE || item.link_to === "vetedge-billing-sessions") {
+			return navigateRoute(BILLING_SESSIONS_ROUTE);
+		}
+		if (item.link_to === "vetedge-billing-center" || item.route === BILLING_CENTER_ROUTE) {
+			return navigateRoute(BILLING_CENTER_ROUTE);
+		}
 		if (typeof config?.navigate === "function") {
 			config.navigate(item);
 			return true;
 		}
-		if (item.route && global.VetEdgeNavigationRecovery?.navigate?.(item.route)) return true;
+		if (item.route) return navigateRoute(item.route);
 		return false;
+	}
+
+	function bindSharedProductMenuNavigation(panel) {
+		if (!panel || panel.dataset.vetedgeItemRoutingBound === "1") return;
+		panel.dataset.vetedgeItemRoutingBound = "1";
+		panel.addEventListener("click", (event) => {
+			const item = event.target?.closest?.(".edge-product-menu__item");
+			if (!item) return;
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			routeProductItem(item);
+			runtime()?.closeProductMenu?.();
+		}, true);
 	}
 
 	function filterProductPanel(panel, query) {
@@ -346,8 +382,6 @@
 		host.dataset.vetedgeProductMenuBridgeBound = "1";
 
 		trigger.addEventListener("click", (event) => {
-			// This listener is capture-bound only for a repaired EdgeSuite-shell host,
-			// so the original native-navbar listener cannot double-toggle the menu.
 			event.preventDefault();
 			event.stopPropagation();
 			event.stopImmediatePropagation();
@@ -359,16 +393,8 @@
 
 		panel.addEventListener("click", (event) => {
 			const close = event.target?.closest?.(".edge-product-menu__close");
-			if (close) {
-				event.preventDefault();
-				runtime()?.closeProductMenu?.();
-				return;
-			}
-			const item = event.target?.closest?.(".edge-product-menu__item");
-			if (!item) return;
+			if (!close) return;
 			event.preventDefault();
-			event.stopPropagation();
-			routeProductItem(item);
 			runtime()?.closeProductMenu?.();
 		}, true);
 
@@ -387,12 +413,14 @@
 		let host = global.document.getElementById(PRODUCT_HOST_ID);
 		let trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
 		let panel = global.document.getElementById(PRODUCT_PANEL_ID);
+		if (panel) bindSharedProductMenuNavigation(panel);
 		if (trigger && panel && visible(trigger)) return true;
 
 		const target = productTarget(shell);
 		if (!target) return false;
 		({ host, trigger, panel } = createSharedHost(target));
 		host.dataset.vetedgeProductMenuBridge = "1";
+		bindSharedProductMenuNavigation(panel);
 		bindRepairedProductMenu(host, trigger, panel);
 		try { edgeUI.refreshProductMenu?.(); } catch (_error) { /* config remains available */ }
 		return visible(trigger);
@@ -410,6 +438,14 @@
 			ensureProductMenu(shell);
 			try { runtime()?.openProductMenu?.(); } catch (_error) { /* leave repaired trigger available */ }
 		}, 0);
+	}
+
+	function sidebarSameTabRoute(item) {
+		if (!item) return "";
+		const label = sectionLabel(item);
+		if (label === "Billing Center") return BILLING_CENTER_ROUTE;
+		if (label === "Billing Session" || label === "Billing Sessions") return BILLING_SESSIONS_ROUTE;
+		return "";
 	}
 
 	function reconcile() {
@@ -446,6 +482,15 @@
 			navigatePatients();
 			return;
 		}
+		const sidebarItem = event.target?.closest?.(".edge-sidebar-item");
+		const sidebarRoute = sidebarSameTabRoute(sidebarItem);
+		if (sidebarRoute) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			navigateRoute(sidebarRoute);
+			return;
+		}
 		repairUnresponsiveSharedTrigger(event);
 	}, true);
 
@@ -460,7 +505,7 @@
 			const homePatched = shell.querySelector(`[${HOME_ATTRIBUTE}="1"]`);
 			const patientsPatched = shell.querySelector(`[${PATIENTS_ATTRIBUTE}="1"]`);
 			const trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
-			if (!homePatched || !patientsPatched || !trigger || !visible(trigger)) schedule(50);
+			if (!homePatched || !patientsPatched || !trigger || !visible(trigger) || !primaryOrderAligned(shell)) schedule(50);
 		});
 		observer.observe(global.document.body, { childList: true, subtree: true });
 	}
@@ -473,6 +518,7 @@
 		},
 		navigateHome,
 		navigatePatients,
+		navigateRoute,
 		state() {
 			const shell = vetedgeShell();
 			const host = global.document?.getElementById(PRODUCT_HOST_ID);
@@ -480,6 +526,7 @@
 				activeShell: Boolean(shell),
 				directHome: Boolean(shell?.querySelector?.(`[${HOME_ATTRIBUTE}="1"]`)),
 				directPatients: Boolean(shell?.querySelector?.(`[${PATIENTS_ATTRIBUTE}="1"]`)),
+				primaryOrderAligned: Boolean(shell && primaryOrderAligned(shell)),
 				productTriggerVisible: visible(global.document?.getElementById(PRODUCT_TRIGGER_ID)),
 				productMenuBridged: host?.dataset?.vetedgeProductMenuBridge === "1",
 				productMenuOpen: !global.document?.getElementById(PRODUCT_PANEL_ID)?.hidden && global.document?.documentElement?.classList?.contains(PRODUCT_OPEN_CLASS),
