@@ -18,7 +18,6 @@ from vetedge.services.permissions import (
 )
 from vetedge.services.portal_access import require_internal_user
 
-
 BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"
 PAGE_LENGTH_DEFAULT = 25
 PAGE_LENGTH_MAX = 100
