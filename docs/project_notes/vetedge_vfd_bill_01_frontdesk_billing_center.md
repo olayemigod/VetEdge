@@ -125,16 +125,16 @@ No business-data migration or accounting data rewrite is required.
 
 A stacked-PR-specific source gate exists at `.github/workflows/vfd-bill-01-validation.yml`.
 
-Latest green source validation evidence for the direct Patients implementation:
+Final green source validation evidence for the direct Patients implementation:
 
 - workflow: `VFD-BILL-01 Validation`
-- run: `34057820286`
-- validated code head: `77a1887aa62c18043b5d96c2c8c6dde4415f70dc`
+- run: `34057963613`
+- validated code head: `8a5ff65fbb52beab29b6bcf160c87e36c2a57b72`
 - Python compile: PASS
 - Ruff focused validation: PASS
 - pure source-contract tests: PASS
 
-The source gate explicitly covers direct Patients post-sync wiring, direct/non-collapsible shell behavior, placement after Veterinary Home, preservation of patient visibility, removal from Front Desk, and the existing VFD-BILL-01 billing/front-desk contracts.
+The source gate explicitly covers direct Patients post-sync wiring, direct/non-collapsible shell behavior, placement after Veterinary Home, preservation of patient visibility, removal from Front Desk, and the existing VFD-BILL-01 billing/front-desk contracts. The installed-site contract also asserts that the migrated Product Menu/sidebar composition contains one separate Patients section and no Patients link under Front Desk.
 
 Any commit after the validated code head must be documentation-only or the source gate must be rerun before local acceptance.
 
