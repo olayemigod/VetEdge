@@ -20,8 +20,9 @@
 						<EdgeLinkField :model-value="filters.customer" label="Customer" placeholder="All relevant customers" :searcher="(query) => linkSearch('customer', query)" @update:model-value="(value) => setFilter('customer', value)" />
 						<EdgeLinkField :model-value="filters.animal" label="Patient" placeholder="All relevant patients" :searcher="(query) => linkSearch('animal', query)" @update:model-value="(value) => setFilter('animal', value)" />
 						<EdgeDropdown :model-value="filters.status" label="Status" placeholder="All statuses" :options="statusOptions" @update:model-value="(value) => setFilter('status', value)" />
-						<EdgeInput v-model="filters.from_date" type="date" label="From Date" />
-						<EdgeInput v-model="filters.to_date" type="date" label="To Date" />
+						<EdgeDropdown :model-value="datePreset" label="Date Range" placeholder="Choose date range" :options="datePresetOptions" @update:model-value="setDatePreset" />
+						<EdgeInput :model-value="filters.from_date" type="date" label="From Date" @update:model-value="(value) => setDateField('from_date', value)" />
+						<EdgeInput :model-value="filters.to_date" type="date" label="To Date" @update:model-value="(value) => setDateField('to_date', value)" />
 					</div>
 					<template #actions>
 						<button type="button" class="edge-button edge-button--primary" :disabled="loading" @click="applyFilters">Apply</button>
@@ -59,15 +60,31 @@ const API = Object.freeze({
 	links: 'vetedge.services.billing_center.get_billing_center_link_options',
 });
 const STATUS_OPTIONS = ['Draft', 'Active', 'Partially Paid', 'Paid', 'Closed', 'Cancelled'];
+const DATE_PRESET_FALLBACK = Object.freeze([
+	{ value: 'today', label: 'Today' },
+	{ value: 'yesterday', label: 'Yesterday' },
+	{ value: 'this_week', label: 'This Week' },
+	{ value: 'last_week', label: 'Last Week' },
+	{ value: 'this_month', label: 'This Month' },
+	{ value: 'last_month', label: 'Last Month' },
+	{ value: 'this_quarter', label: 'This Quarter' },
+	{ value: 'last_quarter', label: 'Last Quarter' },
+	{ value: 'this_year', label: 'This Year' },
+	{ value: 'last_year', label: 'Last Year' },
+	{ value: 'full_history', label: 'Full History' },
+	{ value: 'custom', label: 'Custom Range' },
+]);
 const blankFilters = () => ({ company: '', branch: '', customer: '', animal: '', status: '', from_date: '', to_date: '' });
 const errorMessage = (error, fallback) => error?.message || error?._server_messages || error?.exc_type || fallback || __('Billing Center could not be loaded.');
 const call = (method, args = {}) => frappe.call(method, args).then((response) => response?.message);
+const dateRanges = () => frappe.EdgeSuite?.DateRanges || null;
 
 export default {
 	name: 'VetEdgeBillingCenter',
 	data() {
 		return {
 			filters: blankFilters(),
+			datePreset: 'full_history',
 			rows: [],
 			total: 0,
 			start: 0,
@@ -103,6 +120,10 @@ export default {
 		branchName() { return this.filters.branch || frappe.boot?.edgesuite_product_menu?.branch || 'All Permitted Branches'; },
 		userName() { const user = frappe.session?.user || ''; const info = frappe.boot?.user_info?.[user] || {}; return info.fullname || info.full_name || user; },
 		statusOptions() { return STATUS_OPTIONS.map((value) => ({ value, label: value })); },
+		datePresetOptions() {
+			const options = dateRanges()?.getOptions?.();
+			return Array.isArray(options) && options.length ? options : DATE_PRESET_FALLBACK;
+		},
 		firstVisible() { return this.total ? this.start + 1 : 0; },
 		lastVisible() { return Math.min(this.start + this.rows.length, this.total); },
 		hasPrevious() { return this.start > 0; },
@@ -151,6 +172,18 @@ export default {
 				this.filters.animal = '';
 			}
 		},
+		setDatePreset(value) {
+			this.datePreset = value || 'full_history';
+			if (this.datePreset === 'custom') return;
+			const range = dateRanges()?.getRange?.(this.datePreset);
+			if (!range) return;
+			this.filters.from_date = range.start || '';
+			this.filters.to_date = range.end || '';
+		},
+		setDateField(field, value) {
+			this.filters[field] = value || '';
+			this.datePreset = 'custom';
+		},
 		async linkSearch(fieldname, query) {
 			return (await call(API.links, {
 				fieldname,
@@ -161,7 +194,7 @@ export default {
 			})) || [];
 		},
 		applyFilters() { this.start = 0; this.refresh(); },
-		resetFilters() { this.filters = blankFilters(); this.start = 0; this.refresh(); },
+		resetFilters() { this.filters = blankFilters(); this.datePreset = 'full_history'; this.start = 0; this.refresh(); },
 		previousPage() { this.start = Math.max(0, this.start - this.pageLength); this.refresh(); },
 		nextPage() { this.start += this.pageLength; this.refresh(); },
 		formatCurrency(value) {
