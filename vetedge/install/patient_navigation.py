@@ -7,6 +7,16 @@ import frappe
 PATIENT_LABEL = "Patients"
 PATIENT_DOCTYPE = "Veterinary Patient"
 SIDEBAR_NAME = "VetEdge"
+PRIMARY_GROUP_ORDER = (
+	("Patients",),
+	("Front Desk", "Appointments"),
+	("Clinical", "Clinical Operations"),
+	("Hospital & Services",),
+	("Inventory / Pharmacy", "Inventory / Dispensary"),
+	("Billing Center",),
+	("Dashboard",),
+	("Reports",),
+)
 CHILD_META_FIELDS = {
 	"name",
 	"owner",
@@ -162,7 +172,7 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	]
 
 	# Veterinary Home is a direct child=0 Link prepended by dashboard sync. Keep
-	# all leading direct links in place, then insert Patients before Dashboard.
+	# all leading direct links in place, then insert Patients before grouped menus.
 	insert_at = 0
 	while insert_at < len(remaining):
 		item = remaining[insert_at]
@@ -174,8 +184,49 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	return [*remaining[:insert_at], *_patient_group(template), *remaining[insert_at:]]
 
 
+def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
+	"""Apply the approved top-level order while preserving all group contents.
+
+	Only named primary groups are moved. Any unlisted groups remain after Reports
+	in their existing relative order, so this is a pure navigation-order change.
+	"""
+	clean = [_clean_item(item) for item in items]
+	leading: list[dict] = []
+	blocks: list[list[dict]] = []
+	current: list[dict] | None = None
+
+	for item in clean:
+		if _is_section(item):
+			if current:
+				blocks.append(current)
+			current = [item]
+			continue
+		if current is None:
+			leading.append(item)
+		else:
+			current.append(item)
+	if current:
+		blocks.append(current)
+
+	ordered: list[list[dict]] = []
+	used: set[int] = set()
+	for aliases in PRIMARY_GROUP_ORDER:
+		for index, block in enumerate(blocks):
+			if index in used:
+				continue
+			label = str(block[0].get("label") or "").strip()
+			if label not in aliases:
+				continue
+			ordered.append(block)
+			used.add(index)
+			break
+
+	ordered.extend(block for index, block in enumerate(blocks) if index not in used)
+	return [*leading, *(item for block in ordered for item in block)]
+
+
 def ensure_direct_patient_navigation() -> bool:
-	"""Apply the direct Patients contract after normal VetEdge sidebar sync."""
+	"""Apply direct Patients and approved top-level order after normal sidebar sync."""
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists(
 		"Workspace Sidebar", SIDEBAR_NAME
 	):
@@ -184,6 +235,7 @@ def ensure_direct_patient_navigation() -> bool:
 	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 	current = [_clean_item(item) for item in (sidebar.get("items") or [])]
 	updated = organize_direct_patient_navigation(current)
+	updated = organize_primary_navigation_order(updated)
 	if updated == current:
 		return False
 
