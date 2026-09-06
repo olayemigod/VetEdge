@@ -198,14 +198,27 @@ def test_billing_center_is_read_only_over_authoritative_accounting_documents():
 		assert mutation_word not in component
 
 
-def test_billing_center_filters_are_contextual_and_cascading():
+def test_billing_center_filters_are_contextual_cascading_and_branch_safe():
 	service = read(APP / "services/billing_center.py")
 	component = read(APP / "public/js/vetedge_billing_center/VetEdgeBillingCenter.vue")
 
 	assert "get_billing_center_link_options" in service
 	assert "group_by=field" in service
 	assert "page_length=20" in service
+	assert 'if field == "branch" and scope.get("restricted")' in service
+	assert 'customer: str | None = None' in service
+	assert 'context["customer"] = cstr(customer or "").strip()' in service
 	assert "if (field === 'company')" in component
 	assert "this.filters.branch = ''" in component
 	assert "this.filters.customer = ''" in component
 	assert "this.filters.animal = ''" in component
+	assert "customer: this.filters.customer || undefined" in component
+	assert 'active-route="/desk/vetedge-billing-center"' in component
+
+
+def test_billing_center_page_roles_match_workspace_data_access_contract():
+	page = json.loads(read(APP / "veterinary/page/vetedge_billing_center/vetedge_billing_center.json"))
+	roles = {row.get("role") for row in page.get("roles") or []}
+	for role in ("System Manager", "VetEdge Administrator", "VetEdge Front Desk", "Branch Manager", "Accounts/Cashier", "Accounts User"):
+		assert role in roles
+	assert "Accounts Manager" not in roles
