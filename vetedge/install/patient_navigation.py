@@ -4,7 +4,6 @@ from typing import Any
 
 import frappe
 
-
 PATIENT_LABEL = "Patients"
 PATIENT_DOCTYPE = "Veterinary Patient"
 SIDEBAR_NAME = "VetEdge"
