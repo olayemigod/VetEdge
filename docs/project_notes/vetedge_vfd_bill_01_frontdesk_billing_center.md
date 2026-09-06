@@ -153,6 +153,8 @@ Keep this in the existing VFD-BILL-01 QA campaign. Do not create a divergent cam
 
 These cases supplement, rather than replace, the existing VFD-BILL-01 Navigation, Front Desk, Billing Center, branch-isolation, role and accounting-safety cases.
 
+The repository contains the QA contract and case IDs above. The authoritative QA Center itself runs on local `vetedge.local`, so the six cases must be added/recorded there when the candidate is installed; GitHub source changes do not write records into that local site.
+
 ## Local runtime acceptance
 
 Run on the authoritative local site before merge:
