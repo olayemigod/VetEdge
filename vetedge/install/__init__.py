@@ -10,7 +10,6 @@ from vetedge.install.patient_navigation import ensure_direct_patient_navigation
 from vetedge.install.print_formats import ensure_print_formats
 from vetedge.install.regulatory_reporting import ensure_regulatory_reporting_navigation
 from vetedge.seed.master_data import seed_master_data
-from vetedge.setup.email_templates import sync_vetedge_email_templates
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
 from vetedge.services.portal_access import normalize_owner_portal_users
 from vetedge.services.role_bundles import (
@@ -18,6 +17,7 @@ from vetedge.services.role_bundles import (
 	ensure_existing_internal_users_have_starter_bundle_roles,
 	ensure_starter_role_bundles,
 )
+from vetedge.setup.email_templates import sync_vetedge_email_templates
 
 VETEDGE_HOME_ROUTE = "/desk/vetedge"
 VETEDGE_HOME_PAGE = "desk/vetedge"
