@@ -1,18 +1,11 @@
 <template>
-	<EdgeAppShell product="vetedge" title="Veterinary" :tenant-name="identity.tenant_name || ''" :branch-name="branchName" :user-name="userName" active-route="/desk/vetedge-billing-center" @navigate="openRoute">
+	<EdgeAppShell product="vetedge" title="Veterinary" :tenant-name="identity.tenant_name || ''" :branch-name="branchName" :user-name="userName" :active-route="activeRoute" @navigate="openRoute">
 		<EdgePageLayout>
 			<template #header>
-				<EdgePageHeader eyebrow="Billing Operations" title="Billing Center" subtitle="Consolidated Veterinary billing visibility with safe drill-through to authoritative ERPNext accounting workflows." action-label="Refresh" @action="refresh" />
+				<EdgePageHeader :eyebrow="pageEyebrow" :title="pageTitle" :subtitle="pageSubtitle" action-label="Refresh" @action="refresh" />
 			</template>
 
-			<section class="billing-shortcuts" aria-label="Billing workflows">
-				<button v-if="capabilities.customer" type="button" class="edge-button" @click="openList('Customer')">Customers</button>
-				<button v-if="capabilities.sales_invoice" type="button" class="edge-button" @click="openList('Sales Invoice')">Sales Invoices</button>
-				<button v-if="capabilities.payment_entry" type="button" class="edge-button" @click="openList('Payment Entry')">Payment Entries</button>
-				<button type="button" class="edge-button" @click="openList('Veterinary Billing Session')">Billing Sessions</button>
-			</section>
-
-			<section class="billing-summary">
+			<section v-if="!isSessionsPage" class="billing-summary">
 				<EdgeStatCard label="Open Sessions" :value="summary.open_sessions || 0" icon="file-text" />
 				<EdgeStatCard label="Outstanding Sessions" :value="summary.outstanding_sessions || 0" icon="circle-alert" />
 				<EdgeStatCard label="Outstanding Amount" :value="formatCurrency(summary.outstanding_amount)" icon="wallet" />
@@ -39,11 +32,11 @@
 
 			<section v-if="scope.restricted && !(scope.permitted_branches || []).length" class="billing-warning">
 				<strong>No permitted billing branch</strong>
-				<p>Your account has no active Branch assignment, so Billing Center is intentionally empty. Ask an administrator to assign the appropriate Branch.</p>
+				<p>Your account has no active Branch assignment, so this page is intentionally empty. Ask an administrator to assign the appropriate Branch.</p>
 			</section>
 
-			<EdgeLoadingState v-if="loading" message="Loading Billing Center..." :skeleton="true" />
-			<EdgeErrorState v-else-if="error" title="Billing Center could not load" :message="error" action-label="Try again" @retry="refresh" />
+			<EdgeLoadingState v-if="loading" :message="isSessionsPage ? 'Loading Billing Sessions...' : 'Loading Billing Center...'" :skeleton="true" />
+			<EdgeErrorState v-else-if="error" :title="isSessionsPage ? 'Billing Sessions could not load' : 'Billing Center could not load'" :message="error" action-label="Try again" @retry="refresh" />
 			<template v-else>
 				<section class="billing-boundary"><strong>Accounting safety</strong><p>{{ boundary }}</p></section>
 				<EdgeDataTable :columns="columns" :rows="rows" :actions="rowActions" empty-title="No billing sessions" empty-description="No Veterinary Billing Sessions match the current filters." @row-click="openSession" @action="handleRowAction">
@@ -114,6 +107,15 @@ export default {
 		lastVisible() { return Math.min(this.start + this.rows.length, this.total); },
 		hasPrevious() { return this.start > 0; },
 		hasNext() { return this.start + this.pageLength < this.total; },
+		isSessionsPage() { return String(window.location?.pathname || '').replace(/\/+$/, '') === '/desk/vetedge-billing-sessions'; },
+		activeRoute() { return this.isSessionsPage ? '/desk/vetedge-billing-sessions' : '/desk/vetedge-billing-center'; },
+		pageEyebrow() { return 'Billing Operations'; },
+		pageTitle() { return this.isSessionsPage ? 'Billing Sessions' : 'Billing Center'; },
+		pageSubtitle() {
+			return this.isSessionsPage
+				? 'Permission-aware Veterinary Billing Session worklist with safe drill-through to authoritative accounting documents.'
+				: 'Consolidated Veterinary billing visibility with safe drill-through to authoritative ERPNext accounting workflows.';
+		},
 	},
 	mounted() { this.refresh(); },
 	methods: {
@@ -162,7 +164,20 @@ export default {
 		resetFilters() { this.filters = blankFilters(); this.start = 0; this.refresh(); },
 		previousPage() { this.start = Math.max(0, this.start - this.pageLength); this.refresh(); },
 		nextPage() { this.start += this.pageLength; this.refresh(); },
-		formatCurrency(value) { return frappe.format?.(Number(value || 0), { fieldtype: 'Currency', options: this.currency }) || `${this.currency} ${Number(value || 0).toLocaleString()}`; },
+		formatCurrency(value) {
+			const amount = Number(value || 0);
+			try {
+				return new Intl.NumberFormat('en-NG', {
+					style: 'currency',
+					currency: this.currency || 'NGN',
+					currencyDisplay: 'narrowSymbol',
+					minimumFractionDigits: 2,
+					maximumFractionDigits: 2,
+				}).format(amount);
+			} catch (_error) {
+				return `${this.currency || 'NGN'} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+			}
+		},
 		openSession(row) { if (row?.name) frappe.set_route('Form', 'Veterinary Billing Session', row.name); },
 		handleRowAction(payload) {
 			const action = typeof payload?.action === 'string' ? payload.action : (payload?.action?.key || payload?.key);
@@ -175,12 +190,17 @@ export default {
 			}
 			this.openSession(row);
 		},
-		openList(doctype) { frappe.set_route('List', doctype); },
-		openRoute(route) { if (!route) return; const adapter = (window.EdgeSuiteUI || window.EdgeUI)?.getAdapter?.('navigation:vetedge'); if (adapter?.open?.(route) === true) return; window.location.assign(route); },
+		openRoute(route) {
+			if (!route) return;
+			if (window.VetEdgeNavigationRecovery?.navigate?.(route)) return;
+			const adapter = (window.EdgeSuiteUI || window.EdgeUI)?.getAdapter?.('navigation:vetedge');
+			if (adapter?.open?.(route) === true) return;
+			window.location.assign(route);
+		},
 	},
 };
 </script>
 
 <style scoped>
-.billing-shortcuts,.billing-pagination{display:flex;flex-wrap:wrap;gap:.5rem}.billing-shortcuts{margin-bottom:1rem}.billing-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}.billing-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem;width:100%}.billing-boundary,.billing-warning{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);margin-bottom:1rem;padding:.85rem 1rem}.billing-boundary p,.billing-warning p{color:var(--edge-color-ink-500,#617589);margin:.25rem 0 0}.billing-warning{border-color:var(--edge-color-warning-400,#d99b24)}@media(max-width:64rem){.billing-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:36rem){.billing-summary{grid-template-columns:1fr}}
+.billing-pagination{display:flex;flex-wrap:wrap;gap:.5rem}.billing-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}.billing-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem;width:100%}.billing-boundary,.billing-warning{background:var(--edge-color-surface,#fff);border:1px solid var(--edge-color-border,#dfe6ec);border-radius:var(--edge-radius-md,.75rem);margin-bottom:1rem;padding:.85rem 1rem}.billing-boundary p,.billing-warning p{color:var(--edge-color-ink-500,#617589);margin:.25rem 0 0}.billing-warning{border-color:var(--edge-color-warning-400,#d99b24)}@media(max-width:64rem){.billing-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:36rem){.billing-summary{grid-template-columns:1fr}}
 </style>
