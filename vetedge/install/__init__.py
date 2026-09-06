@@ -39,7 +39,6 @@ def before_tests() -> None:
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
 	ensure_vetedge_role_home_pages()
-	ensure_veterinary_desktop_icon_home()
 	ensure_starter_role_bundles()
 	ensure_existing_internal_users_have_starter_bundle_roles()
 	ensure_custom_fields()
@@ -50,6 +49,9 @@ def setup_foundation() -> None:
 	seed_master_data()
 	sync_vetedge_email_templates()
 	ensure_financial_dashboard()
+	# Run after dashboard/sidebar synchronisation so the final launcher and any
+	# persisted user layouts agree with the canonical same-tab Veterinary route.
+	ensure_veterinary_desktop_icon_home()
 	ensure_regulatory_reporting_navigation()
 
 
@@ -104,8 +106,9 @@ def _is_veterinary_desktop_layout_icon(icon: object) -> bool:
 	return bool(
 		icon.get("name") == VETEDGE_DESKTOP_ICON
 		or icon.get("app") == "vetedge"
-		or icon.get("link_to") == VETEDGE_DESKTOP_LABEL
+		or icon.get("link_to") in {VETEDGE_DESKTOP_ICON, VETEDGE_DESKTOP_LABEL}
 		or "vetedge-executive-dashboard" in str(icon.get("link") or "")
+		or str(icon.get("link") or "").strip() == VETEDGE_HOME_ROUTE
 	)
 
 
@@ -117,23 +120,23 @@ def _normalize_veterinary_desktop_layout_icon(icon: object) -> bool:
 	changed = False
 	for field, value in {
 		"label": VETEDGE_DESKTOP_LABEL,
-		"icon_type": "App",
-		"link_type": "External",
-		"link": VETEDGE_HOME_ROUTE,
+		"icon_type": "Link",
+		"link_type": "Workspace Sidebar",
+		"link_to": VETEDGE_DESKTOP_ICON,
+		"link": "",
 		"app": "vetedge",
 	}.items():
 		if icon.get(field) != value:
 			icon[field] = value
 			changed = True
 
-	# A stale Workspace Sidebar icon makes Frappe derive its route from the first
-	# Veterinary sidebar link (currently Executive Dashboard) and append
-	# ?sidebar=Veterinary. Remove only those routing fields; preserve idx,
-	# parent_icon, hidden and every other user layout preference.
-	for stale_field in ("link_to", "sidebar"):
-		if icon.get(stale_field):
-			icon.pop(stale_field, None)
-			changed = True
+	# The canonical Workspace Sidebar now begins with a relative URL to
+	# /desk/vetedge, which Frappe opens in the same tab. Remove only obsolete
+	# per-icon sidebar metadata; preserve idx, parent_icon, hidden and all other
+	# layout preferences.
+	if icon.get("sidebar"):
+		icon.pop("sidebar", None)
+		changed = True
 	return changed
 
 
@@ -171,13 +174,13 @@ def _repair_saved_veterinary_desktop_layouts() -> bool:
 
 
 def ensure_veterinary_desktop_icon_home() -> None:
-	"""Keep the Veterinary launcher and saved icon-grid layouts on Veterinary Home.
+	"""Keep the Veterinary launcher and saved layouts on same-tab Veterinary Home.
 
-	Frappe's Desktop Icons page can render a user's persisted ``Desktop Layout``
-	instead of the current standard ``Desktop Icon`` row. Old layouts may still
-	contain Veterinary as a ``Workspace Sidebar`` icon; Frappe then derives its
-	destination from the sidebar's first link, which is Executive Dashboard. Repair
-	both sources idempotently while preserving each user's icon order/folder layout.
+	The Desktop Icons screen treats External app routes as absolute URLs and opens
+	them in a new tab. VetEdge therefore uses Frappe's native Workspace Sidebar
+	launcher. Its first Link is a relative /desk/vetedge URL, so an ordinary click
+	opens Veterinary Home in the current tab. Persisted layouts are normalised to
+	the same contract without changing user ordering or folders.
 	"""
 	changed = False
 	if frappe.db.exists("DocType", "Desktop Icon") and frappe.db.exists(
@@ -186,14 +189,16 @@ def ensure_veterinary_desktop_icon_home() -> None:
 		current = frappe.db.get_value(
 			"Desktop Icon",
 			VETEDGE_DESKTOP_ICON,
-			["label", "icon_type", "link_type", "link"],
+			["label", "icon_type", "link_type", "link_to", "link", "app"],
 			as_dict=True,
 		) or {}
 		desired = {
 			"label": VETEDGE_DESKTOP_LABEL,
-			"icon_type": "App",
-			"link_type": "External",
-			"link": VETEDGE_HOME_ROUTE,
+			"icon_type": "Link",
+			"link_type": "Workspace Sidebar",
+			"link_to": VETEDGE_DESKTOP_ICON,
+			"link": "",
+			"app": "vetedge",
 		}
 		changes = {field: value for field, value in desired.items() if current.get(field) != value}
 		if changes:
