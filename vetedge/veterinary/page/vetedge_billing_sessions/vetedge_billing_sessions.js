@@ -4,15 +4,18 @@ frappe.pages['vetedge-billing-sessions'].on_page_load = function(wrapper) {
 
 frappe.pages['vetedge-billing-sessions'].on_page_show = function(wrapper) {
 	const page = wrapper.page;
-	if (wrapper.vue_app?.view) {
+	const sessionName = new URLSearchParams(window.location.search || '').get('name') || '';
+	if (wrapper.vue_app?.view && wrapper.billing_session_name === sessionName) {
 		wrapper.vue_app.view.refresh?.();
 		return;
 	}
 
 	wrapper.vue_app?.unmount?.();
 	wrapper.vue_app = null;
+	wrapper.billing_session_name = sessionName;
 	$(page.body).empty();
-	const loading = $('<div class="p-6 text-center text-muted"></div>').text(__('Loading Billing Sessions...')).appendTo(page.body);
+	const loadingText = sessionName ? __('Loading Billing Session...') : __('Loading Billing Sessions...');
+	const loading = $('<div class="p-6 text-center text-muted"></div>').text(loadingText).appendTo(page.body);
 	const showFailure = (message) => {
 		loading.remove();
 		$('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Billing Sessions failed to load.')).appendTo(page.body);
@@ -37,11 +40,16 @@ frappe.pages['vetedge-billing-sessions'].on_page_show = function(wrapper) {
 				return;
 			}
 			frappe.require('vetedge_billing_center.bundle.js', () => {
-				if (!window.mountVetEdgeBillingCenter) return;
+				const mount = sessionName ? window.mountVetEdgeBillingSessionDetail : window.mountVetEdgeBillingCenter;
+				if (!mount) {
+					showFailure(sessionName ? __('Billing Session detail bundle is unavailable.') : __('Billing Sessions bundle is unavailable.'));
+					return;
+				}
 				try {
 					loading.remove();
-					const root = $('<div class="vetedge-billing-sessions-root" data-edge-product="vetedge"></div>').appendTo(page.body);
-					wrapper.vue_app = window.mountVetEdgeBillingCenter(root[0]);
+					const rootClass = sessionName ? 'vetedge-billing-session-detail-root' : 'vetedge-billing-sessions-root';
+					const root = $(`<div class="${rootClass}" data-edge-product="vetedge"></div>`).appendTo(page.body);
+					wrapper.vue_app = mount(root[0]);
 				} catch (error) {
 					console.error('Error mounting Billing Sessions:', error);
 					showFailure(__('Error mounting Billing Sessions: {0}', [error.message || String(error)]));
