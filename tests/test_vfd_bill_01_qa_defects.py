@@ -163,6 +163,28 @@ def test_browser_guard_repairs_product_menu_search_same_tab_billing_and_native_s
 	assert 'target="_blank"' not in guard
 
 
+def test_waffle_navigation_replaces_stale_document_context_before_patient_route():
+	loader = read("vetedge/public/js/report_pdf_patch.js")
+	guard = read("vetedge/public/js/vetedge_waffle_navigation_hardening.js")
+
+	assert "vetedge_waffle_navigation_hardening.js?v=20260907-1" in loader
+	for marker in (
+		"installVetEdgeWaffleNavigationHardening",
+		'"Veterinary Patient": "/desk/vetedge-resource-center?resource=patients"',
+		'"Veterinary Appointment": "/desk/vetedge-resource-center?resource=appointments"',
+		"VetEdgeNavigationRecovery?.canonicalRoute?.(item)",
+		"if (global.frappe) global.frappe.route_options = null;",
+		"global.location.assign(next);",
+		'global.document?.addEventListener("click", productMenuClick, true);',
+		"event.stopImmediatePropagation();",
+	):
+		assert marker in guard
+
+	assert "frappe.set_route" not in guard
+	assert "window.open(" not in guard
+	assert 'target="_blank"' not in guard
+
+
 def test_rendered_sidebar_rechecks_approved_primary_order_after_dom_changes():
 	hardening = read("vetedge/public/js/vetedge_postqa_navigation_hardening.js")
 
