@@ -191,24 +191,32 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 
 
 def organize_billing_session_navigation(items: list[Any]) -> list[dict]:
-	"""Route the VetEdge Billing Session menu to its EdgeSuite worklist Page."""
+	"""Remove the redundant Billing Session shortcut from Billing Center navigation.
+
+	The Billing Sessions Page and Veterinary Billing Session DocType remain intact
+	for EdgeSuite detail routing, legacy URLs, bookmarks, permissions and history.
+	Only the duplicate user-facing sidebar shortcut inside Billing Center is removed.
+	"""
 	clean = [_clean_item(item) for item in items]
 	current_section = ""
+	deduplicated: list[dict] = []
 	for item in clean:
 		if _is_section(item):
 			current_section = str(item.get("label") or "").strip()
+			deduplicated.append(item)
 			continue
-		if current_section != BILLING_CENTER_LABEL or item.get("type") != "Link":
-			continue
-		label = str(item.get("label") or "").strip()
-		link_to = str(item.get("link_to") or "").strip()
-		if label != BILLING_SESSION_LABEL and link_to != BILLING_SESSION_DOCTYPE:
-			continue
-		item["label"] = BILLING_SESSION_LABEL
-		item["link_type"] = "Page"
-		item["link_to"] = BILLING_SESSIONS_PAGE
-		item.pop("url", None)
-	return clean
+
+		if current_section == BILLING_CENTER_LABEL and item.get("type") == "Link":
+			label = str(item.get("label") or "").strip()
+			link_to = str(item.get("link_to") or "").strip()
+			if label in {BILLING_SESSION_LABEL, "Billing Sessions"} or link_to in {
+				BILLING_SESSION_DOCTYPE,
+				BILLING_SESSIONS_PAGE,
+			}:
+				continue
+
+		deduplicated.append(item)
+	return deduplicated
 
 
 def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
@@ -253,7 +261,7 @@ def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
 
 
 def _ensure_billing_sessions_page() -> None:
-	"""Import the standard Billing Sessions Page before assigning sidebar links."""
+	"""Import the standard Billing Sessions Page used by EdgeSuite detail routes."""
 	if frappe.db.exists("Page", BILLING_SESSIONS_PAGE):
 		return
 	file_path = frappe.get_app_path(
@@ -268,7 +276,7 @@ def _ensure_billing_sessions_page() -> None:
 
 
 def ensure_direct_patient_navigation() -> bool:
-	"""Apply direct Patients, Billing Sessions Page and approved top-level order."""
+	"""Apply direct Patients, billing navigation reconciliation and primary order."""
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists(
 		"Workspace Sidebar", SIDEBAR_NAME
 	):
