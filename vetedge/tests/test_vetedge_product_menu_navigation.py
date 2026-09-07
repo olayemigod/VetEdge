@@ -64,7 +64,7 @@ def test_native_page_guard_removes_product_navigation_for_hidden_or_stale_shells
 	):
 		assert expected in guard
 
-	assert 'frappe.require("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1")' in loader
+	assert 'vetedgeSafeRequire("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1")' in loader
 	assert '".page-actions"' not in guard
 	assert '".navbar-right"' not in guard
 
