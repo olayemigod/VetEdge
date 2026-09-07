@@ -4,7 +4,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, cstr, get_datetime, getdate
+from frappe.utils import add_days, cint, cstr, get_datetime, getdate, now_datetime
 
 from vetedge.coreedge_adapter import get_current_vetedge_branch
 from vetedge.services.appointment_actions import build_appointment_action_state
@@ -42,6 +42,36 @@ APPOINTMENT_SORT_FIELDS = frozenset(
 )
 DEFAULT_SORT_BY = "appointment_datetime"
 DEFAULT_SORT_ORDER = "asc"
+DEFAULT_DATE_PRESET = "upcoming"
+UPCOMING_STATUSES = (
+	"Awaiting Registration",
+	"Owner Requested",
+	"Scheduled",
+	"Confirmed",
+)
+APPOINTMENT_DATE_PRESETS = frozenset(
+	{
+		"upcoming",
+		"today",
+		"tomorrow",
+		"next_7_days",
+		"this_week",
+		"next_week",
+		"this_month",
+		"next_30_days",
+		"past",
+		"full_history",
+		"custom",
+		# Backward-compatible legacy calendar presets from the earlier DateRanges UI.
+		"yesterday",
+		"last_week",
+		"last_month",
+		"this_quarter",
+		"last_quarter",
+		"this_year",
+		"last_year",
+	}
+)
 SEARCH_FIELDS = (
 	"name",
 	"appointment_title",
@@ -113,6 +143,13 @@ def _validated_select(fieldname: str, value: str) -> str:
 	return selected
 
 
+def _validated_date_preset(value: str) -> str:
+	preset = _clean(value) or DEFAULT_DATE_PRESET
+	if preset not in APPOINTMENT_DATE_PRESETS:
+		frappe.throw(_("Invalid appointment date preset."), frappe.ValidationError)
+	return preset
+
+
 def _validated_dates(from_date: str, to_date: str) -> tuple[Any | None, Any | None]:
 	start_date = getdate(from_date) if _clean(from_date) else None
 	end_date = getdate(to_date) if _clean(to_date) else None
@@ -121,6 +158,39 @@ def _validated_dates(from_date: str, to_date: str) -> tuple[Any | None, Any | No
 	start_datetime = get_datetime(f"{start_date} 00:00:00") if start_date else None
 	end_datetime = get_datetime(f"{add_days(end_date, 1)} 00:00:00") if end_date else None
 	return start_datetime, end_datetime
+
+
+def _append_date_filters(
+	filters: list[list[Any]],
+	*,
+	date_preset: str,
+	from_date: str,
+	to_date: str,
+) -> str:
+	"""Apply EdgeFuzzyDate semantics while keeping Custom calendar ranges safe.
+
+	Upcoming is intentionally both time-aware and lifecycle-aware. It is not a
+	mere From Date shortcut: only appointments at or after the current site time
+	and still in a pre-service state are part of the operational upcoming queue.
+	"""
+	preset = _validated_date_preset(date_preset)
+	current = now_datetime()
+	if preset == "upcoming":
+		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", ">=", current])
+		filters.append([APPOINTMENT_DOCTYPE, "status", "in", list(UPCOMING_STATUSES)])
+		return preset
+	if preset == "past":
+		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", "<", current])
+		return preset
+	if preset == "full_history":
+		return preset
+
+	start_datetime, end_datetime = _validated_dates(from_date, to_date)
+	if start_datetime:
+		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", ">=", start_datetime])
+	if end_datetime:
+		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", "<", end_datetime])
+	return preset
 
 
 def _filters(
@@ -132,9 +202,10 @@ def _filters(
 	status: str = "",
 	appointment_type: str = "",
 	consultation_type: str = "",
+	date_preset: str = DEFAULT_DATE_PRESET,
 	from_date: str = "",
 	to_date: str = "",
-) -> list[list[Any]]:
+) -> tuple[list[list[Any]], str]:
 	filters: list[list[Any]] = []
 	selected_branch = _selected_branch(branch)
 	if selected_branch:
@@ -157,12 +228,13 @@ def _filters(
 	if selected_type:
 		filters.append([APPOINTMENT_DOCTYPE, "appointment_type", "=", selected_type])
 
-	start_datetime, end_datetime = _validated_dates(from_date, to_date)
-	if start_datetime:
-		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", ">=", start_datetime])
-	if end_datetime:
-		filters.append([APPOINTMENT_DOCTYPE, "appointment_datetime", "<", end_datetime])
-	return filters
+	preset = _append_date_filters(
+		filters,
+		date_preset=date_preset,
+		from_date=from_date,
+		to_date=to_date,
+	)
+	return filters, preset
 
 
 def _or_filters(search: str) -> list[list[Any]] | None:
@@ -257,6 +329,7 @@ def get_appointment_page(
 	status: str = "",
 	appointment_type: str = "",
 	consultation_type: str = "",
+	date_preset: str = DEFAULT_DATE_PRESET,
 	from_date: str = "",
 	to_date: str = "",
 	sort_by: str = DEFAULT_SORT_BY,
@@ -264,7 +337,7 @@ def get_appointment_page(
 ) -> dict[str, Any]:
 	"""Return the permission-aware Appointments worklist with bounded filters and sorting."""
 	_require_access()
-	filters = _filters(
+	filters, resolved_date_preset = _filters(
 		branch=branch,
 		patient=patient,
 		owner=owner,
@@ -272,6 +345,7 @@ def get_appointment_page(
 		status=status,
 		appointment_type=appointment_type,
 		consultation_type=consultation_type,
+		date_preset=date_preset,
 		from_date=from_date,
 		to_date=to_date,
 	)
@@ -312,6 +386,7 @@ def get_appointment_page(
 		"context_branch": current_branch,
 		"summary_label": _("Branch Scope"),
 		"summary_value": current_branch or _("All permitted branches"),
+		"date_preset": resolved_date_preset,
 		"sort_by": sort_field,
 		"sort_order": order,
 	}
