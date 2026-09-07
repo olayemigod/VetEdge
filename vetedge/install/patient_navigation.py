@@ -1,12 +1,28 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import frappe
+from frappe.modules.import_file import import_file_by_path
 
 PATIENT_LABEL = "Patients"
 PATIENT_DOCTYPE = "Veterinary Patient"
+BILLING_CENTER_LABEL = "Billing Center"
+BILLING_SESSION_LABEL = "Billing Session"
+BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"
+BILLING_SESSIONS_PAGE = "vetedge-billing-sessions"
 SIDEBAR_NAME = "VetEdge"
+PRIMARY_GROUP_ORDER = (
+	("Patients",),
+	("Front Desk", "Appointments"),
+	("Clinical", "Clinical Operations"),
+	("Hospital & Services",),
+	("Inventory / Pharmacy", "Inventory / Dispensary"),
+	("Billing Center",),
+	("Dashboard",),
+	("Reports",),
+)
 CHILD_META_FIELDS = {
 	"name",
 	"owner",
@@ -62,11 +78,7 @@ def _is_patient_link(item: dict) -> bool:
 
 
 def _dedicated_patient_section_ranges(items: list[dict]) -> set[int]:
-	"""Return indexes for canonical/legacy one-item Patients sections only.
-
-	A customized Patients section containing any other link is left intact. This
-	prevents the navigation cleanup from deleting administrator-added content.
-	"""
+	"""Return indexes for canonical/legacy one-item Patients sections only."""
 	remove: set[int] = set()
 	index = 0
 	while index < len(items):
@@ -79,11 +91,32 @@ def _dedicated_patient_section_ranges(items: list[dict]) -> set[int]:
 		while end < len(items) and not _is_section(items[end]):
 			end += 1
 		children = items[index + 1 : end]
-		meaningful = [child for child in children if child.get("type") == "Link"]
-		if meaningful and all(_is_patient_link(child) for child in meaningful):
+		links = [child for child in children if child.get("type") == "Link"]
+		if links and all(_is_patient_link(child) for child in links):
 			remove.update(range(index, end))
 		index = end
 	return remove
+
+
+def _custom_patient_section_indexes(items: list[dict]) -> set[int]:
+	"""Protect customized Patients sections that include non-Patient links."""
+	protected: set[int] = set()
+	index = 0
+	while index < len(items):
+		item = items[index]
+		if not (_is_section(item) and str(item.get("label") or "").strip() == PATIENT_LABEL):
+			index += 1
+			continue
+
+		end = index + 1
+		while end < len(items) and not _is_section(items[end]):
+			end += 1
+		children = items[index + 1 : end]
+		links = [child for child in children if child.get("type") == "Link"]
+		if any(not _is_patient_link(child) for child in links):
+			protected.update(range(index, end))
+		index = end
+	return protected
 
 
 def _patient_group(template: dict) -> list[dict]:
@@ -125,9 +158,14 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	"""Move Patients out of Front Desk into its own first-class navigation group.
 
 	The returned structure is idempotent. Existing Patients visibility is copied
-	from the source link so this layout change never broadens role access.
+	from the source link so this layout change never broadens role access. A
+	customized Patients section containing additional links is preserved unchanged.
 	"""
 	clean = [_clean_item(item) for item in items]
+	custom_indexes = _custom_patient_section_indexes(clean)
+	if custom_indexes:
+		return clean
+
 	template = next((dict(item) for item in clean if _is_patient_link(item)), None)
 	if not template:
 		return clean
@@ -140,7 +178,7 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	]
 
 	# Veterinary Home is a direct child=0 Link prepended by dashboard sync. Keep
-	# all leading direct links in place, then insert Patients before Dashboard.
+	# all leading direct links in place, then insert Patients before grouped menus.
 	insert_at = 0
 	while insert_at < len(remaining):
 		item = remaining[insert_at]
@@ -152,16 +190,104 @@ def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:
 	return [*remaining[:insert_at], *_patient_group(template), *remaining[insert_at:]]
 
 
+def organize_billing_session_navigation(items: list[Any]) -> list[dict]:
+	"""Remove the redundant Billing Session shortcut from Billing Center navigation.
+
+	The Billing Sessions Page and Veterinary Billing Session DocType remain intact
+	for EdgeSuite detail routing, legacy URLs, bookmarks, permissions and history.
+	Only the duplicate user-facing sidebar shortcut inside Billing Center is removed.
+	"""
+	clean = [_clean_item(item) for item in items]
+	current_section = ""
+	deduplicated: list[dict] = []
+	for item in clean:
+		if _is_section(item):
+			current_section = str(item.get("label") or "").strip()
+			deduplicated.append(item)
+			continue
+
+		if current_section == BILLING_CENTER_LABEL and item.get("type") == "Link":
+			label = str(item.get("label") or "").strip()
+			link_to = str(item.get("link_to") or "").strip()
+			if label in {BILLING_SESSION_LABEL, "Billing Sessions"} or link_to in {
+				BILLING_SESSION_DOCTYPE,
+				BILLING_SESSIONS_PAGE,
+			}:
+				continue
+
+		deduplicated.append(item)
+	return deduplicated
+
+
+def organize_primary_navigation_order(items: list[Any]) -> list[dict]:
+	"""Apply the approved top-level order while preserving all group contents.
+
+	Only named primary groups are moved. Any unlisted groups remain after Reports
+	in their existing relative order, so this is a pure navigation-order change.
+	"""
+	clean = [_clean_item(item) for item in items]
+	leading: list[dict] = []
+	blocks: list[list[dict]] = []
+	current: list[dict] | None = None
+
+	for item in clean:
+		if _is_section(item):
+			if current:
+				blocks.append(current)
+			current = [item]
+			continue
+		if current is None:
+			leading.append(item)
+		else:
+			current.append(item)
+	if current:
+		blocks.append(current)
+
+	ordered: list[list[dict]] = []
+	used: set[int] = set()
+	for aliases in PRIMARY_GROUP_ORDER:
+		for index, block in enumerate(blocks):
+			if index in used:
+				continue
+			label = str(block[0].get("label") or "").strip()
+			if label not in aliases:
+				continue
+			ordered.append(block)
+			used.add(index)
+			break
+
+	ordered.extend(block for index, block in enumerate(blocks) if index not in used)
+	return [*leading, *(item for block in ordered for item in block)]
+
+
+def _ensure_billing_sessions_page() -> None:
+	"""Import the standard Billing Sessions Page used by EdgeSuite detail routes."""
+	if frappe.db.exists("Page", BILLING_SESSIONS_PAGE):
+		return
+	file_path = frappe.get_app_path(
+		"vetedge",
+		"veterinary",
+		"page",
+		"vetedge_billing_sessions",
+		"vetedge_billing_sessions.json",
+	)
+	if os.path.exists(file_path):
+		import_file_by_path(file_path, force=True, ignore_version=True)
+
+
 def ensure_direct_patient_navigation() -> bool:
-	"""Apply the direct Patients contract after normal VetEdge sidebar sync."""
+	"""Apply direct Patients, billing navigation reconciliation and primary order."""
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists(
 		"Workspace Sidebar", SIDEBAR_NAME
 	):
 		return False
 
+	_ensure_billing_sessions_page()
 	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 	current = [_clean_item(item) for item in (sidebar.get("items") or [])]
 	updated = organize_direct_patient_navigation(current)
+	updated = organize_billing_session_navigation(updated)
+	updated = organize_primary_navigation_order(updated)
 	if updated == current:
 		return False
 

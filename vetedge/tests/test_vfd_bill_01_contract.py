@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 from vetedge.install.dashboard import _organize_veterinary_navigation
-from vetedge.install.patient_navigation import organize_direct_patient_navigation
+from vetedge.install.patient_navigation import (
+	organize_direct_patient_navigation,
+	organize_primary_navigation_order,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +28,8 @@ def dashboard_items() -> list[dict]:
 
 
 def transformed_items() -> list[dict]:
-	return organize_direct_patient_navigation(dashboard_items())
+	items = organize_direct_patient_navigation(dashboard_items())
+	return organize_primary_navigation_order(items)
 
 
 def labels_in_section(items: list[dict], section: str) -> list[str]:
@@ -60,6 +64,23 @@ def test_navigation_transforms_are_idempotent():
 	second = organize_direct_patient_navigation(first)
 	assert second == first
 
+	ordered = organize_primary_navigation_order(first)
+	assert organize_primary_navigation_order(ordered) == ordered
+
+
+def test_primary_navigation_order_matches_approved_contract():
+	sections = [item.get("label") for item in transformed_items() if item.get("type") == "Section Break"]
+	assert sections[:8] == [
+		"Patients",
+		"Front Desk",
+		"Clinical",
+		"Hospital & Services",
+		"Inventory / Pharmacy",
+		"Billing Center",
+		"Dashboard",
+		"Reports",
+	]
+
 
 def test_patients_is_a_separate_primary_navigation_group():
 	source = source_items()
@@ -69,12 +90,25 @@ def test_patients_is_a_separate_primary_navigation_group():
 	assert sections[0] == "Patients"
 	assert sections.index("Patients") < sections.index("Dashboard")
 	assert labels_in_section(items, "Patients") == ["Patients"]
+	assert "Patients" not in labels_in_section(items, "Front Desk")
 
 	patient = link_by_label(items, "Patients")
 	assert patient.get("link_type") == "DocType"
 	assert patient.get("link_to") == "Veterinary Patient"
 	assert patient.get("display_depends_on") == link_by_label(source, "Patients").get("display_depends_on")
 	assert section_by_label(items, "Patients").get("display_depends_on") == patient.get("display_depends_on")
+
+
+def test_customized_patients_section_is_preserved_unchanged():
+	items = dashboard_items()
+	patient = dict(link_by_label(items, "Patients"))
+	custom = [
+		{"type": "Section Break", "child": 0, "label": "Patients"},
+		patient,
+		{"type": "Link", "child": 1, "label": "Patient Import", "link_type": "Page", "link_to": "patient-import"},
+		*items,
+	]
+	assert organize_direct_patient_navigation(custom) == custom
 
 
 def test_patients_shell_contract_is_direct_and_non_collapsible():
@@ -93,6 +127,16 @@ def test_patients_shell_contract_is_direct_and_non_collapsible():
 		assert marker in hardening
 
 	assert 'directHome.insertAdjacentElement("afterend", directItem)' in hardening
+	for marker in (
+		'"Appointments",',
+		'"Clinical Operations",',
+		'"Hospital & Services",',
+		'"Inventory / Pharmacy",',
+		'"Billing Center",',
+		'"Dashboard",',
+		'"Reports",',
+	):
+		assert marker in hardening
 
 
 def test_front_desk_contains_booking_work_not_accounting_or_patient_links():
@@ -133,7 +177,6 @@ def test_billing_center_is_a_separate_menu_group_with_requested_links():
 	items = transformed_items()
 	sections = [item.get("label") for item in items if item.get("type") == "Section Break"]
 	assert "Billing Center" in sections
-	assert sections.index("Billing Center") == sections.index("Front Desk") + 1
 	assert labels_in_section(items, "Billing Center") == [
 		"Customers",
 		"Sales Invoice",
