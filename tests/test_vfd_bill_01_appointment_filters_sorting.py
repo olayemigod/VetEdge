@@ -58,8 +58,10 @@ def test_appointment_page_exposes_operational_filters_with_cascading_context():
 		'label="Primary Owner"',
 		'label="Practitioner"',
 		'label="Consultation Type"',
-		'type="date" label="From Date"',
-		'type="date" label="To Date"',
+		'label="Date Preset"',
+		'type="date"',
+		'label="From Date"',
+		'label="To Date"',
 		'appointmentFilters: {',
 		'appointmentFilterLabels: {',
 		'appointmentSort: {',
@@ -70,6 +72,60 @@ def test_appointment_page_exposes_operational_filters_with_cascading_context():
 		'this.clearAppointmentFilter("consultation_type")',
 	):
 		assert marker in component
+
+
+def test_appointment_date_presets_reuse_shared_date_ranges_and_default_to_full_history():
+	component = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+	bundle = read("vetedge/public/js/vetedge_resource_center.bundle.js")
+	shared = read("vetedge/public/js/edgesuite_date_ranges.js")
+
+	for marker in (
+		'const DEFAULT_APPOINTMENT_DATE_PRESET = "full_history"',
+		"frappe.EdgeSuite?.DateRanges",
+		"shared?.getOptions?.()",
+		"shared.getRange(option.value)",
+		'v-model="appointmentFilters.date_preset"',
+		'@change="onAppointmentDatePresetChange"',
+		'@change="onAppointmentManualDateChange"',
+		"onAppointmentDatePresetChange()",
+		"onAppointmentManualDateChange()",
+		'parameters.set(key, this.appointmentFilters[key])',
+	):
+		assert marker in component
+
+	for marker in (
+		"'date_preset',",
+		"datePreset: valueFrom(params, 'date_preset', DEFAULT_APPOINTMENT_DATE_PRESET)",
+		"setField(resourceView.appointmentFilters, 'date_preset', state.datePreset)",
+	):
+		assert marker in bundle
+
+	for preset in (
+		'today',
+		'yesterday',
+		'this_week',
+		'last_week',
+		'this_month',
+		'last_month',
+		'this_quarter',
+		'last_quarter',
+		'this_year',
+		'last_year',
+		'full_history',
+		'custom',
+	):
+		assert preset in shared
+
+
+def test_appointment_filter_grid_is_four_columns_on_desktop_and_responsive():
+	component = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
+
+	assert ".vetedge-resource-filters.is-appointment-filters {" in component
+	assert "grid-template-columns: repeat(4, minmax(11rem, 1fr));" in component
+	assert "@media (max-width: 74rem)" in component
+	assert "grid-template-columns: repeat(2, minmax(12rem, 1fr));" in component
+	assert "@media (max-width: 47.99rem)" in component
+	assert "grid-template-columns: minmax(0, 1fr);" in component
 
 
 def test_appointment_table_sorting_is_server_side_and_route_persistent():
