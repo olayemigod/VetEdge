@@ -25,6 +25,7 @@
 						class="vetedge-resource-filters"
 						:class="{
 							'is-patient-filters': isPatients,
+							'is-appointment-filters': isAppointments,
 							'is-clinical-filters': isClinicalResource,
 						}"
 					>
@@ -77,6 +78,69 @@
 								@select="onPatientFilterSelect('species', $event)"
 								@clear="clearPatientFilter('species')"
 							/>
+						</template>
+
+						<template v-else-if="isAppointments">
+							<EdgeLinkField
+								v-model="appointmentFilters.branch"
+								:selected-label="appointmentFilterLabels.branch"
+								label="Branch"
+								placeholder="All permitted branches"
+								:searcher="(query) => searchAppointmentFilter('branch', query)"
+								@select="onAppointmentFilterSelect('branch', $event)"
+								@clear="clearAppointmentFilter('branch')"
+							/>
+							<EdgeDropdown
+								v-model="appointmentFilters.status"
+								label="Status"
+								placeholder="All statuses"
+								:options="appointmentStatusOptions"
+							/>
+							<EdgeDropdown
+								v-model="appointmentFilters.appointment_type"
+								label="Appointment Type"
+								placeholder="All appointment types"
+								:options="appointmentTypeOptions"
+								@change="onAppointmentTypeChange"
+							/>
+							<EdgeLinkField
+								v-model="appointmentFilters.patient"
+								:selected-label="appointmentFilterLabels.patient"
+								label="Patient"
+								placeholder="All Patients"
+								:searcher="(query) => searchAppointmentFilter('patient', query)"
+								@select="onAppointmentFilterSelect('patient', $event)"
+								@clear="clearAppointmentFilter('patient')"
+							/>
+							<EdgeLinkField
+								v-model="appointmentFilters.owner"
+								:selected-label="appointmentFilterLabels.owner"
+								label="Primary Owner"
+								placeholder="All Owners"
+								:searcher="(query) => searchAppointmentFilter('owner', query)"
+								@select="onAppointmentFilterSelect('owner', $event)"
+								@clear="clearAppointmentFilter('owner')"
+							/>
+							<EdgeLinkField
+								v-model="appointmentFilters.practitioner"
+								:selected-label="appointmentFilterLabels.practitioner"
+								label="Practitioner"
+								placeholder="All Veterinary Practitioners"
+								:searcher="(query) => searchAppointmentFilter('practitioner', query)"
+								@select="onAppointmentFilterSelect('practitioner', $event)"
+								@clear="clearAppointmentFilter('practitioner')"
+							/>
+							<EdgeLinkField
+								v-model="appointmentFilters.consultation_type"
+								:selected-label="appointmentFilterLabels.consultation_type"
+								label="Consultation Type"
+								placeholder="All Consultation Types"
+								:searcher="(query) => searchAppointmentFilter('consultation_type', query)"
+								@select="onAppointmentFilterSelect('consultation_type', $event)"
+								@clear="clearAppointmentFilter('consultation_type')"
+							/>
+							<EdgeInput v-model="appointmentFilters.from_date" type="date" label="From Date" />
+							<EdgeInput v-model="appointmentFilters.to_date" type="date" label="To Date" />
 						</template>
 
 						<template v-else-if="isClinicalResource">
@@ -178,7 +242,24 @@
 						<table class="vetedge-resource-table">
 							<thead>
 								<tr>
-									<th v-for="column in page.columns" :key="column.fieldname">{{ column.label }}</th>
+									<th
+										v-for="column in page.columns"
+										:key="column.fieldname"
+										:class="{ 'is-sortable': column.sortable }"
+									>
+										<button
+											v-if="column.sortable"
+											type="button"
+											class="vetedge-resource-sort-button"
+											:disabled="loading"
+											:title="`Sort by ${column.label}`"
+											@click="sortColumn(column)"
+										>
+											<span>{{ column.label }}</span>
+											<span class="vetedge-resource-sort-indicator" aria-hidden="true">{{ sortIndicator(column) }}</span>
+										</button>
+										<span v-else>{{ column.label }}</span>
+									</th>
 									<th class="vetedge-resource-actions-column">Actions</th>
 								</tr>
 							</thead>
@@ -283,12 +364,32 @@ const CLINICAL_RESOURCES = Object.freeze({
 	vaccinations: "Veterinary Vaccination Record",
 });
 
+const DEFAULT_APPOINTMENT_SORT = Object.freeze({ by: "appointment_datetime", order: "asc" });
+
 function emptyPatientFilters() {
 	return { default_branch: "", status: "", registration_status: "", species: "" };
 }
 
 function emptyPatientFilterLabels() {
 	return { default_branch: "", species: "" };
+}
+
+function emptyAppointmentFilters() {
+	return {
+		branch: "",
+		patient: "",
+		owner: "",
+		practitioner: "",
+		status: "",
+		appointment_type: "",
+		consultation_type: "",
+		from_date: "",
+		to_date: "",
+	};
+}
+
+function emptyAppointmentFilterLabels() {
+	return { branch: "", patient: "", owner: "", practitioner: "", consultation_type: "" };
 }
 
 function emptyClinicalFilters() {
@@ -304,6 +405,7 @@ export default {
 	data() {
 		const parameters = new URLSearchParams(window.location.search || "");
 		const requested = parameters.get("resource") || "patients";
+		const requestedSortOrder = String(parameters.get("sort_order") || DEFAULT_APPOINTMENT_SORT.order).toLowerCase();
 		return {
 			loading: true,
 			error: "",
@@ -321,6 +423,28 @@ export default {
 			patientFilterLabels: {
 				default_branch: parameters.get("branch") || "",
 				species: parameters.get("species") || "",
+			},
+			appointmentFilters: {
+				branch: parameters.get("branch") || "",
+				patient: parameters.get("patient") || "",
+				owner: parameters.get("owner") || "",
+				practitioner: parameters.get("practitioner") || "",
+				status: parameters.get("status") || "",
+				appointment_type: parameters.get("appointment_type") || "",
+				consultation_type: parameters.get("consultation_type") || "",
+				from_date: parameters.get("from_date") || "",
+				to_date: parameters.get("to_date") || "",
+			},
+			appointmentFilterLabels: {
+				branch: parameters.get("branch") || "",
+				patient: parameters.get("patient") || "",
+				owner: parameters.get("owner") || "",
+				practitioner: parameters.get("practitioner") || "",
+				consultation_type: parameters.get("consultation_type") || "",
+			},
+			appointmentSort: {
+				by: parameters.get("sort_by") || DEFAULT_APPOINTMENT_SORT.by,
+				order: ["asc", "desc"].includes(requestedSortOrder) ? requestedSortOrder : DEFAULT_APPOINTMENT_SORT.order,
 			},
 			clinicalFilters: {
 				patient: parameters.get("patient") || "",
@@ -395,6 +519,24 @@ export default {
 		registrationStatusOptions() {
 			return ["Registered", "Awaiting Registration Payment", "Registration Paid"].map((value) => ({ value, label: value }));
 		},
+		appointmentStatusOptions() {
+			return [
+				"Awaiting Registration",
+				"Owner Requested",
+				"Scheduled",
+				"Confirmed",
+				"Checked In",
+				"In Consultation",
+				"In Service",
+				"Completed",
+				"Rescheduled",
+				"Cancelled",
+				"No Show",
+			].map((value) => ({ value, label: value }));
+		},
+		appointmentTypeOptions() {
+			return ["Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other"].map((value) => ({ value, label: value }));
+		},
 		clinicalStatusOptions() {
 			const values = this.isLabOrders
 				? ["Draft", "Ordered", "Sample Collected", "Sent to Lab", "In Progress", "Result Pending", "Result Entered", "Awaiting Review", "Reviewed", "Completed", "Cancelled"]
@@ -444,6 +586,20 @@ export default {
 		searchSpeciesFilter(query) {
 			return this.searchLink("Veterinary Species", query);
 		},
+		async searchAppointmentFilter(field, query) {
+			const context = {
+				branch: this.appointmentFilters.branch || "",
+				owner: this.appointmentFilters.owner || "",
+			};
+			const response = await frappe.call("vetedge.services.appointment_edgeui.search_appointment_link", {
+				field,
+				txt: String(query || ""),
+				context: JSON.stringify(context),
+				start: 0,
+				page_length: 20,
+			});
+			return response.message || [];
+		},
 		normalizeLinkSelection(selection) {
 			if (!selection) return { value: "", label: "" };
 			if (typeof selection === "string") return { value: selection, label: selection };
@@ -460,6 +616,41 @@ export default {
 		clearPatientFilter(fieldname) {
 			this.patientFilters[fieldname] = "";
 			this.patientFilterLabels[fieldname] = "";
+		},
+		onAppointmentFilterSelect(fieldname, selection) {
+			const normalized = this.normalizeLinkSelection(selection);
+			const changed = this.appointmentFilters[fieldname] !== normalized.value;
+			this.appointmentFilters[fieldname] = normalized.value;
+			this.appointmentFilterLabels[fieldname] = normalized.label;
+			if (changed && fieldname === "branch") {
+				this.clearAppointmentFilter("patient");
+				this.clearAppointmentFilter("practitioner");
+			}
+			if (changed && fieldname === "owner") {
+				this.clearAppointmentFilter("patient");
+			}
+		},
+		clearAppointmentFilter(fieldname) {
+			const changed = Boolean(this.appointmentFilters[fieldname]);
+			this.appointmentFilters[fieldname] = "";
+			if (Object.prototype.hasOwnProperty.call(this.appointmentFilterLabels, fieldname)) {
+				this.appointmentFilterLabels[fieldname] = "";
+			}
+			if (changed && fieldname === "branch") {
+				this.clearAppointmentFilter("patient");
+				this.clearAppointmentFilter("practitioner");
+			}
+			if (changed && fieldname === "owner") {
+				this.clearAppointmentFilter("patient");
+			}
+		},
+		onAppointmentTypeChange() {
+			if (!["Consultation", "Follow Up"].includes(this.appointmentFilters.appointment_type)) {
+				this.clearAppointmentFilter("consultation_type");
+			}
+			if (this.appointmentFilters.appointment_type === "Grooming") {
+				this.clearAppointmentFilter("practitioner");
+			}
 		},
 		onClinicalFilterSelect(fieldname, selection) {
 			const normalized = this.normalizeLinkSelection(selection);
@@ -479,6 +670,12 @@ export default {
 				if (this.patientFilters.status) parameters.set("status", this.patientFilters.status);
 				if (this.patientFilters.registration_status) parameters.set("registration_status", this.patientFilters.registration_status);
 				if (this.patientFilters.species) parameters.set("species", this.patientFilters.species);
+			} else if (this.isAppointments) {
+				for (const key of ["branch", "patient", "owner", "practitioner", "status", "appointment_type", "consultation_type", "from_date", "to_date"]) {
+					if (this.appointmentFilters[key]) parameters.set(key, this.appointmentFilters[key]);
+				}
+				parameters.set("sort_by", this.appointmentSort.by || DEFAULT_APPOINTMENT_SORT.by);
+				parameters.set("sort_order", this.appointmentSort.order || DEFAULT_APPOINTMENT_SORT.order);
 			} else if (this.isClinicalResource) {
 				for (const key of ["patient", "service_branch", "status", "from_date", "to_date", "vaccine", "lab_test"]) {
 					if (this.clinicalFilters[key]) parameters.set(key, this.clinicalFilters[key]);
@@ -490,26 +687,55 @@ export default {
 			this.loading = true;
 			this.error = "";
 			try {
-				const response = await frappe.call("vetedge.services.resource_center.get_resource_page", {
-					resource: this.resource,
-					search: this.search,
-					start: this.start,
-					page_length: this.pageLength,
-					default_branch: this.isPatients ? this.patientFilters.default_branch : "",
-					status: this.isPatients ? this.patientFilters.status : (this.isClinicalResource ? this.clinicalFilters.status : ""),
-					registration_status: this.isPatients ? this.patientFilters.registration_status : "",
-					species: this.isPatients ? this.patientFilters.species : "",
-					patient: this.isClinicalResource ? this.clinicalFilters.patient : "",
-					service_branch: this.isClinicalResource ? this.clinicalFilters.service_branch : "",
-					from_date: this.isClinicalResource ? this.clinicalFilters.from_date : "",
-					to_date: this.isClinicalResource ? this.clinicalFilters.to_date : "",
-					vaccine: this.isVaccinations ? this.clinicalFilters.vaccine : "",
-					lab_test: this.isLabOrders ? this.clinicalFilters.lab_test : "",
-				});
+				const method = this.isAppointments
+					? "vetedge.services.appointment_resource_center.get_appointment_page"
+					: "vetedge.services.resource_center.get_resource_page";
+				const args = this.isAppointments
+					? {
+						search: this.search,
+						start: this.start,
+						page_length: this.pageLength,
+						branch: this.appointmentFilters.branch,
+						patient: this.appointmentFilters.patient,
+						owner: this.appointmentFilters.owner,
+						practitioner: this.appointmentFilters.practitioner,
+						status: this.appointmentFilters.status,
+						appointment_type: this.appointmentFilters.appointment_type,
+						consultation_type: this.appointmentFilters.consultation_type,
+						from_date: this.appointmentFilters.from_date,
+						to_date: this.appointmentFilters.to_date,
+						sort_by: this.appointmentSort.by,
+						sort_order: this.appointmentSort.order,
+					}
+					: {
+						resource: this.resource,
+						search: this.search,
+						start: this.start,
+						page_length: this.pageLength,
+						default_branch: this.isPatients ? this.patientFilters.default_branch : "",
+						status: this.isPatients ? this.patientFilters.status : (this.isClinicalResource ? this.clinicalFilters.status : ""),
+						registration_status: this.isPatients ? this.patientFilters.registration_status : "",
+						species: this.isPatients ? this.patientFilters.species : "",
+						patient: this.isClinicalResource ? this.clinicalFilters.patient : "",
+						service_branch: this.isClinicalResource ? this.clinicalFilters.service_branch : "",
+						from_date: this.isClinicalResource ? this.clinicalFilters.from_date : "",
+						to_date: this.isClinicalResource ? this.clinicalFilters.to_date : "",
+						vaccine: this.isVaccinations ? this.clinicalFilters.vaccine : "",
+						lab_test: this.isLabOrders ? this.clinicalFilters.lab_test : "",
+					};
+				const response = await frappe.call(method, args);
 				this.page = response.message || this.page;
 				if (this.isPatients && this.page.context_branch && !this.patientFilters.default_branch) {
 					this.patientFilters.default_branch = this.page.context_branch;
 					this.patientFilterLabels.default_branch = this.page.context_branch;
+				}
+				if (this.isAppointments) {
+					if (this.page.context_branch && !this.appointmentFilters.branch) {
+						this.appointmentFilters.branch = this.page.context_branch;
+						this.appointmentFilterLabels.branch = this.page.context_branch;
+					}
+					this.appointmentSort.by = this.page.sort_by || this.appointmentSort.by || DEFAULT_APPOINTMENT_SORT.by;
+					this.appointmentSort.order = this.page.sort_order || this.appointmentSort.order || DEFAULT_APPOINTMENT_SORT.order;
 				}
 				if (this.isClinicalResource && this.page.context_branch && !this.clinicalFilters.service_branch) {
 					this.clinicalFilters.service_branch = this.page.context_branch;
@@ -527,6 +753,9 @@ export default {
 			this.search = "";
 			this.patientFilters = emptyPatientFilters();
 			this.patientFilterLabels = emptyPatientFilterLabels();
+			this.appointmentFilters = emptyAppointmentFilters();
+			this.appointmentFilterLabels = emptyAppointmentFilterLabels();
+			this.appointmentSort = { ...DEFAULT_APPOINTMENT_SORT };
 			this.clinicalFilters = emptyClinicalFilters();
 			this.clinicalFilterLabels = emptyClinicalFilterLabels();
 			this.loadPage();
@@ -539,6 +768,9 @@ export default {
 			this.search = "";
 			this.patientFilters = emptyPatientFilters();
 			this.patientFilterLabels = emptyPatientFilterLabels();
+			this.appointmentFilters = emptyAppointmentFilters();
+			this.appointmentFilterLabels = emptyAppointmentFilterLabels();
+			this.appointmentSort = { ...DEFAULT_APPOINTMENT_SORT };
 			this.clinicalFilters = emptyClinicalFilters();
 			this.clinicalFilterLabels = emptyClinicalFilterLabels();
 			this.start = 0;
@@ -551,6 +783,22 @@ export default {
 		nextPage() {
 			this.start = (this.page.start || 0) + (this.page.page_length || this.pageLength);
 			this.loadPage();
+		},
+		sortColumn(column) {
+			if (!column?.sortable || !column.fieldname || !this.isAppointments) return;
+			if (this.appointmentSort.by === column.fieldname) {
+				this.appointmentSort.order = this.appointmentSort.order === "asc" ? "desc" : "asc";
+			} else {
+				this.appointmentSort.by = column.fieldname;
+				this.appointmentSort.order = column.fieldname === "modified" ? "desc" : "asc";
+			}
+			this.start = 0;
+			this.loadPage();
+		},
+		sortIndicator(column) {
+			if (!column?.sortable) return "";
+			if (this.appointmentSort.by !== column.fieldname) return "↕";
+			return this.appointmentSort.order === "desc" ? "↓" : "↑";
 		},
 		formatValue(column, value, row = null) {
 			const display = row?._display?.[column.fieldname];
@@ -711,6 +959,7 @@ export default {
 }
 
 .vetedge-resource-filters.is-patient-filters,
+.vetedge-resource-filters.is-appointment-filters,
 .vetedge-resource-filters.is-clinical-filters {
 	grid-template-columns: repeat(3, minmax(12rem, 1fr));
 }
@@ -791,6 +1040,39 @@ export default {
 	white-space: nowrap;
 }
 
+.vetedge-resource-table th.is-sortable { padding: 0; }
+
+.vetedge-resource-sort-button {
+	align-items: center;
+	background: transparent;
+	border: 0;
+	color: inherit;
+	cursor: pointer;
+	display: inline-flex;
+	font: inherit;
+	font-weight: inherit;
+	gap: .35rem;
+	letter-spacing: inherit;
+	padding: .65rem .75rem;
+	text-align: left;
+	width: 100%;
+}
+
+.vetedge-resource-sort-button:hover,
+.vetedge-resource-sort-button:focus-visible {
+	background: var(--edge-color-brand-50, #eef7ff);
+	outline: none;
+}
+
+.vetedge-resource-sort-button:disabled { cursor: wait; }
+
+.vetedge-resource-sort-indicator {
+	font-size: .72rem;
+	font-weight: 800;
+	min-width: .8rem;
+	text-align: center;
+}
+
 .vetedge-resource-table tbody tr:hover { background: var(--edge-color-brand-50, #eef7ff); }
 .vetedge-resource-actions-column { min-width: 24rem; }
 
@@ -862,6 +1144,7 @@ export default {
 
 @media (max-width: 74rem) {
 	.vetedge-resource-filters.is-patient-filters,
+	.vetedge-resource-filters.is-appointment-filters,
 	.vetedge-resource-filters.is-clinical-filters {
 		grid-template-columns: repeat(2, minmax(12rem, 1fr));
 	}
@@ -870,6 +1153,7 @@ export default {
 @media (max-width: 47.99rem) {
 	.vetedge-resource-filters,
 	.vetedge-resource-filters.is-patient-filters,
+	.vetedge-resource-filters.is-appointment-filters,
 	.vetedge-resource-filters.is-clinical-filters,
 	.vetedge-resource-summary {
 		grid-template-columns: minmax(0, 1fr);
