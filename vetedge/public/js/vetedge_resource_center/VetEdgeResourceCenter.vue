@@ -900,7 +900,7 @@ export default {
 			if (value === null || value === undefined || value === "") return "—";
 			if (column.fieldname === "docstatus") return { 0: "Draft", 1: "Submitted", 2: "Cancelled" }[Number(value)] || String(value);
 			if (column.fieldtype === "Check") return Number(value) ? "Yes" : "No";
-			if (["Datetime", "Date"].includes(column.fieldtype) && frappe.datetime?.str_to_user) return frappe.datetime.str_to_user(value);
+			if (["Datetime", "Date"].includes(column.fieldtype)) return window.VetEdgeDateTime?.formatByFieldtype?.(value, column.fieldtype, value) || value;
 			return String(value);
 		},
 		cellClass(column, value) {

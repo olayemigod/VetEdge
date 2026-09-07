@@ -131,7 +131,7 @@ export default {
 		},
 		formatDateTime(value) {
 			if (!value) return '—';
-			try { return frappe.datetime?.str_to_user ? frappe.datetime.str_to_user(value) : String(value); }
+			try { return window.VetEdgeDateTime?.formatDateTime?.(value, String(value)) || String(value); }
 			catch (_error) { return String(value); }
 		},
 		sourceLabel(doctype, name) { return doctype && name ? `${doctype}: ${name}` : (name || doctype || '—'); },

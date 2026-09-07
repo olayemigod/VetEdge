@@ -139,13 +139,7 @@
 	}
 
 	function formatDate(value) {
-		if (!value) {
-			return "";
-		}
-		if (window.frappe && frappe.datetime && frappe.datetime.str_to_user) {
-			return frappe.datetime.str_to_user(value);
-		}
-		return value;
+		return value ? (window.VetEdgeDateTime?.formatDateTime?.(value, value) || value) : "";
 	}
 
 	function sortNotifications(items) {

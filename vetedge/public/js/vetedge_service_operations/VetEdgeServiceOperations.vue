@@ -333,8 +333,8 @@ export default {
 		formatDetailValue(field) {
 			const value = field?.value;
 			if (value === undefined || value === null || value === "") return "—";
-			if (field.type === "Datetime") return frappe.datetime?.str_to_user?.(value) || value;
-			if (field.type === "Date") return frappe.datetime?.str_to_user?.(value) || value;
+			if (field.type === "Datetime") return window.VetEdgeDateTime?.formatDateTime?.(value, value) || value;
+			if (field.type === "Date") return window.VetEdgeDateTime?.formatDate?.(value, value) || value;
 			if (field.type === "Check") return Number(value) ? "Yes" : "No";
 			return String(value);
 		},

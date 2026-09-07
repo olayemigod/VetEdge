@@ -479,9 +479,9 @@ export default {
         catch (_error) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
       }
       if (column?.fieldtype === 'Int') return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-      if (column?.fieldtype === 'Datetime' || column?.fieldtype === 'Date') {
-        return window.frappe?.datetime?.str_to_user?.(value) || value;
-      }
+		if (column?.fieldtype === 'Datetime' || column?.fieldtype === 'Date') {
+			return window.VetEdgeDateTime?.formatByFieldtype?.(value, column.fieldtype, value) || value;
+		}
       return String(value);
     },
     openHospitalisationEpisode(name) {

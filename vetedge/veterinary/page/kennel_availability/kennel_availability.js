@@ -91,7 +91,7 @@ class VetEdgeKennelAvailability {
 		}
 
 		const html = `
-			<div class="text-muted small mb-3">${__("Snapshot Date")}: ${escape_html(frappe.datetime.str_to_user(snapshotDate || frappe.datetime.now_date()))}</div>
+			<div class="text-muted small mb-3">${__("Snapshot Date")}: ${escape_html(window.VetEdgeDateTime.formatDate(snapshotDate || frappe.datetime.now_date()))}</div>
 			<div class="table-responsive">
 				<table class="table table-bordered table-hover table-sm">
 					<thead>
@@ -123,7 +123,7 @@ class VetEdgeKennelAvailability {
 								<td>${escape_html(row.reserved_bookings)}</td>
 								<td>${escape_html(row.active_stays)}</td>
 								<td>${escape_html(String(row.occupancy_percent ?? 0))}%</td>
-								<td>${row.next_expected_release_date ? escape_html(frappe.datetime.str_to_user(row.next_expected_release_date)) : __("Not scheduled")}</td>
+								<td>${row.next_expected_release_date ? escape_html(window.VetEdgeDateTime.formatDate(row.next_expected_release_date)) : __("Not scheduled")}</td>
 							</tr>
 						`).join("")}
 					</tbody>

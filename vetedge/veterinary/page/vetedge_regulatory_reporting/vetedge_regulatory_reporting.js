@@ -319,7 +319,7 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 						this.history.error ? h("div", { class: "alert alert-danger" }, this.history.error) : null,
 						!rows.length && !this.history.loading ? h("div", { class: "vetedge-regulatory-issue" }, __("No saved regulatory report runs match the current Company/Branch scope.")) : null,
 						rows.length ? h("div", { class: "vetedge-regulatory-history" }, rows.map((run) => h("div", { class: "vetedge-regulatory-run", key: run.name }, [
-							h("div", { class: "vetedge-regulatory-run-main" }, [h("strong", run.report_type || run.name), h("small", `${run.name} · ${frappe.datetime?.str_to_user?.(run.generated_on) || run.generated_on || ""}`), run.sent_to ? h("small", __("Sent to {0}", [run.sent_to])) : null]),
+							h("div", { class: "vetedge-regulatory-run-main" }, [h("strong", run.report_type || run.name), h("small", `${run.name} · ${window.VetEdgeDateTime?.formatDateTime?.(run.generated_on, run.generated_on) || run.generated_on || ""}`), run.sent_to ? h("small", __("Sent to {0}", [run.sent_to])) : null]),
 							h("div", [h("span", { class: `vetedge-regulatory-pill ${run.status === "Accepted" ? "ready" : run.status === "Rejected" ? "blocked" : ""}` }, run.status || __("Generated")), h("small", { style: "display:block;margin-top:4px" }, run.service_branch || run.company || "")]),
 							h("div", [h("small", __("Template SHA-256")), h("div", { title: run.template_sha256 || "", style: "font-family:monospace;font-size:.72rem;overflow:hidden;text-overflow:ellipsis" }, run.template_sha256 || "—"), run.submission_reference ? h("small", __("Reference: {0}", [run.submission_reference])) : null]),
 							this.renderRunActions(run),

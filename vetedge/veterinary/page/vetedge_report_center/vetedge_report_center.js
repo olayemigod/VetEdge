@@ -430,7 +430,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 						catch (_error) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
 					}
 					if (["Int", "Float", "Percent"].includes(fieldtype)) return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: fieldtype === "Int" ? 0 : 2 });
-					if (["Date", "Datetime"].includes(fieldtype)) return frappe.datetime?.str_to_user?.(value) || value;
+					if (["Date", "Datetime"].includes(fieldtype)) return window.VetEdgeDateTime?.formatByFieldtype?.(value, fieldtype, value) || value;
 					return String(value);
 				},
 				rowKey(row, index) { return row?.name || row?.invoice || row?.batch_no || `row-${Number(this.result.start || 0) + index}`; },

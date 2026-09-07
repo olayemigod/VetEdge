@@ -117,7 +117,7 @@ class VetEdgeKennelAvailabilityBoard {
 			wrapper.html(`<div class="text-muted">${__("No kennels match the selected filters.")}</div>`);
 			return;
 		}
-		const rangeLabel = `${frappe.datetime.str_to_user(filters.from_date || frappe.datetime.now_date())} - ${frappe.datetime.str_to_user(filters.to_date || filters.from_date || frappe.datetime.now_date())}`;
+		const rangeLabel = `${window.VetEdgeDateTime.formatDate(filters.from_date || frappe.datetime.now_date())} - ${window.VetEdgeDateTime.formatDate(filters.to_date || filters.from_date || frappe.datetime.now_date())}`;
 		wrapper.html(`
 			<div class="text-muted small mb-3">${__("Date Range")}: ${escapeHtml(rangeLabel)}</div>
 			<div class="table-responsive">
@@ -147,7 +147,7 @@ class VetEdgeKennelAvailabilityBoard {
 								<td>${escapeHtml(row.available_slots)}</td>
 								<td><span class="indicator-pill ${statusPill(row.status)}">${escapeHtml(__(row.status || "Unknown"))}</span></td>
 								<td>${escapeHtml(row.active_reference || __("None"))}</td>
-								<td>${row.expected_check_out_date ? escapeHtml(frappe.datetime.str_to_user(row.expected_check_out_date)) : __("Not scheduled")}</td>
+								<td>${row.expected_check_out_date ? escapeHtml(window.VetEdgeDateTime.formatDate(row.expected_check_out_date)) : __("Not scheduled")}</td>
 							</tr>
 						`).join('')}
 					</tbody>

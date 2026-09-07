@@ -354,8 +354,8 @@ export default {
       this.currentPage = 1;
       this.fetchData();
     },
-    formatDate(value) { return value ? (window.frappe?.datetime?.str_to_user?.(value) || value) : '—'; },
-    formatTime(value) { return value ? (String(value).split(' ')[1] || value) : '—'; },
+    formatDate(value) { return window.VetEdgeDateTime?.formatDate?.(value, '—') || '—'; },
+    formatTime(value) { return window.VetEdgeDateTime?.formatDateTime?.(value, '—') || '—'; },
     formatDays(days) {
       if (days === null || days === undefined || days === '') return '—';
       const value = Number(days);

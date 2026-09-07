@@ -181,6 +181,9 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 				await this.load();
 			},
 			methods: {
+				formatCell(value, column) {
+					return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value;
+				},
 				setFilter(key, value) {
 					this.filters[key] = value || "";
 				},
@@ -360,7 +363,7 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 					if (this.error) return h(EdgeErrorState, { title: __("Disease Outbreak Register could not load"), message: this.error, actionLabel: __("Try Again"), onRetry: this.load });
 					if (!this.rows.length) return h(EdgeEmptyState, { title: __("No disease outbreaks found"), description: __("No outbreak records match the selected Company, Branch, status, disease and investigation dates."), actionLabel: this.canCreate ? __("New Outbreak") : "", onAction: this.newOutbreak });
 					return h("div", { class: "vetedge-outbreak-register-root" }, [
-						h(EdgeDataTable, { columns: this.columns, rows: this.rows, rowKey: "name", onRowClick: this.openRecord }),
+					h(EdgeDataTable, { columns: this.columns, rows: this.rows, rowKey: "name", formatter: this.formatCell, onRowClick: this.openRecord }),
 						h("div", { class: "vetedge-outbreak-pagination" }, [
 							h("span", { class: "vetedge-outbreak-note" }, __("Showing {0}–{1} of {2}", [this.firstVisible, this.lastVisible, this.total])),
 							h("div", { class: "vetedge-outbreak-actions" }, [

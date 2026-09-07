@@ -938,7 +938,7 @@ export default {
 			if (adapter?.open?.(route) === true) return;
 			window.location.assign(route);
 		},
-		formatDateTime(value) { return value ? (frappe.datetime?.str_to_user?.(value) || String(value)) : ''; },
+		formatDateTime(value) { return value ? (window.VetEdgeDateTime?.formatDateTime?.(value, String(value)) || String(value)) : ''; },
 		formatMoney(value) {
 			const currency = this.episode.invoice?.currency;
 			if (typeof format_currency === 'function') return format_currency(Number(value || 0), currency);

@@ -26,3 +26,4 @@ vetedge.patches.normalize_veterinary_desktop_icon_label
 vetedge.patches.normalize_veterinary_desktop_layout_labels
 vetedge.patches.normalize_veterinary_desktop_layout_link_labels
 vetedge.patches.normalize_veterinary_desktop_icon_all_users
+vetedge.patches.set_vetedge_date_format

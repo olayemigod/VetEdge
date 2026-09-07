@@ -142,7 +142,7 @@
 							{% for appointment in dashboard.upcoming_appointments %}
 								<tr>
 									<td>{{ appointment.appointment_title or appointment.name }}</td>
-									<td>{{ frappe.format(appointment.appointment_datetime, {"fieldtype": "Datetime"}) }}</td>
+									<td>{{ vetedge_datetime(appointment.appointment_datetime) }}</td>
 									<td>{{ appointment.branch or "" }}</td>
 									<td>{{ appointment.practitioner_name or "" }}</td>
 									<td>{{ appointment.status or "" }}</td>
@@ -166,7 +166,7 @@
 							{% for appointment in dashboard.appointment_history %}
 								<tr>
 									<td>{{ appointment.appointment_title or appointment.name }}</td>
-									<td>{{ frappe.format(appointment.appointment_datetime, {"fieldtype": "Datetime"}) }}</td>
+									<td>{{ vetedge_datetime(appointment.appointment_datetime) }}</td>
 									<td>{{ appointment.branch or "" }}</td>
 									<td>{{ appointment.practitioner_name or "" }}</td>
 									<td>{{ appointment.status or "" }}</td>
@@ -200,7 +200,7 @@
 							{% for invoice in dashboard.outstanding_invoices %}
 								<tr>
 									<td>{{ invoice.name }}</td>
-									<td>{{ frappe.format(invoice.posting_date, {"fieldtype": "Date"}) }}</td>
+									<td>{{ vetedge_date(invoice.posting_date) }}</td>
 									<td>{{ invoice.status or "" }}</td>
 									<td>{{ invoice.currency }} {{ invoice.outstanding_amount }}</td>
 									<td>
@@ -241,7 +241,7 @@
 							{% for invoice in dashboard.paid_invoices %}
 								<tr>
 									<td>{{ invoice.name }}</td>
-									<td>{{ frappe.format(invoice.posting_date, {"fieldtype": "Date"}) }}</td>
+									<td>{{ vetedge_date(invoice.posting_date) }}</td>
 									<td>{{ invoice.status or "" }}</td>
 									<td>{{ invoice.currency }} {{ invoice.grand_total }}</td>
 									<td><a class="btn btn-outline-secondary btn-sm vetedge-portal-outline-button" href="{{ invoice.download_pdf_url }}" target="_blank" rel="noopener">Download PDF</a></td>
@@ -272,7 +272,7 @@
 						<tbody>
 						{% for consultation in dashboard.consultations %}
 							<tr>
-								<td>{{ frappe.format(consultation.consultation_datetime, {"fieldtype": "Datetime"}) }}</td>
+								<td>{{ vetedge_datetime(consultation.consultation_datetime) }}</td>
 								<td>{{ consultation.patient_name or consultation.patient }}</td>
 								<td>{{ consultation.service_branch or "" }}</td>
 								<td>{{ consultation.consulting_practitioner_name or "" }}</td>
