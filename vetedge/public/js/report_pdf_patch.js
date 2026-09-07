@@ -109,6 +109,7 @@ function vetedgeSafeRequire(path) {
 	}
 }
 
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_waffle_navigation_hardening.js?v=20260907-1");
 vetedgeSafeRequire("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1");
 vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
 vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_management_ui.js");
