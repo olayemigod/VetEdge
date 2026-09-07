@@ -124,6 +124,26 @@ class TestStockExpiryMonitor(TestCase):
 		self.assertEqual(captured["values"]["warehouse"], "Main Store")
 		self.assertEqual(captured["values"]["branch_warehouse"], "Branch Store")
 		self.assertEqual(captured["values"]["item_group"], "Medicines")
+		self.assertIn("batch_stock.warehouse = %(warehouse)s", captured["query"])
+		self.assertIn("batch_stock.warehouse = %(branch_warehouse)s", captured["query"])
+
+	def test_batch_stock_ledger_source_uses_legacy_rows_without_bundle_support(self):
+		with patch.object(stock_expiry_monitor, "_has_serial_and_batch_bundle_source", return_value=False):
+			source = stock_expiry_monitor._batch_stock_ledger_source()
+
+		self.assertIn("sle.batch_no", source)
+		self.assertIn("sle.actual_qty", source)
+		self.assertNotIn("Serial and Batch Entry", source)
+
+	def test_batch_stock_ledger_source_combines_bundle_rows_without_double_counting(self):
+		with patch.object(stock_expiry_monitor, "_has_serial_and_batch_bundle_source", return_value=True):
+			source = stock_expiry_monitor._batch_stock_ledger_source()
+
+		self.assertIn("UNION ALL", source)
+		self.assertIn("`tabSerial and Batch Entry`", source)
+		self.assertIn("sbe.qty AS actual_qty", source)
+		self.assertIn("COALESCE(sle.serial_and_batch_bundle, '') = ''", source)
+		self.assertIn("sbe.parent = sle.serial_and_batch_bundle", source)
 
 	def test_settings_defaults(self):
 		frappe_stub = SimpleNamespace(db=SimpleNamespace(exists=lambda *args, **kwargs: False))

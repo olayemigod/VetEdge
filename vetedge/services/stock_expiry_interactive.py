@@ -5,6 +5,7 @@ from frappe.utils import add_days, cint, cstr, flt, getdate, nowdate
 
 from vetedge.services.stock import get_branch_dispensary_warehouse
 from vetedge.services.stock_expiry_monitor import (
+	_batch_stock_ledger_source,
 	_expiry_bucket_label,
 	_get_warehouse_branch_map,
 	_has_stock_expiry_source,
@@ -208,12 +209,13 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 	conditions = ["b.disabled = 0"]
 	values = {}
 	join_type = "LEFT JOIN" if cint(filters.get("include_zero_qty")) else "INNER JOIN"
+	ledger_source = _batch_stock_ledger_source()
 
 	if filters.get("company"):
 		conditions.append("w.company = %(company)s")
 		values["company"] = filters.get("company")
 	if filters.get("warehouse"):
-		conditions.append("sle.warehouse = %(warehouse)s")
+		conditions.append("batch_stock.warehouse = %(warehouse)s")
 		values["warehouse"] = filters.get("warehouse")
 	if filters.get("item_group"):
 		conditions.append("i.item_group = %(item_group)s")
@@ -228,7 +230,7 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			required=False,
 		)
 		if warehouse:
-			conditions.append("sle.warehouse = %(branch_warehouse)s")
+			conditions.append("batch_stock.warehouse = %(branch_warehouse)s")
 			values["branch_warehouse"] = warehouse
 
 	having = "" if cint(filters.get("include_zero_qty")) else "HAVING qty > 0"
@@ -238,17 +240,16 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			i.item_name,
 			i.item_group,
 			b.name AS batch_no,
-			sle.warehouse,
+			batch_stock.warehouse,
 			w.company,
-			COALESCE(SUM(sle.actual_qty), 0) AS qty,
+			COALESCE(SUM(batch_stock.actual_qty), 0) AS qty,
 			i.stock_uom,
 			b.expiry_date
 		FROM `tabBatch` b
-		{join_type} `tabStock Ledger Entry` sle
-			ON sle.batch_no = b.name
-			AND sle.item_code = b.item
-			AND sle.is_cancelled = 0
-		LEFT JOIN `tabWarehouse` w ON w.name = sle.warehouse
+		{join_type} {ledger_source} batch_stock
+			ON batch_stock.batch_no = b.name
+			AND batch_stock.item_code = b.item
+		LEFT JOIN `tabWarehouse` w ON w.name = batch_stock.warehouse
 		LEFT JOIN `tabItem` i ON i.name = b.item
 		WHERE {" AND ".join(conditions)}
 		GROUP BY
@@ -256,7 +257,7 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			b.item,
 			i.item_name,
 			i.item_group,
-			sle.warehouse,
+			batch_stock.warehouse,
 			w.company,
 			i.stock_uom,
 			b.expiry_date
