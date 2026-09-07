@@ -13,15 +13,21 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 	'registration_status',
 	'species',
 	'patient',
+	'owner',
+	'practitioner',
+	'consultation_type',
 	'service_branch',
 	'from_date',
 	'to_date',
 	'vaccine',
 	'lab_test',
+	'sort_by',
+	'sort_order',
 ]);
 
 const CLINICAL_RESOURCES = new Set(['lab-orders', 'vaccinations']);
 const LEGACY_GROOMING_RESOURCE = 'grooming';
+const DEFAULT_APPOINTMENT_SORT = Object.freeze({ by: 'appointment_datetime', order: 'asc' });
 
 function getRequestedRouteParams() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -199,6 +205,7 @@ export function mountVetEdgeResourceCenter(target) {
 	const getRequestedState = () => {
 		const params = getRequestedRouteParams();
 		const requestedResource = valueFrom(params, 'resource', 'patients') || 'patients';
+		const requestedSortOrder = valueFrom(params, 'sort_order', DEFAULT_APPOINTMENT_SORT.order).toLowerCase();
 		return {
 			resource: requestedResource === LEGACY_GROOMING_RESOURCE ? 'appointments' : requestedResource,
 			search: valueFrom(params, 'search'),
@@ -210,11 +217,16 @@ export function mountVetEdgeResourceCenter(target) {
 			registrationStatus: valueFrom(params, 'registration_status'),
 			species: valueFrom(params, 'species'),
 			patient: valueFrom(params, 'patient'),
+			owner: valueFrom(params, 'owner'),
+			practitioner: valueFrom(params, 'practitioner'),
+			consultationType: valueFrom(params, 'consultation_type'),
 			serviceBranch: valueFrom(params, 'service_branch') || valueFrom(params, 'branch'),
 			fromDate: valueFrom(params, 'from_date'),
 			toDate: valueFrom(params, 'to_date'),
 			vaccine: valueFrom(params, 'vaccine'),
 			labTest: valueFrom(params, 'lab_test'),
+			sortBy: valueFrom(params, 'sort_by', DEFAULT_APPOINTMENT_SORT.by),
+			sortOrder: ['asc', 'desc'].includes(requestedSortOrder) ? requestedSortOrder : DEFAULT_APPOINTMENT_SORT.order,
 		};
 	};
 
@@ -254,6 +266,18 @@ export function mountVetEdgeResourceCenter(target) {
 			routeChanged = setField(resourceView.patientFilters, 'status', state.status) || routeChanged;
 			routeChanged = setField(resourceView.patientFilters, 'registration_status', state.registrationStatus) || routeChanged;
 			routeChanged = setLinkField(resourceView.patientFilters, resourceView.patientFilterLabels, 'species', state.species) || routeChanged;
+		} else if (state.resource === 'appointments') {
+			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'branch', state.branch) || routeChanged;
+			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'patient', state.patient) || routeChanged;
+			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'owner', state.owner) || routeChanged;
+			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'practitioner', state.practitioner) || routeChanged;
+			routeChanged = setField(resourceView.appointmentFilters, 'status', state.status) || routeChanged;
+			routeChanged = setField(resourceView.appointmentFilters, 'appointment_type', state.appointmentType) || routeChanged;
+			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'consultation_type', state.consultationType) || routeChanged;
+			routeChanged = setField(resourceView.appointmentFilters, 'from_date', state.fromDate) || routeChanged;
+			routeChanged = setField(resourceView.appointmentFilters, 'to_date', state.toDate) || routeChanged;
+			routeChanged = setField(resourceView.appointmentSort, 'by', state.sortBy) || routeChanged;
+			routeChanged = setField(resourceView.appointmentSort, 'order', state.sortOrder) || routeChanged;
 		} else if (CLINICAL_RESOURCES.has(state.resource)) {
 			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'patient', state.patient) || routeChanged;
 			routeChanged = setLinkField(resourceView.clinicalFilters, resourceView.clinicalFilterLabels, 'service_branch', state.serviceBranch) || routeChanged;
