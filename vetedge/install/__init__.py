@@ -6,10 +6,10 @@ import frappe
 
 from vetedge.install.custom_fields import ensure_custom_fields
 from vetedge.install.dashboard import ensure_financial_dashboard
+from vetedge.install.patient_navigation import ensure_direct_patient_navigation
 from vetedge.install.print_formats import ensure_print_formats
 from vetedge.install.regulatory_reporting import ensure_regulatory_reporting_navigation
 from vetedge.seed.master_data import seed_master_data
-from vetedge.setup.email_templates import sync_vetedge_email_templates
 from vetedge.services.feature_flags import DEFAULT_FEATURE_FLAGS, SETTINGS_DOCTYPE
 from vetedge.services.portal_access import normalize_owner_portal_users
 from vetedge.services.role_bundles import (
@@ -17,6 +17,7 @@ from vetedge.services.role_bundles import (
 	ensure_existing_internal_users_have_starter_bundle_roles,
 	ensure_starter_role_bundles,
 )
+from vetedge.setup.email_templates import sync_vetedge_email_templates
 
 VETEDGE_HOME_ROUTE = "/desk/vetedge"
 VETEDGE_HOME_PAGE = "desk/vetedge"
@@ -49,6 +50,7 @@ def setup_foundation() -> None:
 	seed_master_data()
 	sync_vetedge_email_templates()
 	ensure_financial_dashboard()
+	ensure_direct_patient_navigation()
 	# Run after dashboard/sidebar synchronisation so the final launcher and any
 	# persisted user layouts agree with the canonical same-tab Veterinary route.
 	ensure_veterinary_desktop_icon_home()

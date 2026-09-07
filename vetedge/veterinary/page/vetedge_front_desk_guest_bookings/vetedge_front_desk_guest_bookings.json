@@ -1,23 +1,21 @@
 {
  "content": null,
- "creation": "2026-07-23 00:00:00.000000",
+ "creation": "2026-09-06 00:00:00.000000",
  "docstatus": 0,
  "doctype": "Page",
- "icon": "list-tree",
+ "icon": "file-question-mark",
  "idx": 0,
- "modified": "2026-07-23 00:00:00.000000",
+ "modified": "2026-09-06 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Veterinary",
- "name": "vetedge-front-desk-action-center",
+ "name": "vetedge-front-desk-guest-bookings",
  "owner": "Administrator",
- "page_name": "vetedge-front-desk-action-center",
+ "page_name": "vetedge-front-desk-guest-bookings",
  "roles": [
   {"role": "System Manager"},
   {"role": "VetEdge Administrator"},
   {"role": "VetEdge Front Desk"},
   {"role": "VetEdge Doctor"},
-  {"role": "Veterinary Nurse"},
-  {"role": "Dispensary User"},
   {"role": "Branch Manager"},
   {"role": "VetEdge Branch Manager"}
  ],
@@ -25,5 +23,5 @@
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Front Desk Action Centre"
+ "title": "Guest Booking Requests"
 }

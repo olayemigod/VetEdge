@@ -8,11 +8,26 @@
 	const HOME_DATASET_KEY = "vetedgeDirectHome";
 	const HOME_ATTRIBUTE = "data-vetedge-direct-home";
 	const HOME_LABEL = "Veterinary Home";
+	const PATIENTS_DATASET_KEY = "vetedgeDirectPatients";
+	const PATIENTS_ATTRIBUTE = "data-vetedge-direct-patients";
+	const PATIENTS_LABEL = "Patients";
+	const PATIENTS_ROUTE = "/desk/vetedge-resource-center?resource=patients";
+	const BILLING_CENTER_ROUTE = "/desk/vetedge-billing-center";
+	const BILLING_SESSIONS_ROUTE = "/desk/vetedge-billing-sessions";
+	const BILLING_SESSION_DOCTYPE = "Veterinary Billing Session";
 	const PRIMARY_SECTION_LABELS = Object.freeze({
 		Clinical: "Clinical Operations",
 		"Front Desk": "Appointments",
 	});
-	const PRIMARY_SECTION_ORDER = Object.freeze(["Dashboard", "Clinical Operations", "Appointments"]);
+	const PRIMARY_SECTION_ORDER = Object.freeze([
+		"Appointments",
+		"Clinical Operations",
+		"Hospital & Services",
+		"Inventory / Pharmacy",
+		"Billing Center",
+		"Dashboard",
+		"Reports",
+	]);
 	const PRODUCT_HOST_ID = "edge-product-menu-host";
 	const PRODUCT_TRIGGER_ID = "edge-product-menu-trigger";
 	const PRODUCT_PANEL_ID = "edge-product-menu-dropdown";
@@ -44,16 +59,29 @@
 		return String(global.location?.pathname || "").replace(/\/+$/, "") === "/desk/vetedge";
 	}
 
-	function navigateHome() {
-		if (global.VetEdgeNavigationRecovery?.navigate?.("/desk/vetedge")) return true;
+	function directPatientsTarget() {
+		const path = String(global.location?.pathname || "").replace(/\/+$/, "");
+		if (path === "/desk/veterinary-patient" || path.startsWith("/desk/veterinary-patient/")) return true;
+		if (path !== "/desk/vetedge-resource-center") return false;
+		const params = new URLSearchParams(global.location?.search || "");
+		return (params.get("resource") || "patients") === "patients";
+	}
+
+	function navigateRoute(route) {
+		if (!route) return false;
+		if (global.VetEdgeNavigationRecovery?.navigate?.(route)) return true;
 		const adapter = runtime()?.getAdapter?.("navigation:vetedge") || runtime()?.getAdapter?.("navigation:veterinary");
-		if (adapter?.open?.("/desk/vetedge")) return true;
-		if (typeof global.frappe?.set_route === "function") {
-			global.frappe.set_route("vetedge");
-			return true;
-		}
-		global.location?.assign?.("/desk/vetedge");
+		if (adapter?.open?.(route)) return true;
+		global.location?.assign?.(route);
 		return true;
+	}
+
+	function navigateHome() {
+		return navigateRoute("/desk/vetedge");
+	}
+
+	function navigatePatients() {
+		return navigateRoute(PATIENTS_ROUTE);
 	}
 
 	function visibleLabelNode(element) {
@@ -100,6 +128,30 @@
 		return true;
 	}
 
+	function syncDirectPatientsState(item) {
+		if (!item) return false;
+		item.dataset[PATIENTS_DATASET_KEY] = "1";
+		setVisibleLabel(item, PATIENTS_LABEL);
+		item.setAttribute("aria-label", PATIENTS_LABEL);
+		item.setAttribute("title", PATIENTS_LABEL);
+		item.removeAttribute("aria-expanded");
+		item.removeAttribute("aria-controls");
+		const active = directPatientsTarget();
+		item.classList.toggle("active", active);
+		if (active) {
+			const shell = item.closest?.(SHELL_SELECTOR);
+			shell?.querySelectorAll?.(".edge-sidebar-item").forEach((candidate) => {
+				if (candidate === item) return;
+				candidate.classList.remove("active");
+				candidate.removeAttribute("aria-current");
+			});
+			item.setAttribute("aria-current", "page");
+		} else {
+			item.removeAttribute("aria-current");
+		}
+		return true;
+	}
+
 	function patchDirectHome(shell) {
 		const existing = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
 		if (existing) return syncDirectHomeState(existing);
@@ -114,10 +166,6 @@
 		const nestedItem = homeSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
 		if (!toggle && !nestedItem) return false;
 
-		// Veterinary Home is navigation, not a category. Replace the one-item accordion
-		// section with the actual sidebar item so there is no chevron, expansion
-		// state, hidden child, or second click required. Clone the generated child
-		// when available so EdgeSuite keeps its canonical icon/label markup.
 		const directItem = nestedItem?.cloneNode(true) || toggle.cloneNode(true);
 		directItem.classList.remove("edge-sidebar__section-toggle");
 		directItem.classList.add("edge-sidebar-item");
@@ -129,6 +177,58 @@
 		syncDirectHomeState(directItem);
 		homeSection.replaceWith(directItem);
 		return true;
+	}
+
+	function patchDirectPatients(shell) {
+		const existing = shell.querySelector(`.edge-sidebar-item[${PATIENTS_ATTRIBUTE}="1"]`);
+		if (existing) return syncDirectPatientsState(existing);
+
+		const patientsSection = Array.from(shell.querySelectorAll(".edge-sidebar__section")).find((section) => {
+			const label = sectionLabel(section.querySelector(".edge-sidebar__section-toggle"));
+			return label === PATIENTS_LABEL;
+		});
+		if (!patientsSection) return false;
+
+		const toggle = patientsSection.querySelector(".edge-sidebar__section-toggle");
+		const nestedItem = patientsSection.querySelector(".edge-sidebar__items .edge-sidebar-item");
+		if (!toggle && !nestedItem) return false;
+
+		const directItem = nestedItem?.cloneNode(true) || toggle.cloneNode(true);
+		directItem.classList.remove("edge-sidebar__section-toggle");
+		directItem.classList.add("edge-sidebar-item");
+		if (directItem.tagName === "BUTTON") directItem.type = "button";
+		if (directItem.tagName === "A") directItem.setAttribute("href", PATIENTS_ROUTE);
+		directItem.querySelectorAll(".edge-icon").forEach((icon, index) => {
+			if (index > 0) icon.remove();
+		});
+		syncDirectPatientsState(directItem);
+		patientsSection.replaceWith(directItem);
+
+		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (directHome?.parentElement === directItem.parentElement && directHome.nextElementSibling !== directItem) {
+			directHome.insertAdjacentElement("afterend", directItem);
+		}
+		return true;
+	}
+
+	function primaryNodeLabel(node) {
+		if (node?.matches?.(`[${HOME_ATTRIBUTE}="1"]`)) return HOME_LABEL;
+		if (node?.matches?.(`[${PATIENTS_ATTRIBUTE}="1"]`)) return PATIENTS_LABEL;
+		if (node?.classList?.contains("edge-sidebar__section")) {
+			return sectionLabel(node.querySelector(".edge-sidebar__section-toggle"));
+		}
+		return "";
+	}
+
+	function primaryOrderAligned(shell) {
+		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
+		if (!directHome?.parentElement) return false;
+		const expectedOrder = [HOME_LABEL, PATIENTS_LABEL, ...PRIMARY_SECTION_ORDER];
+		const actual = Array.from(directHome.parentElement.children)
+			.map(primaryNodeLabel)
+			.filter((label) => expectedOrder.includes(label));
+		const expected = expectedOrder.filter((label) => actual.includes(label));
+		return actual.join("|") === expected.join("|");
 	}
 
 	function normalizePrimarySections(shell) {
@@ -145,7 +245,12 @@
 
 		const directHome = shell.querySelector(`.edge-sidebar-item[${HOME_ATTRIBUTE}="1"]`);
 		if (!directHome?.parentElement) return false;
+		const directPatients = shell.querySelector(`.edge-sidebar-item[${PATIENTS_ATTRIBUTE}="1"]`);
 		let anchor = directHome;
+		if (directPatients?.parentElement === directHome.parentElement) {
+			if (directHome.nextElementSibling !== directPatients) directHome.insertAdjacentElement("afterend", directPatients);
+			anchor = directPatients;
+		}
 		const orderedSections = Array.from(shell.querySelectorAll(".edge-sidebar__section"));
 		for (const label of PRIMARY_SECTION_ORDER) {
 			const section = orderedSections.find((candidate) => {
@@ -225,12 +330,32 @@
 			link_to: node?.dataset?.linkTo || "",
 			route: node?.dataset?.route || "",
 		};
+		if (item.link_to === BILLING_SESSION_DOCTYPE || item.link_to === "vetedge-billing-sessions") {
+			return navigateRoute(BILLING_SESSIONS_ROUTE);
+		}
+		if (item.link_to === "vetedge-billing-center" || item.route === BILLING_CENTER_ROUTE) {
+			return navigateRoute(BILLING_CENTER_ROUTE);
+		}
 		if (typeof config?.navigate === "function") {
 			config.navigate(item);
 			return true;
 		}
-		if (item.route && global.VetEdgeNavigationRecovery?.navigate?.(item.route)) return true;
+		if (item.route) return navigateRoute(item.route);
 		return false;
+	}
+
+	function bindSharedProductMenuNavigation(panel) {
+		if (!panel || panel.dataset.vetedgeItemRoutingBound === "1") return;
+		panel.dataset.vetedgeItemRoutingBound = "1";
+		panel.addEventListener("click", (event) => {
+			const item = event.target?.closest?.(".edge-product-menu__item");
+			if (!item) return;
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			routeProductItem(item);
+			runtime()?.closeProductMenu?.();
+		}, true);
 	}
 
 	function filterProductPanel(panel, query) {
@@ -257,8 +382,6 @@
 		host.dataset.vetedgeProductMenuBridgeBound = "1";
 
 		trigger.addEventListener("click", (event) => {
-			// This listener is capture-bound only for a repaired EdgeSuite-shell host,
-			// so the original native-navbar listener cannot double-toggle the menu.
 			event.preventDefault();
 			event.stopPropagation();
 			event.stopImmediatePropagation();
@@ -270,16 +393,8 @@
 
 		panel.addEventListener("click", (event) => {
 			const close = event.target?.closest?.(".edge-product-menu__close");
-			if (close) {
-				event.preventDefault();
-				runtime()?.closeProductMenu?.();
-				return;
-			}
-			const item = event.target?.closest?.(".edge-product-menu__item");
-			if (!item) return;
+			if (!close) return;
 			event.preventDefault();
-			event.stopPropagation();
-			routeProductItem(item);
 			runtime()?.closeProductMenu?.();
 		}, true);
 
@@ -298,12 +413,14 @@
 		let host = global.document.getElementById(PRODUCT_HOST_ID);
 		let trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
 		let panel = global.document.getElementById(PRODUCT_PANEL_ID);
+		if (panel) bindSharedProductMenuNavigation(panel);
 		if (trigger && panel && visible(trigger)) return true;
 
 		const target = productTarget(shell);
 		if (!target) return false;
 		({ host, trigger, panel } = createSharedHost(target));
 		host.dataset.vetedgeProductMenuBridge = "1";
+		bindSharedProductMenuNavigation(panel);
 		bindRepairedProductMenu(host, trigger, panel);
 		try { edgeUI.refreshProductMenu?.(); } catch (_error) { /* config remains available */ }
 		return visible(trigger);
@@ -323,12 +440,21 @@
 		}, 0);
 	}
 
+	function sidebarSameTabRoute(item) {
+		if (!item) return "";
+		const label = sectionLabel(item);
+		if (label === "Billing Center") return BILLING_CENTER_ROUTE;
+		if (label === "Billing Session" || label === "Billing Sessions") return BILLING_SESSIONS_ROUTE;
+		return "";
+	}
+
 	function reconcile() {
 		global.clearTimeout(scheduled);
 		scheduled = null;
 		const shell = vetedgeShell();
 		if (!shell) return false;
 		patchDirectHome(shell);
+		patchDirectPatients(shell);
 		normalizePrimarySections(shell);
 		ensureProductMenu(shell);
 		return true;
@@ -348,6 +474,23 @@
 			navigateHome();
 			return;
 		}
+		const directPatients = event.target?.closest?.(`[${PATIENTS_ATTRIBUTE}="1"]`);
+		if (directPatients) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			navigatePatients();
+			return;
+		}
+		const sidebarItem = event.target?.closest?.(".edge-sidebar-item");
+		const sidebarRoute = sidebarSameTabRoute(sidebarItem);
+		if (sidebarRoute) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			navigateRoute(sidebarRoute);
+			return;
+		}
 		repairUnresponsiveSharedTrigger(event);
 	}, true);
 
@@ -360,8 +503,9 @@
 			const shell = vetedgeShell();
 			if (!shell) return;
 			const homePatched = shell.querySelector(`[${HOME_ATTRIBUTE}="1"]`);
+			const patientsPatched = shell.querySelector(`[${PATIENTS_ATTRIBUTE}="1"]`);
 			const trigger = global.document.getElementById(PRODUCT_TRIGGER_ID);
-			if (!homePatched || !trigger || !visible(trigger)) schedule(50);
+			if (!homePatched || !patientsPatched || !trigger || !visible(trigger) || !primaryOrderAligned(shell)) schedule(50);
 		});
 		observer.observe(global.document.body, { childList: true, subtree: true });
 	}
@@ -373,12 +517,16 @@
 			return shell ? ensureProductMenu(shell) : false;
 		},
 		navigateHome,
+		navigatePatients,
+		navigateRoute,
 		state() {
 			const shell = vetedgeShell();
 			const host = global.document?.getElementById(PRODUCT_HOST_ID);
 			return {
 				activeShell: Boolean(shell),
 				directHome: Boolean(shell?.querySelector?.(`[${HOME_ATTRIBUTE}="1"]`)),
+				directPatients: Boolean(shell?.querySelector?.(`[${PATIENTS_ATTRIBUTE}="1"]`)),
+				primaryOrderAligned: Boolean(shell && primaryOrderAligned(shell)),
 				productTriggerVisible: visible(global.document?.getElementById(PRODUCT_TRIGGER_ID)),
 				productMenuBridged: host?.dataset?.vetedgeProductMenuBridge === "1",
 				productMenuOpen: !global.document?.getElementById(PRODUCT_PANEL_ID)?.hidden && global.document?.documentElement?.classList?.contains(PRODUCT_OPEN_CLASS),
