@@ -76,9 +76,10 @@ def _get_required_apps() -> list[str]:
 	raise AssertionError("required_apps is not declared in vetedge/hooks.py")
 
 
-def test_vetedge_requires_edgesuite_ui_but_not_coreedge():
+def test_vetedge_requires_erpnext_and_edgesuite_ui_but_not_coreedge():
 	required_apps = _get_required_apps()
 
+	assert "erpnext" in required_apps
 	assert "edgesuite_ui" in required_apps
 	assert "coreedge" not in required_apps
 

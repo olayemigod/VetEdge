@@ -7,9 +7,11 @@ app_license = "mit"
 app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
 app_home = "/desk/vetedge"
 
-# The standalone EdgeSuite UI app must be installed before VetEdge so shared
-# product pages never depend on CoreEdge for their browser runtime.
-required_apps = ["edgesuite_ui"]
+# ERPNext supplies VetEdge's accounting, stock, selling, purchasing, customer,
+# item, warehouse, batch and payment records. The standalone EdgeSuite UI app
+# supplies the shared product runtime. Both must be installed before VetEdge;
+# CoreEdge remains optional and is controlled through the platform mode.
+required_apps = ["erpnext", "edgesuite_ui"]
 
 add_to_apps_screen = [
 	{
