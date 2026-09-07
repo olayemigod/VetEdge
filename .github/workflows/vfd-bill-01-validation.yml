@@ -11,6 +11,8 @@ on:
       - "vetedge/services/billing_center.py"
       - "vetedge/services/billing_session_page.py"
       - "vetedge/public/js/edgesuite_date_ranges.js"
+      - "vetedge/public/js/report_pdf_patch.js"
+      - "vetedge/public/js/vetedge_waffle_navigation_hardening.js"
       - "vetedge/public/js/vetedge_billing_center/**"
       - "vetedge/public/js/vetedge_billing_center.bundle.js"
       - "vetedge/public/js/vetedge_front_desk_action_center/**"
@@ -57,8 +59,10 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q vetedge
 
-      - name: Validate browser guard JavaScript syntax
-        run: node --check vetedge/public/js/edgesuite_date_ranges.js
+      - name: Validate browser navigation JavaScript syntax
+        run: |
+          node --check vetedge/public/js/edgesuite_date_ranges.js
+          node --check vetedge/public/js/vetedge_waffle_navigation_hardening.js
 
       - name: Ruff focused Python
         run: |
