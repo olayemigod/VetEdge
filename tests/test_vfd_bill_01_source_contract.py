@@ -36,6 +36,7 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 
 	for marker in (
 		'def organize_direct_patient_navigation(items: list[Any]) -> list[dict]:',
+		'def organize_billing_session_navigation(items: list[Any]) -> list[dict]:',
 		'def organize_primary_navigation_order(items: list[Any]) -> list[dict]:',
 		'PATIENT_LABEL = "Patients"',
 		'PATIENT_DOCTYPE = "Veterinary Patient"',
@@ -53,6 +54,31 @@ def test_navigation_source_contract_is_bounded_and_idempotent_by_design():
 	assert 'standard_items = _organize_veterinary_navigation(standard_items)' in dashboard
 	assert 'ensure_direct_patient_navigation()' in install
 	assert install.index('ensure_financial_dashboard()') < install.index('ensure_direct_patient_navigation()')
+
+
+def test_billing_center_navigation_deduplicates_session_shortcut_without_removing_deep_routes():
+	patient_navigation = read("vetedge/install/patient_navigation.py")
+
+	for marker in (
+		'Remove the redundant Billing Session shortcut from Billing Center navigation.',
+		'if current_section == BILLING_CENTER_LABEL and item.get("type") == "Link":',
+		'if label in {BILLING_SESSION_LABEL, "Billing Sessions"} or link_to in {',
+		'BILLING_SESSION_DOCTYPE,',
+		'BILLING_SESSIONS_PAGE,',
+		'deduplicated.append(item)',
+		'def _ensure_billing_sessions_page() -> None:',
+		'"vetedge_billing_sessions.json",',
+	):
+		assert marker in patient_navigation
+
+	function = patient_navigation[
+		patient_navigation.index("def organize_billing_session_navigation") : patient_navigation.index(
+			"def organize_primary_navigation_order"
+		)
+	]
+	assert "\n\t\t\t\tcontinue\n" in function
+	assert 'BILLING_SESSIONS_PAGE = "vetedge-billing-sessions"' in patient_navigation
+	assert 'BILLING_SESSION_DOCTYPE = "Veterinary Billing Session"' in patient_navigation
 
 
 def test_patients_is_direct_and_primary_shell_order_is_exact():
