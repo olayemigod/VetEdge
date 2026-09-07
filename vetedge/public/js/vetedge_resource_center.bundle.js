@@ -17,6 +17,7 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 	'practitioner',
 	'consultation_type',
 	'service_branch',
+	'date_preset',
 	'from_date',
 	'to_date',
 	'vaccine',
@@ -28,6 +29,7 @@ const RESOURCE_ROUTE_KEYS = Object.freeze([
 const CLINICAL_RESOURCES = new Set(['lab-orders', 'vaccinations']);
 const LEGACY_GROOMING_RESOURCE = 'grooming';
 const DEFAULT_APPOINTMENT_SORT = Object.freeze({ by: 'appointment_datetime', order: 'asc' });
+const DEFAULT_APPOINTMENT_DATE_PRESET = 'full_history';
 
 function getRequestedRouteParams() {
 	const params = new URLSearchParams(window.location.search || '');
@@ -221,6 +223,7 @@ export function mountVetEdgeResourceCenter(target) {
 			practitioner: valueFrom(params, 'practitioner'),
 			consultationType: valueFrom(params, 'consultation_type'),
 			serviceBranch: valueFrom(params, 'service_branch') || valueFrom(params, 'branch'),
+			datePreset: valueFrom(params, 'date_preset', DEFAULT_APPOINTMENT_DATE_PRESET),
 			fromDate: valueFrom(params, 'from_date'),
 			toDate: valueFrom(params, 'to_date'),
 			vaccine: valueFrom(params, 'vaccine'),
@@ -274,6 +277,7 @@ export function mountVetEdgeResourceCenter(target) {
 			routeChanged = setField(resourceView.appointmentFilters, 'status', state.status) || routeChanged;
 			routeChanged = setField(resourceView.appointmentFilters, 'appointment_type', state.appointmentType) || routeChanged;
 			routeChanged = setLinkField(resourceView.appointmentFilters, resourceView.appointmentFilterLabels, 'consultation_type', state.consultationType) || routeChanged;
+			routeChanged = setField(resourceView.appointmentFilters, 'date_preset', state.datePreset) || routeChanged;
 			routeChanged = setField(resourceView.appointmentFilters, 'from_date', state.fromDate) || routeChanged;
 			routeChanged = setField(resourceView.appointmentFilters, 'to_date', state.toDate) || routeChanged;
 			routeChanged = setField(resourceView.appointmentSort, 'by', state.sortBy) || routeChanged;
