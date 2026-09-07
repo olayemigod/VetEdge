@@ -13,13 +13,20 @@
         <EdgePageHeader
           title="Training Centre"
           eyebrow="Help & Training"
-          subtitle="Role-aware Veterinary guides, workflow references, videos and practice exercises."
+          subtitle="Role-aware guides for every VetEdge operational team, with controlled workflows, references, videos and practice exercises."
         />
       </template>
 
       <div v-if="!currentModule" class="vtc-list-view">
         <div class="vtc-toolbar">
           <EdgeInput v-model="search" label="Search Training" placeholder="Search modules" />
+          <label class="vtc-role-filter">
+            <span>Training area</span>
+            <select v-model="roleFilter">
+              <option value="">All available areas</option>
+              <option v-for="group in availableRoleGroups" :key="group" :value="group">{{ group }}</option>
+            </select>
+          </label>
           <button class="edge-button" type="button" :disabled="loading" @click="loadModules">Refresh</button>
         </div>
 
@@ -154,6 +161,7 @@ export default {
     return {
       modules: [],
       search: '',
+      roleFilter: '',
       loading: true,
       error: '',
       currentModule: null,
@@ -176,10 +184,14 @@ export default {
     };
   },
   computed: {
+    availableRoleGroups() {
+      return [...new Set(this.modules.map((module) => module.role_group).filter(Boolean))].sort();
+    },
     filteredModules() {
       const query = String(this.search || '').trim().toLowerCase();
-      if (!query) return this.modules;
       return this.modules.filter((module) => {
+        if (this.roleFilter && module.role_group !== this.roleFilter) return false;
+        if (!query) return true;
         const haystack = `${module.title || ''} ${module.short_description || ''} ${module.role_group || ''}`.toLowerCase();
         return haystack.includes(query);
       });
@@ -465,6 +477,8 @@ export default {
 .vtc-list-view, .vtc-reader { width: 100%; }
 .vtc-toolbar { display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
 .vtc-toolbar > :first-child { flex: 1; max-width: 420px; }
+.vtc-role-filter { display: flex; min-width: 230px; flex-direction: column; gap: 6px; color: var(--edge-text-muted, #667085); font-size: .78rem; }
+.vtc-role-filter select { min-height: 38px; border: 1px solid var(--edge-border, #dfe3e8); border-radius: 8px; background: var(--edge-surface, #fff); color: var(--edge-text, #172033); padding: 7px 10px; }
 .vtc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
 .vtc-card, .vtc-note-card, .vtc-shot, .vtc-reader { border: 1px solid var(--edge-border, #dfe3e8); border-radius: 10px; background: var(--edge-surface, #fff); }
 .vtc-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 190px; padding: 18px; }

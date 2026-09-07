@@ -35,7 +35,7 @@ class TestTrainingCentre(TestCase):
 		modules = training_centre.load_training_manifest()
 
 		self.assertGreaterEqual(len(modules), 10)
-		self.assertEqual(modules[0]["module_id"], "doctor-overview")
+		self.assertEqual(modules[0]["role_group"], "Shared Operations")
 		self.assertTrue(all(module["status"] == "Published" for module in modules))
 		self.assertTrue(all(module["short_description"] for module in modules))
 		self.assertTrue(all(module["video_title"] for module in modules))
@@ -103,18 +103,46 @@ class TestTrainingCentre(TestCase):
 		with patch("vetedge.services.training_centre.frappe.throw", side_effect=frappe.ValidationError):
 			self.assertRaises(frappe.ValidationError, training_centre.resolve_markdown_path, module)
 
-	def test_role_filter_allows_doctor_operations_for_doctor(self):
+	def test_role_filter_allows_shared_and_doctor_operations_for_doctor(self):
 		with patch("vetedge.services.training_centre.get_user_training_roles", return_value={"VetEdge Doctor"}):
 			modules = training_centre.get_visible_training_modules(user="doctor@example.com")
 
 		self.assertTrue(modules)
-		self.assertTrue(all(module["role_group"] == "Doctor Operations" for module in modules))
+		self.assertEqual({module["role_group"] for module in modules}, {"Shared Operations", "Doctor Operations"})
 
-	def test_role_filter_blocks_unrelated_role(self):
+	def test_role_filter_allows_each_starter_operational_role(self):
+		cases = {
+			"Veterinary Nurse": "Nursing Operations",
+			"VetEdge Front Desk": "Front Desk Operations",
+			"Accounts/Cashier": "Accounts & Billing",
+			"Dispensary User": "Dispensary & Stock",
+			"Lab Technician": "Laboratory Operations",
+			"VetEdge Groomer": "Grooming Operations",
+			"Branch Manager": "Branch Management",
+		}
+		for role, expected_group in cases.items():
+			with self.subTest(role=role), patch(
+				"vetedge.services.training_centre.get_user_training_roles", return_value={role}
+			):
+				modules = training_centre.get_visible_training_modules(user="role@example.com")
+				groups = {module["role_group"] for module in modules}
+				self.assertIn("Shared Operations", groups)
+				self.assertIn(expected_group, groups)
+
+	def test_role_filter_blocks_non_vetedge_supplemental_role(self):
 		with patch("vetedge.services.training_centre.get_user_training_roles", return_value={"VetEdge Groomer"}):
-			modules = training_centre.get_visible_training_modules(user="groomer@example.com")
+			groomer_modules = training_centre.get_visible_training_modules(user="groomer@example.com")
+		with patch("vetedge.services.training_centre.get_user_training_roles", return_value={"Accounts User"}):
+			modules = training_centre.get_visible_training_modules(user="accounts-user@example.com")
 
+		self.assertTrue(groomer_modules)
 		self.assertEqual(modules, [])
+
+	def test_administrator_can_view_every_published_training_group(self):
+		with patch("vetedge.services.training_centre.get_user_training_roles", return_value={"VetEdge Administrator"}):
+			modules = training_centre.get_visible_training_modules(user="admin@example.com")
+
+		self.assertEqual(len(modules), len(training_centre.load_training_manifest()))
 
 	def test_youtube_url_validation(self):
 		self.assertEqual(
@@ -142,6 +170,31 @@ class TestTrainingCentre(TestCase):
 			"youtube_url": "",
 			"video_title": "Bad Video Status",
 			"video_status": "Draft",
+			"status": "Published",
+			"order": 99,
+		}
+
+		with patch("vetedge.services.training_centre.frappe.throw", side_effect=frappe.ValidationError):
+			self.assertRaises(frappe.ValidationError, training_centre.normalize_manifest_row, row)
+
+	def test_manifest_ids_paths_and_role_groups_are_release_safe(self):
+		modules = training_centre.load_training_manifest()
+		module_ids = [module["module_id"] for module in modules]
+
+		self.assertEqual(len(module_ids), len(set(module_ids)))
+		self.assertTrue(all(module["role_group"] in training_centre.ROLE_GROUP_ROLES for module in modules))
+		self.assertTrue(all(training_centre.resolve_markdown_path(module).exists() for module in modules))
+
+	def test_invalid_role_group_is_rejected(self):
+		row = {
+			"module_id": "bad-role-group",
+			"title": "Bad Role Group",
+			"role_group": "Uncontrolled Access",
+			"short_description": "Invalid row used only by this test.",
+			"markdown_path": "docs/training/veterinary_doctor_operations/glossary.md",
+			"youtube_url": "",
+			"video_title": "Bad Role Group",
+			"video_status": "Not Recorded",
 			"status": "Published",
 			"order": 99,
 		}

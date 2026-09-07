@@ -38,9 +38,9 @@ See [Role Access Matrix](training-module:role-access) for the trainer-friendly a
 
 By the end of training, the doctor should be able to:
 
-- Open the Veterinary workspace and review the daily queue.
+- Open the role-aware Veterinary Home and review the daily queue.
 - Search for an existing Veterinary Patient without creating duplicates.
-- Review medical history before making care decisions.
+- Review Medical History before making care decisions and explain why unfinished Lab and Vaccination workflows do not appear.
 - Select approved Veterinary master values and avoid duplicate masters.
 - Start or continue a consultation.
 - Record complaint, history, examination, assessment, diagnosis, treatment plan, planned treatments, and follow-up.
@@ -75,7 +75,7 @@ By the end of training, the doctor should be able to:
 
 ```mermaid
 flowchart TD
-    A[Veterinary Workspace] --> B[Appointments and Queue]
+    A[Veterinary Home] --> B[Appointments and Queue]
     A --> C[Veterinary Patient]
     A --> D[Veterinary Consultation]
     A --> E[Medical History]
@@ -694,6 +694,9 @@ Screenshots are listed and tracked in [Screenshot Manifest](training-module:scre
 
 ## Appendix: Detailed Module Guides
 
+- [Veterinary Home and EdgeSuite Daily Start](training-module:shared-veterinary-home)
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Safe Workflow Handoffs](training-module:shared-safe-handoffs)
 - [Role Access Matrix](training-module:role-access)
 - [Doctor Daily Workflow](training-module:daily-workflow)
 - [Patient Medical Record Workflow](training-module:patient-record)
