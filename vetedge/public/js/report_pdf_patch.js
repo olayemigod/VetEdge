@@ -100,7 +100,10 @@ frappe.render_pdf = function (html, opts = {}) {
 
 function vetedgeSafeRequire(path) {
 	try {
-		const pending = frappe.require(path);
+		// Frappe v16's raw-asset loader still invokes the callback internally.
+		// Always provide one so optional scripts do not fail with
+		// `TypeError: s is not a function` after loading successfully.
+		const pending = frappe.require(path, function vetedgeOptionalAssetLoaded() {});
 		if (pending && typeof pending.catch === "function") {
 			pending.catch((error) => console.error(`VetEdge optional asset failed to load: ${path}`, error));
 		}

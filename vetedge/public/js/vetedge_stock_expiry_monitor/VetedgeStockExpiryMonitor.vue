@@ -356,6 +356,12 @@ export default {
     },
     formatDate(value) { return window.VetEdgeDateTime?.formatDate?.(value, '—') || '—'; },
     formatTime(value) { return window.VetEdgeDateTime?.formatDateTime?.(value, '—') || '—'; },
+    formatQty(value) {
+      const quantity = Number(value || 0);
+      return Number.isFinite(quantity)
+        ? quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })
+        : '0';
+    },
     formatDays(days) {
       if (days === null || days === undefined || days === '') return '—';
       const value = Number(days);
@@ -366,7 +372,7 @@ export default {
     formatCell(value, column) {
       if (column?.fieldname === 'expiry_date') return this.formatDate(value);
       if (column?.fieldname === 'days_to_expiry') return this.formatDays(value);
-      if (column?.fieldname === 'qty') return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      if (column?.fieldname === 'qty') return this.formatQty(value);
       return value === null || value === undefined || value === '' ? '—' : String(value);
     },
     openCell({ row, column, value }) {
