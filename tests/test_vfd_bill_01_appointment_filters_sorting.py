@@ -16,6 +16,7 @@ def test_appointment_worklist_backend_is_permission_aware_filtered_and_safely_so
 		'APPOINTMENT_DOCTYPE = "Veterinary Appointment"',
 		'DEFAULT_SORT_BY = "appointment_datetime"',
 		'DEFAULT_SORT_ORDER = "asc"',
+		'DEFAULT_DATE_PRESET = "upcoming"',
 		"APPOINTMENT_SORT_FIELDS = frozenset(",
 		'"branch"',
 		'"patient"',
@@ -24,6 +25,7 @@ def test_appointment_worklist_backend_is_permission_aware_filtered_and_safely_so
 		'"status"',
 		'"appointment_type"',
 		'"consultation_type"',
+		'date_preset: str = DEFAULT_DATE_PRESET',
 		'from_date: str = ""',
 		'to_date: str = ""',
 		"can_access_branch_data(frappe.session.user, selected, raise_exception=True)",
@@ -44,6 +46,33 @@ def test_appointment_worklist_backend_is_permission_aware_filtered_and_safely_so
 		"frappe.delete_doc",
 	):
 		assert forbidden not in service
+
+
+def test_upcoming_is_server_side_time_and_lifecycle_semantic_scope():
+	service = read("vetedge/services/appointment_resource_center.py")
+
+	for marker in (
+		"UPCOMING_STATUSES = (",
+		'"Awaiting Registration",',
+		'"Owner Requested",',
+		'"Scheduled",',
+		'"Confirmed",',
+		'def _append_date_filters(',
+		'if preset == "upcoming":',
+		'current = now_datetime()',
+		'[APPOINTMENT_DOCTYPE, "appointment_datetime", ">=", current]',
+		'[APPOINTMENT_DOCTYPE, "status", "in", list(UPCOMING_STATUSES)]',
+		'if preset == "past":',
+		'[APPOINTMENT_DOCTYPE, "appointment_datetime", "<", current]',
+		'if preset == "full_history":',
+		'"date_preset": resolved_date_preset',
+	):
+		assert marker in service
+
+	# Upcoming is intentionally not a static From Date shortcut.
+	upcoming_block = service[service.index('if preset == "upcoming":') : service.index('if preset == "past":')]
+	assert "from_date" not in upcoming_block
+	assert "to_date" not in upcoming_block
 
 
 def test_appointment_page_exposes_operational_filters_with_cascading_context():
@@ -74,47 +103,46 @@ def test_appointment_page_exposes_operational_filters_with_cascading_context():
 		assert marker in component
 
 
-def test_appointment_date_presets_reuse_shared_date_ranges_and_default_to_full_history():
+def test_appointment_date_presets_use_edge_fuzzy_date_and_default_to_upcoming():
 	component = read("vetedge/public/js/vetedge_resource_center/VetEdgeResourceCenter.vue")
 	bundle = read("vetedge/public/js/vetedge_resource_center.bundle.js")
-	shared = read("vetedge/public/js/edgesuite_date_ranges.js")
 
 	for marker in (
-		'const DEFAULT_APPOINTMENT_DATE_PRESET = "full_history"',
-		"frappe.EdgeSuite?.DateRanges",
-		"shared?.getOptions?.()",
-		"shared.getRange(option.value)",
-		'v-model="appointmentFilters.date_preset"',
-		'@change="onAppointmentDatePresetChange"',
-		'@change="onAppointmentManualDateChange"',
+		"const DEFAULT_APPOINTMENT_DATE_PRESET = 'upcoming';",
+		"frappe.EdgeSuite.FuzzyDate = fuzzyDate;",
+		"const EDGE_FUZZY_DATE = installEdgeFuzzyDate();",
+		"appointmentDateStateFromParams(params)",
+		"appointmentDatePresetOptions()",
+		"return EDGE_FUZZY_DATE.getOptions();",
 		"onAppointmentDatePresetChange()",
 		"onAppointmentManualDateChange()",
-		'parameters.set(key, this.appointmentFilters[key])',
-	):
-		assert marker in component
-
-	for marker in (
-		"'date_preset',",
-		"datePreset: valueFrom(params, 'date_preset', DEFAULT_APPOINTMENT_DATE_PRESET)",
+		"date_preset: this.appointmentFilters.date_preset || DEFAULT_APPOINTMENT_DATE_PRESET",
+		"this.appointmentFilters.date_preset = 'custom';",
+		"datePreset: dateState.preset",
 		"setField(resourceView.appointmentFilters, 'date_preset', state.datePreset)",
 	):
 		assert marker in bundle
 
 	for preset in (
-		'today',
-		'yesterday',
-		'this_week',
-		'last_week',
-		'this_month',
-		'last_month',
-		'this_quarter',
-		'last_quarter',
-		'this_year',
-		'last_year',
-		'full_history',
-		'custom',
+		"'upcoming'",
+		"'today'",
+		"'tomorrow'",
+		"'next_7_days'",
+		"'this_week'",
+		"'next_week'",
+		"'this_month'",
+		"'next_30_days'",
+		"'past'",
+		"'full_history'",
+		"'custom'",
 	):
-		assert preset in shared
+		assert preset in bundle
+
+	# Existing Vue control remains the rendering surface; the bundle supplies the
+	# appointment-specific fuzzy options without changing Billing Center DateRanges.
+	assert 'v-model="appointmentFilters.date_preset"' in component
+	assert '@change="onAppointmentDatePresetChange"' in component
+	assert '@change="onAppointmentManualDateChange"' in component
 
 
 def test_appointment_filter_grid_is_four_columns_on_desktop_and_responsive():
@@ -148,6 +176,7 @@ def test_appointment_table_sorting_is_server_side_and_route_persistent():
 		"'owner',",
 		"'practitioner',",
 		"'consultation_type',",
+		"'date_preset',",
 		"'sort_by',",
 		"'sort_order',",
 		"owner: valueFrom(params, 'owner')",
