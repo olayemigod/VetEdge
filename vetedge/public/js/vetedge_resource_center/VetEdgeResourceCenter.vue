@@ -139,8 +139,24 @@
 								@select="onAppointmentFilterSelect('consultation_type', $event)"
 								@clear="clearAppointmentFilter('consultation_type')"
 							/>
-							<EdgeInput v-model="appointmentFilters.from_date" type="date" label="From Date" />
-							<EdgeInput v-model="appointmentFilters.to_date" type="date" label="To Date" />
+							<EdgeDropdown
+								v-model="appointmentFilters.date_preset"
+								label="Date Preset"
+								:options="appointmentDatePresetOptions"
+								@change="onAppointmentDatePresetChange"
+							/>
+							<EdgeInput
+								v-model="appointmentFilters.from_date"
+								type="date"
+								label="From Date"
+								@change="onAppointmentManualDateChange"
+							/>
+							<EdgeInput
+								v-model="appointmentFilters.to_date"
+								type="date"
+								label="To Date"
+								@change="onAppointmentManualDateChange"
+							/>
 						</template>
 
 						<template v-else-if="isClinicalResource">
@@ -365,6 +381,63 @@ const CLINICAL_RESOURCES = Object.freeze({
 });
 
 const DEFAULT_APPOINTMENT_SORT = Object.freeze({ by: "appointment_datetime", order: "asc" });
+const DEFAULT_APPOINTMENT_DATE_PRESET = "full_history";
+
+function getSharedDateRanges() {
+	return frappe.EdgeSuite?.DateRanges || null;
+}
+
+function getAppointmentDatePresetOptions() {
+	const shared = getSharedDateRanges();
+	const options = shared?.getOptions?.();
+	if (Array.isArray(options) && options.length) return options;
+	return [
+		{ value: "today", label: __("Today") },
+		{ value: "yesterday", label: __("Yesterday") },
+		{ value: "this_week", label: __("This Week") },
+		{ value: "last_week", label: __("Last Week") },
+		{ value: "this_month", label: __("This Month") },
+		{ value: "last_month", label: __("Last Month") },
+		{ value: "this_quarter", label: __("This Quarter") },
+		{ value: "last_quarter", label: __("Last Quarter") },
+		{ value: "this_year", label: __("This Year") },
+		{ value: "last_year", label: __("Last Year") },
+		{ value: "full_history", label: __("Full History") },
+		{ value: "custom", label: __("-- Custom Range --") },
+	];
+}
+
+function resolveInitialAppointmentDateState(parameters) {
+	let preset = String(parameters.get("date_preset") || "").trim();
+	let fromDate = String(parameters.get("from_date") || "").trim();
+	let toDate = String(parameters.get("to_date") || "").trim();
+	const shared = getSharedDateRanges();
+
+	if (!preset) {
+		if (!fromDate && !toDate) {
+			preset = DEFAULT_APPOINTMENT_DATE_PRESET;
+		} else if (shared?.getRange) {
+			preset = getAppointmentDatePresetOptions()
+				.filter((option) => !["custom", "full_history"].includes(option.value))
+				.find((option) => {
+					const range = shared.getRange(option.value);
+					return range?.start === fromDate && range?.end === toDate;
+				})?.value || "custom";
+		} else {
+			preset = "custom";
+		}
+	}
+
+	if (preset !== "custom" && shared?.getRange) {
+		const range = shared.getRange(preset);
+		if (range) {
+			fromDate = range.start;
+			toDate = range.end;
+		}
+	}
+
+	return { preset, fromDate, toDate };
+}
 
 function emptyPatientFilters() {
 	return { default_branch: "", status: "", registration_status: "", species: "" };
@@ -383,6 +456,7 @@ function emptyAppointmentFilters() {
 		status: "",
 		appointment_type: "",
 		consultation_type: "",
+		date_preset: DEFAULT_APPOINTMENT_DATE_PRESET,
 		from_date: "",
 		to_date: "",
 	};
@@ -406,6 +480,7 @@ export default {
 		const parameters = new URLSearchParams(window.location.search || "");
 		const requested = parameters.get("resource") || "patients";
 		const requestedSortOrder = String(parameters.get("sort_order") || DEFAULT_APPOINTMENT_SORT.order).toLowerCase();
+		const appointmentDateState = resolveInitialAppointmentDateState(parameters);
 		return {
 			loading: true,
 			error: "",
@@ -432,8 +507,9 @@ export default {
 				status: parameters.get("status") || "",
 				appointment_type: parameters.get("appointment_type") || "",
 				consultation_type: parameters.get("consultation_type") || "",
-				from_date: parameters.get("from_date") || "",
-				to_date: parameters.get("to_date") || "",
+				date_preset: appointmentDateState.preset,
+				from_date: appointmentDateState.fromDate,
+				to_date: appointmentDateState.toDate,
 			},
 			appointmentFilterLabels: {
 				branch: parameters.get("branch") || "",
@@ -536,6 +612,9 @@ export default {
 		},
 		appointmentTypeOptions() {
 			return ["Consultation", "Follow Up", "Vaccination", "Grooming", "Boarding", "Other"].map((value) => ({ value, label: value }));
+		},
+		appointmentDatePresetOptions() {
+			return getAppointmentDatePresetOptions();
 		},
 		clinicalStatusOptions() {
 			const values = this.isLabOrders
@@ -652,6 +731,21 @@ export default {
 				this.clearAppointmentFilter("practitioner");
 			}
 		},
+		onAppointmentDatePresetChange() {
+			const preset = this.appointmentFilters.date_preset || DEFAULT_APPOINTMENT_DATE_PRESET;
+			if (preset === "custom") return;
+			const range = getSharedDateRanges()?.getRange?.(preset);
+			if (!range) return;
+			this.appointmentFilters.from_date = range.start;
+			this.appointmentFilters.to_date = range.end;
+			this.start = 0;
+			this.loadPage();
+		},
+		onAppointmentManualDateChange() {
+			this.appointmentFilters.date_preset = this.appointmentFilters.from_date || this.appointmentFilters.to_date
+				? "custom"
+				: DEFAULT_APPOINTMENT_DATE_PRESET;
+		},
 		onClinicalFilterSelect(fieldname, selection) {
 			const normalized = this.normalizeLinkSelection(selection);
 			this.clinicalFilters[fieldname] = normalized.value;
@@ -671,7 +765,7 @@ export default {
 				if (this.patientFilters.registration_status) parameters.set("registration_status", this.patientFilters.registration_status);
 				if (this.patientFilters.species) parameters.set("species", this.patientFilters.species);
 			} else if (this.isAppointments) {
-				for (const key of ["branch", "patient", "owner", "practitioner", "status", "appointment_type", "consultation_type", "from_date", "to_date"]) {
+				for (const key of ["branch", "patient", "owner", "practitioner", "status", "appointment_type", "consultation_type", "date_preset", "from_date", "to_date"]) {
 					if (this.appointmentFilters[key]) parameters.set(key, this.appointmentFilters[key]);
 				}
 				parameters.set("sort_by", this.appointmentSort.by || DEFAULT_APPOINTMENT_SORT.by);
@@ -959,9 +1053,12 @@ export default {
 }
 
 .vetedge-resource-filters.is-patient-filters,
-.vetedge-resource-filters.is-appointment-filters,
 .vetedge-resource-filters.is-clinical-filters {
 	grid-template-columns: repeat(3, minmax(12rem, 1fr));
+}
+
+.vetedge-resource-filters.is-appointment-filters {
+	grid-template-columns: repeat(4, minmax(11rem, 1fr));
 }
 
 .vetedge-resource-field {
