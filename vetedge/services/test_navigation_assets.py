@@ -64,18 +64,18 @@ class TestNavigationAssets(TestCase):
 						assignments[target.id] = _resolve_names(node.value, assignments)
 
 		self.assertEqual(assignments["app_title"], "VetEdge")
-		self.assertEqual(assignments["app_home"], "/app/vetedge")
+		self.assertEqual(assignments["app_home"], "/desk/vetedge")
 		self.assertNotEqual(assignments["app_home"], "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(assignments["app_home"], "/desk/veterinary-patient")
-		self.assertEqual(assignments["add_to_apps_screen"][0]["title"], "VetEdge")
-		self.assertEqual(assignments["add_to_apps_screen"][0]["route"], "/app/vetedge")
+		self.assertEqual(assignments["add_to_apps_screen"][0]["title"], "Veterinary")
+		self.assertEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/vetedge")
 		self.assertNotEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/veterinary-patient")
 
 	def test_desktop_icon_fixture_uses_supported_launcher_route(self):
 		icon = json.loads(DESKTOP_ICON_PATH.read_text())
 
-		self.assertEqual(icon["label"], "VetEdge")
+		self.assertEqual(icon["label"], "Veterinary")
 		self.assertEqual(icon["link_type"], "Workspace Sidebar")
 		self.assertEqual(icon["link_to"], "VetEdge")
 		self.assertNotEqual(icon.get("link"), "/desk/vetedge-executive-dashboard")

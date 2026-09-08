@@ -507,6 +507,11 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	except Exception:
 		branding = {}
 
+	# The launcher identifies the operational module, while app_title remains the
+	# product/browser identity. Keep this distinction consistent in standalone,
+	# shared-hosted and white-label deployments.
+	launcher_label = branding.get("module_label") or "Veterinary"
+
 	bootinfo.edgesuite_product_menu = frappe._dict({
 		"product_label": branding.get("app_title") or "VetEdge",
 		"is_coreedge_available": bootinfo.is_coreedge_available,
@@ -518,25 +523,26 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	if sidebar_items:
 		source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
 		if source_sidebar:
-			source_sidebar["label"] = branding.get("module_label") or "Veterinary"
+			source_sidebar["label"] = launcher_label
 			sidebar_items["veterinary"] = source_sidebar
 			sidebar_items["vetedge"] = source_sidebar
 
-	# Always override the desktop icon label in bootinfo to be VetEdge (or the branded app_title)
+	# Keep the visible launcher aligned with the Veterinary module label. The
+	# canonical document/link identity remains VetEdge for route stability.
 	desktop_icons = bootinfo.get("desktop_icons")
 	if desktop_icons:
 		for icon in desktop_icons:
 			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
-				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				icon["label"] = launcher_label
 				icon["link_type"] = "Workspace Sidebar"
 				icon["link"] = ""
 				icon["link_to"] = "VetEdge"
 
-	# Always override the app_data app_title and logo for app screen
+	# app_data is rendered as an app launcher, so it uses the same module label.
 	if bootinfo.get("app_data"):
 		for app in bootinfo.app_data:
 			if app.get("app_name") == "vetedge":
-				app["app_title"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				app["app_title"] = launcher_label
 				app["route"] = get_vetedge_desk_route()
 				if branding.get("logo"):
 					app["app_logo_url"] = branding.get("logo")

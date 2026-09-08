@@ -90,6 +90,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"Item": "vetedge.setup.item_creation_permissions.has_item_permission",
 	"Veterinary Patient": "vetedge.services.permissions.has_veterinary_patient_permission",
 	"Veterinary Hospitalisation": "vetedge.services.hospitalisation_permissions.has_hospitalisation_permission",
 	"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.has_outbreak_permission",
@@ -155,6 +156,9 @@ override_whitelisted_methods = {
 }
 
 doc_events = {
+	"User": {
+		"before_save": "vetedge.setup.item_creation_permissions.reconcile_user_item_creator_role",
+	},
 	"Sales Invoice": {
 		"before_validate": "vetedge.services.billing_core.normalize_vetedge_sales_invoice_dates",
 		"before_save": "vetedge.services.branch_integrity.enforce_vetedge_invoice_branch",

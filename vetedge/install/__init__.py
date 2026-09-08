@@ -19,6 +19,7 @@ from vetedge.services.role_bundles import (
 )
 from vetedge.setup.display_settings import ensure_vetedge_date_format
 from vetedge.setup.email_templates import sync_vetedge_email_templates
+from vetedge.setup.item_creation_permissions import ensure_doctor_stock_item_creation
 
 VETEDGE_HOME_ROUTE = "/desk/vetedge"
 VETEDGE_HOME_PAGE = "desk/vetedge"
@@ -41,6 +42,7 @@ def before_tests() -> None:
 
 def setup_foundation() -> None:
 	ensure_vetedge_roles()
+	ensure_doctor_stock_item_creation()
 	ensure_vetedge_role_home_pages()
 	ensure_starter_role_bundles()
 	ensure_existing_internal_users_have_starter_bundle_roles()
@@ -73,6 +75,7 @@ def ensure_vetedge_roles() -> None:
 		("VetEdge Branch Manager", 1),
 		("Accounts/Cashier", 1),
 		("VetEdge Portal User", 0),
+		("VetEdge Clinical Item Creator", 1),
 	):
 		if frappe.db.exists("Role", role):
 			continue

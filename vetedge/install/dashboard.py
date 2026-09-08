@@ -479,7 +479,7 @@ def ensure_vetedge_desktop_icon() -> None:
 	from vetedge.services.branding import get_branding
 
 	branding = get_branding()
-	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+	default_label = branding.get("module_label") or "Veterinary"
 
 	if not frappe.db.exists("Desktop Icon", "VetEdge"):
 		icon = frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json"))
