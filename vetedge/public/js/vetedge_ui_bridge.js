@@ -102,6 +102,7 @@
 		lastError: null,
 		runtimeVersion: "",
 		productMenuPatched: false,
+		dataTablePatched: false,
 		sidebarFocusInstalled: false,
 		sidebarFocusTarget: "",
 		sidebarFocusObserver: null,
@@ -111,6 +112,72 @@
 
 	function runtime() {
 		return window.EdgeSuiteUI || window.EdgeUI || null;
+	}
+
+	function installDataTableFormatting(edgeUI) {
+		if (state.dataTablePatched) return true;
+		const BaseDataTable = edgeUI?.components?.EdgeDataTable;
+		const Vue = edgeUI?.Vue;
+		if (!BaseDataTable || !Vue?.defineComponent || !Vue?.h || !edgeUI?.registerComponent) return false;
+
+		const { defineComponent, h } = Vue;
+		const baseProps = BaseDataTable.props || {};
+		const VetEdgeDataTable = defineComponent({
+			name: "VetEdgeDataTable",
+			inheritAttrs: false,
+			props: {
+				...baseProps,
+				formatter: { type: Function, default: null },
+			},
+			emits: ["row-click", "action", "update:selected", "select"],
+			methods: {
+				formatRows() {
+					const columns = Array.isArray(this.columns) ? this.columns : [];
+					return (Array.isArray(this.rows) ? this.rows : []).map((row, index) => {
+						const formatted = { ...row, __vetedge_source_index: index };
+						columns.forEach((column = {}) => {
+							const fieldname = column.fieldname || column.key || "";
+							if (!fieldname) return;
+							const value = row?.[fieldname];
+							if (typeof this.formatter === "function") {
+								const result = this.formatter(value, column, row);
+								if (result !== undefined) formatted[fieldname] = result;
+								return;
+							}
+							formatted[fieldname] = window.VetEdgeDateTime?.formatCell?.(value, column) ?? value;
+						});
+						return formatted;
+					});
+				},
+				sourceRow(row) {
+					const index = Number(row?.__vetedge_source_index);
+					return Number.isInteger(index) && index >= 0 ? this.rows[index] : row;
+				},
+			},
+			render() {
+				const forwardedProps = { ...this.$props };
+				delete forwardedProps.formatter;
+				return h(BaseDataTable, {
+					...this.$attrs,
+					...forwardedProps,
+					rows: this.formatRows(),
+					onRowClick: (row) => this.$emit("row-click", this.sourceRow(row)),
+					onAction: (payload) => this.$emit("action", {
+						...payload,
+						row: this.sourceRow(payload?.row),
+					}),
+					"onUpdate:selected": (selected) => this.$emit("update:selected", selected),
+					onSelect: (payload) => this.$emit("select", {
+						...payload,
+						row: this.sourceRow(payload?.row),
+					}),
+				}, this.$slots);
+			},
+		});
+
+		edgeUI.registerComponent("EdgeDataTable", VetEdgeDataTable, { replace: true });
+		state.dataTablePatched = true;
+		return true;
 	}
 
 	function supportsSharedContracts(version) {
@@ -574,6 +641,7 @@
 		}
 
 		try {
+			installDataTableFormatting(edgeUI);
 			const navigation = navigationAdapter();
 			edgeUI.registerAdapter("navigation:vetedge", navigation, { replace: true });
 			edgeUI.registerAdapter("navigation:veterinary", navigation, { replace: true });
@@ -597,6 +665,7 @@
 			runtimeVersion: state.runtimeVersion,
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
+			dataTablePatched: state.dataTablePatched,
 			sidebarFocusInstalled: state.sidebarFocusInstalled,
 			sidebarFocusTarget: state.sidebarFocusTarget,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,

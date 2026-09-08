@@ -44,7 +44,7 @@
 					</div>
 					<div class="vetedge-home-context-note">
 						<strong>{{ branchName }}</strong>
-						<span>Date-specific cards use {{ selectedDate || payload.context?.operational_date }}. Current/open-work cards remain live backlog.</span>
+						<span>Date-specific cards use {{ formatDate(selectedDate || payload.context?.operational_date) }}. Current/open-work cards remain live backlog.</span>
 					</div>
 				</section>
 
@@ -59,7 +59,7 @@
 					</div>
 					<div>
 						<span class="vetedge-home-context-label">Operational date</span>
-						<strong>{{ payload.context?.operational_date || '' }}</strong>
+						<strong>{{ formatDate(payload.context?.operational_date) }}</strong>
 					</div>
 					<div v-if="secondaryPersonas.length">
 						<span class="vetedge-home-context-label">Additional access</span>
@@ -105,7 +105,7 @@
 							<span>Mini dashboard</span>
 							<h2 id="vetedge-home-overview-heading">Your Operational Snapshot</h2>
 						</div>
-						<small>{{ branchName }} · {{ payload.context?.operational_date }}</small>
+						<small>{{ branchName }} · {{ formatDate(payload.context?.operational_date) }}</small>
 					</div>
 					<EdgeDashboardLayout class="vetedge-home-kpi-grid" min-column-width="11rem">
 						<button
@@ -288,6 +288,9 @@ export default {
 		this.loadHome();
 	},
 	methods: {
+		formatDate(value) {
+			return value ? window.VetEdgeDateTime?.formatDate?.(value, value) || value : '';
+		},
 		iconGlyph(icon) {
 			return ICON_GLYPHS[icon] || '→';
 		},

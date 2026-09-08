@@ -23,7 +23,9 @@ def test_shared_date_formatter_outputs_vetedge_display_contract():
 			date: dates.formatDate('2026-09-07'),
 			datetime: dates.formatDateTime('2026-09-07 14:05:59'),
 			alreadyFormatted: dates.formatDate('07-09-2026'),
-			unknown: dates.formatDate('not-a-date')
+			unknown: dates.formatDate('not-a-date'),
+			inferredDatetime: dates.formatCell('2026-09-07 14:05:59', {{ key: 'consultation_datetime' }}),
+			inferredDate: dates.formatCell('2026-09-07', {{ fieldname: 'expiry_date' }})
 		}}));
 	"""
 	result = subprocess.run([node, "-e", program], capture_output=True, text=True, check=False)
@@ -33,6 +35,8 @@ def test_shared_date_formatter_outputs_vetedge_display_contract():
 		"datetime": "07-09-2026 14:05",
 		"alreadyFormatted": "07-09-2026",
 		"unknown": "not-a-date",
+		"inferredDatetime": "07-09-2026 14:05",
+		"inferredDate": "07-09-2026",
 	}
 
 
@@ -40,6 +44,7 @@ def test_formatter_loads_before_vetedge_pages_and_report_enhancer_uses_it():
 	hooks = read(APP / "hooks.py")
 	reports = read(APP / "public/js/report_visibility.js")
 	assert hooks.index("vetedge_datetime.js") < hooks.index("dashboard_shell.js")
+	assert "vetedge_datetime.js?v=20260908-1" in hooks
 	assert hooks.index("vetedge_datetime.js") < hooks.index("billing_modal.js")
 	assert "VetEdgeDateTime?.reportFormatter" in reports
 	assert "report_settings.formatter = formatter" in reports
@@ -86,3 +91,23 @@ def test_native_frappe_date_controls_receive_the_same_display_format():
 	assert "settings.save(ignore_permissions=True)" in setup
 	assert "vetedge.patches.set_vetedge_date_format" in patches
 	assert "ensure_vetedge_date_format()" in install
+
+
+def test_edgesuite_tables_apply_vetedge_date_format_before_rendering():
+	bridge = read(APP / "public/js/vetedge_ui_bridge.js")
+	hooks = read(APP / "hooks.py")
+	assert 'installDataTableFormatting(edgeUI)' in bridge
+	assert 'edgeUI.registerComponent("EdgeDataTable", VetEdgeDataTable, { replace: true })' in bridge
+	assert 'window.VetEdgeDateTime?.formatCell?.(value, column)' in bridge
+	assert 'formatter(value, column, row)' in bridge
+	assert 'this.$emit("row-click", this.sourceRow(row))' in bridge
+	assert "vetedge_ui_bridge.js?v=20260908-1" in hooks
+
+
+def test_direct_home_and_history_dates_use_explicit_display_helpers():
+	home = read(APP / "public/js/vetedge_home/VetEdgeHome.vue")
+	history = read(APP / "public/js/veterinary_medical_history/VeterinaryMedicalHistory.vue")
+	assert "formatDate(selectedDate || payload.context?.operational_date)" in home
+	assert "formatDate(payload.context?.operational_date)" in home
+	assert "formatDate(filters.from_date)" in history
+	assert "formatDate(filters.to_date)" in history

@@ -34,10 +34,10 @@ app_include_css = [
 	"/assets/vetedge/css/vetedge_navigation_shell_compat.css?v=20260812-1",
 ]
 app_include_js = [
-	"/assets/vetedge/js/vetedge_datetime.js?v=20260907-1",
+	"/assets/vetedge/js/vetedge_datetime.js?v=20260908-1",
 	"/assets/vetedge/js/edgesuite_product_menu.js?v=20260810-2",
 	"/assets/vetedge/js/vetedge_professional_ui.js?v=20260719-1",
-	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260810-2",
+	"/assets/vetedge/js/vetedge_ui_bridge.js?v=20260908-1",
 	"/assets/vetedge/js/vetedge_navigation_recovery.js?v=20260812-2",
 	"/assets/vetedge/js/vetedge_postqa_navigation_hardening.js?v=20260905-2",
 	"/assets/vetedge/js/edgesuite_date_ranges.js",

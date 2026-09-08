@@ -69,7 +69,7 @@
 							<h2>Clinical Trend Charts</h2>
 							<p>Switch between chart tabs to follow the patient's vital-sign changes over the selected period.</p>
 						</div>
-						<span class="history-period">{{ filters.from_date }} → {{ filters.to_date }}</span>
+						<span class="history-period">{{ formatDate(filters.from_date) }} → {{ formatDate(filters.to_date) }}</span>
 					</header>
 
 					<nav class="history-tabs" aria-label="Vitals trend charts">
@@ -270,6 +270,7 @@ export default {
 		this.clearChart();
 	},
 	methods: {
+		formatDate(value) { return value ? window.VetEdgeDateTime?.formatDate?.(value, value) || value : ""; },
 		formatCell(value, column) { return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value; },
 		async searchPatients(term) {
 			const response = await frappe.call(API.patientSearch, {

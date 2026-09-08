@@ -90,9 +90,19 @@
 		return value;
 	}
 
+	function inferredFieldtype(value, column) {
+		const declared = String(column?.fieldtype || column?.type || "").toLowerCase();
+		if (declared) return declared;
+		const text = value == null ? "" : String(value).trim();
+		if (!ISO_PARTS.test(text)) return "";
+		const fieldname = String(column?.fieldname || column?.key || "").toLowerCase();
+		if (!/(^|_)(date|datetime|timestamp|creation|modified)$|_date$|_datetime$|_on$/.test(fieldname)) return "";
+		return /[T\s]\d{2}:\d{2}/.test(text) ? "datetime" : "date";
+	}
+
 	function formatCell(value, column) {
 		if (value === null || value === undefined || value === "") return "—";
-		return formatByFieldtype(value, column?.fieldtype || column?.type, String(value));
+		return formatByFieldtype(value, inferredFieldtype(value, column), String(value));
 	}
 
 	function formatChartLabel(value) {
@@ -119,6 +129,7 @@
 		formatDate,
 		formatDateTime,
 		formatByFieldtype,
+		inferredFieldtype,
 		formatCell,
 		formatChartLabel,
 		formatChartData,
