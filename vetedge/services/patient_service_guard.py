@@ -26,6 +26,7 @@ BLOCKED_DELIVERY_TRANSITIONS = {
         "Completed",
     },
     "Veterinary Vaccination Record": {"Pending Administration", "Administered"},
+    "Veterinary Hospitalisation": {"Admitted", "Under Care", "Ready for Discharge"},
     "Pet Grooming Appointment": {"Confirmed", "Checked In", "In Progress", "Completed"},
     "Pet Grooming Session": {"In Progress", "Completed"},
     "Pet Boarding Booking": {"Confirmed", "Checked In", "Admitted", "In Stay", "Completed"},

@@ -11,6 +11,11 @@ dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
 ]
 
+# Bench and Frappe Cloud use this constraint to reject incompatible benches
+# before installation or upgrade. VetEdge 2.0 is validated on Frappe v16.
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0-dev,<17.0.0"
+
 [build-system]
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"

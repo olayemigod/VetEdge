@@ -88,7 +88,7 @@
    "read_only": 1
   },
   {
-   "description": "Optional in H3A. Used later by the charge sheet/invoice sync flow.",
+   "description": "Required when the activity should create a hospitalisation charge or post stock usage. Charge Sheet and Stock actions process the selected item safely.",
    "fieldname": "item",
    "fieldtype": "Link",
    "label": "Item",

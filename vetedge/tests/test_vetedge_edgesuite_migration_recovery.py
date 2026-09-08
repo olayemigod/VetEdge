@@ -28,7 +28,7 @@ MIGRATED_PAGES = {
 		"provider": APP / "services/pricing_master_workspace.py",
 	},
 	"front_desk": {
-		"loader": APP / "veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js",
+		"loader": APP / "public/js/vetedge_front_desk_page_host.js",
 		"page": APP / "veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.json",
 		"bundle": APP / "public/js/vetedge_front_desk_action_center.bundle.js",
 		"component": APP / "public/js/vetedge_front_desk_action_center/VetEdgeFrontDeskActionCenter.vue",
@@ -206,9 +206,11 @@ def test_recovered_page_and_deep_link_routes_point_to_migrated_workspaces():
 	missed_form = read(APP / "veterinary/doctype/veterinary_missed_appointment/veterinary_missed_appointment.js")
 	missed_list = read(APP / "veterinary/doctype/veterinary_missed_appointment/veterinary_missed_appointment_list.js")
 	queue = read(APP / "veterinary/page/veterinary_appointment_queue/veterinary_appointment_queue.js")
-	for content in (guest_form, guest_list, missed_form, missed_list, queue):
+	for content in (guest_form, guest_list, missed_form, missed_list):
 		assert "/desk/vetedge-front-desk-action-center" in content
 		assert "/app/vetedge-front-desk-action-center" not in content
+	assert "/desk/vetedge-front-desk-queue" in queue
+	assert "/desk/vetedge-front-desk-action-center" not in queue
 
 
 def test_resource_center_publishes_frappe_v16_desk_full_form_routes():
@@ -279,7 +281,7 @@ def test_hospital_services_and_vital_signs_remain_while_obsolete_dashboard_stays
 	assert not (obsolete_page / "veterinary_hospitalisation_dashboard.json").exists()
 	assert "REMOVED_STANDARD_PAGES" in dashboard_install
 	assert '"veterinary-hospitalisation-dashboard"' in dashboard_install
-	assert '("Page", "veterinary-hospitalisation-dashboard")' in dashboard_install
+	assert '("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE)' in dashboard_install
 	assert '("DocType", "Veterinary Vital Signs")' not in dashboard_install
 	assert '"veterinary", "page", "veterinary_hospitalisation_dashboard"' not in dashboard_install
 	assert '"label": "Vital Signs"' in sidebar

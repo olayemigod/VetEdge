@@ -114,6 +114,12 @@ function createCanonicalStockExpiryMonitor(runtime) {
 		},
 		methods: {
 			...(LegacyStockExpiryMonitor.methods || {}),
+			formatQty(value) {
+				const quantity = Number(value || 0);
+				return Number.isFinite(quantity)
+					? quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })
+					: '0';
+			},
 			async searchFilterOptions(field, term) {
 				const options = await this.callFrappe(FILTER_SEARCH_API, {
 					field,

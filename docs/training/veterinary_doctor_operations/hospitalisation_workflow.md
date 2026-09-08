@@ -33,11 +33,11 @@ stateDiagram-v2
 
 ## Step-by-Step Training Guide
 
-1. From a consultation, click Admit for Hospitalisation, or create/open Hospitalisations.
+1. From a consultation, select Admit for Hospitalisation, or open Hospitalisation Operations and enter the secured Hospitalisation Episode.
 2. Confirm patient, owner, service Branch, company, linked consultation, attending veterinarian, admitted by, admission reason, and care level.
 3. Assign a care location if location tracking is used.
 4. Admit the patient.
-5. During care, add activity rows for vitals, medication, vaccination, fluid therapy, feeding, nursing notes, wound care, lab, procedure, oxygen/nebulisation, owner update, or other activities.
+5. During care, use the Episode actions to add vitals, medication, vaccination, fluid therapy, feeding, nursing notes, wound care, lab, procedure, oxygen/nebulisation, owner update, or other activities.
 6. Mark activities as billable when they should be charged.
 7. Mark activities as stock-affecting when stock should be consumed.
 8. Build the charge sheet where required.
@@ -48,7 +48,10 @@ stateDiagram-v2
 13. Run Check Payment Gate when payment status needs refresh.
 14. Before discharge, run Check Discharge Readiness.
 15. Resolve blocked items with Accounts, Pharmacy, Dispensary, stock team, Nurse, or Admin as appropriate.
-16. Discharge only after readiness checks pass and discharge notes are complete.
+16. Enter discharge condition, summary, instructions, follow-up date and follow-up notes.
+17. Discharge only after readiness checks pass and discharge documentation is complete.
+
+Hospitalisation contributes admission, non-duplicated inpatient activities and discharge events to Medical History. Linked Vital Signs, Lab Orders and Vaccination Records keep their own authoritative clinical records and are not duplicated as free-text inpatient history.
 
 ## Trainer Notes
 
@@ -122,6 +125,9 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Veterinary Nursing Operations](training-module:nursing-operations)
+- [Dispensary and Stock Operations](training-module:dispensary-stock-operations)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Consultation Workflow](training-module:consultation)
 - [Troubleshooting and Common Errors](training-module:troubleshooting)

@@ -81,11 +81,15 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("window.VetedgeProductMenu", product_menu)
 		for public_method in ("mount,", "unmount,", "remount,"):
 			self.assertIn(public_method, product_menu)
-		self.assertIn('".page-head .page-actions"', product_menu)
-		self.assertIn('"header .navbar .navbar-right"', product_menu)
+		self.assertIn('".edge-app-shell[data-edge-product] .edge-topbar__brand"', product_menu)
+		self.assertIn('".edge-app-shell[data-edge-product] .edge-topbar-actions"', product_menu)
+		self.assertIn("function edgeShellPresent()", product_menu)
+		self.assertIn('state.mode = "native-desk-hidden"', product_menu)
+		self.assertNotIn('".page-head .page-actions"', product_menu)
+		self.assertNotIn('"header .navbar .navbar-right"', product_menu)
 		self.assertIn("vetedge-product-menu-waffle-icon", product_menu)
 		self.assertIn("<circle", product_menu)
-		self.assertIn("target.node.prepend(slot)", product_menu)
+		self.assertIn("target.node.appendChild(slot)", product_menu)
 
 	def test_product_menu_is_an_isolated_responsive_mega_menu(self):
 		product_menu = self.read(PRODUCT_MENU)
@@ -134,10 +138,11 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("currentMenuNodeCount", product_menu)
 		self.assertIn("FALLBACK_ROUTES", product_menu)
 		self.assertIn("configured_routes", product_menu)
-		self.assertIn("vetedge-product-menu-slot--floating", product_menu)
-		self.assertIn('"navbar-became-visible"', product_menu)
+		self.assertNotIn("vetedge-product-menu-slot--floating", product_menu)
+		self.assertNotIn('"navbar-became-visible"', product_menu)
 		self.assertIn('result(true, "inserted"', product_menu)
-		self.assertIn('result(false, "no-navbar-target"', product_menu)
+		self.assertIn('result(false, "no-edge-shell-target"', product_menu)
+		self.assertIn('result(false, "native-desk-hidden"', product_menu)
 		self.assertNotIn("frappe.realtime", product_menu)
 		self.assertNotIn("socket", product_menu.lower())
 
@@ -155,8 +160,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn("tenantName", component)
 			self.assertIn("branchName", component)
 			self.assertIn("userName", component)
-			self.assertIn("vetedge-notification-icon", component)
 			self.assertNotIn("coreedge/", component.lower())
+		self.assertIn("vetedge-notification-icon", executive)
 		self.assertIn("'All Branches'", stock)
 		self.assertIn("syncShellContext", stock)
 
@@ -213,8 +218,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(component, content)
 		self.assertIn("repeat(auto-fit, minmax(180px, 1fr))", content)
 		stock = self.read(STOCK_COMPONENT)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", stock)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", stock)
+		self.assertIn("grid-template-columns: repeat(3, minmax(12rem, 1fr))", stock)
+		self.assertIn("grid-template-columns: repeat(2, minmax(10rem, 1fr))", stock)
 		self.assertIn("grid-template-columns: minmax(0, 1fr)", stock)
 		self.assertIn("edge-select edge-control", content)
 		self.assertIn("edge-input edge-control", content)
@@ -236,7 +241,6 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("normalize_dashboard_filters(key, filters)", content)
 		self.assertIn('if key == "executive":', content)
 
-
 	def test_phase_two_fluid_layout_preserves_page_content_and_runtime_contract(self):
 		executive = self.read(COMPONENT)
 		stock = self.read(STOCK_COMPONENT)
@@ -255,18 +259,18 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			self.assertIn(required, executive)
 
 		for required in (
+			"EdgeReportShell",
 			"Warehouse",
 			"Item Group",
 			"Expiry Window",
 			"Days Threshold",
 			"Item Code",
 			"Apply / Refresh",
-			"summary-stats-grid",
-			'v-for="row in rows"',
-			"pagination-footer",
-			"EdgeLoadingState",
-			"EdgeEmptyState",
-			"EdgeErrorState",
+			':summary="summaryCards"',
+			':rows="rows"',
+			':pagination="pagination"',
+			'@page-change="goToPage"',
+			'@page-size-change="setPageSize"',
 			"EdgeNotificationBell",
 			"EdgeNotificationDrawer",
 		):

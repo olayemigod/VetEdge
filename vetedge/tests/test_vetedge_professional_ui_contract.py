@@ -98,11 +98,15 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		self.assertNotIn("coreedge/", content.lower())
 		self.assertNotIn("window.history.pushState", content)
 
-	def test_vetedge_home_stays_in_desk_and_routes_to_resource_center(self):
+	def test_vetedge_home_stays_in_desk_and_mounts_role_aware_workspace(self):
 		content = self.read(VETEDGE_HOME)
 		self.assertIn('title: __("Veterinary Home")', content)
-		self.assertIn('const target = "/desk/vetedge-resource-center";', content)
-		self.assertIn('frappe.set_route("vetedge-resource-center")', content)
+		self.assertIn('frappe.require("edgeui.bundle.js"', content)
+		self.assertIn('frappe.require("vetedge_home.bundle.js"', content)
+		self.assertIn("window.mountVetEdgeHome", content)
+		self.assertIn("VETEDGE_HOME_REFRESH_MAX_AGE_MS", content)
+		self.assertNotIn('const target = "/desk/vetedge-resource-center";', content)
+		self.assertNotIn('frappe.set_route("vetedge-resource-center")', content)
 		self.assertNotIn("window.location.replace", content)
 
 	def test_consumer_adapter_installs_professional_shell_and_menu_contract(self):
@@ -133,13 +137,12 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 		):
 			self.assertNotIn(forbidden, content)
 
-	def test_reference_page_loaders_require_edgeui_0_2_adapter_before_product_bundles(self):
+	def test_reference_page_loaders_validate_edgesuite_runtime_before_product_bundles(self):
 		for loader, product_bundle, loader_function in (
 			(EXECUTIVE_LOADER, "vetedge_executive_dashboard.bundle.js", "loadDashboard"),
 			(STOCK_LOADER, "vetedge_stock_expiry_monitor.bundle.js", "loadMonitor"),
 		):
 			content = self.read(loader)
-			self.assertIn("'EdgeIcon'", content)
 			self.assertIn("/assets/vetedge/js/vetedge_professional_ui.js", content)
 			self.assertIn("window.VetEdgeProfessionalUI?.install?.()", content)
 			self.assertIn("if (window.VetEdgeProfessionalUI?.install)", content)
@@ -150,13 +153,33 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			)
 			self.assertIn(f"\t\t\t{loader_function}();", content)
 			self.assertIn(product_bundle, content)
-			self.assertIn("EdgeSuite UI 0.2 or newer", content)
 			self.assertLess(content.index("edgeui.bundle.js"), content.index(f"const {loader_function}"))
 			self.assertNotIn(
 				"frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=",
 				content,
 			)
 			self.assertNotIn("coreedge/", content.lower())
+
+		executive = self.read(EXECUTIVE_LOADER)
+		for component in (
+			"'EdgeIcon'",
+			"'EdgeDashboardLayout'",
+			"'EdgeNotificationBell'",
+			"'EdgeNotificationDrawer'",
+		):
+			self.assertIn(component, executive)
+		self.assertIn("EdgeSuite UI 0.2 or newer", executive)
+
+		stock = self.read(STOCK_LOADER)
+		for component in (
+			"'EdgeReportShell'",
+			"'EdgeLinkField'",
+			"'EdgeDropdown'",
+			"'EdgeNotificationBell'",
+			"'EdgeNotificationDrawer'",
+		):
+			self.assertIn(component, stock)
+		self.assertIn("The standalone EdgeSuite UI runtime is unavailable.", stock)
 
 	def test_professional_css_restores_shared_sidebar_without_narrowing_page_content(self):
 		content = self.read(PROFESSIONAL_CSS)

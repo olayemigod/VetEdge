@@ -1,0 +1,119 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_regulatory_exports():
+    page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
+
+    for expected in (
+        'frappe.require("edgeui.bundle.js"',
+        '"EdgeAppShell"',
+        '"EdgePageLayout"',
+        '"EdgePageHeader"',
+        '"EdgeLinkField"',
+        'validate_nadis_vaccination_export',
+        'download_nadis_vaccination_workbook',
+        'validate_nadis_outbreak_export',
+        'download_nadis_outbreak_workbook',
+        '__("NADIS Monthly Vaccination Report")',
+        '__("NADIS Disease Outbreak Report")',
+        'label: __("Company")',
+        'doctype: "Company"',
+        'company: frappe.defaults?.get_user_default?.("Company")',
+        'isRegulatoryAdmin()',
+    ):
+        assert expected in page
+
+    for forbidden in (
+        "ignore_permissions",
+        "Sales Invoice",
+        "Payment Entry",
+        "Stock Entry",
+    ):
+        assert forbidden not in page
+
+
+def test_workbench_admin_submission_flow_uses_saved_report_runs():
+    page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
+
+    for expected in (
+        'REPORT_RUN_GENERATE = "vetedge.services.regulatory_report_runs.generate_regulatory_report_run"',
+        'REPORT_RUN_HISTORY = "vetedge.services.regulatory_report_runs.get_regulatory_report_runs"',
+        'REPORT_RUN_SEND = "vetedge.services.regulatory_report_runs.send_regulatory_report_run"',
+        '__("Generate & Save")',
+        '__("Submission History")',
+        '__("Recipient Email(s)")',
+        'apiCall(REPORT_RUN_GENERATE',
+        'apiCall(REPORT_RUN_HISTORY',
+        'apiCall(REPORT_RUN_SEND',
+        'window.open(run.export_file, "_blank", "noopener")',
+        'Saved workbooks are private, immutable report evidence.',
+        'Email sends use the saved attachment and do not regenerate clinical data.',
+    ):
+        assert expected in page
+
+
+def test_vaccination_workbench_surfaces_distinct_animal_count_not_raw_record_count():
+    page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
+
+    assert 'result.distinct_animal_count' in page
+    assert '__("Animals Vaccinated")' in page
+
+
+def test_regulatory_navigation_is_idempotent_and_exposes_outbreak_register():
+    navigation = (ROOT / "install/regulatory_reporting.py").read_text(encoding="utf-8")
+    install = (ROOT / "install/__init__.py").read_text(encoding="utf-8")
+
+    for expected in (
+        'REGULATORY_PAGE = "vetedge-regulatory-reporting"',
+        'OUTBREAK_DOCTYPE = "Veterinary Disease Outbreak"',
+        'SECTION_LABEL = "Regulatory Reporting"',
+        'LINK_LABEL = "VCN / NADIS Reports"',
+        'OUTBREAK_LINK_LABEL = "Disease Outbreak Register"',
+        'getattr(item, "link_type", None) == "Page"',
+        'getattr(item, "link_to", None) == REGULATORY_PAGE',
+        'getattr(item, "link_to", None) == OUTBREAK_DOCTYPE',
+        'getattr(item, "label", None) == "Configuration"',
+        'frappe.cache.delete_key("bootinfo")',
+    ):
+        assert expected in navigation
+
+    assert "ensure_financial_dashboard()\n\tensure_regulatory_reporting_navigation()" in install
+
+
+def test_vaccination_reason_extends_existing_guarded_edgesuite_editor():
+    extension = (ROOT / "services/nadis_vaccination_editor.py").read_text(encoding="utf-8")
+    state = (ROOT / "services/clinical_record_state_v2.py").read_text(encoding="utf-8")
+    mutations = (ROOT / "services/mutation_security.py").read_text(encoding="utf-8")
+
+    assert 'FIELDNAME = "vaccination_reason"' in extension
+    assert 'safe_after_invoice.add(FIELDNAME)' in extension
+    assert "extend_vaccination_editor_config(clinical_record_editor.RECORD_CONFIG)" in state
+    assert 'fields.get("vaccination_reason")' in state
+    assert "extend_vaccination_editor_config(clinical_record_editor.RECORD_CONFIG)" in mutations
+
+    for protected in (
+        '"administered_by"',
+        '"administered_on"',
+        '"batch_no"',
+        '"expiry_date"',
+        '"billing_item"',
+        '"amount"',
+        '"linked_invoice"',
+        '"stock_entry_reference"',
+    ):
+        assert protected in mutations
+
+
+def test_outbreak_native_access_is_branch_safe_for_clinical_roles():
+    outbreak = (ROOT / "veterinary/doctype/veterinary_disease_outbreak/veterinary_disease_outbreak.json").read_text(encoding="utf-8")
+    hooks = (ROOT / "hooks.py").read_text(encoding="utf-8")
+
+    assert '"role": "System Manager"' in outbreak
+    assert '"role": "VetEdge Administrator"' in outbreak
+    assert '"role": "VetEdge Doctor"' in outbreak
+    assert '"role": "Veterinary Nurse"' in outbreak
+    assert '"role": "Branch Manager"' in outbreak
+    assert '"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.get_outbreak_query"' in hooks
+    assert '"Veterinary Disease Outbreak": "vetedge.services.outbreak_permissions.has_outbreak_permission"' in hooks

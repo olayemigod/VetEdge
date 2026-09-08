@@ -68,6 +68,7 @@
 				v-else
 				:columns="columns"
 				:rows="rows"
+				:formatter="formatCell"
 				row-key="name"
 				empty-title="No vital signs found"
 				@row-click="openRecord"
@@ -149,7 +150,7 @@ export default {
 		hasNext() { return this.start + this.rows.length < this.total; },
 		firstVisible() { return this.total ? this.start + 1 : 0; },
 		lastVisible() { return Math.min(this.start + this.rows.length, this.total); },
-		rangeLabel() { return `${this.filters.from_date || "Any"} → ${this.filters.to_date || "Any"}`; },
+		rangeLabel() { return `${window.VetEdgeDateTime?.formatDate?.(this.filters.from_date, "Any") || "Any"} → ${window.VetEdgeDateTime?.formatDate?.(this.filters.to_date, "Any") || "Any"}`; },
 	},
 	async mounted() {
 		if (this.filters.patient) await this.resolvePatientLabels([this.filters.patient]);
@@ -159,6 +160,7 @@ export default {
 		}
 	},
 	methods: {
+		formatCell(value, column) { return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value; },
 		buildFilters() {
 			const filters = {};
 			if (this.filters.patient) filters.patient = this.filters.patient;

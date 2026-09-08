@@ -227,3 +227,23 @@ def test_medical_history_readability_and_first_chart_render_are_protected():
         "vetedge_medical_history_qa_patch.js",
     ):
         assert asset in loader
+
+def test_vaccination_administered_by_uses_branch_safe_staff_search():
+    service = read(APP / "services/clinical_record_editor.py")
+    bundle = read(APP / "public/js/vetedge_clinical_record_editor.bundle.js")
+
+    for contract in (
+        "def search_vaccination_staff(",
+        "get_vaccination_staff_users",
+        "can_administer_vaccine",
+        '"link_search_method"',
+        "vetedge.services.clinical_record_editor.search_vaccination_staff",
+        '"link_search_context_field"',
+        '"service_branch"',
+    ):
+        assert contract in service
+
+    # The shared EdgeSuite Link implementation must honour server-provided
+    # search methods instead of falling back to generic User search.
+    assert "field?.link_search_method" in bundle
+    assert "args[contextField] = contextValue" in bundle

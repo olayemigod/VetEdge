@@ -80,6 +80,7 @@ def validate_vaccination_record(doc) -> None:
 
 	validate_status(doc, previous)
 	resolve_record_context(doc)
+	validate_administered_by_user(doc, previous)
 	set_vaccination_identity_fields(doc)
 	validate_consultation_link(doc)
 	validate_vaccine_applicability(doc)
@@ -182,6 +183,45 @@ def resolve_record_context(doc) -> None:
 		if not doc.administered_by:
 			doc.administered_by = get_current_user()
 
+
+
+def validate_administered_by_user(doc, previous=None) -> None:
+	"""Validate new/changed vaccination attribution without rewriting history."""
+	user = str(doc.get("administered_by") or "").strip()
+	if not user:
+		return
+
+	if previous:
+		previous_user = str(previous.get("administered_by") or "").strip()
+		transitioning_to_administered = (
+			doc.status == "Administered"
+			and getattr(previous, "status", None) != "Administered"
+		)
+		if user == previous_user and not transitioning_to_administered:
+			return
+
+	user_state = frappe.db.get_value(
+		"User",
+		user,
+		["enabled", "user_type"],
+		as_dict=True,
+	)
+	if (
+		not user_state
+		or not cint(user_state.enabled)
+		or user_state.user_type != "System User"
+	):
+		frappe.throw(
+			"Administered By must reference an enabled clinical System User.",
+			frappe.ValidationError,
+		)
+
+	if not can_administer_vaccine(user, doc, raise_exception=False):
+		frappe.throw(
+			f"Administered By {user} must be a VetEdge Doctor or Nurse "
+			f"allowed to administer vaccination for Service Branch {doc.service_branch}.",
+			frappe.ValidationError,
+		)
 
 def set_vaccination_identity_fields(doc) -> None:
 	doc.vaccination_id = doc.name or doc.get("vaccination_id") or ""

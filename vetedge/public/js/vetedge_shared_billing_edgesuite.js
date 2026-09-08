@@ -64,7 +64,7 @@
 			columns: [
 				{ fieldname: "name", label: __("Invoice") },
 				{ fieldname: "display_status", label: __("Status"), fieldtype: "Status" },
-				{ fieldname: "posting_date", label: __("Posting Date") },
+				{ fieldname: "posting_date", label: __("Posting Date"), fieldtype: "Date" },
 				{ fieldname: "grand_total_display", label: __("Total") },
 				{ fieldname: "paid_display", label: __("Paid") },
 				{ fieldname: "outstanding_display", label: __("Outstanding") },

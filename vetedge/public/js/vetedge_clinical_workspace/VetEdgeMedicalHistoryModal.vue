@@ -72,6 +72,7 @@
 				<EdgeDataTable
 					:columns="activeHistoryColumns"
 					:rows="activeHistoryRows"
+					:formatter="formatCell"
 					empty-title="No records in this range"
 					empty-description="There are no records for this medical-history section in the selected date range."
 					@row-click="openHistoryRow"
@@ -142,7 +143,7 @@ const COLUMNS = Object.freeze({
 		{ key: "vaccine", label: "Vaccine" },
 		{ key: "administered_by_name", label: "Practitioner" },
 		{ key: "status", label: "Status", type: "status" },
-		{ key: "next_due_date", label: "Next Due" },
+		{ key: "next_due_date", label: "Next Due", type: "datetime" },
 	],
 	labs: [
 		{ key: "timestamp", label: "Requested On", type: "datetime" },
@@ -202,6 +203,7 @@ export default {
 	},
 	beforeUnmount() { this.clearChart(); },
 	methods: {
+		formatCell(value, column) { return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value; },
 		open({ patient, patientLabel = "" } = {}) {
 			const value = String(patient || "").trim();
 			if (!value) return;
@@ -274,7 +276,7 @@ export default {
 			this.chart = new frappe.Chart(target, {
 				title: `${label} Trend`,
 				data: {
-					labels: rows.map((row) => frappe.datetime?.str_to_user?.(row.timestamp) || row.timestamp),
+					labels: rows.map((row) => window.VetEdgeDateTime?.formatDateTime?.(row.timestamp, row.timestamp) || row.timestamp),
 					datasets: [{ name: label, values: rows.map((row) => Number(row.value || 0)) }],
 				},
 				type: "line",

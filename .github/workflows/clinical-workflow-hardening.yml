@@ -55,6 +55,8 @@ jobs:
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
+            vetedge/services/hospitalisation_preqa_security.py \
+            vetedge/services/hospitalisation_episode_policy_v2.py \
             vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
             vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py
 
@@ -75,6 +77,7 @@ jobs:
           node --check vetedge/veterinary/page/vetedge_master_workspace/vetedge_master_workspace.js
           node --check vetedge/veterinary/page/vetedge_pricing_master_workspace/vetedge_pricing_master_workspace.js
           node --check vetedge/veterinary/page/veterinary_settings_center/veterinary_settings_center.js
+          node --check vetedge/veterinary/page/vetedge_hospitalisation_operations/vetedge_hospitalisation_operations.js
 
       - name: Ruff hardened contracts
         # The canonical Fast Validation gate owns repository import-order style.
@@ -103,10 +106,13 @@ jobs:
             vetedge/services/billing_context_alignment.py \
             vetedge/services/resource_center_v3.py \
             vetedge/services/mutation_security.py \
+            vetedge/services/hospitalisation_preqa_security.py \
+            vetedge/services/hospitalisation_episode_policy_v2.py \
             vetedge/veterinary/doctype/veterinary_lab_order/veterinary_lab_order.py \
             vetedge/veterinary/doctype/veterinary_vaccination_record/veterinary_vaccination_record.py \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
             vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_hospitalisation_preqa_hardening_contract.py \
             vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_medical_history_and_consultation_context_contract.py \
             vetedge/tests/test_medical_history_clinical_truth_contract.py \
@@ -121,6 +127,7 @@ jobs:
           python -m pytest -q \
             vetedge/tests/test_clinical_workflow_hardening_contract.py \
             vetedge/tests/test_consultation_related_record_editor_reachability.py \
+            vetedge/tests/test_hospitalisation_preqa_hardening_contract.py \
             vetedge/tests/test_lab_consultation_billing_gate_alignment.py \
             vetedge/tests/test_medical_history_and_consultation_context_contract.py \
             vetedge/tests/test_medical_history_clinical_truth_contract.py \

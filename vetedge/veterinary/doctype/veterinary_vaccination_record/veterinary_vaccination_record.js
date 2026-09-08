@@ -22,6 +22,7 @@ frappe.ui.form.on("Veterinary Vaccination Record", {
 
 	refresh(frm) {
 		add_workflow_actions(frm);
+		set_administration_field_state(frm);
 		set_billing_field_state(frm);
 		void populate_billing_defaults(frm);
 	},
@@ -56,6 +57,21 @@ frappe.ui.form.on("Veterinary Vaccination Record", {
 		}
 	},
 });
+
+function set_administration_field_state(frm) {
+	frm.set_df_property("administered_by", "read_only", 1);
+	frm.set_df_property("administered_on", "read_only", 1);
+	frm.set_df_property(
+		"administered_by",
+		"description",
+		__("Automatically recorded from the authorised user who administers the vaccination.")
+	);
+	frm.set_df_property(
+		"administered_on",
+		"description",
+		__("Automatically recorded using the server time when the vaccination is administered.")
+	);
+}
 
 function set_billing_field_state(frm) {
 	const locked = ["Administered", "Cancelled"].includes(frm.doc.status);

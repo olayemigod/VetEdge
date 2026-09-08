@@ -44,7 +44,7 @@
 				</section>
 				<EdgeLoadingState v-if="loading" message="Loading consultations..." :skeleton="true" />
 				<EdgeErrorState v-else-if="error" title="Consultations could not load" :message="error" action-label="Try again" @retry="refreshList" />
-				<EdgeDataTable v-else :columns="listColumns" :rows="consultations.rows || []" empty-title="No consultations" empty-description="No consultations match the current filters." @row-click="openConsultation">
+				<EdgeDataTable v-else :columns="listColumns" :rows="consultations.rows || []" :formatter="formatCell" empty-title="No consultations" empty-description="No consultations match the current filters." @row-click="openConsultation">
 					<template #footer>
 						<span>Showing {{ firstVisible }}–{{ lastVisible }} of {{ consultations.total || 0 }}</span>
 						<div class="clinical-row-actions">
@@ -280,7 +280,7 @@ export default {
 		vitalEntries() {
 			const v = this.detail.latest_vitals || {};
 			return [
-				["Recorded On", frappe.datetime?.str_to_user?.(v.recorded_on) || v.recorded_on],
+				["Recorded On", window.VetEdgeDateTime?.formatDateTime?.(v.recorded_on, v.recorded_on) || v.recorded_on],
 				["Temperature", v.temperature], ["Weight", v.weight], ["Heart Rate", v.heart_rate],
 				["Respiratory Rate", v.respiratory_rate], ["Body Condition", v.body_condition_score],
 				["Hydration", v.hydration_status], ["Pain Score", v.pain_score], ["Appetite", v.appetite_status],
@@ -310,6 +310,7 @@ export default {
 		if (this.confirmation.resolve) this.confirmation.resolve(false);
 	},
 	methods: {
+		formatCell(value, column) { return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value; },
 		handleBeforeUnload(event) { if (!this.dirty) return; event.preventDefault(); event.returnValue = ""; },
 		confirmDiscard() {
 			if (!this.dirty) return Promise.resolve(true);

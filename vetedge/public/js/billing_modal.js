@@ -7,6 +7,10 @@
 		return format_currency(value || 0, currency || frappe.defaults.get_default("currency"));
 	}
 
+	function displayDate(value) {
+		return value ? (window.VetEdgeDateTime?.formatDate?.(value, value) || value) : "";
+	}
+
 	function labelValue(label, value) {
 		return `
 			<div class="ve-billing-row">
@@ -202,8 +206,8 @@
 							<tr>
 								<td>${escapeHtml(row.name || row.invoice)}</td>
 								<td>${escapeHtml(row.payment_status || row.payment_state || row.status || (row.docstatus === 0 ? __("Draft") : row.docstatus === 1 ? __("Submitted") : __("Cancelled")))}</td>
-								<td>${escapeHtml(row.posting_date || "")}</td>
-								<td>${escapeHtml(row.due_date || "")}</td>
+								<td>${escapeHtml(displayDate(row.posting_date))}</td>
+								<td>${escapeHtml(displayDate(row.due_date))}</td>
 								<td class="text-right">${money(row.grand_total || row.rounded_total, row.currency)}</td>
 								<td class="text-right">${money(row.paid_amount, row.currency)}</td>
 								<td class="text-right">${money(row.outstanding_amount, row.currency)}</td>
@@ -301,7 +305,7 @@
 					${labelValue(__("Invoice"), invoice.name)}
 					${labelValue(__("Customer"), invoice.customer)}
 					${labelValue(__("Status"), invoiceStatus)}
-					${labelValue(__("Posting Date"), invoice.posting_date)}
+					${labelValue(__("Posting Date"), displayDate(invoice.posting_date))}
 					${labelValue(__("Grand Total"), money(invoice.grand_total, invoice.currency))}
 					${labelValue(__("Outstanding"), money(invoice.outstanding_amount, invoice.currency))}
 				</div>

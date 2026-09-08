@@ -279,12 +279,13 @@ def _query_batch_stock_rows(filters) -> list[dict]:
 	conditions = ["b.disabled = 0"]
 	values = {}
 	join_type = "LEFT JOIN" if cint(filters.get("include_zero_qty")) else "INNER JOIN"
+	ledger_source = _batch_stock_ledger_source()
 
 	if filters.get("company"):
 		conditions.append("w.company = %(company)s")
 		values["company"] = filters.get("company")
 	if filters.get("warehouse"):
-		conditions.append("sle.warehouse = %(warehouse)s")
+		conditions.append("batch_stock.warehouse = %(warehouse)s")
 		values["warehouse"] = filters.get("warehouse")
 	if filters.get("item_group"):
 		conditions.append("i.item_group = %(item_group)s")
@@ -295,7 +296,7 @@ def _query_batch_stock_rows(filters) -> list[dict]:
 	if filters.get("branch"):
 		warehouse = get_branch_dispensary_warehouse(filters.get("branch"), filters.get("company"), required=False)
 		if warehouse:
-			conditions.append("sle.warehouse = %(branch_warehouse)s")
+			conditions.append("batch_stock.warehouse = %(branch_warehouse)s")
 			values["branch_warehouse"] = warehouse
 
 	having = "" if cint(filters.get("include_zero_qty")) else "HAVING qty > 0"
@@ -305,24 +306,80 @@ def _query_batch_stock_rows(filters) -> list[dict]:
 			i.item_name,
 			i.item_group,
 			b.name AS batch_no,
-			sle.warehouse,
+			batch_stock.warehouse,
 			w.company,
-			COALESCE(SUM(sle.actual_qty), 0) AS qty,
+			COALESCE(SUM(batch_stock.actual_qty), 0) AS qty,
 			i.stock_uom,
 			b.expiry_date
 		FROM `tabBatch` b
-		{join_type} `tabStock Ledger Entry` sle
-			ON sle.batch_no = b.name
-			AND sle.item_code = b.item
-			AND sle.is_cancelled = 0
-		LEFT JOIN `tabWarehouse` w ON w.name = sle.warehouse
+		{join_type} {ledger_source} batch_stock
+			ON batch_stock.batch_no = b.name
+			AND batch_stock.item_code = b.item
+		LEFT JOIN `tabWarehouse` w ON w.name = batch_stock.warehouse
 		LEFT JOIN `tabItem` i ON i.name = b.item
 		WHERE {" AND ".join(conditions)}
-		GROUP BY b.name, b.item, i.item_name, i.item_group, sle.warehouse, w.company, i.stock_uom, b.expiry_date
+		GROUP BY b.name, b.item, i.item_name, i.item_group, batch_stock.warehouse, w.company, i.stock_uom, b.expiry_date
 		{having}
 		ORDER BY b.expiry_date ASC, b.item ASC, b.name ASC
 	"""
 	return frappe.db.sql(sql, values, as_dict=True)
+
+
+def _batch_stock_ledger_source() -> str:
+	"""Return a signed batch movement source for legacy and current ERPNext stock ledgers.
+
+	ERPNext 15+ stores batch splits in Serial and Batch Entry rows referenced by
+	Stock Ledger Entry.serial_and_batch_bundle. Older ledgers store the batch
+	directly on Stock Ledger Entry.batch_no. Keep both paths, while excluding
+	bundle-backed ledger rows from the legacy path so quantities are not counted
+	twice on sites where both compatibility fields are populated.
+	"""
+	bundle_enabled = _has_serial_and_batch_bundle_source()
+	legacy_bundle_condition = ""
+	if bundle_enabled:
+		legacy_bundle_condition = "AND COALESCE(sle.serial_and_batch_bundle, '') = ''"
+
+	legacy_source = f"""
+		SELECT
+			sle.item_code,
+			sle.warehouse,
+			sle.batch_no,
+			sle.actual_qty
+		FROM `tabStock Ledger Entry` sle
+		WHERE sle.is_cancelled = 0
+			AND COALESCE(sle.batch_no, '') != ''
+			{legacy_bundle_condition}
+	"""
+	if not bundle_enabled:
+		return f"({legacy_source})"
+
+	bundle_source = """
+		SELECT
+			sle.item_code,
+			sle.warehouse,
+			sbe.batch_no,
+			sbe.qty AS actual_qty
+		FROM `tabStock Ledger Entry` sle
+		INNER JOIN `tabSerial and Batch Entry` sbe
+			ON sbe.parent = sle.serial_and_batch_bundle
+		WHERE sle.is_cancelled = 0
+			AND COALESCE(sle.serial_and_batch_bundle, '') != ''
+			AND COALESCE(sbe.batch_no, '') != ''
+			AND COALESCE(sbe.is_cancelled, 0) = 0
+	"""
+	return f"({legacy_source} UNION ALL {bundle_source})"
+
+
+def _has_serial_and_batch_bundle_source() -> bool:
+	try:
+		return bool(
+			frappe.db.exists("DocType", "Serial and Batch Entry")
+			and frappe.db.has_column("Stock Ledger Entry", "serial_and_batch_bundle")
+			and frappe.db.has_column("Serial and Batch Entry", "batch_no")
+			and frappe.db.has_column("Serial and Batch Entry", "qty")
+		)
+	except Exception:
+		return False
 
 
 def _has_stock_expiry_source() -> bool:

@@ -1,26 +1,34 @@
+import { h } from "vue";
+
 const ALIGNMENT_STYLE_ID = "vetedge-dashboard-parity-style";
-const ALIGNMENT_STYLE_URL = "/assets/vetedge/css/vetedge_dashboard_parity.css?v=20260813-2";
+const ALIGNMENT_STYLE_URL = "/assets/vetedge/css/vetedge_dashboard_parity.css?v=20260817-1";
 const BOTTOM_REPORTS_ATTR = "data-vetedge-dashboard-bottom-reports";
 const REPORT_CENTER_PATH = "/desk/vetedge-report-center";
+const CAPABILITIES_API = "vetedge.services.reporting_capabilities.get_shell_capabilities";
+const DASHBOARD_EXPORT_API = "/api/method/vetedge.services.dashboard_reporting_actions.download_dashboard";
+const DASHBOARD_PRINT_API = "vetedge.services.dashboard_reporting_actions.get_dashboard_print_html";
 
-const DASHBOARD_PATHS = new Set([
-	"/desk/vetedge-executive-dashboard",
-	"/desk/vetedge-clinical-dashboard",
-	"/desk/veterinary-financial-dashboard",
-	"/desk/vetedge-inventory-dispensary-dashboard",
-	"/desk/vetedge-lab-dashboard",
-	"/desk/vetedge-vaccination-dashboard",
-	"/desk/vetedge-boarding-dashboard",
-	"/desk/vetedge-grooming-dashboard",
-	"/desk/vetedge-practitioner-performance-dashboard",
-	"/desk/vetedge-branch-performance-dashboard",
+const DASHBOARD_ROUTE_KEYS = new Map([
+	["/desk/vetedge-executive-dashboard", "executive"],
+	["/desk/vetedge-clinical-dashboard", "clinical"],
+	["/desk/veterinary-financial-dashboard", "financial"],
+	["/desk/vetedge-inventory-dispensary-dashboard", "inventory_dispensary"],
+	["/desk/vetedge-lab-dashboard", "lab"],
+	["/desk/vetedge-vaccination-dashboard", "vaccination"],
+	["/desk/vetedge-hospitalisation-dashboard", "hospitalisation"],
+	["/desk/vetedge-boarding-dashboard", "boarding"],
+	["/desk/vetedge-grooming-dashboard", "grooming"],
+	["/desk/vetedge-practitioner-performance-dashboard", "practitioner_performance"],
+	["/desk/vetedge-branch-performance-dashboard", "branch_performance"],
 ]);
+const DASHBOARD_PATHS = new Set(DASHBOARD_ROUTE_KEYS.keys());
 
 let installed = false;
 let scheduled = null;
 let observer = null;
 let dashboardClickBound = false;
 let adapterPatched = false;
+let dashboardShellPatched = false;
 
 function ensureStyles() {
 	if (document.getElementById(ALIGNMENT_STYLE_ID)) return;
@@ -52,6 +60,10 @@ function canonicalPath(route) {
 	} catch (_error) {
 		return String(route || "").split("?")[0].replace(/\/+$/, "") || "/";
 	}
+}
+
+function dashboardKey(route = window.location.pathname) {
+	return DASHBOARD_ROUTE_KEYS.get(canonicalPath(route)) || "";
 }
 
 function isDashboardRoute(route) {
@@ -117,6 +129,247 @@ function openReport(reportName, extraFilters = {}) {
 	return navigateSameTab(target);
 }
 
+function apiCall(method, args = {}) {
+	return new Promise((resolve, reject) => {
+		window.frappe.call({
+			method,
+			args,
+			callback: (response) => resolve(response.message || {}),
+			error: reject,
+		});
+	});
+}
+
+function exportRuntime() {
+	return window.EdgeSuiteReportExport || window.EdgeSuiteUI?.reportExport || window.EdgeUI?.reportExport || null;
+}
+
+function printRuntime() {
+	return window.EdgeSuiteReportPrint || window.EdgeSuiteUI?.reportPrint || window.EdgeUI?.reportPrint || null;
+}
+
+function serverErrorMessage(xhr) {
+	try {
+		const text = new TextDecoder("utf-8").decode(new Uint8Array(xhr.response || []));
+		const parsed = JSON.parse(text);
+		return parsed?.message || parsed?.exc || parsed?._server_messages || "";
+	} catch (_error) {
+		return "";
+	}
+}
+
+function responseFilename(xhr, key, format) {
+	const disposition = xhr.getResponseHeader("Content-Disposition") || "";
+	const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+	if (match?.[1]) {
+		try {
+			return decodeURIComponent(match[1].replace(/^\"|\"$/g, ""));
+		} catch (_error) {
+			return match[1].replace(/^\"|\"$/g, "");
+		}
+	}
+	return `VetEdge-${key || "dashboard"}.${format || "xlsx"}`;
+}
+
+function downloadDashboard(key, filters, options = {}) {
+	return new Promise((resolve, reject) => {
+		const exports = exportRuntime();
+		if (!exports?.normalizeOptions || !exports?.downloadVerified) {
+			reject(new Error(__("The shared EdgeSuite export runtime is unavailable.")));
+			return;
+		}
+		const normalized = exports.normalizeOptions({ ...(options || {}), artifact_kind: "dashboard" });
+		const formData = new FormData();
+		formData.append("dashboard_key", key);
+		formData.append("filters", JSON.stringify(filters || {}));
+		formData.append("options", JSON.stringify(normalized));
+		const xhr = new XMLHttpRequest();
+		xhr.open("POST", DASHBOARD_EXPORT_API);
+		xhr.responseType = "arraybuffer";
+		xhr.setRequestHeader("X-Frappe-CSRF-Token", window.frappe.csrf_token);
+		xhr.onload = () => {
+			if (xhr.status < 200 || xhr.status >= 300) {
+				reject(new Error(serverErrorMessage(xhr) || `Dashboard export failed with HTTP ${xhr.status}.`));
+				return;
+			}
+			try {
+				const bytes = new Uint8Array(xhr.response || []);
+				const mime = xhr.getResponseHeader("Content-Type") || exports.expectedMime(normalized.format);
+				const filename = responseFilename(xhr, key, normalized.format);
+				exports.downloadVerified({ bytes, format: normalized.format, mime, filename });
+				resolve({ filename, format: normalized.format });
+			} catch (error) {
+				reject(error);
+			}
+		};
+		xhr.onerror = () => reject(new Error(__("Dashboard export request failed. Please check the connection and try again.")));
+		xhr.send(formData);
+	});
+}
+
+function printDashboard(key, filters) {
+	return new Promise((resolve, reject) => {
+		const prints = printRuntime();
+		const exports = exportRuntime();
+		if (!prints?.open || !exports?.normalizeOptions) {
+			reject(new Error(__("The shared EdgeSuite print runtime is unavailable.")));
+			return;
+		}
+		const printWindow = window.open?.("", "_blank");
+		if (!printWindow) {
+			reject(new Error(__("The print window could not be opened. Please allow pop-ups and try again.")));
+			return;
+		}
+		const options = exports.normalizeOptions({
+			format: "pdf",
+			scope: "all_filtered",
+			include_title: true,
+			include_filters: true,
+			include_summary: true,
+			include_charts: true,
+			include_generated_metadata: true,
+			repeat_table_headings: true,
+		});
+		window.frappe.call({
+			method: DASHBOARD_PRINT_API,
+			args: { dashboard_key: key, filters: JSON.stringify(filters || {}), options: JSON.stringify(options) },
+			callback: (response) => {
+				try {
+					prints.open({ html: response.message || "", title: key || "Dashboard", printWindow });
+					resolve(true);
+				} catch (error) {
+					printWindow.close?.();
+					reject(error);
+				}
+			},
+			error: (error) => {
+				printWindow.close?.();
+				reject(error instanceof Error ? error : new Error(__("Dashboard print generation failed.")));
+			},
+		});
+	});
+}
+
+function dashboardShellLayoutAdapter(BasePageLayout, EdgeDashboardShell) {
+	return {
+		name: "VetEdgeDashboardShellLayoutAdapter",
+		inheritAttrs: false,
+		data() {
+			return {
+				capabilities: {
+					can_view: true,
+					can_print: false,
+					can_export: false,
+					report_tier: "",
+					subscription_entitled: true,
+				},
+				exportBusy: false,
+				printBusy: false,
+			};
+		},
+		mounted() {
+			this.loadCapabilities();
+		},
+		methods: {
+			async loadCapabilities() {
+				const key = dashboardKey();
+				if (!key) return;
+				try {
+					this.capabilities = await apiCall(CAPABILITIES_API, { scope_name: key, scope_type: "dashboard" });
+				} catch (error) {
+					console.warn("VetEdge dashboard action capabilities could not be loaded", error);
+					this.capabilities = {
+						can_view: true,
+						can_print: false,
+						can_export: false,
+						report_tier: "",
+						subscription_entitled: true,
+					};
+				}
+			},
+			async handleExport(options) {
+				const key = dashboardKey();
+				if (!key || !this.capabilities.can_export) return;
+				this.exportBusy = true;
+				try {
+					await downloadDashboard(key, reportFilters(), options || {});
+				} catch (error) {
+					window.frappe.msgprint({ title: __("Dashboard Export Failed"), message: error?.message || String(error), indicator: "red" });
+				} finally {
+					this.exportBusy = false;
+				}
+			},
+			async handlePrint() {
+				const key = dashboardKey();
+				if (!key || !this.capabilities.can_print) return;
+				this.printBusy = true;
+				try {
+					await printDashboard(key, reportFilters());
+				} catch (error) {
+					window.frappe.msgprint({ title: __("Dashboard Print Failed"), message: error?.message || String(error), indicator: "red" });
+				} finally {
+					this.printBusy = false;
+				}
+			},
+		},
+		render() {
+			const key = dashboardKey();
+			if (!key) return h(BasePageLayout, this.$attrs, this.$slots);
+
+			const headerVNode = this.$slots.header?.()?.[0] || null;
+			const headerProps = headerVNode?.props || {};
+			const filterVNode = this.$slots.filters?.()?.[0] || null;
+			const filterSlots = filterVNode?.children && typeof filterVNode.children === "object" ? filterVNode.children : {};
+			const filtersSlot = typeof filterSlots.default === "function" ? filterSlots.default : undefined;
+			const filterActionsSlot = typeof filterSlots.actions === "function" ? filterSlots.actions : undefined;
+
+			return h(
+				EdgeDashboardShell,
+				{
+					...this.$attrs,
+					title: headerProps.title || __("Veterinary Dashboard"),
+					eyebrow: headerProps.eyebrow || __("Veterinary Performance"),
+					subtitle: headerProps.subtitle || __("Branch-aware veterinary operational and performance insights."),
+					exportEnabled: Boolean(this.capabilities.can_export),
+					printEnabled: Boolean(this.capabilities.can_print),
+					exportBusy: this.exportBusy,
+					printBusy: this.printBusy,
+					tier: this.capabilities.report_tier || "",
+					subscriptionEntitled: this.capabilities.subscription_entitled !== false,
+					onExport: this.handleExport,
+					onPrint: this.handlePrint,
+				},
+				{
+					filters: filtersSlot,
+					filterActions: filterActionsSlot,
+					default: () => this.$slots.default?.() || [],
+				},
+			);
+		},
+	};
+}
+
+function installDashboardShellAdapter() {
+	const edgeUI = window.EdgeSuiteUI || window.EdgeUI;
+	const components = edgeUI?.components || edgeUI;
+	if (!components?.EdgePageLayout || !components?.EdgeDashboardShell) return false;
+	if (components.EdgePageLayout?.__vetedgeDashboardShellAdapter) {
+		dashboardShellPatched = true;
+		return true;
+	}
+	const BasePageLayout = components.EdgePageLayout;
+	const adapter = dashboardShellLayoutAdapter(BasePageLayout, components.EdgeDashboardShell);
+	adapter.__vetedgeDashboardShellAdapter = true;
+	try {
+		components.EdgePageLayout = adapter;
+		dashboardShellPatched = components.EdgePageLayout === adapter;
+	} catch (error) {
+		console.warn("VetEdge could not install the EdgeDashboardShell compatibility adapter", error);
+		dashboardShellPatched = false;
+	}
+	return dashboardShellPatched;
+}
+
 function quickReportButton(event) {
 	const target = event.target;
 	if (!target?.closest) return null;
@@ -143,6 +396,7 @@ function schedule() {
 	scheduled = window.setTimeout(() => {
 		apply();
 		patchNavigationAdapter();
+		installDashboardShellAdapter();
 	}, 0);
 }
 
@@ -213,6 +467,7 @@ function bindLifecycle() {
 function install() {
 	ensureStyles();
 	bindDashboardClicks();
+	installDashboardShellAdapter();
 	if (!installed) {
 		bindLifecycle();
 		installed = true;
@@ -220,6 +475,7 @@ function install() {
 	if (window.frappe?.require) {
 		window.frappe.require("edgeui.bundle.js", () => {
 			patchNavigationAdapter();
+			installDashboardShellAdapter();
 			schedule();
 		});
 	} else {
@@ -227,7 +483,7 @@ function install() {
 	}
 	window.setTimeout(schedule, 80);
 	window.setTimeout(schedule, 250);
-	return { installed: true, adapterPatched, dashboardCount: DASHBOARD_PATHS.size };
+	return { installed: true, adapterPatched, dashboardShellPatched, dashboardCount: DASHBOARD_PATHS.size };
 }
 
 if (typeof window !== "undefined") {
@@ -237,6 +493,9 @@ if (typeof window !== "undefined") {
 		openReport,
 		reportCenterTarget,
 		navigateSameTab,
+		dashboardKey,
+		downloadDashboard,
+		printDashboard,
 	});
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install, { once: true });
 	else install();

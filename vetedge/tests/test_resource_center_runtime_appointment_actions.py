@@ -55,6 +55,12 @@ def test_hooked_resource_center_provider_enriches_appointment_rows_with_smart_ac
     ):
         assert contract in component
 
+    # Backend-owned Smart Appointment routes may contain record-specific query
+    # parameters. Navigate them exactly as returned so repeat actions do not
+    # lose consultation or other target context.
+    assert "window.location.assign(result.open.route)" in component
+    assert "this.openRoute(result.open.route)" not in component
+
     # Smart action state is included in the normal page response. The client
     # must not add a separate resolver request for every visible row.
     assert "get_appointment_action_state" not in component

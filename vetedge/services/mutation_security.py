@@ -4,6 +4,8 @@ from typing import Any
 
 import frappe
 
+from vetedge.services.nadis_vaccination_editor import extend_vaccination_editor_config
+
 from vetedge.services.platform_access import require_vetedge_platform_access
 from vetedge.services.portal_access import require_internal_user
 
@@ -43,9 +45,10 @@ def _parse_values(values: str | dict | None) -> dict[str, Any]:
 @frappe.whitelist()
 def create_clinical_record(doctype: str, values=None):
     _gate("create_clinical_record", doctype)
-    from vetedge.services.clinical_record_editor import create_clinical_record as original
+    from vetedge.services import clinical_record_editor
 
-    return original(doctype=doctype, values=values)
+    extend_vaccination_editor_config(clinical_record_editor.RECORD_CONFIG)
+    return clinical_record_editor.create_clinical_record(doctype=doctype, values=values)
 
 
 @frappe.whitelist()
@@ -70,9 +73,10 @@ def save_clinical_record_editor(doctype: str, name: str, values=None):
         # context-assignment path above.
         for fieldname in VACCINATION_PROTECTED_EDITOR_FIELDS:
             payload.pop(fieldname, None)
-    from vetedge.services.clinical_record_editor import save_clinical_record_editor as original
+    from vetedge.services import clinical_record_editor
 
-    return original(doctype=doctype, name=name, values=payload)
+    extend_vaccination_editor_config(clinical_record_editor.RECORD_CONFIG)
+    return clinical_record_editor.save_clinical_record_editor(doctype=doctype, name=name, values=payload)
 
 
 @frappe.whitelist()
