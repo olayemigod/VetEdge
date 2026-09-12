@@ -47,7 +47,7 @@ Users without pricing authority cannot override the resolved Price List or overw
 
 ## Hospitalisation Boundary
 
-Hospitalisation clinical medication/activity selection uses curated Veterinary Treatment Items and supports create-if-missing when enabled.
+Hospitalisation clinical medication/activity selection preserves the existing ERPNext Item results and additionally supports creating a reusable Veterinary Treatment Item when no exact treatment master exists and the feature is enabled.
 
 Hospitalisation charge editing deliberately retains the existing generic ERPNext Item search so existing charge-sheet workflows are not narrowed.
 
@@ -90,8 +90,8 @@ No destructive data migration is required. A normal `bench migrate` adds the new
 
 ### Hospitalisation
 
-- Medication/Fluid Therapy clinical picker searches curated Treatment Items.
-- Existing charge edit Item picker remains unchanged.
+- Medication/Fluid Therapy clinical picker still shows the existing valid ERPNext Item choices.
+- A missing treatment master can expose Create New Treatment Item without removing an existing ERPNext Item match.\n- Existing charge edit Item picker remains unchanged.
 - With Hospitalisation extension off: no Treatment Item create result.
 - Enable both Treatment Item and Hospitalisation gates: Create New Treatment Item appears.
 - Create/select the new master and add the clinical activity.
