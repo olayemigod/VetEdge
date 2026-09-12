@@ -289,7 +289,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations",
+   "depends_on": "eval:doc.enable_vetedge",
    "description": "When a Symptom search has no suitable result, allow permitted users to create a new Veterinary Symptom from the clinical workflow.",
    "fieldname": "allow_new_symptoms_in_clinical_workflow",
    "fieldtype": "Check",
@@ -297,7 +297,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations",
+   "depends_on": "eval:doc.enable_vetedge",
    "description": "When a Diagnosis search has no suitable result, allow permitted users to create a new Veterinary Diagnosis from the clinical workflow.",
    "fieldname": "allow_new_diagnoses_in_clinical_workflow",
    "fieldtype": "Check",
@@ -305,7 +305,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.enable_vetedge && doc.enable_consultations",
+   "depends_on": "eval:doc.enable_vetedge",
    "description": "When a Treatment Item search has no suitable result, allow permitted users to create a new Veterinary Treatment Item from the clinical workflow.",
    "fieldname": "allow_new_treatment_items_in_clinical_workflow",
    "fieldtype": "Check",
