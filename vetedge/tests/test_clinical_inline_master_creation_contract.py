@@ -19,7 +19,7 @@ class TestClinicalInlineMasterCreationContract(TestCase):
 		self.assertIn('this._createSeed("treatment_item", item)', vue)
 		self.assertIn("Create & Select", vue)
 
-	def test_native_consultation_routes_treatment_creation_through_vetedge(self):
+	def test_native_consultation_keeps_treatment_picker_safe_and_curated(self):
 		js = (
 			ROOT
 			/ "veterinary"
@@ -28,10 +28,11 @@ class TestClinicalInlineMasterCreationContract(TestCase):
 			/ "veterinary_consultation.js"
 		).read_text()
 
-		self.assertIn("get_treatment_item_link_options_with_create", js)
+		self.assertIn("vetedge.services.treatment_items.get_treatment_item_link_options", js)
 		self.assertIn('treatment_grid?.update_docfield_property("item", "only_select", 1)', js)
-		self.assertIn("show_treatment_item_create_dialog", js)
-		self.assertIn("create_clinical_master", js)
+		self.assertIn("configure_clinical_master_creation", js)
+		self.assertNotIn("get_treatment_item_link_options_with_create", js)
+		self.assertNotIn("show_treatment_item_create_dialog", js)
 
 	def test_hospitalisation_clinical_item_search_is_separate_from_charge_item_search(self):
 		vue = (ROOT / "public" / "js" / "vetedge_hospitalisation_episode" / "VetEdgeHospitalisationEpisode.vue").read_text()
