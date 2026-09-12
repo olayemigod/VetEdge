@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from vetedge.services.permissions import can_access_branch_data, get_current_user
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -92,6 +93,11 @@ def _kind_allowed(kind: str, context: str) -> bool:
 		return False
 
 
+def _validate_branch_context(branch: str | None) -> None:
+	if branch:
+		can_access_branch_data(get_current_user(), branch, raise_exception=True)
+
+
 def _resolved_price_list(branch: str | None = None, company: str | None = None, customer: str | None = None) -> str | None:
 	try:
 		from vetedge.services.billing_core import _resolve_selling_price_list
@@ -110,12 +116,14 @@ def get_clinical_master_creation_capabilities(
 ) -> dict[str, Any]:
 	require_internal_user()
 	resolved_context = _normalise_context(context)
+	_validate_branch_context(branch)
+	can_create_treatment_item = _kind_allowed("treatment_item", resolved_context)
 	return {
 		"context": resolved_context,
 		"can_create_symptom": _kind_allowed("symptom", resolved_context),
 		"can_create_diagnosis": _kind_allowed("diagnosis", resolved_context),
-		"can_create_treatment_item": _kind_allowed("treatment_item", resolved_context),
-		"can_create_erpnext_item": _can_create_erpnext_item(),
+		"can_create_treatment_item": can_create_treatment_item,
+		"can_create_erpnext_item": can_create_treatment_item and _can_create_erpnext_item(),
 		"can_select_price_list": _can_manage_pricing(),
 		"resolved_price_list": _resolved_price_list(branch=branch, company=company, customer=customer),
 	}
@@ -559,6 +567,7 @@ def create_clinical_master(
 ) -> dict[str, Any]:
 	require_internal_user()
 	resolved_context = _normalise_context(context)
+	_validate_branch_context(branch)
 	if kind not in KIND_SETTINGS:
 		frappe.throw(_("Unsupported clinical master type."), frappe.ValidationError)
 	if not _kind_allowed(kind, resolved_context):
