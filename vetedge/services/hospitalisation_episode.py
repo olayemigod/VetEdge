@@ -648,6 +648,17 @@ def search_hospitalisation_episode_options(
             for row in rows
         ]
 
+    if field == "treatment_item":
+        from vetedge.services.clinical_master_creation import search_clinical_master_options
+
+        return search_clinical_master_options(
+            "treatment_item",
+            query,
+            context="hospitalisation",
+            branch=doc.get("service_branch"),
+            limit=page_len,
+        )
+
     if field == "item":
         filters = {"disabled": 0}
         or_filters = None
