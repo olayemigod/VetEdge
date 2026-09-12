@@ -231,7 +231,12 @@ APPOINTMENT_EVENTS = {
 }
 
 
-def notify_appointment_event(appointment, event: str, previous_status: str | None = None) -> dict:
+def notify_appointment_event(
+	appointment,
+	event: str,
+	previous_status: str | None = None,
+	previous_datetime=None,
+) -> dict:
 	if event not in APPOINTMENT_EVENTS:
 		frappe.throw(f"Unsupported appointment notification event: {event}", frappe.ValidationError)
 
@@ -245,6 +250,7 @@ def notify_appointment_event(appointment, event: str, previous_status: str | Non
 			"branch": appointment.branch,
 			"practitioner": appointment.practitioner,
 			"appointment_datetime": appointment.appointment_datetime,
+			"previous_datetime": previous_datetime,
 			"previous_status": previous_status,
 			"status": appointment.status,
 		},
@@ -867,6 +873,7 @@ def build_delivery_idempotency_key(
 	occurrence = {
 		"previous_status": context.get("previous_status"),
 		"status": context.get("status"),
+		"previous_datetime": cstr(context.get("previous_datetime") or ""),
 		"appointment_datetime": cstr(context.get("appointment_datetime") or ""),
 	}
 	raw = json.dumps(
