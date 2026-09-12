@@ -30,13 +30,14 @@ frappe.ui.form.on("Veterinary Consultation", {
 		}));
 
 		frm.set_query("item", "planned_treatments", () => ({
-			query: "vetedge.services.treatment_items.get_treatment_item_link_options",
+			query: "vetedge.services.clinical_master_creation.get_treatment_item_link_options_with_create",
 		}));
 	},
 
 	refresh(frm) {
 		applyCurrentDoctorPractitionerDefault(frm);
 		configure_planned_treatments_grid(frm);
+		configure_clinical_master_creation(frm);
 		configure_dispensary_grid(frm);
 		sync_dispensary_preview(frm);
 		frm.add_custom_button(__("View Medical History"), () => {
@@ -519,6 +520,128 @@ function consultationIsClosed(frm) {
 	return ["Completed", "Cancelled"].includes(frm.doc.status);
 }
 
+const CLINICAL_CREATE_PREFIX = "__vetedge_create__:";
+
+function parse_clinical_create_value(kind, value) {
+	const prefix = `${CLINICAL_CREATE_PREFIX}${kind}:`;
+	if (typeof value !== "string" || !value.startsWith(prefix)) {
+		return null;
+	}
+	return value.slice(prefix.length).trim();
+}
+
+function configure_clinical_master_creation(frm) {
+	frappe.call({
+		method: "vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities",
+		args: {
+			context: "consultation",
+			branch: frm.doc.service_branch,
+			company: frm.doc.company,
+			customer: frm.doc.primary_owner,
+		},
+		callback(response) {
+			const capabilities = response.message || {};
+			const symptom_grid = frm.get_field("symptoms")?.grid;
+			const diagnosis_grid = frm.get_field("diagnoses")?.grid;
+			const treatment_grid = frm.get_field("planned_treatments")?.grid;
+			symptom_grid?.update_docfield_property("symptom", "only_select", capabilities.can_create_symptom ? 0 : 1);
+			diagnosis_grid?.update_docfield_property("diagnosis", "only_select", capabilities.can_create_diagnosis ? 0 : 1);
+			// Never expose ERPNext's generic Item creation directly from the treatment row.
+			// VetEdge's create-if-missing pseudo result owns the treatment + pricing workflow.
+			treatment_grid?.update_docfield_property("item", "only_select", 1);
+		},
+	});
+}
+
+function show_treatment_item_create_dialog(frm, seed, cdt, cdn) {
+	frappe.call({
+		method: "vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities",
+		args: {
+			context: "consultation",
+			branch: frm.doc.service_branch,
+			company: frm.doc.company,
+			customer: frm.doc.primary_owner,
+		},
+		callback(response) {
+			const capabilities = response.message || {};
+			if (!capabilities.can_create_treatment_item) {
+				frappe.msgprint(__("Creating new Treatment Items from this clinical workflow is disabled or not permitted."));
+				return;
+			}
+
+			const dialog = new frappe.ui.Dialog({
+				title: __("Create New Treatment Item"),
+				size: "large",
+				fields: [
+					{
+						fieldtype: "Link",
+						fieldname: "item",
+						label: __("ERPNext Item"),
+						options: "Item",
+						reqd: 1,
+						only_select: capabilities.can_create_erpnext_item ? 0 : 1,
+						description: capabilities.can_create_erpnext_item
+							? __("Search existing Items first. If unavailable, Frappe may offer Create New Item based on your stock permissions.")
+							: __("Search and select an existing ERPNext Item."),
+						get_query: () => ({ filters: { disabled: 0 } }),
+					},
+					{
+						fieldtype: "Link",
+						fieldname: "price_list",
+						label: __("Price List"),
+						options: "Price List",
+						default: capabilities.resolved_price_list || "",
+						read_only: capabilities.can_select_price_list ? 0 : 1,
+						get_query: () => ({ filters: { enabled: 1, selling: 1 } }),
+					},
+					{ fieldtype: "Currency", fieldname: "default_price", label: __("Default Price"), default: 0 },
+					{ fieldtype: "Column Break" },
+					{ fieldtype: "Link", fieldname: "service_type", label: __("Default Service Type"), options: "Veterinary Service Type" },
+					{ fieldtype: "Link", fieldname: "treatment_type", label: __("Default Treatment Type"), options: "Veterinary Treatment Type" },
+					{ fieldtype: "Int", fieldname: "shelf_life_in_days", label: __("Shelf Life in Days"), default: 0 },
+					{ fieldtype: "Section Break" },
+					{
+						fieldtype: "Small Text",
+						fieldname: "description",
+						label: __("Description"),
+						default: seed || "",
+					},
+				],
+				primary_action_label: __("Create & Select"),
+				primary_action(values) {
+					dialog.disable_primary_action();
+					frappe.call({
+						method: "vetedge.services.clinical_master_creation.create_clinical_master",
+						args: {
+							kind: "treatment_item",
+							values,
+							context: "consultation",
+							branch: frm.doc.service_branch,
+							company: frm.doc.company,
+							customer: frm.doc.primary_owner,
+						},
+						callback(result) {
+							const created = result.message || {};
+							if (!created.value && !created.item) {
+								dialog.enable_primary_action();
+								return;
+							}
+							dialog.hide();
+							frappe.model.set_value(cdt, cdn, "item", created.value || created.item);
+							frappe.show_alert({ message: __("Treatment Item created and selected."), indicator: "green" });
+						},
+						error() {
+							dialog.enable_primary_action();
+						},
+					});
+				},
+			});
+
+			dialog.show();
+		},
+	});
+}
+
 function configure_planned_treatments_grid(frm) {
 	const grid = frm.get_field("planned_treatments")?.grid;
 	if (!grid) {
@@ -535,6 +658,12 @@ function configure_planned_treatments_grid(frm) {
 frappe.ui.form.on("Planned Treatment Item", {
 	item(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
+		const create_seed = parse_clinical_create_value("treatment_item", row.item);
+		if (create_seed !== null) {
+			frappe.model.set_value(cdt, cdn, "item", "");
+			show_treatment_item_create_dialog(frm, create_seed, cdt, cdn);
+			return;
+		}
 		if (!row.item) {
 			return;
 		}
