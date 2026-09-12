@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import get_datetime
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
 from vetedge.services.appointment_intelligence import (
@@ -55,7 +56,13 @@ class VeterinaryAppointment(Document):
 			return
 
 		status_changed = previous.status != self.status
-		datetime_changed = previous.get("appointment_datetime") != self.get("appointment_datetime")
+		previous_datetime = previous.get("appointment_datetime")
+		current_datetime = self.get("appointment_datetime")
+		datetime_changed = (
+			get_datetime(previous_datetime) if previous_datetime else None
+		) != (
+			get_datetime(current_datetime) if current_datetime else None
+		)
 		is_repeated_reschedule = self.status == "Rescheduled" and datetime_changed
 		if not status_changed and not is_repeated_reschedule:
 			return
@@ -75,7 +82,7 @@ class VeterinaryAppointment(Document):
 				self,
 				status_event,
 				previous_status=previous.status,
-				previous_datetime=previous.get("appointment_datetime"),
+				previous_datetime=previous_datetime,
 			)
 
 		# These are dedicated, persistent in-app operational notifications.
@@ -116,7 +123,7 @@ class VeterinaryAppointment(Document):
 								except Exception:
 									pass
 
-							from frappe.utils import get_datetime, get_date_str, get_time_str
+							from frappe.utils import get_date_str, get_time_str
 							
 							clinic_name = (
 								frappe.db.get_value("Website Settings", "Website Settings", "app_name")
