@@ -10,6 +10,7 @@ from frappe.utils import add_days, add_to_date, cstr, flt, get_datetime, getdate
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.notification_backends import get_notification_backend
 from vetedge.services.notification_events import (
+	NOTIFICATION_EVENT_REGISTRY,
 	get_notification_event_definition,
 	get_notification_email_template,
 )
@@ -59,32 +60,9 @@ OWNER_FACING_NOTIFICATION_TITLES = {
 }
 
 OWNER_EVENTS = {
-	"appointment_created",
-	"appointment_booked",
-	"appointment_scheduled",
-	"appointment_confirmed",
-	"appointment_reminder",
-	"appointment_rescheduled",
-	"appointment_cancelled",
-	"appointment_completed",
-	"registration_confirmed",
-	"invoice_created",
-	"consultation_invoice_created",
-	"payment_received",
-	"payment_initiated",
-	"payment_pending",
-	"payment_reminder",
-	"vaccination_administered",
-	"vaccination_due_soon",
-	"vaccination_overdue",
-	"grooming_appointment_created",
-	"grooming_appointment_confirmed",
-	"grooming_completed",
-	"boarding_reserved",
-	"boarding_checked_in",
-	"boarding_checked_out",
-	"boarding_invoice_created",
-	"invoice_pdf_available",
+	event_key
+	for event_key, definition in NOTIFICATION_EVENT_REGISTRY.items()
+	if "Owner" in cstr(definition.audience or "")
 }
 
 STAFF_NOTIFICATION_ROLES = {
