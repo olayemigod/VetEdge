@@ -827,11 +827,9 @@ def reschedule_missed_appointment(
 	if get_datetime(new_datetime) <= now_datetime():
 		frappe.throw("Rescheduled appointment date/time must be in the future.", frappe.ValidationError)
 
-	previous_status = appointment.status
 	appointment.appointment_datetime = new_datetime
 	appointment.status = _rescheduled_appointment_status(appointment.status)
 	appointment.save()
-	emit_appointment_status_notification(appointment, previous_status, appointment.status)
 
 	missed = _apply_missed_resolution_db(
 		missed.name,
@@ -851,10 +849,8 @@ def cancel_missed_appointment(missed_appointment: str, note: str | None = None) 
 	if getattr(missed, "resolved", 0):
 		return _missed_action_response(missed, appointment)
 
-	previous_status = appointment.status
 	appointment.status = "Cancelled"
 	appointment.save()
-	emit_appointment_status_notification(appointment, previous_status, appointment.status)
 
 	missed = _apply_missed_resolution_db(
 		missed.name,
