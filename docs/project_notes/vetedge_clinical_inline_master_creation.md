@@ -85,8 +85,8 @@ No destructive data migration is required. A normal `bench migrate` adds the new
 
 - Symptom/Diagnosis Link quick-create is disabled when the respective gate is off.
 - Enable the gate and confirm Frappe search/create becomes available for permitted users.
-- Treatment search returns curated Treatment Items.
-- Missing treatment returns VetEdge Create New Treatment Item, not generic direct Item creation.
+- Treatment search remains curated/select-only and never exposes generic direct ERPNext Item creation from the treatment row.
+- Use the EdgeSuite Clinical Workspace for the full Treatment Item create-if-missing + pricing + optional ERPNext Item creation flow.
 
 ### Hospitalisation
 
