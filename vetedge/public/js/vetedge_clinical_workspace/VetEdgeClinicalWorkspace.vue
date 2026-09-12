@@ -104,13 +104,13 @@
 						<EdgeTextarea :model-value="form.assessment_notes" label="Assessment Notes" :rows="5" @update:model-value="(value) => updateField('assessment_notes', value)" />
 						<header class="clinical-subhead"><div><h4>Symptoms</h4><p>Capture active and clinically relevant symptoms.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addSymptom">Add Symptom</button></header>
 						<div v-for="(row, index) in form.symptoms" :key="row._key || row.name || index" class="clinical-child-row">
-							<EdgeLinkField :model-value="row.symptom" label="Symptom" placeholder="Select symptom" :searcher="(query) => linkSearch('symptom', query)" @update:model-value="(value) => updateChild('symptoms', index, 'symptom', value)" />
+							<EdgeLinkField :model-value="row.symptom" label="Symptom" placeholder="Select symptom" :searcher="(query) => linkSearch('symptom', query)" @update:model-value="(value) => selectClinicalMaster('symptom', 'symptoms', index, value)" />
 							<EdgeInput :model-value="row.notes" label="Notes" @update:model-value="(value) => updateChild('symptoms', index, 'notes', value)" />
 							<button type="button" class="edge-button edge-button--danger edge-button--compact" @click="removeChild('symptoms', index)">Remove</button>
 						</div>
 						<header class="clinical-subhead"><div><h4>Diagnoses</h4><p>Diagnosis and treatment capture remains permission-aware.</p></div><button type="button" class="edge-button edge-button--compact" :disabled="!detail.can_write" @click="addDiagnosis">Add Diagnosis</button></header>
 						<div v-for="(row, index) in form.diagnoses" :key="row._key || row.name || index" class="clinical-child-row clinical-child-row--diagnosis">
-							<EdgeLinkField :model-value="row.diagnosis" label="Diagnosis" placeholder="Select diagnosis" :searcher="(query) => linkSearch('diagnosis', query)" @update:model-value="(value) => updateChild('diagnoses', index, 'diagnosis', value)" />
+							<EdgeLinkField :model-value="row.diagnosis" label="Diagnosis" placeholder="Select diagnosis" :searcher="(query) => linkSearch('diagnosis', query)" @update:model-value="(value) => selectClinicalMaster('diagnosis', 'diagnoses', index, value)" />
 							<EdgeDropdown :model-value="row.diagnosis_type" label="Diagnosis Type" placeholder="Select type" :options="diagnosisTypeOptions" @update:model-value="(value) => updateChild('diagnoses', index, 'diagnosis_type', value)" />
 							<EdgeInput :model-value="row.notes" label="Notes" @update:model-value="(value) => updateChild('diagnoses', index, 'notes', value)" />
 							<button type="button" class="edge-button edge-button--danger edge-button--compact" @click="removeChild('diagnoses', index)">Remove</button>
@@ -173,6 +173,39 @@
 			<template #footer><button type="button" class="edge-button" :disabled="busy" @click="closeDispensary">Close</button><button v-if="dispensaryDialog.context.can_confirm && dispensaryPending" type="button" class="edge-button edge-button--primary" :disabled="busy || dispensaryDialog.loading" @click="confirmDispensary">Confirm Dispensary Issue</button></template>
 		</EdgeModal>
 
+		<EdgeModal :open="clinicalMasterDialog.open" :title="clinicalMasterTitle" subtitle="Create the missing reusable clinical master without leaving this workflow." :busy="clinicalMasterDialog.saving" @close="closeClinicalMaster">
+			<div v-if="clinicalMasterDialog.kind === 'symptom'" class="clinical-grid">
+				<EdgeInput :model-value="clinicalMasterDialog.values.name" label="Symptom Name" @update:model-value="(value) => setClinicalMasterValue('name', value)" />
+				<EdgeDropdown :model-value="clinicalMasterDialog.values.body_system" label="Body System" placeholder="Optional" :options="bodySystemOptions" @update:model-value="(value) => setClinicalMasterValue('body_system', value)" />
+				<EdgeTextarea class="clinical-wide" :model-value="clinicalMasterDialog.values.description" label="Description" :rows="4" @update:model-value="(value) => setClinicalMasterValue('description', value)" />
+			</div>
+			<div v-else-if="clinicalMasterDialog.kind === 'diagnosis'" class="clinical-grid">
+				<EdgeInput :model-value="clinicalMasterDialog.values.name" label="Diagnosis Name" @update:model-value="(value) => setClinicalMasterValue('name', value)" />
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.category" label="Diagnosis Category" placeholder="Optional" :searcher="(query) => creationSearch('diagnosis_category', query)" @update:model-value="(value) => setClinicalMasterValue('category', value)" />
+				<EdgeTextarea class="clinical-wide" :model-value="clinicalMasterDialog.values.description" label="Description" :rows="4" @update:model-value="(value) => setClinicalMasterValue('description', value)" />
+			</div>
+			<div v-else-if="clinicalMasterDialog.kind === 'treatment_item'" class="clinical-grid">
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.item" :selected-label="clinicalMasterDialog.values.item_label" label="ERPNext Item" placeholder="Search existing ERPNext Item first" :searcher="(query) => creationSearch('erpnext_item', query)" @update:model-value="selectTreatmentBaseItem" />
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!clinicalMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="(value) => setClinicalMasterValue('price_list', value)" />
+				<template v-if="clinicalMasterDialog.newItemMode">
+					<EdgeInput :model-value="clinicalMasterDialog.values.new_item.item_name" label="New Item Name" @update:model-value="(value) => setNewItemValue('item_name', value)" />
+					<EdgeInput :model-value="clinicalMasterDialog.values.new_item.item_code" label="Item Code" description="Leave blank to use the Item Name." @update:model-value="(value) => setNewItemValue('item_code', value)" />
+					<EdgeLinkField :model-value="clinicalMasterDialog.values.new_item.item_group" label="Item Group" placeholder="Select Item Group" :searcher="(query) => creationSearch('item_group', query)" @update:model-value="(value) => setNewItemValue('item_group', value)" />
+					<EdgeLinkField :model-value="clinicalMasterDialog.values.new_item.stock_uom" label="Stock UOM" placeholder="Select UOM" :searcher="(query) => creationSearch('uom', query)" @update:model-value="(value) => setNewItemValue('stock_uom', value)" />
+					<EdgeDropdown :model-value="String(clinicalMasterDialog.values.new_item.is_stock_item ?? 1)" label="Item Type" :options="itemTypeOptions" @update:model-value="(value) => setNewItemValue('is_stock_item', Number(value))" />
+				</template>
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.service_type" label="Default Service Type" placeholder="Optional" :searcher="(query) => creationSearch('service_type', query)" @update:model-value="(value) => setClinicalMasterValue('service_type', value)" />
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.treatment_type" label="Default Treatment Type" placeholder="Optional" :searcher="(query) => creationSearch('treatment_type', query)" @update:model-value="(value) => setClinicalMasterValue('treatment_type', value)" />
+				<EdgeInput :model-value="clinicalMasterDialog.values.default_price" type="number" min="0" step="0.01" label="Default Price" description="Uses the contextual Price List. Existing prices cannot be overwritten without pricing authority." @update:model-value="(value) => setClinicalMasterValue('default_price', value)" />
+				<EdgeInput :model-value="clinicalMasterDialog.values.shelf_life_in_days" type="number" min="0" step="1" label="Shelf Life in Days" @update:model-value="(value) => setClinicalMasterValue('shelf_life_in_days', value)" />
+				<EdgeTextarea class="clinical-wide" :model-value="clinicalMasterDialog.values.description" label="Description" :rows="4" @update:model-value="(value) => setClinicalMasterValue('description', value)" />
+			</div>
+			<template #footer>
+				<button type="button" class="edge-button" :disabled="clinicalMasterDialog.saving" @click="closeClinicalMaster">Cancel</button>
+				<button type="button" class="edge-button edge-button--primary" :disabled="clinicalMasterDialog.saving" @click="saveClinicalMaster">Create & Select</button>
+			</template>
+		</EdgeModal>
+
 		<EdgeModal :open="confirmation.open" :title="confirmation.title" :subtitle="confirmation.subtitle" :busy="false" @close="cancelConfirmation">
 			<p>{{ confirmation.message }}</p>
 			<template #footer><button type="button" class="edge-button" @click="cancelConfirmation">Keep Editing</button><button type="button" :class="['edge-button', confirmation.danger ? 'edge-button--danger' : 'edge-button--primary']" @click="confirmConfirmation">{{ confirmation.confirmLabel }}</button></template>
@@ -197,14 +230,30 @@ const API = Object.freeze({
 	treatmentOrder: "vetedge.services.clinical_workspace_phase5.get_treatment_display_order",
 	dispensaryContext: "vetedge.services.clinical_workspace_phase5.get_dispensary_workspace_context",
 	confirmDispensary: "vetedge.services.clinical_workspace_phase5.confirm_workspace_dispensary",
+	createMaster: "vetedge.services.clinical_master_creation.create_clinical_master",
+	creationOptions: "vetedge.services.clinical_master_creation.search_clinical_creation_options",
+	creationCapabilities: "vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities",
 });
 const STATUSES = ["Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"];
 const DIAGNOSIS_TYPES = ["Primary", "Differential", "Rule Out", "Resolved"];
+const BODY_SYSTEMS = ["General", "Digestive", "Respiratory", "Musculoskeletal", "Dermatology", "Ear", "Eye", "Dental", "Neurological", "Urinary", "Reproductive"];
+const CREATE_PREFIX = "__vetedge_create__:";
+const ERP_ITEM_CREATE_PREFIX = "__vetedge_create_erpnext_item__:";
 const blankCapabilities = () => ({ create_vitals: false, view_history: false, open_billing: false });
 const blankDetail = (overrides = {}) => ({ open: false, loading: false, error: "", name: "", modified: "", status: "Draft", can_write: true, scope_locked: false, latest_vitals: null, actions: [], capabilities: blankCapabilities(), ...overrides });
 const blankForm = () => ({ patient: "", patient_label: "", primary_owner: "", primary_owner_label: "", consultation_datetime: "", consultation_type: "General Consultation", service_branch: "", consulting_practitioner: "", linked_appointment: "", presenting_complaint: "", examination_notes: "", assessment_notes: "", treatment_plan_summary: "", follow_up_date: "", symptoms: [], diagnoses: [], planned_treatments: [], consultation_invoices: [], payment_status: "Not Billed", dispensary_status: "Not Required" });
 const blankConfirmation = () => ({ open: false, title: "", subtitle: "", message: "", confirmLabel: "Continue", danger: false, resolve: null });
 const blankDispensary = () => ({ open: false, loading: false, context: {}, items: [] });
+const blankClinicalMaster = () => ({
+	open: false,
+	kind: "",
+	seed: "",
+	target: { table: "", index: -1 },
+	capabilities: {},
+	values: {},
+	newItemMode: false,
+	saving: false,
+});
 function call(method, args = {}) { return frappe.call({ method, args }).then((response) => response.message); }
 function message(error, fallback) { return error?.message || error?._server_messages || error?.exc_type || fallback; }
 function localDatetime(value) { return value ? String(value).replace(" ", "T").slice(0, 16) : ""; }
@@ -242,6 +291,7 @@ export default {
 			vitalsDialog: { open: false, values: {} },
 			historyDialog: { open: false, loading: false, data: {} },
 			dispensaryDialog: blankDispensary(),
+			clinicalMasterDialog: blankClinicalMaster(),
 			confirmation: blankConfirmation(),
 			listColumns: [
 				{ key: "consultation_datetime", label: "Date/Time", type: "datetime" },
@@ -265,6 +315,15 @@ export default {
 	computed: {
 		statusOptions() { return this.statuses.map((value) => ({ value, label: value })); },
 		diagnosisTypeOptions() { return DIAGNOSIS_TYPES.map((value) => ({ value, label: value })); },
+		bodySystemOptions() { return BODY_SYSTEMS.map((value) => ({ value, label: value })); },
+		itemTypeOptions() { return [{ value: "1", label: "Stock Item" }, { value: "0", label: "Service / Non-stock Item" }]; },
+		clinicalMasterTitle() {
+			return {
+				symptom: __("Create New Symptom"),
+				diagnosis: __("Create New Diagnosis"),
+				treatment_item: __("Create New Treatment Item"),
+			}[this.clinicalMasterDialog.kind] || __("Create Clinical Master");
+		},
 		userName() { return window.frappe?.session?.user_fullname || window.frappe?.session?.user || ""; },
 		branchName() { return this.form.service_branch || this.filters.branch || ""; },
 		isNew() { return !this.detail.name; },
@@ -434,6 +493,123 @@ export default {
 			this.form[table][index][field] = value ?? "";
 			this.markDirty();
 		},
+		_createSeed(kind, value) {
+			const prefix = `${CREATE_PREFIX}${kind}:`;
+			return typeof value === "string" && value.startsWith(prefix) ? value.slice(prefix.length).trim() : null;
+		},
+		async selectClinicalMaster(kind, table, index, value) {
+			const seed = this._createSeed(kind, value);
+			if (seed !== null) {
+				await this.openClinicalMaster(kind, seed, { table, index });
+				return;
+			}
+			const field = kind === "symptom" ? "symptom" : "diagnosis";
+			this.updateChild(table, index, field, value);
+		},
+		async openClinicalMaster(kind, seed, target) {
+			try {
+				const capabilities = await call(API.creationCapabilities, {
+					context: "consultation",
+					branch: this.form.service_branch || undefined,
+					company: this.form.company || undefined,
+					customer: this.form.primary_owner || undefined,
+				});
+				const values = kind === "symptom"
+					? { name: seed, body_system: "", description: "" }
+					: kind === "diagnosis"
+						? { name: seed, category: "", description: "" }
+						: {
+							item: "",
+							item_label: "",
+							price_list: capabilities?.resolved_price_list || "",
+							default_price: 0,
+							service_type: "",
+							treatment_type: "",
+							shelf_life_in_days: 0,
+							description: "",
+							new_item: { item_name: seed, item_code: "", item_group: "", stock_uom: "", is_stock_item: 1 },
+						};
+				this.clinicalMasterDialog = { ...blankClinicalMaster(), open: true, kind, seed, target, capabilities: capabilities || {}, values };
+			} catch (error) {
+				frappe.show_alert({ message: message(error, __("Clinical master creation is unavailable.")), indicator: "orange" });
+			}
+		},
+		closeClinicalMaster() {
+			if (!this.clinicalMasterDialog.saving) this.clinicalMasterDialog = blankClinicalMaster();
+		},
+		setClinicalMasterValue(field, value) {
+			this.clinicalMasterDialog.values = { ...this.clinicalMasterDialog.values, [field]: value ?? "" };
+		},
+		setNewItemValue(field, value) {
+			this.clinicalMasterDialog.values = {
+				...this.clinicalMasterDialog.values,
+				new_item: { ...(this.clinicalMasterDialog.values.new_item || {}), [field]: value ?? "" },
+			};
+		},
+		async creationSearch(kind, search) {
+			return (await call(API.creationOptions, {
+				kind,
+				search,
+				context: "consultation",
+				branch: this.form.service_branch || undefined,
+				company: this.form.company || undefined,
+				customer: this.form.primary_owner || undefined,
+				limit: 20,
+			})) || [];
+		},
+		selectTreatmentBaseItem(value) {
+			if (typeof value === "string" && value.startsWith(ERP_ITEM_CREATE_PREFIX)) {
+				const seed = value.slice(ERP_ITEM_CREATE_PREFIX.length).trim();
+				if (!this.clinicalMasterDialog.capabilities.can_create_erpnext_item) return;
+				this.clinicalMasterDialog.newItemMode = true;
+				this.clinicalMasterDialog.values = {
+					...this.clinicalMasterDialog.values,
+					item: "",
+					item_label: "",
+					new_item: {
+						...(this.clinicalMasterDialog.values.new_item || {}),
+						item_name: seed || this.clinicalMasterDialog.seed,
+					},
+				};
+				return;
+			}
+			this.clinicalMasterDialog.newItemMode = false;
+			this.clinicalMasterDialog.values = {
+				...this.clinicalMasterDialog.values,
+				item: value || "",
+				item_label: "",
+			};
+		},
+		async saveClinicalMaster() {
+			const dialog = this.clinicalMasterDialog;
+			if (!dialog.open || dialog.saving) return;
+			this.clinicalMasterDialog.saving = true;
+			try {
+				const values = { ...dialog.values };
+				if (dialog.kind === "treatment_item" && !dialog.newItemMode) delete values.new_item;
+				const created = await call(API.createMaster, {
+					kind: dialog.kind,
+					values,
+					context: "consultation",
+					branch: this.form.service_branch || undefined,
+					company: this.form.company || undefined,
+					customer: this.form.primary_owner || undefined,
+				});
+				const target = dialog.target || {};
+				this.clinicalMasterDialog = blankClinicalMaster();
+				if (dialog.kind === "symptom") {
+					this.updateChild(target.table, target.index, "symptom", created?.value || created?.name);
+				} else if (dialog.kind === "diagnosis") {
+					this.updateChild(target.table, target.index, "diagnosis", created?.value || created?.name);
+				} else {
+					await this.updateTreatmentItem(target.index, created?.value || created?.item);
+				}
+				frappe.show_alert({ message: __("Created and selected."), indicator: "green" });
+			} catch (error) {
+				this.clinicalMasterDialog.saving = false;
+				frappe.msgprint({ title: __("Could not create clinical master"), message: message(error, __("Creation failed.")), indicator: "red" });
+			}
+		},
 		addSymptom() { this.form.symptoms.push({ _key: rowKey(), symptom: "", notes: "" }); this.markDirty(); },
 		addDiagnosis() { this.form.diagnoses.push({ _key: rowKey(), diagnosis: "", diagnosis_type: "", notes: "" }); this.markDirty(); },
 		addTreatment() { this.form.planned_treatments.push({ _key: rowKey(), item: "", description: "", qty: 1, rate: 0, billing_status: "Pending", payment_status: "Not Billed" }); this.markDirty(); },
@@ -446,6 +622,11 @@ export default {
 			this.form[table].splice(index, 1); this.markDirty();
 		},
 		async updateTreatmentItem(index, item) {
+			const createSeed = this._createSeed("treatment_item", item);
+			if (createSeed !== null) {
+				await this.openClinicalMaster("treatment_item", createSeed, { table: "planned_treatments", index });
+				return;
+			}
 			const row = this.form.planned_treatments[index];
 			if (['Lab Order', 'Vaccination'].includes(row?.source_type)) {
 				frappe.show_alert({ message: __("The ERPNext Item for Lab/Vaccination rows is fixed by its clinical master. Edit only the Rate here."), indicator: 'orange' });
