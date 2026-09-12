@@ -35,6 +35,20 @@ class TestClinicalMasterCreation(TestCase):
 		self.assertEqual(rows[-1]["create_new"], 1)
 		self.assertEqual(len(exact), 1)
 
+	def test_append_create_option_checks_database_exact_match_not_only_current_page(self):
+		with (
+			patch.object(creation, "_kind_allowed", return_value=True),
+			patch.object(creation, "_master_exact_exists", return_value=True),
+		):
+			rows = creation._append_create_option(
+				[{"value": "Different Result", "label": "Different Result"}],
+				kind="diagnosis",
+				query="Canine Dermatitis",
+				context="consultation",
+			)
+
+		self.assertEqual(rows, [{"value": "Different Result", "label": "Different Result"}])
+
 	def test_erpnext_item_creation_requires_setting_stock_role_and_item_permission(self):
 		with (
 			patch.object(creation, "_setting_enabled", return_value=True),
