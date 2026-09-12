@@ -221,6 +221,19 @@ def create_appointment_from_booking_request(booking_request: str) -> dict:
 	request.status = "Converted"
 	request.save()
 
+	emit_notification_event(
+		event_key="guest_appointment_ready_for_approval",
+		reference_doctype=appointment.doctype,
+		reference_name=appointment.name,
+		payload={
+			"booking_request": request.name,
+			"customer": request.linked_customer,
+			"patient": appointment.patient,
+			"branch": appointment.branch,
+			"appointment_datetime": appointment.appointment_datetime,
+			"status": appointment.status,
+		},
+	)
 
 	return build_appointment_response(appointment, request)
 
