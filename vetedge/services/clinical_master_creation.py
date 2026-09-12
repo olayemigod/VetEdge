@@ -101,6 +101,7 @@ def _resolved_price_list(branch: str | None = None, company: str | None = None, 
 		return None
 
 
+@frappe.whitelist()
 def get_clinical_master_creation_capabilities(
 	context: str = "consultation",
 	branch: str | None = None,
@@ -230,19 +231,41 @@ def get_treatment_item_link_options_with_create(doctype, txt, searchfield, start
 	return [[row["value"], row["label"]] for row in rows]
 
 
+def _has_exact_treatment_profile(query: str) -> bool:
+	needle = _clean(query)
+	if not needle:
+		return True
+	filters = {"item": needle}
+	if frappe.get_meta(TREATMENT_ITEM_DOCTYPE).has_field("disabled"):
+		filters["disabled"] = 0
+	if frappe.db.exists(TREATMENT_ITEM_DOCTYPE, filters):
+		return True
+	item_code = frappe.db.get_value("Item", {"item_name": needle, "disabled": 0}, "name")
+	return bool(item_code and frappe.db.exists(TREATMENT_ITEM_DOCTYPE, {"item": item_code, "disabled": 0}))
+
+
 def append_hospitalisation_item_create_option(
 	rows: list[dict[str, Any]],
 	query: str,
 	*,
 	branch: str | None = None,
 ) -> list[dict[str, Any]]:
-	return _append_create_option(
-		rows,
-		kind="treatment_item",
-		query=query,
-		context="hospitalisation",
-		branch=branch,
-	)
+	if (
+		not _clean(query)
+		or _has_exact_treatment_profile(query)
+		or not _kind_allowed("treatment_item", "hospitalisation")
+	):
+		return rows
+	label = _("Create New Treatment Item: {0}").format(query)
+	return [
+		*rows,
+		{
+			"value": _create_value("treatment_item", query),
+			"label": f"+ {label}",
+			"create_new": 1,
+			"kind": "treatment_item",
+		},
+	]
 
 
 def _search_link_options(
