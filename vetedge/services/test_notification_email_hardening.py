@@ -10,6 +10,8 @@ from vetedge.services.notifications import (
 	APPOINTMENT_EVENTS,
 	EVENT_SETTING_FIELDS,
 	OWNER_EVENTS,
+	PORTAL_INTAKE_EVENTS,
+	PORTAL_INTAKE_NOTIFICATION_ROLES,
 )
 
 
@@ -54,6 +56,28 @@ class TestNotificationEmailHardeningContract(TestCase):
 			NOTIFICATION_EVENT_REGISTRY["appointment_checked_in"].audience,
 			"Internal Staff",
 		)
+
+	def test_portal_intake_has_one_branch_scoped_action_event(self):
+		guest_booking = (ROOT / "services" / "guest_booking.py").read_text()
+
+		self.assertIn(
+			'event_key = "guest_appointment_request_received" if doc.appointment_requested else "registration_request_received"',
+			guest_booking,
+		)
+		self.assertNotIn('event_key="appointment_booked"', guest_booking)
+		self.assertEqual(guest_booking.count('event_key="guest_appointment_ready_for_approval"'), 2)
+
+		for event_key in (
+			"guest_appointment_request_received",
+			"guest_appointment_ready_for_approval",
+			"owner_appointment_request_received",
+			"registration_request_received",
+		):
+			self.assertIn(event_key, PORTAL_INTAKE_EVENTS)
+
+		self.assertIn("VetEdge Front Desk", PORTAL_INTAKE_NOTIFICATION_ROLES)
+		self.assertIn("VetEdge Branch Manager", PORTAL_INTAKE_NOTIFICATION_ROLES)
+		self.assertIn("VetEdge Administrator", PORTAL_INTAKE_NOTIFICATION_ROLES)
 
 	def test_semantic_event_setting_mappings_are_explicit(self):
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_initiated"], "notify_on_payment_follow_up")
@@ -113,6 +137,9 @@ class TestNotificationEmailHardeningContract(TestCase):
 			"payment_initiated": "VetEdge - Payment Initiated",
 			"payment_reminder": "VetEdge - Payment Reminder",
 			"consultation_awaiting_payment": "VetEdge - Consultation Awaiting Payment",
+			"registration_confirmed": "VetEdge - Registration Confirmed",
+			"grooming_appointment_confirmed": "VetEdge - Grooming Appointment Confirmed",
+			"grooming_invoice_created": "VetEdge - Grooming Invoice Created",
 		}.items():
 			self.assertEqual(
 				NOTIFICATION_EVENT_REGISTRY[event_key].email_template,
