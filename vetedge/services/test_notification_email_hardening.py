@@ -80,6 +80,17 @@ class TestNotificationEmailHardeningContract(TestCase):
 		self.assertIn("VetEdge Administrator", PORTAL_INTAKE_NOTIFICATION_ROLES)
 
 	def test_semantic_event_setting_mappings_are_explicit(self):
+		for event_key in (
+			"invoice_created",
+			"consultation_invoice_created",
+			"registration_invoice_created",
+			"grooming_invoice_created",
+			"boarding_invoice_created",
+			"invoice_pdf_available",
+		):
+			self.assertEqual(EVENT_SETTING_FIELDS[event_key], "notify_on_invoice_created")
+		self.assertEqual(EVENT_SETTING_FIELDS["payment_received"], "notify_on_payment_received")
+		self.assertEqual(EVENT_SETTING_FIELDS["registration_payment_received"], "notify_on_payment_received")
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_initiated"], "notify_on_payment_follow_up")
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_pending"], "notify_on_payment_follow_up")
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_reminder"], "notify_on_payment_follow_up")
@@ -140,6 +151,10 @@ class TestNotificationEmailHardeningContract(TestCase):
 			"registration_confirmed": "VetEdge - Registration Confirmed",
 			"grooming_appointment_confirmed": "VetEdge - Grooming Appointment Confirmed",
 			"grooming_invoice_created": "VetEdge - Grooming Invoice Created",
+			"guest_appointment_request_received": "VetEdge - Guest Appointment Request Received",
+			"guest_appointment_ready_for_approval": "VetEdge - Guest Appointment Ready for Approval",
+			"owner_appointment_request_received": "VetEdge - Owner Appointment Request Received",
+			"registration_request_received": "VetEdge - Registration Request Received",
 		}.items():
 			self.assertEqual(
 				NOTIFICATION_EVENT_REGISTRY[event_key].email_template,
