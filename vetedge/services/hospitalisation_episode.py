@@ -648,18 +648,7 @@ def search_hospitalisation_episode_options(
             for row in rows
         ]
 
-    if field == "treatment_item":
-        from vetedge.services.clinical_master_creation import search_clinical_master_options
-
-        return search_clinical_master_options(
-            "treatment_item",
-            query,
-            context="hospitalisation",
-            branch=doc.get("service_branch"),
-            limit=page_len,
-        )
-
-    if field == "item":
+    if field in {"clinical_item", "item"}:
         filters = {"disabled": 0}
         or_filters = None
         if query:
@@ -676,7 +665,7 @@ def search_hospitalisation_episode_options(
             start=offset,
             page_length=page_len,
         )
-        return [
+        options = [
             {
                 "value": row.get("name"),
                 "label": row.get("item_name") or row.get("name"),
@@ -688,6 +677,15 @@ def search_hospitalisation_episode_options(
             }
             for row in rows
         ]
+        if field == "clinical_item":
+            from vetedge.services.clinical_master_creation import append_hospitalisation_item_create_option
+
+            return append_hospitalisation_item_create_option(
+                options,
+                query,
+                branch=doc.get("service_branch"),
+            )
+        return options
 
     if field == "practitioner":
         rows = get_veterinary_doctor_users("User", query, "name", offset, page_len, {})
