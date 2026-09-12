@@ -143,6 +143,21 @@ ADMIN_ESCALATION_EVENTS = {
 	"role_bundle_apply_blocked",
 }
 
+PORTAL_INTAKE_EVENTS = {
+	"guest_booking_received",
+	"guest_appointment_request_received",
+	"guest_appointment_ready_for_approval",
+	"owner_appointment_request_received",
+	"registration_request_received",
+}
+PORTAL_INTAKE_NOTIFICATION_ROLES = {
+	"VetEdge Front Desk",
+	"Branch Manager",
+	"VetEdge Branch Manager",
+	"VetEdge Administrator",
+	"System Manager",
+}
+
 MANAGER_ESCALATION_EVENTS = {
 	"accounts_action_required",
 	"stock_issue_failed",
@@ -1187,6 +1202,12 @@ def get_internal_recipients(event_key: str, context: dict) -> list[dict]:
 		return resolve_admin_escalation_recipients(branch=branch)
 	if event_key in MANAGER_ESCALATION_EVENTS:
 		return resolve_manager_escalation_recipients(branch=branch)
+	if event_key in PORTAL_INTAKE_EVENTS:
+		return get_role_recipients(
+			PORTAL_INTAKE_NOTIFICATION_ROLES,
+			branch=branch,
+			audience_type="Front Desk",
+		)
 	return get_document_connected_recipients(context)
 
 
