@@ -136,12 +136,14 @@
   "notify_on_guest_appointment_request",
   "notify_on_invoice_created",
   "notify_on_payment_received",
+  "notify_on_payment_follow_up",
   "vaccination_due_reminder_days",
   "payment_reminder_days",
   "column_break_notifications",
   "notify_on_reschedule",
   "notify_on_cancellation",
   "notify_on_accounts_action_required",
+  "notify_on_clinical_workflow_updates",
   "notify_on_lab_updates",
   "notification_channels",
   "email_notification_settings_section",
@@ -1100,6 +1102,15 @@
    "permlevel": 1
   },
   {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "description": "Notify configured recipients about pending, initiated, or reminder stages of payment workflows. This is separate from successful Payment Received notifications.",
+   "fieldname": "notify_on_payment_follow_up",
+   "fieldtype": "Check",
+   "label": "Notify on Payment Follow-up",
+   "permlevel": 1
+  },
+  {
    "default": "7",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
    "fieldname": "vaccination_due_reminder_days",
@@ -1142,6 +1153,15 @@
    "fieldname": "notify_on_accounts_action_required",
    "fieldtype": "Check",
    "label": "Notify on Accounts Action Required",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "description": "Notify relevant internal users when consultations or dispensary workflows move between operational stages such as sent to dispensary, ready for treatment, or dispensary confirmation.",
+   "fieldname": "notify_on_clinical_workflow_updates",
+   "fieldtype": "Check",
+   "label": "Notify on Clinical Workflow Updates",
    "permlevel": 1
   },
   {

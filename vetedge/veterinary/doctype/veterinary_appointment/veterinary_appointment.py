@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import get_datetime
 
 from vetedge.services.copy_control import reset_vetedge_copy_state
 from vetedge.services.appointment_intelligence import (
@@ -51,18 +52,44 @@ class VeterinaryAppointment(Document):
 	def on_update(self) -> None:
 		previous = self.get_doc_before_save()
 		sync_missed_appointment_from_source(self)
-		if not previous or previous.status == self.status:
+		if not previous:
 			return
 
-		if self.status == "Confirmed":
-			notify_appointment_event(self, "appointment_confirmed")
-		elif self.status == "Rescheduled":
-			notify_appointment_event(self, "appointment_rescheduled")
-		elif self.status == "Cancelled":
-			notify_appointment_event(self, "appointment_cancelled")
-		elif self.status == "Checked In":
+		status_changed = previous.status != self.status
+		previous_datetime = previous.get("appointment_datetime")
+		current_datetime = self.get("appointment_datetime")
+		datetime_changed = (
+			get_datetime(previous_datetime) if previous_datetime else None
+		) != (
+			get_datetime(current_datetime) if current_datetime else None
+		)
+		is_repeated_reschedule = self.status == "Rescheduled" and datetime_changed
+		if not status_changed and not is_repeated_reschedule:
+			return
+
+		status_event = {
+			"Scheduled": "appointment_scheduled",
+			"Confirmed": "appointment_confirmed",
+			"Checked In": "appointment_checked_in",
+			"In Consultation": "appointment_started",
+			"Completed": "appointment_completed",
+			"Rescheduled": "appointment_rescheduled",
+			"Cancelled": "appointment_cancelled",
+			"No Show": "appointment_no_show",
+		}.get(self.status)
+		if status_event:
+			notify_appointment_event(
+				self,
+				status_event,
+				previous_status=previous.status,
+				previous_datetime=previous_datetime,
+			)
+
+		# These are dedicated, persistent in-app operational notifications.
+		# They remain separate from external Email/SMS/WhatsApp delivery.
+		if status_changed and self.status == "Checked In":
 			notify_appointment_checked_in(self)
-		elif self.status == "Completed":
+		elif status_changed and self.status == "Completed":
 			notify_appointment_completed(self)
 
 		STATUS_SMS_SETTINGS_MAP = {
@@ -96,7 +123,7 @@ class VeterinaryAppointment(Document):
 								except Exception:
 									pass
 
-							from frappe.utils import get_datetime, get_date_str, get_time_str
+							from frappe.utils import get_date_str, get_time_str
 							
 							clinic_name = (
 								frappe.db.get_value("Website Settings", "Website Settings", "app_name")

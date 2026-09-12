@@ -5,11 +5,12 @@ from hashlib import sha256
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, add_to_date, cstr, flt, getdate, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, cstr, flt, get_datetime, getdate, now_datetime, nowdate
 
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.notification_backends import get_notification_backend
 from vetedge.services.notification_events import (
+	NOTIFICATION_EVENT_REGISTRY,
 	get_notification_event_definition,
 	get_notification_email_template,
 )
@@ -17,6 +18,18 @@ from vetedge.services.permissions import get_assigned_branches
 
 
 SUPPORTED_CHANNELS = {"Email", "SMS", "WhatsApp"}
+APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS = {
+	"appointment_created",
+	"appointment_scheduled",
+	"appointment_confirmed",
+	"appointment_checked_in",
+	"appointment_started",
+	"appointment_completed",
+	"appointment_rescheduled",
+	"appointment_cancelled",
+	"appointment_no_show",
+}
+DELIVERY_RESERVATION_SECONDS = 600
 NOTIFICATION_ITEM_DOCTYPE = "Veterinary Notification Item"
 NOTIFICATION_ITEM_STATUSES = {"Unread", "Read", "Acknowledged", "Done", "Dismissed", "Archived"}
 NOTIFICATION_ITEM_STATUS_TIMESTAMPS = {
@@ -47,33 +60,9 @@ OWNER_FACING_NOTIFICATION_TITLES = {
 }
 
 OWNER_EVENTS = {
-	"appointment_created",
-	"appointment_booked",
-	"appointment_scheduled",
-	"appointment_confirmed",
-	"appointment_checked_in",
-	"appointment_reminder",
-	"appointment_rescheduled",
-	"appointment_cancelled",
-	"appointment_completed",
-	"registration_confirmed",
-	"invoice_created",
-	"consultation_invoice_created",
-	"payment_received",
-	"payment_initiated",
-	"payment_pending",
-	"payment_reminder",
-	"vaccination_administered",
-	"vaccination_due_soon",
-	"vaccination_overdue",
-	"grooming_appointment_created",
-	"grooming_appointment_confirmed",
-	"grooming_completed",
-	"boarding_reserved",
-	"boarding_checked_in",
-	"boarding_checked_out",
-	"boarding_invoice_created",
-	"invoice_pdf_available",
+	event_key
+	for event_key, definition in NOTIFICATION_EVENT_REGISTRY.items()
+	if "Owner" in cstr(definition.audience or "")
 }
 
 STAFF_NOTIFICATION_ROLES = {
@@ -154,6 +143,21 @@ ADMIN_ESCALATION_EVENTS = {
 	"role_bundle_apply_blocked",
 }
 
+PORTAL_INTAKE_EVENTS = {
+	"guest_booking_received",
+	"guest_appointment_request_received",
+	"guest_appointment_ready_for_approval",
+	"owner_appointment_request_received",
+	"registration_request_received",
+}
+PORTAL_INTAKE_NOTIFICATION_ROLES = {
+	"VetEdge Front Desk",
+	"Branch Manager",
+	"VetEdge Branch Manager",
+	"VetEdge Administrator",
+	"System Manager",
+}
+
 MANAGER_ESCALATION_EVENTS = {
 	"accounts_action_required",
 	"stock_issue_failed",
@@ -206,20 +210,26 @@ EVENT_SETTING_FIELDS = {
 	"registration_confirmed": "notify_on_guest_registration_confirmed",
 	"invoice_created": "notify_on_invoice_created",
 	"consultation_invoice_created": "notify_on_invoice_created",
+	"registration_invoice_created": "notify_on_invoice_created",
+	"grooming_invoice_created": "notify_on_invoice_created",
+	"boarding_invoice_created": "notify_on_invoice_created",
+	"invoice_pdf_available": "notify_on_invoice_created",
 	"payment_received": "notify_on_payment_received",
-	"payment_pending": "notify_on_payment_received",
-	"payment_reminder": "notify_on_payment_received",
+	"registration_payment_received": "notify_on_payment_received",
+	"payment_initiated": "notify_on_payment_follow_up",
+	"payment_pending": "notify_on_payment_follow_up",
+	"payment_reminder": "notify_on_payment_follow_up",
 	"accounts_action_required": "notify_on_accounts_action_required",
 	"consultation_awaiting_payment": "notify_on_accounts_action_required",
-	"consultation_sent_to_dispensary": "notify_on_accounts_action_required",
-	"dispensary_confirmation_completed": "notify_on_payment_received",
+	"consultation_sent_to_dispensary": "notify_on_clinical_workflow_updates",
+	"dispensary_confirmation_completed": "notify_on_clinical_workflow_updates",
 	"dispensary_stock_issue_failed": "notify_on_accounts_action_required",
 	"dispensary_expired_stock_blocked": "notify_on_accounts_action_required",
 	"dispensary_insufficient_non_expired_stock": "notify_on_accounts_action_required",
 	"stock_issue_failed": "notify_on_accounts_action_required",
 	"expired_stock_blocked": "notify_on_accounts_action_required",
 	"insufficient_non_expired_stock": "notify_on_accounts_action_required",
-	"consultation_ready_for_treatment": "notify_on_payment_received",
+	"consultation_ready_for_treatment": "notify_on_clinical_workflow_updates",
 	"lab_order_created": "notify_on_lab_updates",
 	"lab_sample_collected": "notify_on_lab_updates",
 	"lab_result_entered": "notify_on_lab_updates",
@@ -241,7 +251,12 @@ APPOINTMENT_EVENTS = {
 }
 
 
-def notify_appointment_event(appointment, event: str) -> dict:
+def notify_appointment_event(
+	appointment,
+	event: str,
+	previous_status: str | None = None,
+	previous_datetime=None,
+) -> dict:
 	if event not in APPOINTMENT_EVENTS:
 		frappe.throw(f"Unsupported appointment notification event: {event}", frappe.ValidationError)
 
@@ -255,6 +270,8 @@ def notify_appointment_event(appointment, event: str) -> dict:
 			"branch": appointment.branch,
 			"practitioner": appointment.practitioner,
 			"appointment_datetime": appointment.appointment_datetime,
+			"previous_datetime": previous_datetime,
+			"previous_status": previous_status,
 			"status": appointment.status,
 		},
 	)
@@ -862,6 +879,180 @@ def emit_notification_event(
 	}
 
 
+def build_delivery_idempotency_key(
+	event_key: str,
+	reference_doctype: str | None,
+	reference_name: str | None,
+	recipient: str | None,
+	channel: str,
+	context: dict,
+) -> str | None:
+	"""Build a stable key only for lifecycle events where one transition should queue once."""
+	if event_key not in APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS:
+		return None
+	occurrence = {
+		"previous_status": context.get("previous_status"),
+		"status": context.get("status"),
+		"previous_datetime": cstr(context.get("previous_datetime") or ""),
+		"appointment_datetime": cstr(context.get("appointment_datetime") or ""),
+	}
+	raw = json.dumps(
+		{
+			"event_key": event_key,
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+			"recipient": cstr(recipient).strip().lower(),
+			"channel": channel,
+			"occurrence": occurrence,
+		},
+		sort_keys=True,
+		default=str,
+	)
+	return f"delivery::{sha256(raw.encode('utf-8')).hexdigest()}"
+
+
+def _notification_log_supports_idempotency() -> bool:
+	try:
+		return bool(
+			frappe.db.exists("DocType", "Veterinary Notification Log")
+			and frappe.get_meta("Veterinary Notification Log").has_field("idempotency_key")
+		)
+	except Exception:
+		return False
+
+
+def _reservation_is_active(created_on) -> bool:
+	if not created_on:
+		return True
+	try:
+		age = (now_datetime() - get_datetime(created_on)).total_seconds()
+		return age < DELIVERY_RESERVATION_SECONDS
+	except Exception:
+		return True
+
+
+def reserve_notification_delivery(
+	*,
+	event_key: str,
+	reference_doctype: str | None,
+	reference_name: str | None,
+	context: dict,
+	recipient: dict,
+	channel: str,
+	backend_mode: str,
+) -> dict:
+	"""Reserve a lifecycle delivery before provider dispatch.
+
+	The reservation closes the sequential/concurrent duplicate window. Failed, skipped,
+	or stale reservations can be reused for a later retry; queued/sent deliveries cannot.
+	"""
+	recipient_address = recipient.get("address") or recipient.get("identifier")
+	idempotency_key = build_delivery_idempotency_key(
+		event_key,
+		reference_doctype,
+		reference_name,
+		recipient_address,
+		channel,
+		context,
+	)
+	if not idempotency_key or not _notification_log_supports_idempotency():
+		return {"reserved": False, "duplicate": False, "idempotency_key": idempotency_key}
+
+	existing = frappe.db.get_value(
+		"Veterinary Notification Log",
+		{"idempotency_key": idempotency_key},
+		["name", "status", "created_on"],
+		as_dict=True,
+	)
+	if existing:
+		status = existing.get("status")
+		if status in {"Queued", "Sent"} or (status == "Reserved" and _reservation_is_active(existing.get("created_on"))):
+			return {
+				"reserved": False,
+				"duplicate": True,
+				"name": existing.get("name"),
+				"idempotency_key": idempotency_key,
+			}
+		frappe.db.set_value(
+			"Veterinary Notification Log",
+			existing.get("name"),
+			{
+				"status": "Reserved",
+				"backend_mode": backend_mode,
+				"recipient": recipient_address,
+				"audience_type": recipient.get("audience_type"),
+				"provider_reference": None,
+				"error_message": None,
+				"created_on": now_datetime(),
+				"sent_on": None,
+				"payload_preview": build_payload_preview(context),
+			},
+			update_modified=False,
+		)
+		return {
+			"reserved": True,
+			"duplicate": False,
+			"name": existing.get("name"),
+			"idempotency_key": idempotency_key,
+		}
+
+	try:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Veterinary Notification Log",
+				"event_key": event_key,
+				"channel": channel,
+				"status": "Reserved",
+				"backend_mode": backend_mode,
+				"recipient": recipient_address,
+				"audience_type": recipient.get("audience_type"),
+				"created_on": now_datetime(),
+				"reference_doctype": reference_doctype,
+				"reference_name": reference_name,
+				"idempotency_key": idempotency_key,
+				"payload_preview": build_payload_preview(context),
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return {
+			"reserved": True,
+			"duplicate": False,
+			"name": doc.name,
+			"idempotency_key": idempotency_key,
+		}
+	except frappe.DuplicateEntryError:
+		name = frappe.db.get_value("Veterinary Notification Log", {"idempotency_key": idempotency_key}, "name")
+		return {
+			"reserved": False,
+			"duplicate": True,
+			"name": name,
+			"idempotency_key": idempotency_key,
+		}
+
+
+def finalize_notification_delivery(reservation: dict, attempt: dict, context: dict) -> bool:
+	name = reservation.get("name") if reservation else None
+	if not name:
+		return False
+	status = attempt.get("status") or "Skipped"
+	frappe.db.set_value(
+		"Veterinary Notification Log",
+		name,
+		{
+			"status": status,
+			"backend_mode": attempt.get("backend_mode") or "local",
+			"recipient": attempt.get("recipient"),
+			"audience_type": attempt.get("audience_type"),
+			"provider_reference": attempt.get("provider_reference"),
+			"error_message": attempt.get("error_message"),
+			"sent_on": now_datetime() if status == "Sent" else None,
+			"payload_preview": build_payload_preview(context),
+		},
+		update_modified=False,
+	)
+	return True
+
+
 def dispatch_notification_event(event_payload: dict, settings: dict | None = None) -> dict:
 	settings = settings or get_notification_settings()
 	event_key = event_payload["event_key"]
@@ -892,16 +1083,53 @@ def dispatch_notification_event(event_payload: dict, settings: dict | None = Non
 			attempts.append(attempt)
 			continue
 
+		reservations = {}
+		deliverable_channels = []
+		for channel in channels:
+			reservation = reserve_notification_delivery(
+				event_key=event_key,
+				reference_doctype=event_payload.get("reference_doctype"),
+				reference_name=event_payload.get("reference_name"),
+				context=context,
+				recipient=recipient,
+				channel=channel,
+				backend_mode=settings.get("notification_backend_mode", "local"),
+			)
+			if reservation.get("duplicate"):
+				attempts.append(
+					{
+						"channel": channel,
+						"recipient": recipient.get("address") or recipient.get("identifier"),
+						"audience_type": recipient.get("audience_type"),
+						"status": "Skipped",
+						"backend_mode": settings.get("notification_backend_mode", "local"),
+						"provider_reference": reservation.get("name"),
+						"error_message": "duplicate_delivery_suppressed",
+						"idempotency_key": reservation.get("idempotency_key"),
+					}
+				)
+				continue
+			deliverable_channels.append(channel)
+			if reservation.get("reserved"):
+				reservations[channel] = reservation
+
+		if not deliverable_channels:
+			continue
+
 		results = backend.dispatch(
 			event_definition=event_definition,
 			recipient=recipient,
-			channels=channels,
+			channels=deliverable_channels,
 			context=context,
 			settings=settings,
 			reference_doctype=event_payload.get("reference_doctype"),
 			reference_name=event_payload.get("reference_name"),
 		)
 		for attempt in results:
+			reservation = reservations.get(attempt.get("channel"))
+			if reservation and finalize_notification_delivery(reservation, attempt, context):
+				attempt["idempotency_key"] = reservation.get("idempotency_key")
+				continue
 			log_notification_attempt(
 				event_key=event_key,
 				reference_doctype=event_payload.get("reference_doctype"),
@@ -979,6 +1207,12 @@ def get_internal_recipients(event_key: str, context: dict) -> list[dict]:
 		return resolve_admin_escalation_recipients(branch=branch)
 	if event_key in MANAGER_ESCALATION_EVENTS:
 		return resolve_manager_escalation_recipients(branch=branch)
+	if event_key in PORTAL_INTAKE_EVENTS:
+		return get_role_recipients(
+			PORTAL_INTAKE_NOTIFICATION_ROLES,
+			branch=branch,
+			audience_type="Front Desk",
+		)
 	return get_document_connected_recipients(context)
 
 
@@ -1517,7 +1751,9 @@ def get_notification_settings() -> dict:
 		"notify_on_guest_appointment_request": False,
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
+		"notify_on_payment_follow_up": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
 	}
 
@@ -1559,7 +1795,9 @@ def default_notification_settings() -> dict:
 		"notify_on_guest_appointment_request": False,
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
+		"notify_on_payment_follow_up": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
 	}
 
