@@ -241,7 +241,7 @@ APPOINTMENT_EVENTS = {
 }
 
 
-def notify_appointment_event(appointment, event: str) -> dict:
+def notify_appointment_event(appointment, event: str, previous_status: str | None = None) -> dict:
 	if event not in APPOINTMENT_EVENTS:
 		frappe.throw(f"Unsupported appointment notification event: {event}", frappe.ValidationError)
 
@@ -255,6 +255,7 @@ def notify_appointment_event(appointment, event: str) -> dict:
 			"branch": appointment.branch,
 			"practitioner": appointment.practitioner,
 			"appointment_datetime": appointment.appointment_datetime,
+			"previous_status": previous_status,
 			"status": appointment.status,
 		},
 	)
