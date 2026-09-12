@@ -51,7 +51,13 @@ class VeterinaryAppointment(Document):
 	def on_update(self) -> None:
 		previous = self.get_doc_before_save()
 		sync_missed_appointment_from_source(self)
-		if not previous or previous.status == self.status:
+		if not previous:
+			return
+
+		status_changed = previous.status != self.status
+		datetime_changed = previous.get("appointment_datetime") != self.get("appointment_datetime")
+		is_repeated_reschedule = self.status == "Rescheduled" and datetime_changed
+		if not status_changed and not is_repeated_reschedule:
 			return
 
 		status_event = {
@@ -65,13 +71,18 @@ class VeterinaryAppointment(Document):
 			"No Show": "appointment_no_show",
 		}.get(self.status)
 		if status_event:
-			notify_appointment_event(self, status_event, previous_status=previous.status)
+			notify_appointment_event(
+				self,
+				status_event,
+				previous_status=previous.status,
+				previous_datetime=previous.get("appointment_datetime"),
+			)
 
 		# These are dedicated, persistent in-app operational notifications.
 		# They remain separate from external Email/SMS/WhatsApp delivery.
-		if self.status == "Checked In":
+		if status_changed and self.status == "Checked In":
 			notify_appointment_checked_in(self)
-		elif self.status == "Completed":
+		elif status_changed and self.status == "Completed":
 			notify_appointment_completed(self)
 
 		STATUS_SMS_SETTINGS_MAP = {
