@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
@@ -67,13 +68,16 @@ class TestClinicalMasterCreation(TestCase):
 			self.assertFalse(creation._kind_allowed("treatment_item", "hospitalisation"))
 
 	def test_settings_default_off_contract(self):
-		settings = (
-			Path(__file__).resolve().parents[1]
-			/ "veterinary"
-			/ "doctype"
-			/ "veterinary_settings"
-			/ "veterinary_settings.json"
-		).read_text()
+		settings = json.loads(
+			(
+				Path(__file__).resolve().parents[1]
+				/ "veterinary"
+				/ "doctype"
+				/ "veterinary_settings"
+				/ "veterinary_settings.json"
+			).read_text()
+		)
+		fields = {row.get("fieldname"): row for row in settings.get("fields", [])}
 
 		for fieldname in (
 			"allow_new_symptoms_in_clinical_workflow",
@@ -82,4 +86,5 @@ class TestClinicalMasterCreation(TestCase):
 			"allow_clinical_master_creation_in_hospitalisation",
 			"allow_erpnext_item_creation_from_treatment",
 		):
-			self.assertIn(f'"fieldname": "{fieldname}"', settings)
+			self.assertIn(fieldname, fields)
+			self.assertEqual(fields[fieldname].get("default"), "0")
