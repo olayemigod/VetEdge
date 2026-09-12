@@ -300,7 +300,7 @@
 		<EdgeModal :open="activityDialog.open" :title="`Add ${activityDialog.type || 'Activity'}`" subtitle="Hospitalisation Clinical Care" :busy="busy" @close="closeActivity">
 			<div class="episode-grid">
 				<EdgeInput :model-value="activityDialog.datetime" type="datetime-local" label="Activity Date/Time" @update:model-value="(value) => activityDialog.datetime = value" />
-				<EdgeLinkField :model-value="activityDialog.item" :selected-label="activityDialog.item_label" label="ERPNext Item" :placeholder="activityRequiresItem ? 'Required for this activity' : 'Optional ERPNext Item'" :searcher="(query) => optionSearch('treatment_item', query)" @update:model-value="selectActivityItem" />
+				<EdgeLinkField :model-value="activityDialog.item" :selected-label="activityDialog.item_label" label="ERPNext Item" :placeholder="activityRequiresItem ? 'Required for this activity' : 'Optional ERPNext Item'" :searcher="(query) => optionSearch('clinical_item', query)" @update:model-value="selectActivityItem" />
 				<EdgeInput :model-value="activityDialog.qty" type="number" min="0.001" step="0.001" label="Quantity" @update:model-value="(value) => activityDialog.qty = value" />
 				<EdgeInput :model-value="activityDialog.uom" label="UOM" readonly />
 				<EdgeDropdown :model-value="String(activityDialog.billable || 0)" label="Billable" :options="yesNoOptions" @update:model-value="(value) => activityDialog.billable = Number(value || 0)" />
