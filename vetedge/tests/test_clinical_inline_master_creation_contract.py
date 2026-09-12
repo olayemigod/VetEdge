@@ -36,7 +36,7 @@ class TestClinicalInlineMasterCreationContract(TestCase):
 	def test_hospitalisation_clinical_item_search_is_separate_from_charge_item_search(self):
 		vue = (ROOT / "public" / "js" / "vetedge_hospitalisation_episode" / "VetEdgeHospitalisationEpisode.vue").read_text()
 
-		self.assertIn("optionSearch('treatment_item', query)", vue)
+		self.assertIn("optionSearch('clinical_item', query)", vue)
 		self.assertIn("optionSearch('item', query)", vue)
 		self.assertIn("saveTreatmentMaster", vue)
 		self.assertIn("context: 'hospitalisation'", vue)
