@@ -208,6 +208,28 @@ def search_clinical_master_options(
 	return _append_create_option(options, kind=kind, query=query, context=resolved_context, branch=branch)
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_treatment_item_link_options_with_create(doctype, txt, searchfield, start, page_len, filters):
+	"""Native Frappe Link query: curated Treatment Items plus a gated create-if-missing option."""
+	require_internal_user()
+	from vetedge.services.treatment_items import get_treatment_item_link_options
+
+	rows = [
+		{"value": row[0], "label": row[1] or row[0]}
+		for row in get_treatment_item_link_options(doctype, txt, searchfield, start, page_len, filters)
+	]
+	if cint(start):
+		return [[row["value"], row["label"]] for row in rows]
+	rows = _append_create_option(
+		rows,
+		kind="treatment_item",
+		query=_clean(txt),
+		context="consultation",
+	)
+	return [[row["value"], row["label"]] for row in rows]
+
+
 def append_hospitalisation_item_create_option(
 	rows: list[dict[str, Any]],
 	query: str,
