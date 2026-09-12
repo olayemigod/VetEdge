@@ -425,6 +425,51 @@ class TestNotifications(TestCase):
 		self.assertEqual(first, duplicate)
 		self.assertNotEqual(first, later)
 
+	def test_duplicate_lifecycle_reservation_does_not_call_backend(self):
+		backend = SimpleNamespace(
+			dispatch=lambda **kwargs: (_ for _ in ()).throw(
+				AssertionError("Duplicate lifecycle delivery must not call backend.dispatch")
+			)
+		)
+		with (
+			patch("vetedge.services.notifications.get_notification_backend", return_value=backend),
+			patch("vetedge.services.notifications.resolve_recipient_channels", return_value=["Email"]),
+			patch(
+				"vetedge.services.notifications.reserve_notification_delivery",
+				return_value={
+					"reserved": False,
+					"duplicate": True,
+					"name": "VNL-EXISTING",
+					"idempotency_key": "delivery::abc",
+				},
+			),
+		):
+			result = dispatch_notification_event(
+				{
+					"event_key": "appointment_confirmed",
+					"reference_doctype": "Veterinary Appointment",
+					"reference_name": "VAPT-001",
+					"context": {
+						"previous_status": "Scheduled",
+						"status": "Confirmed",
+						"appointment_datetime": "2026-09-20 10:00:00",
+					},
+					"recipients": [
+						{
+							"identifier": "CUST-001",
+							"address": "owner@example.com",
+							"audience_type": "Owner",
+						}
+					],
+				},
+				settings={"notification_backend_mode": "local"},
+			)
+
+		self.assertEqual(len(result["attempts"]), 1)
+		self.assertEqual(result["attempts"][0]["status"], "Skipped")
+		self.assertEqual(result["attempts"][0]["error_message"], "duplicate_delivery_suppressed")
+		self.assertEqual(result["attempts"][0]["idempotency_key"], "delivery::abc")
+
 	def test_processedge_core_mode_returns_pending_safely(self):
 		backend = ProcessEdgeCoreNotificationBackend()
 		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
