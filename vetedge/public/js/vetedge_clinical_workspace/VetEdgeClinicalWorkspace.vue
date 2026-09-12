@@ -196,7 +196,7 @@
 				</template>
 				<EdgeLinkField :model-value="clinicalMasterDialog.values.service_type" label="Default Service Type" placeholder="Optional" :searcher="(query) => creationSearch('service_type', query)" @update:model-value="(value) => setClinicalMasterValue('service_type', value)" />
 				<EdgeLinkField :model-value="clinicalMasterDialog.values.treatment_type" label="Default Treatment Type" placeholder="Optional" :searcher="(query) => creationSearch('treatment_type', query)" @update:model-value="(value) => setClinicalMasterValue('treatment_type', value)" />
-				<EdgeInput :model-value="clinicalMasterDialog.values.default_price" type="number" min="0" step="0.01" label="Default Price" description="Uses the contextual Price List. Existing prices cannot be overwritten without pricing authority." @update:model-value="(value) => setClinicalMasterValue('default_price', value)" />
+				<EdgeInput :model-value="clinicalMasterDialog.values.default_price" type="number" min="0" step="0.01" label="Default Price" :disabled="clinicalMasterDialog.pricingLocked" :description="clinicalMasterDialog.pricingLocked ? 'Existing Item Price is locked for your role.' : 'Uses the selected/contextual Price List.'" @update:model-value="(value) => setClinicalMasterValue('default_price', value)" />
 				<EdgeInput :model-value="clinicalMasterDialog.values.shelf_life_in_days" type="number" min="0" step="1" label="Shelf Life in Days" @update:model-value="(value) => setClinicalMasterValue('shelf_life_in_days', value)" />
 				<EdgeTextarea class="clinical-wide" :model-value="clinicalMasterDialog.values.description" label="Description" :rows="4" @update:model-value="(value) => setClinicalMasterValue('description', value)" />
 			</div>
@@ -233,6 +233,7 @@ const API = Object.freeze({
 	createMaster: "vetedge.services.clinical_master_creation.create_clinical_master",
 	creationOptions: "vetedge.services.clinical_master_creation.search_clinical_creation_options",
 	creationCapabilities: "vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities",
+	itemCreationContext: "vetedge.services.clinical_master_creation.get_clinical_creation_item_context",
 });
 const STATUSES = ["Draft", "In Progress", "Awaiting Payment", "Pending Dispensary", "Ready for Treatment", "Completed", "Cancelled"];
 const DIAGNOSIS_TYPES = ["Primary", "Differential", "Rule Out", "Resolved"];
@@ -252,6 +253,7 @@ const blankClinicalMaster = () => ({
 	capabilities: {},
 	values: {},
 	newItemMode: false,
+	pricingLocked: false,
 	saving: false,
 });
 function call(method, args = {}) { return frappe.call({ method, args }).then((response) => response.message); }
@@ -557,15 +559,17 @@ export default {
 				limit: 20,
 			})) || [];
 		},
-		selectTreatmentBaseItem(value) {
+		async selectTreatmentBaseItem(value) {
 			if (typeof value === "string" && value.startsWith(ERP_ITEM_CREATE_PREFIX)) {
 				const seed = value.slice(ERP_ITEM_CREATE_PREFIX.length).trim();
 				if (!this.clinicalMasterDialog.capabilities.can_create_erpnext_item) return;
 				this.clinicalMasterDialog.newItemMode = true;
+				this.clinicalMasterDialog.pricingLocked = false;
 				this.clinicalMasterDialog.values = {
 					...this.clinicalMasterDialog.values,
 					item: "",
 					item_label: "",
+					default_price: 0,
 					new_item: {
 						...(this.clinicalMasterDialog.values.new_item || {}),
 						item_name: seed || this.clinicalMasterDialog.seed,
@@ -574,11 +578,39 @@ export default {
 				return;
 			}
 			this.clinicalMasterDialog.newItemMode = false;
+			this.clinicalMasterDialog.pricingLocked = false;
 			this.clinicalMasterDialog.values = {
 				...this.clinicalMasterDialog.values,
 				item: value || "",
 				item_label: "",
+				default_price: 0,
 			};
+			if (!value) return;
+			try {
+				const itemContext = await call(API.itemCreationContext, {
+					item: value,
+					context: "consultation",
+					branch: this.form.service_branch || undefined,
+					company: this.form.company || undefined,
+					customer: this.form.primary_owner || undefined,
+					price_list: this.clinicalMasterDialog.values.price_list || undefined,
+				});
+				if (this.clinicalMasterDialog.values.item !== value) return;
+				if (itemContext?.treatment_item_exists) {
+					this.clinicalMasterDialog.values = { ...this.clinicalMasterDialog.values, item: "", item_label: "" };
+					frappe.show_alert({ message: __("That ERPNext Item already has a Veterinary Treatment Item. Return to the treatment search and select it."), indicator: "orange" });
+					return;
+				}
+				this.clinicalMasterDialog.pricingLocked = Boolean(itemContext?.price_locked);
+				this.clinicalMasterDialog.values = {
+					...this.clinicalMasterDialog.values,
+					item_label: itemContext?.item_name || value,
+					price_list: itemContext?.price_list || this.clinicalMasterDialog.values.price_list || "",
+					default_price: itemContext?.existing_item_price ? Number(itemContext.existing_price_rate || 0) : 0,
+				};
+			} catch (error) {
+				frappe.show_alert({ message: message(error, __("Item pricing context could not be loaded.")), indicator: "orange" });
+			}
 		},
 		async saveClinicalMaster() {
 			const dialog = this.clinicalMasterDialog;
