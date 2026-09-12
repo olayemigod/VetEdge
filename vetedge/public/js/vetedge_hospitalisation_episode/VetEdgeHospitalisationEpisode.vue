@@ -314,7 +314,7 @@
 		<EdgeModal :open="treatmentMasterDialog.open" title="Create New Treatment Item" subtitle="Create the missing reusable Treatment Item and return to this Hospitalisation activity." :busy="treatmentMasterDialog.saving" @close="closeTreatmentMaster">
 			<div class="episode-grid">
 				<EdgeLinkField :model-value="treatmentMasterDialog.values.item" :selected-label="treatmentMasterDialog.values.item_label" label="ERPNext Item" placeholder="Search existing ERPNext Item first" :searcher="(query) => creationSearch('erpnext_item', query)" @update:model-value="selectTreatmentMasterBaseItem" />
-				<EdgeLinkField :model-value="treatmentMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!treatmentMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="(value) => setTreatmentMasterValue('price_list', value)" />
+				<EdgeLinkField :model-value="treatmentMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!treatmentMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="selectTreatmentMasterPriceList" />
 				<template v-if="treatmentMasterDialog.newItemMode">
 					<EdgeInput :model-value="treatmentMasterDialog.values.new_item.item_name" label="New Item Name" @update:model-value="(value) => setTreatmentMasterNewItemValue('item_name', value)" />
 					<EdgeInput :model-value="treatmentMasterDialog.values.new_item.item_code" label="Item Code" description="Leave blank to use the Item Name." @update:model-value="(value) => setTreatmentMasterNewItemValue('item_code', value)" />
@@ -737,6 +737,13 @@ export default {
 				customer: this.episode.owner || undefined,
 				limit: 20,
 			})) || [];
+		},
+		async selectTreatmentMasterPriceList(value) {
+			this.setTreatmentMasterValue('price_list', value);
+			this.treatmentMasterDialog.pricingLocked = false;
+			if (this.treatmentMasterDialog.values.item && !this.treatmentMasterDialog.newItemMode) {
+				await this.selectTreatmentMasterBaseItem(this.treatmentMasterDialog.values.item);
+			}
 		},
 		async selectTreatmentMasterBaseItem(value) {
 			if (typeof value === 'string' && value.startsWith(ERP_ITEM_CREATE_PREFIX)) {
