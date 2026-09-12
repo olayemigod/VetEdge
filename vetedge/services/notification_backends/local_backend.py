@@ -72,7 +72,19 @@ class LocalNotificationBackend:
 				"error_message": _("No email address could be resolved for this recipient."),
 			}
 
-		subject, message, template_name = self._render_email(event_definition, context)
+		try:
+			subject, message, template_name = self._render_email(event_definition, context)
+		except Exception as exc:
+			return {
+				"channel": "Email",
+				"recipient": email,
+				"audience_type": recipient.get("audience_type"),
+				"status": "Skipped",
+				"backend_mode": self.backend_mode,
+				"provider_reference": event_definition.email_template,
+				"error_message": _("Configured email template could not be rendered: {0}").format(str(exc)),
+			}
+
 		try:
 			frappe.sendmail(
 				recipients=[email],
@@ -105,27 +117,35 @@ class LocalNotificationBackend:
 
 	def _render_email(self, event_definition, context: dict) -> tuple[str, str, str | None]:
 		template_name = event_definition.email_template
-		if template_name and frappe.db.exists("Email Template", template_name):
+		if template_name:
+			if not frappe.db.exists("Email Template", template_name):
+				raise ValueError(_("Configured Email Template {0} is missing.").format(template_name))
 			try:
 				template_doc = frappe.get_doc("Email Template", template_name)
 				subject = (template_doc.get_formatted_subject(context) or "").strip()
 				message = (template_doc.get_formatted_response(context) or "").strip()
-				if subject and message:
-					return subject, message, template_name
-			except Exception:
-				pass
+			except Exception as exc:
+				raise ValueError(_("Email Template {0} failed to render.").format(template_name)) from exc
+			if not subject or not message:
+				raise ValueError(_("Email Template {0} rendered an empty subject or body.").format(template_name))
+			return subject, message, template_name
 
+		# Unmapped/internal events may still use the controlled privacy-filtered fallback.
 		return self._build_fallback_email(event_definition, context)
 
 	def _build_fallback_email(self, event_definition, context: dict) -> tuple[str, str, str | None]:
-		subject = f"{context.get('clinic_name') or 'VetEdge'}: {event_definition.event_label}"
+		clinic_name = context.get("clinic_name") or "Veterinary"
+		subject = f"{clinic_name}: {event_definition.event_label}"
 		rows = []
 		for key, value in (context or {}).items():
+			key_lower = str(key).lower()
 			if key in {"clinic_name", "clinic_tagline"} or value in (None, ""):
+				continue
+			if any(marker in key_lower for marker in ("note", "notes", "diagnosis", "symptom", "medical")):
 				continue
 			rows.append(f"<tr><th style='text-align:left;padding:6px;border:1px solid #ddd'>{frappe.utils.escape_html(str(key).replace('_', ' ').title())}</th><td style='padding:6px;border:1px solid #ddd'>{frappe.utils.escape_html(str(value))}</td></tr>")
 		message = (
-			f"<p>{frappe.utils.escape_html(context.get('clinic_name') or 'VetEdge')} has an update for you.</p>"
+			f"<p>{frappe.utils.escape_html(clinic_name)} has an update for you.</p>"
 			f"<table style='border-collapse:collapse'>{''.join(rows)}</table>"
 		)
 		return subject, message, None
