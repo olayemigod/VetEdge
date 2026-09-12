@@ -458,5 +458,45 @@
     "response": "<p>A grooming invoice has been created for <strong>{{ patient_name }}</strong>.</p>\n<p><strong>Invoice:</strong> {{ invoice }}</p>\n<p><strong>Amount:</strong> {{ amount }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
     "reference_doctype": "",
     "event_key": "grooming_invoice_created"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Guest Appointment Request Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Guest Appointment Request Received",
+    "response": "<p>A guest appointment request has been received and needs front-desk review.</p>\n<p><strong>Guest:</strong> {{ guest_name }}</p>\n<p><strong>Pet:</strong> {{ pet_name }}</p>\n<p><strong>Preferred Branch:</strong> {{ preferred_branch or branch }}</p>\n<p><strong>Preferred Date/Time:</strong> {{ preferred_datetime or appointment_datetime }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "guest_appointment_request_received"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Guest Appointment Ready for Approval",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Appointment Ready for Approval",
+    "response": "<p>A guest-originated appointment is ready for staff approval.</p>\n<p><strong>Pet:</strong> {{ patient_name }}</p>\n<p><strong>Appointment:</strong> {{ appointment or record }}</p>\n<p><strong>Branch:</strong> {{ branch }}</p>\n<p><strong>Date/Time:</strong> {{ appointment_datetime }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "guest_appointment_ready_for_approval"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Owner Appointment Request Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Owner Appointment Request Received",
+    "response": "<p>An owner appointment request has been received and needs front-desk review.</p>\n<p><strong>Owner:</strong> {{ owner_name }}</p>\n<p><strong>Pet:</strong> {{ patient_name }}</p>\n<p><strong>Branch:</strong> {{ branch }}</p>\n<p><strong>Date/Time:</strong> {{ appointment_datetime }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "owner_appointment_request_received"
+  },
+  {
+    "doctype": "Email Template",
+    "name": "VetEdge - Registration Request Received",
+    "enabled": 1,
+    "use_html": 1,
+    "subject": "{{ clinic_name }} - Registration Request Received",
+    "response": "<p>A new veterinary registration request has been received.</p>\n<p><strong>Guest:</strong> {{ guest_name }}</p>\n<p><strong>Pet:</strong> {{ pet_name }}</p>\n<p><strong>Preferred Branch:</strong> {{ preferred_branch or branch }}</p>\n<hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">\n<p style=\"font-size: 12px; color: #555;\">\n<strong>{{ clinic_name }}</strong><br>\n{{ clinic_tagline or \"Veterinary Care Services\" }}<br><br>\nThis is an automated message. Please do not reply directly to this email.<br>\nFor support, contact your clinic directly.\n</p>",
+    "reference_doctype": "",
+    "event_key": "registration_request_received"
   }
 ]
