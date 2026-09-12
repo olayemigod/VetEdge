@@ -312,6 +312,7 @@ def get_clinical_creation_item_context(
 	branch: str | None = None,
 	company: str | None = None,
 	customer: str | None = None,
+	price_list: str | None = None,
 ) -> dict[str, Any]:
 	require_internal_user()
 	_normalise_context(context)
@@ -324,14 +325,19 @@ def get_clinical_creation_item_context(
 	if cint(item_doc.get("disabled")):
 		frappe.throw(_("Disabled ERPNext Items cannot be used as Treatment Items."), frappe.ValidationError)
 
-	price_list = _resolved_price_list(branch=branch, company=company, customer=customer)
-	existing_price = _existing_item_price(item_code, price_list)
+	resolved_price_list = _resolved_price_list(branch=branch, company=company, customer=customer)
+	requested_price_list = _clean(price_list)
+	if requested_price_list and requested_price_list != (resolved_price_list or "") and not _can_manage_pricing():
+		frappe.throw(_("You are not permitted to inspect an alternate Price List in this workflow."), frappe.PermissionError)
+	selected_price_list = requested_price_list or resolved_price_list
+	_validate_selling_price_list(selected_price_list)
+	existing_price = _existing_item_price(item_code, selected_price_list)
 	return {
 		"item": item_code,
 		"item_name": item_doc.get("item_name") or item_code,
 		"stock_uom": item_doc.get("stock_uom"),
 		"is_stock_item": cint(item_doc.get("is_stock_item")),
-		"price_list": price_list,
+		"price_list": selected_price_list,
 		"existing_item_price": existing_price.get("name"),
 		"existing_price_rate": flt(existing_price.get("price_list_rate")) if existing_price else 0,
 		"price_locked": bool(existing_price and not _can_manage_pricing()),
