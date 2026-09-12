@@ -5,7 +5,7 @@ from hashlib import sha256
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, add_to_date, cstr, flt, getdate, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, cstr, flt, get_datetime, getdate, now_datetime, nowdate
 
 from vetedge.services.branding import get_clinic_brand_name
 from vetedge.services.notification_backends import get_notification_backend
@@ -21,7 +21,6 @@ APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS = {
 	"appointment_created",
 	"appointment_scheduled",
 	"appointment_confirmed",
-	"appointment_checked_in",
 	"appointment_started",
 	"appointment_completed",
 	"appointment_rescheduled",
@@ -219,19 +218,20 @@ EVENT_SETTING_FIELDS = {
 	"invoice_created": "notify_on_invoice_created",
 	"consultation_invoice_created": "notify_on_invoice_created",
 	"payment_received": "notify_on_payment_received",
-	"payment_pending": "notify_on_payment_received",
-	"payment_reminder": "notify_on_payment_received",
+	"payment_initiated": "notify_on_payment_follow_up",
+	"payment_pending": "notify_on_payment_follow_up",
+	"payment_reminder": "notify_on_payment_follow_up",
 	"accounts_action_required": "notify_on_accounts_action_required",
 	"consultation_awaiting_payment": "notify_on_accounts_action_required",
-	"consultation_sent_to_dispensary": "notify_on_accounts_action_required",
-	"dispensary_confirmation_completed": "notify_on_payment_received",
+	"consultation_sent_to_dispensary": "notify_on_clinical_workflow_updates",
+	"dispensary_confirmation_completed": "notify_on_clinical_workflow_updates",
 	"dispensary_stock_issue_failed": "notify_on_accounts_action_required",
 	"dispensary_expired_stock_blocked": "notify_on_accounts_action_required",
 	"dispensary_insufficient_non_expired_stock": "notify_on_accounts_action_required",
 	"stock_issue_failed": "notify_on_accounts_action_required",
 	"expired_stock_blocked": "notify_on_accounts_action_required",
 	"insufficient_non_expired_stock": "notify_on_accounts_action_required",
-	"consultation_ready_for_treatment": "notify_on_payment_received",
+	"consultation_ready_for_treatment": "notify_on_clinical_workflow_updates",
 	"lab_order_created": "notify_on_lab_updates",
 	"lab_sample_collected": "notify_on_lab_updates",
 	"lab_result_entered": "notify_on_lab_updates",
@@ -920,7 +920,7 @@ def _reservation_is_active(created_on) -> bool:
 	if not created_on:
 		return True
 	try:
-		age = (now_datetime() - created_on).total_seconds()
+		age = (now_datetime() - get_datetime(created_on)).total_seconds()
 		return age < DELIVERY_RESERVATION_SECONDS
 	except Exception:
 		return True
@@ -1740,7 +1740,9 @@ def get_notification_settings() -> dict:
 		"notify_on_guest_appointment_request": False,
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
+		"notify_on_payment_follow_up": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
 	}
 
@@ -1782,7 +1784,9 @@ def default_notification_settings() -> dict:
 		"notify_on_guest_appointment_request": False,
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
+		"notify_on_payment_follow_up": False,
 		"notify_on_accounts_action_required": False,
+		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
 	}
 
