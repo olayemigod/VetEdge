@@ -158,8 +158,6 @@ def _master_exact_exists(kind: str, query: str) -> bool:
 		return _has_exact_treatment_profile(needle)
 	else:
 		return False
-	if frappe.get_meta(doctype).has_field("disabled"):
-		filters["disabled"] = 0
 	return bool(frappe.db.exists(doctype, filters))
 
 
@@ -167,9 +165,9 @@ def _erpnext_item_exact_exists(query: str) -> bool:
 	needle = _clean(query)
 	if not needle:
 		return True
-	if frappe.db.exists("Item", {"name": needle, "disabled": 0}):
+	if frappe.db.exists("Item", {"name": needle}):
 		return True
-	return bool(frappe.db.exists("Item", {"item_name": needle, "disabled": 0}))
+	return bool(frappe.db.exists("Item", {"item_name": needle}))
 
 
 def _append_create_option(
@@ -241,13 +239,10 @@ def _has_exact_treatment_profile(query: str) -> bool:
 	needle = _clean(query)
 	if not needle:
 		return True
-	filters = {"item": needle}
-	if frappe.get_meta(TREATMENT_ITEM_DOCTYPE).has_field("disabled"):
-		filters["disabled"] = 0
-	if frappe.db.exists(TREATMENT_ITEM_DOCTYPE, filters):
+	if frappe.db.exists(TREATMENT_ITEM_DOCTYPE, {"item": needle}):
 		return True
-	item_code = frappe.db.get_value("Item", {"item_name": needle, "disabled": 0}, "name")
-	return bool(item_code and frappe.db.exists(TREATMENT_ITEM_DOCTYPE, {"item": item_code, "disabled": 0}))
+	item_code = frappe.db.get_value("Item", {"item_name": needle}, "name")
+	return bool(item_code and frappe.db.exists(TREATMENT_ITEM_DOCTYPE, {"item": item_code}))
 
 
 def append_hospitalisation_item_create_option(
