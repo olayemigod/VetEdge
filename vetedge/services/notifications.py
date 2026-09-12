@@ -17,6 +17,18 @@ from vetedge.services.permissions import get_assigned_branches
 
 
 SUPPORTED_CHANNELS = {"Email", "SMS", "WhatsApp"}
+APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS = {
+	"appointment_created",
+	"appointment_scheduled",
+	"appointment_confirmed",
+	"appointment_checked_in",
+	"appointment_started",
+	"appointment_completed",
+	"appointment_rescheduled",
+	"appointment_cancelled",
+	"appointment_no_show",
+}
+DELIVERY_RESERVATION_SECONDS = 600
 NOTIFICATION_ITEM_DOCTYPE = "Veterinary Notification Item"
 NOTIFICATION_ITEM_STATUSES = {"Unread", "Read", "Acknowledged", "Done", "Dismissed", "Archived"}
 NOTIFICATION_ITEM_STATUS_TIMESTAMPS = {
@@ -863,6 +875,179 @@ def emit_notification_event(
 	}
 
 
+def build_delivery_idempotency_key(
+	event_key: str,
+	reference_doctype: str | None,
+	reference_name: str | None,
+	recipient: str | None,
+	channel: str,
+	context: dict,
+) -> str | None:
+	"""Build a stable key only for lifecycle events where one transition should queue once."""
+	if event_key not in APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS:
+		return None
+	occurrence = {
+		"previous_status": context.get("previous_status"),
+		"status": context.get("status"),
+		"appointment_datetime": cstr(context.get("appointment_datetime") or ""),
+	}
+	raw = json.dumps(
+		{
+			"event_key": event_key,
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+			"recipient": cstr(recipient).strip().lower(),
+			"channel": channel,
+			"occurrence": occurrence,
+		},
+		sort_keys=True,
+		default=str,
+	)
+	return f"delivery::{sha256(raw.encode('utf-8')).hexdigest()}"
+
+
+def _notification_log_supports_idempotency() -> bool:
+	try:
+		return bool(
+			frappe.db.exists("DocType", "Veterinary Notification Log")
+			and frappe.get_meta("Veterinary Notification Log").has_field("idempotency_key")
+		)
+	except Exception:
+		return False
+
+
+def _reservation_is_active(created_on) -> bool:
+	if not created_on:
+		return True
+	try:
+		age = (now_datetime() - created_on).total_seconds()
+		return age < DELIVERY_RESERVATION_SECONDS
+	except Exception:
+		return True
+
+
+def reserve_notification_delivery(
+	*,
+	event_key: str,
+	reference_doctype: str | None,
+	reference_name: str | None,
+	context: dict,
+	recipient: dict,
+	channel: str,
+	backend_mode: str,
+) -> dict:
+	"""Reserve a lifecycle delivery before provider dispatch.
+
+	The reservation closes the sequential/concurrent duplicate window. Failed, skipped,
+	or stale reservations can be reused for a later retry; queued/sent deliveries cannot.
+	"""
+	recipient_address = recipient.get("address") or recipient.get("identifier")
+	idempotency_key = build_delivery_idempotency_key(
+		event_key,
+		reference_doctype,
+		reference_name,
+		recipient_address,
+		channel,
+		context,
+	)
+	if not idempotency_key or not _notification_log_supports_idempotency():
+		return {"reserved": False, "duplicate": False, "idempotency_key": idempotency_key}
+
+	existing = frappe.db.get_value(
+		"Veterinary Notification Log",
+		{"idempotency_key": idempotency_key},
+		["name", "status", "created_on"],
+		as_dict=True,
+	)
+	if existing:
+		status = existing.get("status")
+		if status in {"Queued", "Sent"} or (status == "Reserved" and _reservation_is_active(existing.get("created_on"))):
+			return {
+				"reserved": False,
+				"duplicate": True,
+				"name": existing.get("name"),
+				"idempotency_key": idempotency_key,
+			}
+		frappe.db.set_value(
+			"Veterinary Notification Log",
+			existing.get("name"),
+			{
+				"status": "Reserved",
+				"backend_mode": backend_mode,
+				"recipient": recipient_address,
+				"audience_type": recipient.get("audience_type"),
+				"provider_reference": None,
+				"error_message": None,
+				"created_on": now_datetime(),
+				"sent_on": None,
+				"payload_preview": build_payload_preview(context),
+			},
+			update_modified=False,
+		)
+		return {
+			"reserved": True,
+			"duplicate": False,
+			"name": existing.get("name"),
+			"idempotency_key": idempotency_key,
+		}
+
+	try:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Veterinary Notification Log",
+				"event_key": event_key,
+				"channel": channel,
+				"status": "Reserved",
+				"backend_mode": backend_mode,
+				"recipient": recipient_address,
+				"audience_type": recipient.get("audience_type"),
+				"created_on": now_datetime(),
+				"reference_doctype": reference_doctype,
+				"reference_name": reference_name,
+				"idempotency_key": idempotency_key,
+				"payload_preview": build_payload_preview(context),
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return {
+			"reserved": True,
+			"duplicate": False,
+			"name": doc.name,
+			"idempotency_key": idempotency_key,
+		}
+	except frappe.DuplicateEntryError:
+		name = frappe.db.get_value("Veterinary Notification Log", {"idempotency_key": idempotency_key}, "name")
+		return {
+			"reserved": False,
+			"duplicate": True,
+			"name": name,
+			"idempotency_key": idempotency_key,
+		}
+
+
+def finalize_notification_delivery(reservation: dict, attempt: dict, context: dict) -> bool:
+	name = reservation.get("name") if reservation else None
+	if not name:
+		return False
+	status = attempt.get("status") or "Skipped"
+	frappe.db.set_value(
+		"Veterinary Notification Log",
+		name,
+		{
+			"status": status,
+			"backend_mode": attempt.get("backend_mode") or "local",
+			"recipient": attempt.get("recipient"),
+			"audience_type": attempt.get("audience_type"),
+			"provider_reference": attempt.get("provider_reference"),
+			"error_message": attempt.get("error_message"),
+			"sent_on": now_datetime() if status == "Sent" else None,
+			"payload_preview": build_payload_preview(context),
+		},
+		update_modified=False,
+	)
+	return True
+
+
 def dispatch_notification_event(event_payload: dict, settings: dict | None = None) -> dict:
 	settings = settings or get_notification_settings()
 	event_key = event_payload["event_key"]
@@ -893,16 +1078,53 @@ def dispatch_notification_event(event_payload: dict, settings: dict | None = Non
 			attempts.append(attempt)
 			continue
 
+		reservations = {}
+		deliverable_channels = []
+		for channel in channels:
+			reservation = reserve_notification_delivery(
+				event_key=event_key,
+				reference_doctype=event_payload.get("reference_doctype"),
+				reference_name=event_payload.get("reference_name"),
+				context=context,
+				recipient=recipient,
+				channel=channel,
+				backend_mode=settings.get("notification_backend_mode", "local"),
+			)
+			if reservation.get("duplicate"):
+				attempts.append(
+					{
+						"channel": channel,
+						"recipient": recipient.get("address") or recipient.get("identifier"),
+						"audience_type": recipient.get("audience_type"),
+						"status": "Skipped",
+						"backend_mode": settings.get("notification_backend_mode", "local"),
+						"provider_reference": reservation.get("name"),
+						"error_message": "duplicate_delivery_suppressed",
+						"idempotency_key": reservation.get("idempotency_key"),
+					}
+				)
+				continue
+			deliverable_channels.append(channel)
+			if reservation.get("reserved"):
+				reservations[channel] = reservation
+
+		if not deliverable_channels:
+			continue
+
 		results = backend.dispatch(
 			event_definition=event_definition,
 			recipient=recipient,
-			channels=channels,
+			channels=deliverable_channels,
 			context=context,
 			settings=settings,
 			reference_doctype=event_payload.get("reference_doctype"),
 			reference_name=event_payload.get("reference_name"),
 		)
 		for attempt in results:
+			reservation = reservations.get(attempt.get("channel"))
+			if reservation and finalize_notification_delivery(reservation, attempt, context):
+				attempt["idempotency_key"] = reservation.get("idempotency_key")
+				continue
 			log_notification_attempt(
 				event_key=event_key,
 				reference_doctype=event_payload.get("reference_doctype"),
