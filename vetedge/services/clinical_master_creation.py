@@ -144,6 +144,34 @@ def parse_create_value(value: str | None, kind: str) -> str | None:
 	return None
 
 
+def _master_exact_exists(kind: str, query: str) -> bool:
+	needle = _clean(query)
+	if not needle:
+		return True
+	if kind == "symptom":
+		filters: dict[str, Any] = {"symptom_name": needle}
+		doctype = "Veterinary Symptom"
+	elif kind == "diagnosis":
+		filters = {"diagnosis_name": needle}
+		doctype = "Veterinary Diagnosis"
+	elif kind == "treatment_item":
+		return _has_exact_treatment_profile(needle)
+	else:
+		return False
+	if frappe.get_meta(doctype).has_field("disabled"):
+		filters["disabled"] = 0
+	return bool(frappe.db.exists(doctype, filters))
+
+
+def _erpnext_item_exact_exists(query: str) -> bool:
+	needle = _clean(query)
+	if not needle:
+		return True
+	if frappe.db.exists("Item", {"name": needle, "disabled": 0}):
+		return True
+	return bool(frappe.db.exists("Item", {"item_name": needle, "disabled": 0}))
+
+
 def _append_create_option(
 	rows: list[dict[str, Any]],
 	*,
@@ -152,7 +180,7 @@ def _append_create_option(
 	context: str,
 	branch: str | None = None,
 ) -> list[dict[str, Any]]:
-	if not _clean(query) or _matches_exact(rows, query) or not _kind_allowed(kind, context):
+	if not _clean(query) or _master_exact_exists(kind, query) or not _kind_allowed(kind, context):
 		return rows
 	label = {
 		"symptom": _("Create New Symptom: {0}").format(query),
@@ -314,7 +342,7 @@ def search_clinical_creation_options(
 			}
 			for row in rows
 		]
-		if query and capabilities["can_create_erpnext_item"] and not _matches_exact(options, query):
+		if query and capabilities["can_create_erpnext_item"] and not _erpnext_item_exact_exists(query):
 			options.append({
 				"value": f"{ITEM_CREATE_PREFIX}{query}",
 				"label": f"+ { _('Create New ERPNext Item: {0}').format(query) }",
