@@ -332,9 +332,16 @@ def get_clinical_link_options(kind: str, search: str = "", branch: str | None = 
 	_require_clinical_context(); query = str(search or "").strip(); page_len = min(max(cint(limit) or 20, 1), 50)
 	if kind == "practitioner":
 		return [{"value": row[0], "label": row[1]} for row in get_veterinary_doctor_users("User", query, "name", 0, page_len, {})]
-	if kind == "treatment_item":
-		return [{"value": row[0], "label": row[1]} for row in get_treatment_item_link_options("Item", query, "name", 0, page_len, {})]
-	config = {"patient": ("Veterinary Patient", "patient_name", {"status": ["!=", "Deceased"]}), "branch": ("Branch", "name", {}), "consultation_type": ("Consultation Type", "consultation_type", {}), "symptom": ("Veterinary Symptom", "name", {}), "diagnosis": ("Veterinary Diagnosis", "name", {})}
+	if kind in {"symptom", "diagnosis", "treatment_item"}:
+		from vetedge.services.clinical_master_creation import search_clinical_master_options
+		return search_clinical_master_options(
+			kind,
+			query,
+			context="consultation",
+			branch=branch,
+			limit=page_len,
+		)
+	config = {"patient": ("Veterinary Patient", "patient_name", {"status": ["!=", "Deceased"]}), "branch": ("Branch", "name", {}), "consultation_type": ("Consultation Type", "consultation_type", {})}
 	if kind not in config: frappe.throw(_("Unsupported clinical link type."), frappe.ValidationError)
 	doctype, label_field, filters = config[kind]; meta = frappe.get_meta(doctype)
 	if meta.has_field("disabled"): filters["disabled"] = 0

@@ -37,6 +37,7 @@ frappe.ui.form.on("Veterinary Consultation", {
 	refresh(frm) {
 		applyCurrentDoctorPractitionerDefault(frm);
 		configure_planned_treatments_grid(frm);
+		configure_clinical_master_creation(frm);
 		configure_dispensary_grid(frm);
 		sync_dispensary_preview(frm);
 		frm.add_custom_button(__("View Medical History"), () => {
@@ -517,6 +518,29 @@ function consultationScopeIsLocked(frm) {
 
 function consultationIsClosed(frm) {
 	return ["Completed", "Cancelled"].includes(frm.doc.status);
+}
+
+function configure_clinical_master_creation(frm) {
+	frappe.call({
+		method: "vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities",
+		args: {
+			context: "consultation",
+			branch: frm.doc.service_branch,
+			company: frm.doc.company,
+			customer: frm.doc.primary_owner,
+		},
+		callback(response) {
+			const capabilities = response.message || {};
+			const symptom_grid = frm.get_field("symptoms")?.grid;
+			const diagnosis_grid = frm.get_field("diagnoses")?.grid;
+			const treatment_grid = frm.get_field("planned_treatments")?.grid;
+			symptom_grid?.update_docfield_property("symptom", "only_select", capabilities.can_create_symptom ? 0 : 1);
+			diagnosis_grid?.update_docfield_property("diagnosis", "only_select", capabilities.can_create_diagnosis ? 0 : 1);
+			// Treatment Items remain curated/select-only in the native fallback form.
+			// Full create-if-missing Treatment Item + pricing flow is owned by the EdgeSuite clinical workspace.
+			treatment_grid?.update_docfield_property("item", "only_select", 1);
+		},
+	});
 }
 
 function configure_planned_treatments_grid(frm) {

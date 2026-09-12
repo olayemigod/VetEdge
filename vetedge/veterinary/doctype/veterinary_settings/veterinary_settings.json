@@ -22,6 +22,12 @@
   "clinical_tab",
   "consultation_section",
   "enable_consultations",
+  "clinical_master_creation_section",
+  "allow_new_symptoms_in_clinical_workflow",
+  "allow_new_diagnoses_in_clinical_workflow",
+  "allow_new_treatment_items_in_clinical_workflow",
+  "allow_clinical_master_creation_in_hospitalisation",
+  "allow_erpnext_item_creation_from_treatment",
   "vitals_section",
   "enable_vitals",
   "require_vitals_before_completion",
@@ -274,6 +280,52 @@
    "fieldname": "enable_consultations",
    "fieldtype": "Check",
    "label": "Enable Consultations"
+  },
+  {
+   "fieldname": "clinical_master_creation_section",
+   "fieldtype": "Section Break",
+   "label": "Clinical Master Creation",
+   "description": "Controls whether clinical users can create missing Symptoms, Diagnoses, and Treatment Items directly from search-based clinical workflows."
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "When a Symptom search has no suitable result, allow permitted users to create a new Veterinary Symptom from the clinical workflow.",
+   "fieldname": "allow_new_symptoms_in_clinical_workflow",
+   "fieldtype": "Check",
+   "label": "Allow New Symptoms in Clinical Workflow"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "When a Diagnosis search has no suitable result, allow permitted users to create a new Veterinary Diagnosis from the clinical workflow.",
+   "fieldname": "allow_new_diagnoses_in_clinical_workflow",
+   "fieldtype": "Check",
+   "label": "Allow New Diagnoses in Clinical Workflow"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge",
+   "description": "When a Treatment Item search has no suitable result, allow permitted users to create a new Veterinary Treatment Item from the clinical workflow.",
+   "fieldname": "allow_new_treatment_items_in_clinical_workflow",
+   "fieldtype": "Check",
+   "label": "Allow New Treatment Items in Clinical Workflow"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_veterinary_hospitalisation",
+   "description": "Extend the enabled clinical master creation rules to Hospitalisation Episode workflows where the corresponding master is applicable.",
+   "fieldname": "allow_clinical_master_creation_in_hospitalisation",
+   "fieldtype": "Check",
+   "label": "Allow Clinical Master Creation in Hospitalisation"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_vetedge && doc.allow_new_treatment_items_in_clinical_workflow",
+   "description": "Allow a permitted stock user to create an ERPNext Item while creating a new Treatment Item. Existing ERPNext Item permissions and stock roles are still required.",
+   "fieldname": "allow_erpnext_item_creation_from_treatment",
+   "fieldtype": "Check",
+   "label": "Allow ERPNext Item Creation from Treatment Item"
   },
   {
    "collapsible": 1,
@@ -1323,7 +1375,15 @@
    "share": 1,
    "write": 1
   },
-  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "VetEdge Doctor", "share": 1}
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "VetEdge Doctor",
+   "share": 1
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC"

@@ -300,7 +300,7 @@
 		<EdgeModal :open="activityDialog.open" :title="`Add ${activityDialog.type || 'Activity'}`" subtitle="Hospitalisation Clinical Care" :busy="busy" @close="closeActivity">
 			<div class="episode-grid">
 				<EdgeInput :model-value="activityDialog.datetime" type="datetime-local" label="Activity Date/Time" @update:model-value="(value) => activityDialog.datetime = value" />
-				<EdgeLinkField :model-value="activityDialog.item" :selected-label="activityDialog.item_label" label="ERPNext Item" :placeholder="activityRequiresItem ? 'Required for this activity' : 'Optional ERPNext Item'" :searcher="(query) => optionSearch('item', query)" @update:model-value="selectActivityItem" />
+				<EdgeLinkField :model-value="activityDialog.item" :selected-label="activityDialog.item_label" label="ERPNext Item" :placeholder="activityRequiresItem ? 'Required for this activity' : 'Optional ERPNext Item'" :searcher="(query) => optionSearch('clinical_item', query)" @update:model-value="selectActivityItem" />
 				<EdgeInput :model-value="activityDialog.qty" type="number" min="0.001" step="0.001" label="Quantity" @update:model-value="(value) => activityDialog.qty = value" />
 				<EdgeInput :model-value="activityDialog.uom" label="UOM" readonly />
 				<EdgeDropdown :model-value="String(activityDialog.billable || 0)" label="Billable" :options="yesNoOptions" @update:model-value="(value) => activityDialog.billable = Number(value || 0)" />
@@ -309,6 +309,29 @@
 				<EdgeTextarea class="episode-wide" :model-value="activityDialog.notes" label="Clinical Notes" :rows="5" @update:model-value="(value) => activityDialog.notes = value" />
 			</div>
 			<template #footer><button type="button" class="edge-button" :disabled="busy" @click="closeActivity">Cancel</button><button type="button" class="edge-button edge-button--primary" :disabled="busy || (activityRequiresItem && !activityDialog.item)" @click="saveActivity">Add Activity</button></template>
+		</EdgeModal>
+
+		<EdgeModal :open="treatmentMasterDialog.open" title="Create New Treatment Item" subtitle="Create the missing reusable Treatment Item and return to this Hospitalisation activity." :busy="treatmentMasterDialog.saving" @close="closeTreatmentMaster">
+			<div class="episode-grid">
+				<EdgeLinkField :model-value="treatmentMasterDialog.values.item" :selected-label="treatmentMasterDialog.values.item_label" label="ERPNext Item" placeholder="Search existing ERPNext Item first" :searcher="(query) => creationSearch('erpnext_item', query)" @update:model-value="selectTreatmentMasterBaseItem" />
+				<EdgeLinkField :model-value="treatmentMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!treatmentMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="selectTreatmentMasterPriceList" />
+				<template v-if="treatmentMasterDialog.newItemMode">
+					<EdgeInput :model-value="treatmentMasterDialog.values.new_item.item_name" label="New Item Name" @update:model-value="(value) => setTreatmentMasterNewItemValue('item_name', value)" />
+					<EdgeInput :model-value="treatmentMasterDialog.values.new_item.item_code" label="Item Code" description="Leave blank to use the Item Name." @update:model-value="(value) => setTreatmentMasterNewItemValue('item_code', value)" />
+					<EdgeLinkField :model-value="treatmentMasterDialog.values.new_item.item_group" label="Item Group" placeholder="Select Item Group" :searcher="(query) => creationSearch('item_group', query)" @update:model-value="(value) => setTreatmentMasterNewItemValue('item_group', value)" />
+					<EdgeLinkField :model-value="treatmentMasterDialog.values.new_item.stock_uom" label="Stock UOM" placeholder="Select UOM" :searcher="(query) => creationSearch('uom', query)" @update:model-value="(value) => setTreatmentMasterNewItemValue('stock_uom', value)" />
+					<EdgeDropdown :model-value="String(treatmentMasterDialog.values.new_item.is_stock_item ?? 1)" label="Item Type" :options="itemTypeOptions" @update:model-value="(value) => setTreatmentMasterNewItemValue('is_stock_item', Number(value))" />
+				</template>
+				<EdgeLinkField :model-value="treatmentMasterDialog.values.service_type" label="Default Service Type" placeholder="Optional" :searcher="(query) => creationSearch('service_type', query)" @update:model-value="(value) => setTreatmentMasterValue('service_type', value)" />
+				<EdgeLinkField :model-value="treatmentMasterDialog.values.treatment_type" label="Default Treatment Type" placeholder="Optional" :searcher="(query) => creationSearch('treatment_type', query)" @update:model-value="(value) => setTreatmentMasterValue('treatment_type', value)" />
+				<EdgeInput :model-value="treatmentMasterDialog.values.default_price" type="number" min="0" step="0.01" label="Default Price" :disabled="treatmentMasterDialog.pricingLocked" :description="treatmentMasterDialog.pricingLocked ? 'Existing Item Price is locked for your role.' : 'Uses the selected/contextual Price List.'" @update:model-value="(value) => setTreatmentMasterValue('default_price', value)" />
+				<EdgeInput :model-value="treatmentMasterDialog.values.shelf_life_in_days" type="number" min="0" step="1" label="Shelf Life in Days" @update:model-value="(value) => setTreatmentMasterValue('shelf_life_in_days', value)" />
+				<EdgeTextarea class="episode-wide" :model-value="treatmentMasterDialog.values.description" label="Description" :rows="4" @update:model-value="(value) => setTreatmentMasterValue('description', value)" />
+			</div>
+			<template #footer>
+				<button type="button" class="edge-button" :disabled="treatmentMasterDialog.saving" @click="closeTreatmentMaster">Cancel</button>
+				<button type="button" class="edge-button edge-button--primary" :disabled="treatmentMasterDialog.saving" @click="saveTreatmentMaster">Create & Select</button>
+			</template>
 		</EdgeModal>
 
 		<EdgeModal :open="vitalsDialog.open" title="Add Vitals" subtitle="Hospitalisation Clinical Care" :busy="busy" @close="closeVitals">
@@ -438,10 +461,16 @@ const API = Object.freeze({
 	options: 'vetedge.services.hospitalisation_episode.search_hospitalisation_episode_options',
 	itemContext: 'vetedge.services.hospitalisation_episode.get_hospitalisation_episode_item_context',
 	action: 'vetedge.services.hospitalisation_episode.perform_hospitalisation_episode_action',
+	createMaster: 'vetedge.services.clinical_master_creation.create_clinical_master',
+	creationOptions: 'vetedge.services.clinical_master_creation.search_clinical_creation_options',
+	creationCapabilities: 'vetedge.services.clinical_master_creation.get_clinical_master_creation_capabilities',
+	itemCreationContext: 'vetedge.services.clinical_master_creation.get_clinical_creation_item_context',
 });
 
 const CARE_LEVELS = ['Standard', 'Observation', 'Intensive Care', 'ICU', 'Isolation', 'Recovery'];
 const ITEM_REQUIRED_ACTIVITY_TYPES = new Set(['Medication', 'Fluid Therapy']);
+const CLINICAL_CREATE_PREFIX = '__vetedge_create__:';
+const ERP_ITEM_CREATE_PREFIX = '__vetedge_create_erpnext_item__:';
 const toOptions = (values) => values.map((value) => ({ value, label: value }));
 const yesNoOptions = [{ value: '0', label: 'No' }, { value: '1', label: 'Yes' }];
 const blankEpisode = () => ({ name: '', status: '', activities: [], charge_items: [], signals: {}, capabilities: {}, invoice: {} });
@@ -454,6 +483,15 @@ const blankStock = () => ({ open: false, postRequested: false, preview: {} });
 const blankCharge = () => ({ open: false, row_name: '', item: '', item_label: '', qty: 1, uom: '', rate: 0, description: '', editable_fields: [], invoice_is_draft: false });
 const blankInvoiceConfirmation = () => ({ open: false, confirmation_type: '', message: '' });
 const blankDischarge = () => ({ open: false, values: {} });
+const blankTreatmentMaster = () => ({
+	open: false,
+	seed: '',
+	capabilities: {},
+	values: {},
+	newItemMode: false,
+	pricingLocked: false,
+	saving: false,
+});
 
 function call(method, args = {}) {
 	return frappe.call({ method, args }).then((response) => response.message);
@@ -510,6 +548,7 @@ export default {
 			chargeDialog: blankCharge(),
 			invoiceConfirmation: blankInvoiceConfirmation(),
 			dischargeDialog: blankDischarge(),
+			treatmentMasterDialog: blankTreatmentMaster(),
 			dischargeReadiness: null,
 			labOptionCache: {},
 		};
@@ -542,6 +581,7 @@ export default {
 			];
 		},
 		chargeTotal() { return (this.episode.charge_items || []).reduce((total, row) => total + Number(row.amount || 0), 0); },
+		itemTypeOptions() { return [{ value: '1', label: 'Stock Item' }, { value: '0', label: 'Service / Non-stock Item' }]; },
 	},
 	async mounted() {
 		const name = new URLSearchParams(window.location.search || '').get('name');
@@ -625,6 +665,11 @@ export default {
 		},
 		closeActivity() { if (!this.busy) this.activityDialog = blankActivity(); },
 		async selectActivityItem(value) {
+			const prefix = `${CLINICAL_CREATE_PREFIX}treatment_item:`;
+			if (typeof value === 'string' && value.startsWith(prefix)) {
+				await this.openTreatmentMaster(value.slice(prefix.length).trim());
+				return;
+			}
 			this.activityDialog.item = value || ''; this.activityDialog.item_label = '';
 			if (!value) { this.activityDialog.uom = ''; this.activityDialog.rate = ''; return; }
 			try {
@@ -636,6 +681,144 @@ export default {
 				if (this.episode.capabilities?.dispensary_enabled && context?.is_stock_item) this.activityDialog.stock_affecting = 1;
 				if (Number(context?.rate || 0) > 0) this.activityDialog.billable = 1;
 			} catch (error) { this.error = errorMessage(error, __('Item context could not be loaded.')); }
+		},
+		async openTreatmentMaster(seed) {
+			try {
+				const capabilities = await call(API.creationCapabilities, {
+					context: 'hospitalisation',
+					branch: this.episode.service_branch || undefined,
+					company: this.episode.company || undefined,
+					customer: this.episode.owner || undefined,
+				});
+				if (!capabilities?.can_create_treatment_item) {
+					frappe.show_alert({ message: __('Creating Treatment Items from Hospitalisation is disabled or not permitted.'), indicator: 'orange' });
+					return;
+				}
+				this.treatmentMasterDialog = {
+					...blankTreatmentMaster(),
+					open: true,
+					seed,
+					capabilities,
+					values: {
+						item: '',
+						item_label: '',
+						price_list: capabilities.resolved_price_list || '',
+						default_price: 0,
+						service_type: '',
+						treatment_type: '',
+						shelf_life_in_days: 0,
+						description: '',
+						new_item: { item_name: seed, item_code: '', item_group: '', stock_uom: '', is_stock_item: 1 },
+					},
+				};
+			} catch (error) {
+				this.error = errorMessage(error, __('Treatment Item creation is unavailable.'));
+			}
+		},
+		closeTreatmentMaster() {
+			if (!this.treatmentMasterDialog.saving) this.treatmentMasterDialog = blankTreatmentMaster();
+		},
+		setTreatmentMasterValue(field, value) {
+			this.treatmentMasterDialog.values = { ...this.treatmentMasterDialog.values, [field]: value ?? '' };
+		},
+		setTreatmentMasterNewItemValue(field, value) {
+			this.treatmentMasterDialog.values = {
+				...this.treatmentMasterDialog.values,
+				new_item: { ...(this.treatmentMasterDialog.values.new_item || {}), [field]: value ?? '' },
+			};
+		},
+		async creationSearch(kind, search) {
+			return (await call(API.creationOptions, {
+				kind,
+				search,
+				context: 'hospitalisation',
+				branch: this.episode.service_branch || undefined,
+				company: this.episode.company || undefined,
+				customer: this.episode.owner || undefined,
+				limit: 20,
+			})) || [];
+		},
+		async selectTreatmentMasterPriceList(value) {
+			this.setTreatmentMasterValue('price_list', value);
+			this.treatmentMasterDialog.pricingLocked = false;
+			if (this.treatmentMasterDialog.values.item && !this.treatmentMasterDialog.newItemMode) {
+				await this.selectTreatmentMasterBaseItem(this.treatmentMasterDialog.values.item);
+			}
+		},
+		async selectTreatmentMasterBaseItem(value) {
+			if (typeof value === 'string' && value.startsWith(ERP_ITEM_CREATE_PREFIX)) {
+				if (!this.treatmentMasterDialog.capabilities.can_create_erpnext_item) return;
+				const seed = value.slice(ERP_ITEM_CREATE_PREFIX.length).trim();
+				this.treatmentMasterDialog.newItemMode = true;
+				this.treatmentMasterDialog.pricingLocked = false;
+				this.treatmentMasterDialog.values = {
+					...this.treatmentMasterDialog.values,
+					item: '',
+					item_label: '',
+					default_price: 0,
+					new_item: {
+						...(this.treatmentMasterDialog.values.new_item || {}),
+						item_name: seed || this.treatmentMasterDialog.seed,
+					},
+				};
+				return;
+			}
+			this.treatmentMasterDialog.newItemMode = false;
+			this.treatmentMasterDialog.pricingLocked = false;
+			this.treatmentMasterDialog.values = {
+				...this.treatmentMasterDialog.values,
+				item: value || '',
+				item_label: '',
+				default_price: 0,
+			};
+			if (!value) return;
+			try {
+				const itemContext = await call(API.itemCreationContext, {
+					item: value,
+					context: 'hospitalisation',
+					branch: this.episode.service_branch || undefined,
+					company: this.episode.company || undefined,
+					customer: this.episode.owner || undefined,
+					price_list: this.treatmentMasterDialog.values.price_list || undefined,
+				});
+				if (this.treatmentMasterDialog.values.item !== value) return;
+				if (itemContext?.treatment_item_exists) {
+					this.treatmentMasterDialog.values = { ...this.treatmentMasterDialog.values, item: '', item_label: '' };
+					frappe.show_alert({ message: __('That ERPNext Item already has a Veterinary Treatment Item. Select the existing treatment master instead.'), indicator: 'orange' });
+					return;
+				}
+				this.treatmentMasterDialog.pricingLocked = Boolean(itemContext?.price_locked);
+				this.treatmentMasterDialog.values = {
+					...this.treatmentMasterDialog.values,
+					item_label: itemContext?.item_name || value,
+					price_list: itemContext?.price_list || this.treatmentMasterDialog.values.price_list || '',
+					default_price: itemContext?.existing_item_price ? Number(itemContext.existing_price_rate || 0) : 0,
+				};
+			} catch (error) {
+				this.error = errorMessage(error, __('Item pricing context could not be loaded.'));
+			}
+		},
+		async saveTreatmentMaster() {
+			if (!this.treatmentMasterDialog.open || this.treatmentMasterDialog.saving) return;
+			this.treatmentMasterDialog.saving = true;
+			try {
+				const values = { ...this.treatmentMasterDialog.values };
+				if (!this.treatmentMasterDialog.newItemMode) delete values.new_item;
+				const created = await call(API.createMaster, {
+					kind: 'treatment_item',
+					values,
+					context: 'hospitalisation',
+					branch: this.episode.service_branch || undefined,
+					company: this.episode.company || undefined,
+					customer: this.episode.owner || undefined,
+				});
+				this.treatmentMasterDialog = blankTreatmentMaster();
+				await this.selectActivityItem(created?.value || created?.item);
+				frappe.show_alert({ message: __('Treatment Item created and selected.'), indicator: 'green' });
+			} catch (error) {
+				this.treatmentMasterDialog.saving = false;
+				this.error = errorMessage(error, __('Treatment Item could not be created.'));
+			}
 		},
 		async saveActivity() {
 			if (!this.activityDialog.type || this.busy || (this.activityRequiresItem && !this.activityDialog.item)) return;
