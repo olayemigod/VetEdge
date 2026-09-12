@@ -11,6 +11,7 @@ from vetedge.services.notification_backends.processedge_core_backend import (
 	ProcessEdgeCoreNotificationBackend,
 )
 from vetedge.services.notifications import (
+	build_delivery_idempotency_key,
 	dispatch_notification_event,
 	emit_notification_event,
 	parse_notification_channels,
@@ -331,7 +332,7 @@ class TestNotifications(TestCase):
 		self.assertEqual(sent[0]["subject"], "Payment Received")
 		self.assertTrue(sent[0]["raw_html"])
 
-	def test_missing_template_fallback_works(self):
+	def test_missing_configured_template_skips_email(self):
 		sent = []
 		backend = LocalNotificationBackend()
 		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
@@ -346,16 +347,17 @@ class TestNotifications(TestCase):
 				event_definition=event_definition,
 				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
 				channels=["Email"],
-				context={"clinic_name": "VetEdge", "notes": "sensitive"},
+				context={"clinic_name": "Clinic", "notes": "sensitive"},
 				settings={},
 				reference_doctype="Sales Invoice",
 				reference_name="SINV-001",
 			)
 
-		self.assertIsNone(result[0]["provider_reference"])
-		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
+		self.assertEqual(result[0]["status"], "Skipped")
+		self.assertEqual(result[0]["provider_reference"], "VetEdge - Payment Received")
+		self.assertEqual(sent, [])
 
-	def test_blank_rendered_template_falls_back_to_generated_email(self):
+	def test_blank_configured_template_skips_email(self):
 		sent = []
 		backend = LocalNotificationBackend()
 		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
@@ -377,15 +379,51 @@ class TestNotifications(TestCase):
 				event_definition=event_definition,
 				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
 				channels=["Email"],
-				context={"clinic_name": "VetEdge", "invoice": "SINV-001"},
+				context={"clinic_name": "Clinic", "invoice": "SINV-001"},
 				settings={},
 				reference_doctype="Sales Invoice",
 				reference_name="SINV-001",
 			)
 
-		self.assertIsNone(result[0]["provider_reference"])
-		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
-		self.assertIn("SINV-001", sent[0]["message"])
+		self.assertEqual(result[0]["status"], "Skipped")
+		self.assertEqual(sent, [])
+
+	def test_unmapped_fallback_filters_clinical_sensitive_fields(self):
+		backend = LocalNotificationBackend()
+		event_definition = SimpleNamespace(event_key="internal_update", event_label="Internal Update", email_template=None)
+		subject, message, template = backend._build_fallback_email(
+			event_definition,
+			{"clinic_name": "Clinic", "invoice": "SINV-001", "diagnosis": "Sensitive", "medical_notes": "Sensitive"},
+		)
+
+		self.assertEqual(subject, "Clinic: Internal Update")
+		self.assertIsNone(template)
+		self.assertIn("SINV-001", message)
+		self.assertNotIn("Sensitive", message)
+
+	def test_appointment_delivery_idempotency_key_changes_with_occurrence(self):
+		base = {
+			"event_key": "appointment_rescheduled",
+			"reference_doctype": "Veterinary Appointment",
+			"reference_name": "VAPT-001",
+			"recipient": "owner@example.com",
+			"channel": "Email",
+		}
+		first = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-20 10:00:00"},
+		)
+		duplicate = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-20 10:00:00"},
+		)
+		later = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-21 10:00:00"},
+		)
+
+		self.assertEqual(first, duplicate)
+		self.assertNotEqual(first, later)
 
 	def test_processedge_core_mode_returns_pending_safely(self):
 		backend = ProcessEdgeCoreNotificationBackend()
