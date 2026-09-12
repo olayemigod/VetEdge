@@ -6,6 +6,11 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from vetedge.services.master_pricing import (
+	doctype_has_field,
+	get_item_stock_uom,
+	get_price_list_currency,
+)
 from vetedge.services.permissions import can_access_branch_data, get_current_user
 from vetedge.services.portal_access import require_internal_user
 
@@ -431,9 +436,18 @@ def _validate_selling_price_list(price_list: str | None) -> None:
 def _existing_item_price(item_code: str, price_list: str | None) -> dict[str, Any]:
 	if not price_list or not frappe.db.exists("DocType", "Item Price"):
 		return {}
+	filters: dict[str, Any] = {"item_code": item_code, "price_list": price_list}
+	if doctype_has_field("Item Price", "selling"):
+		filters["selling"] = 1
+	uom = get_item_stock_uom(item_code)
+	if doctype_has_field("Item Price", "uom") and uom:
+		filters["uom"] = uom
+	currency = get_price_list_currency(price_list)
+	if doctype_has_field("Item Price", "currency") and currency:
+		filters["currency"] = currency
 	row = frappe.db.get_value(
 		"Item Price",
-		{"item_code": item_code, "price_list": price_list},
+		filters,
 		["name", "price_list_rate"],
 		as_dict=True,
 	)
