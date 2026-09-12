@@ -306,6 +306,40 @@ def _search_link_options(
 
 
 @frappe.whitelist()
+def get_clinical_creation_item_context(
+	item: str,
+	context: str = "consultation",
+	branch: str | None = None,
+	company: str | None = None,
+	customer: str | None = None,
+) -> dict[str, Any]:
+	require_internal_user()
+	_normalise_context(context)
+	_validate_branch_context(branch)
+	item_code = _clean(item)
+	if not item_code or not frappe.db.exists("Item", item_code):
+		frappe.throw(_("Selected ERPNext Item does not exist."), frappe.ValidationError)
+	item_doc = frappe.get_doc("Item", item_code)
+	item_doc.check_permission("read")
+	if cint(item_doc.get("disabled")):
+		frappe.throw(_("Disabled ERPNext Items cannot be used as Treatment Items."), frappe.ValidationError)
+
+	price_list = _resolved_price_list(branch=branch, company=company, customer=customer)
+	existing_price = _existing_item_price(item_code, price_list)
+	return {
+		"item": item_code,
+		"item_name": item_doc.get("item_name") or item_code,
+		"stock_uom": item_doc.get("stock_uom"),
+		"is_stock_item": cint(item_doc.get("is_stock_item")),
+		"price_list": price_list,
+		"existing_item_price": existing_price.get("name"),
+		"existing_price_rate": flt(existing_price.get("price_list_rate")) if existing_price else 0,
+		"price_locked": bool(existing_price and not _can_manage_pricing()),
+		"treatment_item_exists": bool(frappe.db.exists(TREATMENT_ITEM_DOCTYPE, {"item": item_code})),
+	}
+
+
+@frappe.whitelist()
 def search_clinical_creation_options(
 	kind: str,
 	search: str = "",
