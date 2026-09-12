@@ -54,13 +54,22 @@ class VeterinaryAppointment(Document):
 		if not previous or previous.status == self.status:
 			return
 
-		if self.status == "Confirmed":
-			notify_appointment_event(self, "appointment_confirmed")
-		elif self.status == "Rescheduled":
-			notify_appointment_event(self, "appointment_rescheduled")
-		elif self.status == "Cancelled":
-			notify_appointment_event(self, "appointment_cancelled")
-		elif self.status == "Checked In":
+		status_event = {
+			"Scheduled": "appointment_scheduled",
+			"Confirmed": "appointment_confirmed",
+			"Checked In": "appointment_checked_in",
+			"In Consultation": "appointment_started",
+			"Completed": "appointment_completed",
+			"Rescheduled": "appointment_rescheduled",
+			"Cancelled": "appointment_cancelled",
+			"No Show": "appointment_no_show",
+		}.get(self.status)
+		if status_event:
+			notify_appointment_event(self, status_event, previous_status=previous.status)
+
+		# These are dedicated, persistent in-app operational notifications.
+		# They remain separate from external Email/SMS/WhatsApp delivery.
+		if self.status == "Checked In":
 			notify_appointment_checked_in(self)
 		elif self.status == "Completed":
 			notify_appointment_completed(self)
