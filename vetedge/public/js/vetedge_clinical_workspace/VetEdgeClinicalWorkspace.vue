@@ -186,7 +186,7 @@
 			</div>
 			<div v-else-if="clinicalMasterDialog.kind === 'treatment_item'" class="clinical-grid">
 				<EdgeLinkField :model-value="clinicalMasterDialog.values.item" :selected-label="clinicalMasterDialog.values.item_label" label="ERPNext Item" placeholder="Search existing ERPNext Item first" :searcher="(query) => creationSearch('erpnext_item', query)" @update:model-value="selectTreatmentBaseItem" />
-				<EdgeLinkField :model-value="clinicalMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!clinicalMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="(value) => setClinicalMasterValue('price_list', value)" />
+				<EdgeLinkField :model-value="clinicalMasterDialog.values.price_list" label="Price List" placeholder="Contextual selling price list" :disabled="!clinicalMasterDialog.capabilities.can_select_price_list" :searcher="(query) => creationSearch('price_list', query)" @update:model-value="selectClinicalMasterPriceList" />
 				<template v-if="clinicalMasterDialog.newItemMode">
 					<EdgeInput :model-value="clinicalMasterDialog.values.new_item.item_name" label="New Item Name" @update:model-value="(value) => setNewItemValue('item_name', value)" />
 					<EdgeInput :model-value="clinicalMasterDialog.values.new_item.item_code" label="Item Code" description="Leave blank to use the Item Name." @update:model-value="(value) => setNewItemValue('item_code', value)" />
@@ -558,6 +558,13 @@ export default {
 				customer: this.form.primary_owner || undefined,
 				limit: 20,
 			})) || [];
+		},
+		async selectClinicalMasterPriceList(value) {
+			this.setClinicalMasterValue("price_list", value);
+			this.clinicalMasterDialog.pricingLocked = false;
+			if (this.clinicalMasterDialog.values.item && !this.clinicalMasterDialog.newItemMode) {
+				await this.selectTreatmentBaseItem(this.clinicalMasterDialog.values.item);
+			}
 		},
 		async selectTreatmentBaseItem(value) {
 			if (typeof value === "string" && value.startsWith(ERP_ITEM_CREATE_PREFIX)) {
