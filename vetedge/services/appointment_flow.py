@@ -12,7 +12,6 @@ from vetedge.services.consultation_flow import (
 	validate_user_branch_access,
 )
 from vetedge.services.feature_flags import is_enabled
-from vetedge.services.notifications import emit_notification_event
 from vetedge.services.payment_gate import assert_consultation_can_proceed
 from vetedge.services.permissions import (
 	ELEVATED_ROLES,
@@ -289,7 +288,6 @@ def create_follow_up_from_consultation(
 		}
 	)
 	appointment.insert(ignore_permissions=True)
-	emit_appointment_event(appointment, "appointment_created", previous_status=None)
 
 	consultation_meta = frappe.get_meta("Veterinary Consultation")
 	if consultation_meta.has_field("follow_up_appointment"):
@@ -334,10 +332,8 @@ def create_consultation_from_appointment(appointment: str) -> dict:
 	consultation.insert()
 
 	appointment_doc.linked_consultation = consultation.name
-	previous_status = appointment_doc.status
 	appointment_doc.status = "In Consultation"
 	appointment_doc.save()
-	emit_appointment_status_notification(appointment_doc, previous_status, appointment_doc.status)
 
 	return {
 		"name": consultation.name,
@@ -350,56 +346,13 @@ def transition_appointment_status(appointment: str, status: str) -> dict:
 	require_internal_user()
 	ensure_appointments_enabled()
 	appointment_doc = frappe.get_doc("Veterinary Appointment", appointment)
-	previous_status = appointment_doc.status
 	appointment_doc.status = status
 	appointment_doc.save()
-	emit_appointment_status_notification(appointment_doc, previous_status, appointment_doc.status)
 
 	return {
 		"name": appointment_doc.name,
 		"status": appointment_doc.status,
 	}
-
-
-def emit_appointment_status_notification(appointment_doc, previous_status: str | None, status: str) -> dict | None:
-	event = get_appointment_status_event(status)
-	if not event:
-		return None
-
-	return emit_appointment_event(appointment_doc, event, previous_status=previous_status)
-
-
-def emit_appointment_event(appointment_doc, event: str, previous_status: str | None = None) -> dict:
-	return emit_notification_event(
-		event_key=event,
-		reference_doctype="Veterinary Appointment",
-		reference_name=appointment_doc.name,
-		payload={
-			"appointment": appointment_doc.name,
-			"patient": appointment_doc.get("patient"),
-			"primary_owner": appointment_doc.get("primary_owner"),
-			"branch": appointment_doc.get("branch"),
-			"practitioner": appointment_doc.get("practitioner"),
-			"appointment_datetime": appointment_doc.get("appointment_datetime"),
-			"appointment_type": appointment_doc.get("appointment_type"),
-			"previous_status": previous_status,
-			"status": appointment_doc.get("status"),
-			"created_from": appointment_doc.get("created_from"),
-		},
-	)
-
-
-def get_appointment_status_event(status: str) -> str | None:
-	return {
-		"Scheduled": "appointment_scheduled",
-		"Confirmed": "appointment_confirmed",
-		"Checked In": "appointment_checked_in",
-		"In Consultation": "appointment_started",
-		"Completed": "appointment_completed",
-		"Rescheduled": "appointment_rescheduled",
-		"Cancelled": "appointment_cancelled",
-		"No Show": "appointment_no_show",
-	}.get(status)
 
 
 def validate_start_consultation_from_appointment(appointment_doc) -> None:
