@@ -3,7 +3,14 @@ from __future__ import annotations
 import frappe
 
 from vetedge.coreedge_adapter import get_current_vetedge_company, get_edge_platform_mode
-from vetedge.services.branding import get_branding, get_shell_branding
+from vetedge.services.branding import (
+	PROCESSEDGE_VETERINARY_APP_ICON,
+	PROCESSEDGE_VETERINARY_HORIZONTAL_LOGO,
+	PROCESSEDGE_VETERINARY_STACKED_LOGO,
+	get_branding,
+	get_clinic_brand_name,
+	get_shell_branding,
+)
 
 VETEDGE_LOGO = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
 MEDICAL_HISTORY_PAGE = "veterinary-medical-history"
@@ -77,13 +84,21 @@ def build_vetedge_ui_identity() -> dict:
 	# deployments can therefore show the clinic name/logo alongside ProcessEdge
 	# Veterinary, while white-label mode can replace the product shell entirely.
 	if branding.get("source") == "coreedge" and branding.get("enabled"):
-		tenant_name = branding.get("company_name") or branding.get("brand_name") or company.get("label")
 		tenant_logo = branding.get("logo") or settings_brand.get("logo") or company.get("logo") or ""
 	else:
-		tenant_name = settings_brand.get("name") or company.get("label") or branding.get("company_name") or branding.get("brand_name")
 		tenant_logo = settings_brand.get("logo") or branding.get("logo") or company.get("logo") or ""
 
-	tenant_name = tenant_name or "Veterinary Clinic"
+	# Clinic/tenant identity must never inherit the ProcessEdge product name merely
+	# because a white-label profile is incomplete.
+	tenant_name = get_clinic_brand_name() or settings_brand.get("name") or company.get("label") or "Veterinary Clinic"
+
+	if mode == "white_label" and tenant_logo in {
+		PROCESSEDGE_VETERINARY_APP_ICON,
+		PROCESSEDGE_VETERINARY_HORIZONTAL_LOGO,
+		PROCESSEDGE_VETERINARY_STACKED_LOGO,
+	}:
+		tenant_logo = settings_brand.get("logo") or company.get("logo") or ""
+
 	product_name = shell_branding.get("app_title") or shell_branding.get("brand_name") or "Veterinary"
 	product_logo = shell_branding.get("logo") or ""
 
