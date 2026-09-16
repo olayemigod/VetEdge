@@ -264,7 +264,7 @@ class TestVetEdgeBranding(unittest.TestCase):
 			self.assertIsNone(replace_brand_tokens(None))
 
 	def test_patch_normalizes_stale_values_when_branding_inactive(self) -> None:
-		# Branding is inactive. Website settings with stale "Veterinary" should be normalized back to VetEdge.
+		# Default product branding should normalize stale "Veterinary" to ProcessEdge Veterinary.
 		frappe.db.set_value("Website Settings", "Website Settings", "app_name", "Veterinary")
 		frappe.db.set_value("Website Settings", "Website Settings", "footer_powered", "Veterinary")
 		frappe.db.commit()
@@ -342,7 +342,8 @@ class TestVetEdgeBranding(unittest.TestCase):
 		self.assertEqual(bootinfo.workspace_sidebar_item["vetedge"]["label"], "Veterinary")
 		self.assertEqual(bootinfo.workspace_sidebar_item["veterinary"]["label"], "Veterinary")
 
-		# Active site_config branding:
+		# Active white-label site_config branding:
+		frappe.conf.edge_platform_mode = "white_label"
 		frappe.conf.vetedge_white_label_enabled = 1
 		frappe.conf.vetedge_brand_name = "Tenant App"
 		frappe.conf.vetedge_module_label = "Tenant Vet Center"
