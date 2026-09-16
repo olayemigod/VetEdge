@@ -224,7 +224,7 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 			"logo": "/branded-logo.png"
 		}
 
-		with patch("vetedge.services.branding.get_branding", return_value=mock_branding):
+		with patch("vetedge.services.branding.get_shell_branding", return_value=mock_branding):
 			filter_bootinfo_for_coreedge_platform(bootinfo)
 
 		# 1. Sidebar label overridden
