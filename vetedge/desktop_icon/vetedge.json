@@ -6,7 +6,7 @@
  "hidden": 0,
  "icon_type": "Link",
  "idx": 0,
- "label": "VetEdge",
+ "label": "ProcessEdge Veterinary",
  "link": "",
  "link_to": "VetEdge",
  "link_type": "Workspace Sidebar",
@@ -14,7 +14,7 @@
  "modified_by": "Administrator",
  "name": "VetEdge",
  "owner": "Administrator",
- "logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
+ "logo_url": "/assets/vetedge/images/processedge-veterinary-app-icon.png",
  "roles": [],
  "standard": 1
 }

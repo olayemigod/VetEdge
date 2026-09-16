@@ -200,15 +200,18 @@ def ensure_vetedge_desktop_icon() -> None:
 	if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
 		frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
-	from vetedge.services.branding import get_branding
+	from vetedge.services.branding import get_shell_branding
 
-	branding = get_branding()
-	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+	branding = get_shell_branding()
+	default_label = branding.get("app_title") or branding.get("brand_name") or "Veterinary"
+	default_logo = branding.get("logo") or ""
 
 	if not frappe.db.exists("Desktop Icon", "VetEdge"):
-		icon = frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json"))
+		standard_doc = _load_standard_doc("desktop_icon", "vetedge.json")
+		standard_doc["label"] = default_label
+		standard_doc["logo_url"] = default_logo
+		icon = frappe.get_doc(standard_doc)
 		icon.insert(ignore_permissions=True)
-		icon.db_set("label", default_label)
 	else:
 		frappe.db.set_value(
 			"Desktop Icon",
@@ -220,7 +223,7 @@ def ensure_vetedge_desktop_icon() -> None:
 				"link_type": "Workspace Sidebar",
 				"link_to": "VetEdge",
 				"link": "",
-				"logo_url": "/assets/vetedge/images/vetedge-app-icon.png",
+				"logo_url": default_logo,
 				"label": default_label,
 				"standard": 1,
 			},

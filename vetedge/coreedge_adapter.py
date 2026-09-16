@@ -6,7 +6,7 @@ from frappe import _
 
 VETEDGE_PRODUCT_FAMILY = "veterinary_practice"
 VETEDGE_DISTRIBUTION = "vetedge"
-VETEDGE_DISPLAY_LABEL = "VetEdge"
+VETEDGE_DISPLAY_LABEL = "ProcessEdge Veterinary"
 
 VETEDGE_FEATURE_KEYS = {
 	"stock_expiry",
@@ -471,62 +471,67 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 	bootinfo.should_show_coreedge_controls = should_show_coreedge_controls()
 	
 	try:
-		from vetedge.services.branding import get_branding
-		branding = get_branding()
+		from vetedge.services.branding import get_shell_branding
+		shell_branding = get_shell_branding()
 	except Exception:
-		branding = {}
+		# Fail generic rather than leaking ProcessEdge branding into a white-label
+		# site if branding resolution is unavailable during boot/migration.
+		shell_branding = {
+			"app_title": "Veterinary",
+			"brand_name": "Veterinary",
+			"module_label": "Veterinary",
+			"logo": "",
+		}
+
+	product_label = shell_branding.get("app_title") or shell_branding.get("brand_name") or "Veterinary"
+	product_logo = shell_branding.get("logo") or ""
 
 	bootinfo.edgesuite_product_menu = frappe._dict({
-		"product_label": branding.get("app_title") or "VetEdge",
+		"product_label": product_label,
 		"is_coreedge_available": bootinfo.is_coreedge_available,
 		"show_coreedge_controls": bootinfo.should_show_coreedge_controls
 	})
 
-	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
+	# Always map the sidebar under both "vetedge" and "veterinary". These keys are
+	# technical compatibility identifiers; only the visible label is branded.
 	sidebar_items = bootinfo.get("workspace_sidebar_item")
 	if sidebar_items:
 		source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
 		if source_sidebar:
-			source_sidebar["label"] = branding.get("module_label") or "Veterinary"
+			source_sidebar["label"] = shell_branding.get("module_label") or "Veterinary"
 			sidebar_items["veterinary"] = source_sidebar
 			sidebar_items["vetedge"] = source_sidebar
 
-	# Always override the desktop icon label in bootinfo to be VetEdge (or the branded app_title)
+	# Product launcher identity is mode-aware. A blank logo is intentional for a
+	# generic white-label fallback and prevents the ProcessEdge icon leaking.
 	desktop_icons = bootinfo.get("desktop_icons")
 	if desktop_icons:
 		for icon in desktop_icons:
 			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
-				icon["label"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				icon["label"] = product_label
+				icon["logo_url"] = product_logo
 				icon["link_type"] = "Workspace Sidebar"
 				icon["link"] = ""
 				icon["link_to"] = "VetEdge"
 
-	# Always override the app_data app_title and logo for app screen
 	if bootinfo.get("app_data"):
 		for app in bootinfo.app_data:
 			if app.get("app_name") == "vetedge":
-				app["app_title"] = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+				app["app_title"] = product_label
+				app["app_logo_url"] = product_logo
 				app["route"] = get_vetedge_desk_route()
-				if branding.get("logo"):
-					app["app_logo_url"] = branding.get("logo")
 
-	# Apply white-label overrides if enabled
-	if branding.get("enabled"):
-		# Set app title in bootinfo for the tab title suffix
-		bootinfo.app_title = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
-		
-		# Override app logo url dynamically
-		if branding.get("logo"):
-			bootinfo.app_logo_url = branding.get("logo")
-			if bootinfo.get("navbar_settings"):
-				bootinfo.navbar_settings.app_logo = branding.get("logo")
-			
-			# Patch frappe.boot's get_app_logo reference to return the branded logo url
-			try:
-				import frappe.boot as boot
-				boot.get_app_logo = lambda: branding.get("logo")
-			except Exception:
-				pass
+	bootinfo.app_title = product_label
+	bootinfo.app_logo_url = product_logo
+	if bootinfo.get("navbar_settings"):
+		bootinfo.navbar_settings.app_logo = product_logo
+
+	# Keep Frappe's runtime logo resolver aligned with the mode-aware shell.
+	try:
+		import frappe.boot as boot
+		boot.get_app_logo = lambda: product_logo
+	except Exception:
+		pass
 
 	if not bootinfo.should_show_coreedge_controls:
 		if sidebar_items and "vetedge" in sidebar_items:

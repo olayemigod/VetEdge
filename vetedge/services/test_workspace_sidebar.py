@@ -427,11 +427,11 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertTrue(frappe.db.exists("Desktop Icon", "VetEdge"))
 		doc = frappe.get_doc("Desktop Icon", "VetEdge")
 
-		from vetedge.services.branding import get_branding
-		branding = get_branding()
-		expected_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+		from vetedge.services.branding import get_shell_branding
+		branding = get_shell_branding()
+		expected_label = branding.get("app_title") or branding.get("brand_name") or "Veterinary"
 
-		# Desktop icon/app launcher label remains VetEdge
+		# Desktop icon/app launcher label follows the deployment-aware product shell
 		self.assertEqual(doc.label, expected_label)
 		# Desktop icon route points to the intended Veterinary operational landing route
 		self.assertEqual(doc.link_type, "Workspace Sidebar")
@@ -445,7 +445,7 @@ class TestWorkspaceSidebar(TestCase):
 
 		icons = frappe.get_all(
 			"Desktop Icon",
-			fields=["name", "label", "app", "hidden", "link", "link_to", "link_type"],
+			fields=["name", "label", "app", "hidden", "link", "link_to", "link_type", "logo_url"],
 			limit=1000,
 		)
 		matching_icons = [
@@ -461,7 +461,7 @@ class TestWorkspaceSidebar(TestCase):
 				continue
 			self.assertNotEqual(icon.link, "/desk/veterinary-patient", icon)
 			self.assertNotEqual(icon.link_to, "Veterinary Patient", icon)
-			if icon.label == "VetEdge":
+			if icon.app == "vetedge" or icon.name == "VetEdge":
 				self.assertEqual(icon.link_type, "Workspace Sidebar")
 				self.assertEqual(icon.link_to, "VetEdge")
 				self.assertNotEqual(icon.link, "/desk/vetedge-executive-dashboard")

@@ -24,6 +24,25 @@ class TestBranding(TestCase):
 		with patch("vetedge.services.branding.frappe", frappe_stub):
 			self.assertEqual(get_clinic_brand_name(), "BluePaw Vet")
 
+	def test_get_clinic_brand_name_never_falls_back_to_processedge_product_name(self):
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=lambda *args, **kwargs: False),
+		)
+
+		with (
+			patch("vetedge.services.branding.frappe", frappe_stub),
+			patch(
+				"vetedge.services.branding.get_branding",
+				return_value={
+					"enabled": 1,
+					"brand_name": "ProcessEdge Veterinary",
+					"company_name": "ProcessEdge Veterinary",
+				},
+			),
+			patch("vetedge.services.registration_billing.get_default_company", return_value=None),
+		):
+			self.assertEqual(get_clinic_brand_name(), "Veterinary Clinic")
+
 	def test_get_clinic_brand_name_falls_back_to_company_name(self):
 		frappe_stub = SimpleNamespace(
 			db=SimpleNamespace(

@@ -4,11 +4,12 @@ from __future__ import annotations
 import frappe
 
 
-from vetedge.services.branding import get_branding
+from vetedge.services.branding import get_shell_branding
 
 
 def execute() -> None:
-	# Revert database records of standard app identity from Veterinary back to VetEdge
+	# Revert database records of standard app identity from Veterinary back to VetEdge.
+	# These record names are technical compatibility keys, not visible product branding.
 	if frappe.db.exists("DocType", "Workspace Sidebar"):
 		if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):
 			frappe.rename_doc("Workspace Sidebar", "Veterinary", "VetEdge", force=True)
@@ -21,28 +22,24 @@ def execute() -> None:
 		if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
 			frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
-	# Check if branding is active through site_config or coreedge
-	branding = get_branding()
-	if branding.get("enabled"):
-		return
+	# Resolve the deployment-aware visible product identity. Only blank or known
+	# historical values are replaced; tenant-specific values stay untouched.
+	branding = get_shell_branding()
 
-	# 1. Normalize Website Settings branding
 	if frappe.db.exists("DocType", "Website Settings"):
 		try:
 			web_settings = frappe.get_doc("Website Settings", "Website Settings")
 			changed = False
 			app_name = web_settings.app_name or ""
 			footer = web_settings.footer_powered or ""
+			target_app_title = branding.get("app_title") or "Veterinary"
 
-			target_app_title = branding.get("app_title") or "VetEdge"
-
-			# Only normalize blank values or known defaults
-			if app_name in ("", "VetEdge", "Veterinary"):
+			if app_name in ("", "VetEdge", "Veterinary", "ProcessEdge Veterinary"):
 				if app_name != target_app_title:
 					web_settings.app_name = target_app_title
 					changed = True
-			
-			if footer in ("", "VetEdge", "Veterinary"):
+
+			if footer in ("", "VetEdge", "Veterinary", "ProcessEdge Veterinary"):
 				if footer != target_app_title:
 					web_settings.footer_powered = target_app_title
 					changed = True

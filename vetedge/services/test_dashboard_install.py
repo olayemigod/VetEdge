@@ -60,12 +60,24 @@ class TestDashboardInstall(TestCase):
 			dashboard,
 			"_load_standard_doc",
 			return_value={"doctype": "Desktop Icon", "name": "VetEdge"},
+		), patch(
+			"vetedge.services.branding.get_shell_branding",
+			return_value={
+				"app_title": "ProcessEdge Veterinary",
+				"brand_name": "ProcessEdge Veterinary",
+				"logo": "/assets/vetedge/images/processedge-veterinary-app-icon.png",
+			},
 		):
 			dashboard.ensure_vetedge_desktop_icon()
 
-		frappe_stub.get_doc.assert_called_once_with({"doctype": "Desktop Icon", "name": "VetEdge"})
+		frappe_stub.get_doc.assert_called_once_with({
+			"doctype": "Desktop Icon",
+			"name": "VetEdge",
+			"label": "ProcessEdge Veterinary",
+			"logo_url": "/assets/vetedge/images/processedge-veterinary-app-icon.png",
+		})
 		insert.assert_called_once_with(ignore_permissions=True)
-		db_set.assert_called_once_with("label", "VetEdge")
+		db_set.assert_not_called()
 		frappe_stub.db.set_value.assert_not_called()
 
 	def test_ensure_vetedge_desktop_icon_updates_existing_icon(self):
@@ -81,12 +93,21 @@ class TestDashboardInstall(TestCase):
 			delete_doc=Mock(),
 		)
 
-		with patch.object(dashboard, "frappe", frappe_stub):
+		with patch.object(dashboard, "frappe", frappe_stub), patch(
+			"vetedge.services.branding.get_shell_branding",
+			return_value={
+				"app_title": "ProcessEdge Veterinary",
+				"brand_name": "ProcessEdge Veterinary",
+				"logo": "/assets/vetedge/images/processedge-veterinary-app-icon.png",
+			},
+		):
 			dashboard.ensure_vetedge_desktop_icon()
 
 		frappe_stub.get_doc.assert_not_called()
 		frappe_stub.db.set_value.assert_called_once()
 		update_values = frappe_stub.db.set_value.call_args.args[2]
+		self.assertEqual(update_values["label"], "ProcessEdge Veterinary")
+		self.assertEqual(update_values["logo_url"], "/assets/vetedge/images/processedge-veterinary-app-icon.png")
 		self.assertEqual(update_values["link_type"], "Workspace Sidebar")
 		self.assertEqual(update_values["link"], "")
 		self.assertEqual(update_values["link_to"], "VetEdge")

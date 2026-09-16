@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
+  <title id="title">ProcessEdge Veterinary</title>
+  <desc id="desc">ProcessEdge Veterinary horizontal product logo</desc>
+  <image href="/assets/vetedge/images/processedge-veterinary-app-icon.png" x="20" y="30" width="440" height="440" preserveAspectRatio="xMidYMid meet"/>
+  <g font-family="Montserrat, Arial, Helvetica, sans-serif">
+    <text x="500" y="235" font-size="150" font-weight="700" letter-spacing="-5" fill="#003E73">Process<tspan fill="#1C9C5D">EDGE</tspan></text>
+    <text x="500" y="390" font-size="132" font-weight="400" fill="#0056A6">Veterinary</text>
+  </g>
+</svg>

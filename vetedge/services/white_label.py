@@ -5,7 +5,7 @@ import frappe
 
 DEFAULT_LABEL = "Veterinary"
 DEFAULT_HEADER_ICON = "octicon octicon-heart"
-DEFAULT_APP_ICON = "/assets/vetedge/images/vetedge-app-icon.png"
+DEFAULT_APP_ICON = ""
 
 
 def get_white_label_context() -> dict:
