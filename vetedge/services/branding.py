@@ -7,7 +7,8 @@ from frappe import _
 PROCESSEDGE_VETERINARY_NAME = "ProcessEdge Veterinary"
 PROCESSEDGE_VETERINARY_SHORT_NAME = "PE Veterinary"
 PROCESSEDGE_VETERINARY_APP_ICON = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
-PROCESSEDGE_VETERINARY_STACKED_LOGO = "/assets/vetedge/images/processedge-veterinary-logo-stacked.png"
+PROCESSEDGE_VETERINARY_HORIZONTAL_LOGO = "/assets/vetedge/images/processedge-veterinary-logo-horizontal.svg"
+PROCESSEDGE_VETERINARY_STACKED_LOGO = "/assets/vetedge/images/processedge-veterinary-logo-stacked.svg"
 PROCESSEDGE_VETERINARY_PRIMARY_COLOR = "#0056A6"
 
 # Safe product/distribution defaults. The Python package and internal app key remain
@@ -207,7 +208,7 @@ def _sanitize_white_label_name(value: str | None, fallback: str = "Veterinary") 
 
 def _sanitize_white_label_asset(value: str | None) -> str:
 	value = str(value or "").strip()
-	if value in {PROCESSEDGE_VETERINARY_APP_ICON, PROCESSEDGE_VETERINARY_STACKED_LOGO}:
+	if value in {PROCESSEDGE_VETERINARY_APP_ICON, PROCESSEDGE_VETERINARY_HORIZONTAL_LOGO, PROCESSEDGE_VETERINARY_STACKED_LOGO}:
 		return ""
 	return value
 
