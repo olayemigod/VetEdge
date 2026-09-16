@@ -427,9 +427,9 @@ class TestWorkspaceSidebar(TestCase):
 		self.assertTrue(frappe.db.exists("Desktop Icon", "VetEdge"))
 		doc = frappe.get_doc("Desktop Icon", "VetEdge")
 
-		from vetedge.services.branding import get_branding
-		branding = get_branding()
-		expected_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+		from vetedge.services.branding import get_shell_branding
+		branding = get_shell_branding()
+		expected_label = branding.get("app_title") or branding.get("brand_name") or "Veterinary"
 
 		# Desktop icon/app launcher label remains VetEdge
 		self.assertEqual(doc.label, expected_label)
