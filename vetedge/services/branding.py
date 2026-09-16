@@ -309,15 +309,29 @@ def replace_brand_tokens(text: str) -> str:
 	text = text.replace("VETEDGE", brand_name.upper())
 	return text
 
-def get_clinic_brand_name() -> str:
-	"""
-	Returns the resolved clinic brand name.
-	For backward compatibility, falls back to the old database/ERPNext checks if white-labeling is disabled.
-	"""
+def _resolved_tenant_brand_name() -> str:
+	"""Return a real tenant/clinic brand without allowing product defaults to leak."""
 	branding = get_branding()
-	if branding.get("enabled"):
-		return branding.get("brand_name") or "VetEdge"
-		
+	if not branding.get("enabled"):
+		return ""
+	candidate = _sanitize_white_label_name(
+		branding.get("company_name") or branding.get("brand_name"),
+		"",
+	)
+	return candidate if candidate not in {"", "Veterinary"} else ""
+
+
+def get_clinic_brand_name() -> str:
+	"""Return clinic identity for accounting remarks, messages, and operations.
+
+	Clinic identity is intentionally separate from the ProcessEdge Veterinary
+	product shell. Incomplete white-label configuration must not turn the clinic
+	name into the vendor/product name.
+	"""
+	tenant_brand = _resolved_tenant_brand_name()
+	if tenant_brand:
+		return tenant_brand
+
 	try:
 		if frappe.db.exists("DocType", "Veterinary Settings"):
 			settings = frappe.get_single("Veterinary Settings")
@@ -328,7 +342,7 @@ def get_clinic_brand_name() -> str:
 				return settings.get("clinic_brand_name")
 	except Exception:
 		pass
-		
+
 	try:
 		from vetedge.services.registration_billing import get_default_company
 		company = get_default_company()
@@ -338,17 +352,16 @@ def get_clinic_brand_name() -> str:
 				return name
 	except Exception:
 		pass
-		
-	return "VetEdge"
+
+	return "Veterinary Clinic"
+
 
 def get_owner_portal_brand_name() -> str:
-	"""
-	Returns the resolved owner portal brand name.
-	"""
-	branding = get_branding()
-	if branding.get("enabled"):
-		return branding.get("brand_name") or "VetEdge"
-		
+	"""Return a tenant-safe owner portal brand name."""
+	tenant_brand = _resolved_tenant_brand_name()
+	if tenant_brand:
+		return tenant_brand
+
 	try:
 		if frappe.db.exists("DocType", "Veterinary Settings"):
 			settings = frappe.get_single("Veterinary Settings")
@@ -357,5 +370,5 @@ def get_owner_portal_brand_name() -> str:
 				return settings.get("portal_brand_name")
 	except Exception:
 		pass
-		
+
 	return "Owner Portal"
