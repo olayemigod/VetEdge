@@ -4,7 +4,7 @@ from __future__ import annotations
 import frappe
 
 
-from vetedge.services.branding import get_branding
+from vetedge.services.branding import get_shell_branding
 
 
 def execute() -> None:
@@ -22,7 +22,7 @@ def execute() -> None:
 			frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
 	# Check if branding is active through site_config or coreedge
-	branding = get_branding()
+	branding = get_shell_branding()
 	if branding.get("enabled"):
 		return
 
@@ -34,15 +34,15 @@ def execute() -> None:
 			app_name = web_settings.app_name or ""
 			footer = web_settings.footer_powered or ""
 
-			target_app_title = branding.get("app_title") or "VetEdge"
+			target_app_title = branding.get("app_title") or "Veterinary"
 
 			# Only normalize blank values or known defaults
-			if app_name in ("", "VetEdge", "Veterinary"):
+			if app_name in ("", "VetEdge", "Veterinary", "ProcessEdge Veterinary"):
 				if app_name != target_app_title:
 					web_settings.app_name = target_app_title
 					changed = True
 			
-			if footer in ("", "VetEdge", "Veterinary"):
+			if footer in ("", "VetEdge", "Veterinary", "ProcessEdge Veterinary"):
 				if footer != target_app_title:
 					web_settings.footer_powered = target_app_title
 					changed = True
