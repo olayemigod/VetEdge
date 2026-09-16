@@ -21,10 +21,9 @@ def execute() -> None:
 		if frappe.db.exists("Desktop Icon", "Veterinary") and frappe.db.exists("Desktop Icon", "VetEdge"):
 			frappe.delete_doc("Desktop Icon", "Veterinary", force=True)
 
-	# Check if branding is active through site_config or coreedge
+	# Resolve the deployment-aware visible product identity. The migration only
+	# replaces blank/known historical values, so tenant-specific values remain intact.
 	branding = get_shell_branding()
-	if branding.get("enabled"):
-		return
 
 	# 1. Normalize Website Settings branding
 	if frappe.db.exists("DocType", "Website Settings"):
