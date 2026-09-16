@@ -198,6 +198,20 @@ def _generic_veterinary_shell() -> dict:
 	}
 
 
+def _sanitize_white_label_name(value: str | None, fallback: str = "Veterinary") -> str:
+	value = str(value or "").strip()
+	if not value or value in {"VetEdge", PROCESSEDGE_VETERINARY_NAME, PROCESSEDGE_VETERINARY_SHORT_NAME}:
+		return fallback
+	return value
+
+
+def _sanitize_white_label_asset(value: str | None) -> str:
+	value = str(value or "").strip()
+	if value in {PROCESSEDGE_VETERINARY_APP_ICON, PROCESSEDGE_VETERINARY_STACKED_LOGO}:
+		return ""
+	return value
+
+
 def get_shell_branding() -> dict:
 	"""Resolve the user-facing product shell without leaking ProcessEdge branding.
 
@@ -224,23 +238,36 @@ def get_shell_branding() -> dict:
 	if mode == "white_label":
 		if tenant_branding.get("enabled"):
 			resolved = dict(tenant_branding)
-			resolved["brand_name"] = resolved.get("brand_name") or "Veterinary"
-			resolved["company_name"] = resolved.get("company_name") or resolved["brand_name"]
-			resolved["short_name"] = resolved.get("short_name") or resolved["brand_name"]
+			resolved["brand_name"] = _sanitize_white_label_name(resolved.get("brand_name"))
+			resolved["company_name"] = _sanitize_white_label_name(
+				resolved.get("company_name"),
+				resolved["brand_name"],
+			)
+			resolved["short_name"] = _sanitize_white_label_name(
+				resolved.get("short_name"),
+				resolved["brand_name"],
+			)
 			resolved["module_label"] = resolved.get("module_label") or "Veterinary"
-			resolved["app_title"] = resolved.get("app_title") or resolved["brand_name"]
-			resolved["logo"] = resolved.get("logo") or ""
-			resolved["favicon"] = resolved.get("favicon") or ""
+			resolved["app_title"] = _sanitize_white_label_name(
+				resolved.get("app_title"),
+				resolved["brand_name"],
+			)
+			resolved["logo"] = _sanitize_white_label_asset(resolved.get("logo"))
+			resolved["favicon"] = _sanitize_white_label_asset(resolved.get("favicon"))
 			resolved["source"] = resolved.get("source") or "white_label"
 			return resolved
 		return _generic_veterinary_shell()
 
 	if tenant_branding.get("enabled") and tenant_branding.get("hide_source_product_name"):
 		resolved = dict(tenant_branding)
-		resolved["app_title"] = resolved.get("app_title") or resolved.get("brand_name") or "Veterinary"
+		resolved["brand_name"] = _sanitize_white_label_name(resolved.get("brand_name"))
+		resolved["app_title"] = _sanitize_white_label_name(
+			resolved.get("app_title"),
+			resolved["brand_name"],
+		)
 		resolved["module_label"] = resolved.get("module_label") or "Veterinary"
-		resolved["logo"] = resolved.get("logo") or ""
-		resolved["favicon"] = resolved.get("favicon") or ""
+		resolved["logo"] = _sanitize_white_label_asset(resolved.get("logo"))
+		resolved["favicon"] = _sanitize_white_label_asset(resolved.get("favicon"))
 		return resolved
 
 	if distribution_profile.get("app_title") == "Veterinary":
