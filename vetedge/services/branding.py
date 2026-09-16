@@ -4,19 +4,25 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
-# Safe defaults
-# Safe defaults
+PROCESSEDGE_VETERINARY_NAME = "ProcessEdge Veterinary"
+PROCESSEDGE_VETERINARY_SHORT_NAME = "PE Veterinary"
+PROCESSEDGE_VETERINARY_APP_ICON = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
+PROCESSEDGE_VETERINARY_STACKED_LOGO = "/assets/vetedge/images/processedge-veterinary-logo-stacked.png"
+PROCESSEDGE_VETERINARY_PRIMARY_COLOR = "#0056A6"
+
+# Safe product/distribution defaults. The Python package and internal app key remain
+# "vetedge"; only the user-facing production identity changes.
 SAFE_DEFAULTS = {
 	"enabled": 0,
-	"brand_name": "VetEdge",
-	"company_name": "VetEdge",
-	"short_name": "VetEdge",
+	"brand_name": PROCESSEDGE_VETERINARY_NAME,
+	"company_name": PROCESSEDGE_VETERINARY_NAME,
+	"short_name": PROCESSEDGE_VETERINARY_SHORT_NAME,
 	"module_label": "Veterinary",
-	"app_title": "VetEdge",
+	"app_title": PROCESSEDGE_VETERINARY_NAME,
 	"hide_source_product_name": 0,
-	"logo": "",
-	"favicon": "",
-	"primary_color": "",
+	"logo": PROCESSEDGE_VETERINARY_APP_ICON,
+	"favicon": PROCESSEDGE_VETERINARY_APP_ICON,
+	"primary_color": PROCESSEDGE_VETERINARY_PRIMARY_COLOR,
 	"support_email": "",
 	"support_phone": "",
 	"source": "default"
@@ -24,19 +30,7 @@ SAFE_DEFAULTS = {
 
 DISTRIBUTION_PROFILES = {
 	"vetedge": {
-		"enabled": 0,
-		"brand_name": "VetEdge",
-		"company_name": "VetEdge",
-		"short_name": "VetEdge",
-		"module_label": "Veterinary",
-		"app_title": "VetEdge",
-		"hide_source_product_name": 0,
-		"logo": "",
-		"favicon": "",
-		"primary_color": "",
-		"support_email": "",
-		"support_phone": "",
-		"source": "default"
+		**SAFE_DEFAULTS,
 	},
 	"veterinary": {
 		"enabled": 0,
@@ -45,7 +39,7 @@ DISTRIBUTION_PROFILES = {
 		"short_name": "Veterinary",
 		"module_label": "Veterinary",
 		"app_title": "Veterinary",
-		"hide_source_product_name": 0,
+		"hide_source_product_name": 1,
 		"logo": "",
 		"favicon": "",
 		"primary_color": "",
@@ -98,8 +92,8 @@ def get_branding() -> dict:
 	An active CoreEdge branding profile takes priority and cannot be overridden by site_config.
 	"""
 	profile = get_distribution_profile()
-	default_app_title = profile.get("app_title") or "VetEdge"
-	default_brand_name = profile.get("brand_name") or "VetEdge"
+	default_app_title = profile.get("app_title") or PROCESSEDGE_VETERINARY_NAME
+	default_brand_name = profile.get("brand_name") or PROCESSEDGE_VETERINARY_NAME
 	default_module_label = profile.get("module_label") or "Veterinary"
 
 	# 1. CoreEdge Integration
@@ -167,6 +161,93 @@ def get_branding() -> dict:
 
 	# 3. Safe Defaults
 	return profile
+
+def _processedge_veterinary_shell() -> dict:
+	return {
+		"enabled": 1,
+		"brand_name": PROCESSEDGE_VETERINARY_NAME,
+		"company_name": PROCESSEDGE_VETERINARY_NAME,
+		"short_name": PROCESSEDGE_VETERINARY_SHORT_NAME,
+		"module_label": "Veterinary",
+		"app_title": PROCESSEDGE_VETERINARY_NAME,
+		"hide_source_product_name": 0,
+		"logo": PROCESSEDGE_VETERINARY_APP_ICON,
+		"favicon": PROCESSEDGE_VETERINARY_APP_ICON,
+		"primary_color": PROCESSEDGE_VETERINARY_PRIMARY_COLOR,
+		"support_email": "",
+		"support_phone": "",
+		"source": "processedge_product",
+	}
+
+
+def _generic_veterinary_shell() -> dict:
+	return {
+		"enabled": 0,
+		"brand_name": "Veterinary",
+		"company_name": "Veterinary",
+		"short_name": "Veterinary",
+		"module_label": "Veterinary",
+		"app_title": "Veterinary",
+		"hide_source_product_name": 1,
+		"logo": "",
+		"favicon": "",
+		"primary_color": "",
+		"support_email": "",
+		"support_phone": "",
+		"source": "generic_product",
+	}
+
+
+def get_shell_branding() -> dict:
+	"""Resolve the user-facing product shell without leaking ProcessEdge branding.
+
+	Deployment policy:
+	- shared_hosted: ProcessEdge Veterinary product shell; clinic identity remains separate.
+	- white_label: tenant branding when configured, otherwise generic Veterinary.
+	- standalone: ProcessEdge Veterinary unless an explicit hidden-source white label is
+	  configured or the generic veterinary distribution is active.
+
+	Internal app/package/workspace keys remain unchanged.
+	"""
+	try:
+		from vetedge.coreedge_adapter import get_edge_platform_mode
+		mode = get_edge_platform_mode()
+	except Exception:
+		mode = "standalone"
+
+	tenant_branding = get_branding()
+	distribution_profile = get_distribution_profile()
+
+	if mode == "shared_hosted":
+		return _processedge_veterinary_shell()
+
+	if mode == "white_label":
+		if tenant_branding.get("enabled"):
+			resolved = dict(tenant_branding)
+			resolved["brand_name"] = resolved.get("brand_name") or "Veterinary"
+			resolved["company_name"] = resolved.get("company_name") or resolved["brand_name"]
+			resolved["short_name"] = resolved.get("short_name") or resolved["brand_name"]
+			resolved["module_label"] = resolved.get("module_label") or "Veterinary"
+			resolved["app_title"] = resolved.get("app_title") or resolved["brand_name"]
+			resolved["logo"] = resolved.get("logo") or ""
+			resolved["favicon"] = resolved.get("favicon") or ""
+			resolved["source"] = resolved.get("source") or "white_label"
+			return resolved
+		return _generic_veterinary_shell()
+
+	if tenant_branding.get("enabled") and tenant_branding.get("hide_source_product_name"):
+		resolved = dict(tenant_branding)
+		resolved["app_title"] = resolved.get("app_title") or resolved.get("brand_name") or "Veterinary"
+		resolved["module_label"] = resolved.get("module_label") or "Veterinary"
+		resolved["logo"] = resolved.get("logo") or ""
+		resolved["favicon"] = resolved.get("favicon") or ""
+		return resolved
+
+	if distribution_profile.get("app_title") == "Veterinary":
+		return _generic_veterinary_shell()
+
+	return _processedge_veterinary_shell()
+
 
 def get_brand_name() -> str:
 	return get_branding().get("brand_name")
