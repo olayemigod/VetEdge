@@ -5,7 +5,7 @@ app_description = "ProcessEdge Veterinary is a veterinary operations system buil
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
 app_logo_url = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
-app_home = "/app/vetedge"
+app_home = "/desk/vetedge"
 
 # The standalone EdgeSuite UI app must be installed before VetEdge so shared
 # product pages never depend on CoreEdge for their browser runtime.
