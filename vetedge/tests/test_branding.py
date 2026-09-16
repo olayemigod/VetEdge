@@ -35,7 +35,9 @@ class TestVetEdgeBranding(unittest.TestCase):
 			"vetedge_primary_color",
 			"vetedge_support_email",
 			"vetedge_support_phone",
-			"vetedge_hide_vetedge_name"
+			"vetedge_hide_vetedge_name",
+			"edge_platform_mode",
+			"edge_distribution"
 		]
 		for key in branding_keys:
 			if key in frappe.conf:
