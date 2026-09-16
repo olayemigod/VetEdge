@@ -13,7 +13,10 @@ from vetedge.services.branding import (
 	get_app_title,
 	hide_source_product_name,
 	replace_brand_tokens,
-	get_distribution_profile
+	get_distribution_profile,
+	get_shell_branding,
+	PROCESSEDGE_VETERINARY_NAME,
+	PROCESSEDGE_VETERINARY_APP_ICON
 )
 
 class TestVetEdgeBranding(unittest.TestCase):
@@ -54,23 +57,23 @@ class TestVetEdgeBranding(unittest.TestCase):
 		# Falls back to safe defaults when no other configurations exist
 		res = get_branding()
 		self.assertEqual(res["enabled"], 0)
-		self.assertEqual(res["brand_name"], "VetEdge")
+		self.assertEqual(res["brand_name"], PROCESSEDGE_VETERINARY_NAME)
 		self.assertEqual(res["module_label"], "Veterinary")
 		self.assertEqual(res["source"], "default")
 
 		# Helper getters
-		self.assertEqual(get_brand_name(), "VetEdge")
-		self.assertEqual(get_company_name(), "VetEdge")
-		self.assertEqual(get_short_name(), "VetEdge")
+		self.assertEqual(get_brand_name(), PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(get_company_name(), PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(get_short_name(), "PE Veterinary")
 		self.assertEqual(get_module_label(), "Veterinary")
-		self.assertEqual(get_app_title(), "VetEdge")
+		self.assertEqual(get_app_title(), PROCESSEDGE_VETERINARY_NAME)
 		self.assertFalse(hide_source_product_name())
 
 	def test_distribution_resolver(self) -> None:
 		# Test profile resolution defaults to vetedge upstream
 		profile = get_distribution_profile()
-		self.assertEqual(profile["app_title"], "VetEdge")
-		self.assertEqual(profile["brand_name"], "VetEdge")
+		self.assertEqual(profile["app_title"], PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(profile["brand_name"], PROCESSEDGE_VETERINARY_NAME)
 
 		# Test site_config override works
 		frappe.conf.edge_distribution = "veterinary"
@@ -80,6 +83,66 @@ class TestVetEdgeBranding(unittest.TestCase):
 
 		# Cleanup site config override
 		frappe.conf.edge_distribution = None
+
+
+	def test_shell_branding_standalone_defaults_to_processedge_veterinary(self) -> None:
+		frappe.conf.edge_platform_mode = "standalone"
+		with patch("vetedge.services.branding.get_branding", return_value={
+			"enabled": 0,
+			"brand_name": PROCESSEDGE_VETERINARY_NAME,
+			"app_title": PROCESSEDGE_VETERINARY_NAME,
+			"logo": PROCESSEDGE_VETERINARY_APP_ICON,
+			"hide_source_product_name": 0,
+		}):
+			res = get_shell_branding()
+		self.assertEqual(res["app_title"], PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(res["logo"], PROCESSEDGE_VETERINARY_APP_ICON)
+
+	def test_shell_branding_shared_hosted_keeps_processedge_product_identity(self) -> None:
+		frappe.conf.edge_platform_mode = "shared_hosted"
+		with patch("vetedge.services.branding.get_branding", return_value={
+			"enabled": 1,
+			"brand_name": "Tenant Clinic",
+			"app_title": "Tenant Clinic",
+			"logo": "/files/tenant.png",
+			"hide_source_product_name": 1,
+		}):
+			res = get_shell_branding()
+		self.assertEqual(res["app_title"], PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(res["logo"], PROCESSEDGE_VETERINARY_APP_ICON)
+
+	def test_shell_branding_white_label_uses_tenant_brand(self) -> None:
+		frappe.conf.edge_platform_mode = "white_label"
+		with patch("vetedge.services.branding.get_branding", return_value={
+			"enabled": 1,
+			"brand_name": "Mercy Veterinary",
+			"company_name": "Mercy Veterinary World",
+			"short_name": "Mercy Vet",
+			"module_label": "Veterinary",
+			"app_title": "Mercy Veterinary",
+			"logo": "/files/mercy.png",
+			"favicon": "/files/mercy.ico",
+			"hide_source_product_name": 1,
+			"source": "coreedge",
+		}):
+			res = get_shell_branding()
+		self.assertEqual(res["app_title"], "Mercy Veterinary")
+		self.assertEqual(res["logo"], "/files/mercy.png")
+		self.assertNotEqual(res["logo"], PROCESSEDGE_VETERINARY_APP_ICON)
+
+	def test_shell_branding_white_label_without_profile_fails_generic(self) -> None:
+		frappe.conf.edge_platform_mode = "white_label"
+		with patch("vetedge.services.branding.get_branding", return_value={
+			"enabled": 0,
+			"brand_name": PROCESSEDGE_VETERINARY_NAME,
+			"app_title": PROCESSEDGE_VETERINARY_NAME,
+			"logo": PROCESSEDGE_VETERINARY_APP_ICON,
+			"hide_source_product_name": 0,
+		}):
+			res = get_shell_branding()
+		self.assertEqual(res["app_title"], "Veterinary")
+		self.assertEqual(res["logo"], "")
+		self.assertEqual(res["hide_source_product_name"], 1)
 
 	def test_branding_site_config_fallback(self) -> None:
 		# Falls back to site_config when CoreEdge is missing/disabled
@@ -188,8 +251,8 @@ class TestVetEdgeBranding(unittest.TestCase):
 		patch_execute()
 
 		app_name, footer = frappe.db.get_value("Website Settings", "Website Settings", ["app_name", "footer_powered"])
-		self.assertEqual(app_name, "VetEdge")
-		self.assertEqual(footer, "VetEdge")
+		self.assertEqual(app_name, PROCESSEDGE_VETERINARY_NAME)
+		self.assertEqual(footer, PROCESSEDGE_VETERINARY_NAME)
 
 	def test_patch_preserves_branding_when_active(self) -> None:
 		# Active site_config branding. Patch should not touch website settings.
@@ -221,7 +284,7 @@ class TestVetEdgeBranding(unittest.TestCase):
 			res = get_branding()
 			# Falls back to default since ce is draft and site_config is empty
 			self.assertEqual(res["enabled"], 0)
-			self.assertEqual(res["brand_name"], "VetEdge")
+			self.assertEqual(res["brand_name"], PROCESSEDGE_VETERINARY_NAME)
 
 	def test_coreedge_profile_ignored_when_disabled(self) -> None:
 		# Profile is active, but CoreEdge app/feature is disabled on site
@@ -236,7 +299,7 @@ class TestVetEdgeBranding(unittest.TestCase):
 			
 			res = get_branding()
 			self.assertEqual(res["enabled"], 0)
-			self.assertEqual(res["brand_name"], "VetEdge")
+			self.assertEqual(res["brand_name"], PROCESSEDGE_VETERINARY_NAME)
 
 	def test_branding_never_breaks_workspace_sidebar_identity(self) -> None:
 		# Verify that dynamic branding applies to labels but never renames the workspace key
