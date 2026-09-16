@@ -144,6 +144,26 @@ class TestVetEdgeBranding(unittest.TestCase):
 		self.assertEqual(res["logo"], "")
 		self.assertEqual(res["hide_source_product_name"], 1)
 
+	def test_white_label_partial_profile_never_leaks_processedge_defaults(self) -> None:
+		frappe.conf.edge_platform_mode = "white_label"
+		with patch("vetedge.services.branding.get_branding", return_value={
+			"enabled": 1,
+			"brand_name": PROCESSEDGE_VETERINARY_NAME,
+			"company_name": PROCESSEDGE_VETERINARY_NAME,
+			"short_name": PROCESSEDGE_VETERINARY_NAME,
+			"module_label": "Veterinary",
+			"app_title": PROCESSEDGE_VETERINARY_NAME,
+			"logo": PROCESSEDGE_VETERINARY_APP_ICON,
+			"favicon": PROCESSEDGE_VETERINARY_APP_ICON,
+			"hide_source_product_name": 1,
+			"source": "site_config",
+		}):
+			res = get_shell_branding()
+		self.assertEqual(res["brand_name"], "Veterinary")
+		self.assertEqual(res["app_title"], "Veterinary")
+		self.assertEqual(res["logo"], "")
+		self.assertEqual(res["favicon"], "")
+
 	def test_branding_site_config_fallback(self) -> None:
 		# Falls back to site_config when CoreEdge is missing/disabled
 		frappe.conf.vetedge_white_label_enabled = 1
