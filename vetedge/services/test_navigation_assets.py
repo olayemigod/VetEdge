@@ -68,11 +68,11 @@ class TestNavigationAssets(TestCase):
 		self.assertTrue((APP_ROOT / "public" / "images" / "processedge-veterinary-app-icon.png").exists())
 		self.assertTrue((APP_ROOT / "public" / "images" / "processedge-veterinary-logo-horizontal.svg").exists())
 		self.assertTrue((APP_ROOT / "public" / "images" / "processedge-veterinary-logo-stacked.svg").exists())
-		self.assertEqual(assignments["app_home"], "/app/vetedge")
+		self.assertEqual(assignments["app_home"], "/desk/vetedge")
 		self.assertNotEqual(assignments["app_home"], "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(assignments["app_home"], "/desk/veterinary-patient")
 		self.assertEqual(assignments["add_to_apps_screen"][0]["title"], "ProcessEdge Veterinary")
-		self.assertEqual(assignments["add_to_apps_screen"][0]["route"], "/app/vetedge")
+		self.assertEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/vetedge")
 		self.assertNotEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(assignments["add_to_apps_screen"][0]["route"], "/desk/veterinary-patient")
 
