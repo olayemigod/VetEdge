@@ -3,7 +3,7 @@ name = "vetedge"
 authors = [
     { name = "ProcessEdge Solutions", email = "processedgeng@gmail.com"}
 ]
-description = "VetEdge is a veterinary operations system built as a custom Frappe/ERPNext app."
+description = "ProcessEdge Veterinary is a veterinary operations system built on Frappe/ERPNext."
 requires-python = ">=3.14"
 readme = "README.md"
 dynamic = ["version"]
