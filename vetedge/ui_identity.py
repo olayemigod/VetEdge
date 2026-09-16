@@ -3,9 +3,9 @@ from __future__ import annotations
 import frappe
 
 from vetedge.coreedge_adapter import get_current_vetedge_company, get_edge_platform_mode
-from vetedge.services.branding import get_branding
+from vetedge.services.branding import get_branding, get_shell_branding
 
-VETEDGE_LOGO = "/assets/vetedge/images/vetedge-app-icon.png"
+VETEDGE_LOGO = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
 MEDICAL_HISTORY_PAGE = "veterinary-medical-history"
 
 
@@ -68,10 +68,14 @@ def _expose_medical_history_page(bootinfo) -> None:
 
 def build_vetedge_ui_identity() -> dict:
 	branding = get_branding()
+	shell_branding = get_shell_branding()
 	mode = get_edge_platform_mode()
 	company = _company_identity(_fallback_company())
 	settings_brand = _settings_brand_identity()
 
+	# Tenant/clinic identity stays separate from the product shell. Shared-hosted
+	# deployments can therefore show the clinic name/logo alongside ProcessEdge
+	# Veterinary, while white-label mode can replace the product shell entirely.
 	if branding.get("source") == "coreedge" and branding.get("enabled"):
 		tenant_name = branding.get("company_name") or branding.get("brand_name") or company.get("label")
 		tenant_logo = branding.get("logo") or settings_brand.get("logo") or company.get("logo") or ""
@@ -80,9 +84,8 @@ def build_vetedge_ui_identity() -> dict:
 		tenant_logo = settings_brand.get("logo") or branding.get("logo") or company.get("logo") or ""
 
 	tenant_name = tenant_name or "Veterinary Clinic"
-	is_saas = mode == "shared_hosted"
-	product_name = "VetEdge" if is_saas else "Veterinary"
-	product_logo = VETEDGE_LOGO if is_saas else ""
+	product_name = shell_branding.get("app_title") or shell_branding.get("brand_name") or "Veterinary"
+	product_logo = shell_branding.get("logo") or ""
 
 	return {
 		"tenant_name": tenant_name,
@@ -94,7 +97,7 @@ def build_vetedge_ui_identity() -> dict:
 		"product_icon": "stethoscope",
 		"product_subtitle": "Veterinary Practice Management",
 		"deployment_mode": mode,
-		"distribution": "vetedge" if is_saas else "veterinary",
+		"distribution": "vetedge" if mode == "shared_hosted" else "veterinary",
 	}
 
 
