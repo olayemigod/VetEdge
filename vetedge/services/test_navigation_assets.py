@@ -64,6 +64,8 @@ class TestNavigationAssets(TestCase):
 						assignments[target.id] = _resolve_names(node.value, assignments)
 
 		self.assertEqual(assignments["app_title"], "ProcessEdge Veterinary")
+		self.assertEqual(assignments["app_logo_url"], "/assets/vetedge/images/processedge-veterinary-app-icon.png")
+		self.assertTrue((APP_ROOT / "public" / "images" / "processedge-veterinary-app-icon.png").exists())
 		self.assertEqual(assignments["app_home"], "/app/vetedge")
 		self.assertNotEqual(assignments["app_home"], "/desk/vetedge-executive-dashboard")
 		self.assertNotEqual(assignments["app_home"], "/desk/veterinary-patient")
