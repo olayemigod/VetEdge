@@ -1,10 +1,10 @@
 app_name = "vetedge"
-app_title = "VetEdge"
+app_title = "ProcessEdge Veterinary"
 app_publisher = "ProcessEdge Solutions"
-app_description = "VetEdge is a veterinary operations system built as a custom Frappe/ERPNext app."
+app_description = "ProcessEdge Veterinary is a veterinary operations system built as a custom Frappe/ERPNext app."
 app_email = "processedgeng@gmail.com"
 app_license = "mit"
-app_logo_url = "/assets/vetedge/images/vetedge-app-icon.png"
+app_logo_url = "/assets/vetedge/images/processedge-veterinary-app-icon.png"
 app_home = "/desk/vetedge"
 
 # The standalone EdgeSuite UI app must be installed before VetEdge so shared
