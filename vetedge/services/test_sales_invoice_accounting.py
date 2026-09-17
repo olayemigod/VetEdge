@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -15,6 +16,14 @@ class _BaseSalesInvoice:
 		self._values = dict(values)
 		for key, value in values.items():
 			setattr(self, key, value)
+		self.flags = frappe._dict(ignore_permissions=False)
+		self.meta = SimpleNamespace(get_field=lambda _fieldname: True)
+		self.posting_date = getattr(self, "posting_date", "2026-09-17")
+		self.customer_address = getattr(self, "customer_address", None)
+		self.shipping_address_name = getattr(self, "shipping_address_name", None)
+		self.company_address = getattr(self, "company_address", None)
+		self.taxes_and_charges = getattr(self, "taxes_and_charges", None)
+		self.taxes = getattr(self, "taxes", [])
 
 	def get(self, fieldname, default=None):
 		return getattr(self, fieldname, self._values.get(fieldname, default))
@@ -27,6 +36,17 @@ class _BaseSalesInvoice:
 	def set_missing_lead_customer_details(self, for_validate: bool = False):
 		self.base_party_details_user = frappe.session.user
 		return "base-party-details"
+
+	def has_value_changed(self, _fieldname: str) -> bool:
+		return False
+
+	def update_if_missing(self, values) -> None:
+		for key, value in dict(values).items():
+			if not self.get(key):
+				setattr(self, key, value)
+
+	def append(self, fieldname: str, value) -> None:
+		getattr(self, fieldname).append(value)
 
 
 class _Invoice(accounting.VetEdgeSalesInvoiceBillingMixin, _BaseSalesInvoice):
@@ -68,7 +88,7 @@ class TestVetEdgeSalesInvoiceAccounting(TestCase):
 		frappe.local.new_doc_templates = {}
 		frappe.local.user_perms = None
 
-	def test_billing_core_invoice_resolves_account_as_system_then_restores_actor(self):
+	def test_billing_core_invoice_elevates_only_account_resolution(self):
 		invoice = _Invoice(
 			remarks="VetEdge billing session VBS-2026-00001",
 			customer="CUST-001",
@@ -76,6 +96,8 @@ class TestVetEdgeSalesInvoiceAccounting(TestCase):
 			debit_to=None,
 		)
 		resolver_users = []
+		party_default_users = []
+		party_default_calls = []
 
 		def resolve_account(party_type, party, company):
 			resolver_users.append(frappe.session.user)
@@ -83,19 +105,33 @@ class TestVetEdgeSalesInvoiceAccounting(TestCase):
 			self.assertEqual(party, "CUST-001")
 			return "Debtors - MGV"
 
+		def resolve_party_details(*args, **kwargs):
+			party_default_users.append(frappe.session.user)
+			party_default_calls.append((args, kwargs))
+			return frappe._dict(
+				customer="CUST-001",
+				selling_price_list="Doctor Assigned Price List",
+				debit_to="Wrong Account - SHOULD NOT APPLY",
+				due_date="2099-01-01",
+			)
+
 		with (
 			patch.object(accounting.frappe, "set_user", side_effect=self._fake_set_user),
 			patch.object(accounting, "get_party_account", side_effect=resolve_account),
+			patch.object(accounting, "_get_party_details", side_effect=resolve_party_details),
 			patch.object(accounting.frappe.db, "get_value", return_value="NGN"),
 		):
 			result = invoice.set_missing_values()
 
 		self.assertEqual(result, "base-missing-values")
 		self.assertEqual(resolver_users, ["Administrator"])
+		self.assertEqual(party_default_users, ["doctor@example.com"])
+		self.assertEqual(party_default_calls[0][1]["doctype"], None)
 		self.assertEqual(invoice.debit_to, "Debtors - MGV")
 		self.assertEqual(invoice.party_account_currency, "NGN")
+		self.assertEqual(invoice.selling_price_list, "Doctor Assigned Price List")
+		self.assertNotEqual(invoice.get("due_date"), "2099-01-01")
 		self.assertEqual(invoice.base_set_missing_user, "doctor@example.com")
-		self.assertEqual(invoice.base_party_details_user, "Administrator")
 		self.assertEqual(frappe.session.user, "doctor@example.com")
 		self.assertEqual(frappe.session.sid, "real-session-id")
 		self.assertEqual(frappe.session.data.get("keep"), "session-data")
@@ -110,10 +146,14 @@ class TestVetEdgeSalesInvoiceAccounting(TestCase):
 			company="Mercy and Grace Veterinary World",
 			debit_to=None,
 		)
-		with patch.object(accounting, "get_party_account") as get_party_account:
+		with (
+			patch.object(accounting, "get_party_account") as get_party_account,
+			patch.object(accounting, "_get_party_details") as get_party_details,
+		):
 			invoice.set_missing_values()
 
 		get_party_account.assert_not_called()
+		get_party_details.assert_not_called()
 		self.assertEqual(invoice.base_set_missing_user, "doctor@example.com")
 		self.assertEqual(invoice.base_party_details_user, "doctor@example.com")
 		self.assertEqual(frappe.session.user, "doctor@example.com")
