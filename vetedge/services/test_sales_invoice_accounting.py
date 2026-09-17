@@ -150,3 +150,7 @@ class TestVetEdgeSalesInvoiceAccounting(TestCase):
 		self.assertIn('extend_doctype_class = {', hooks)
 		self.assertIn('"Sales Invoice": ["vetedge.services.sales_invoice_accounting.VetEdgeSalesInvoiceBillingMixin"]', hooks)
 		self.assertNotIn('override_doctype_class = {\n\t"Sales Invoice"', hooks)
+
+	def test_frappe_sales_invoice_controller_includes_vetedge_billing_mixin(self):
+		invoice = frappe.get_doc({"doctype": "Sales Invoice"})
+		self.assertIsInstance(invoice, accounting.VetEdgeSalesInvoiceBillingMixin)
