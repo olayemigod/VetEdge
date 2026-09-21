@@ -2065,7 +2065,7 @@ def query_due_vaccination_notifications(due_soon_days: int = 7) -> list[dict]:
 
 def send_payment_pending_reminders() -> list[dict]:
 	settings = get_notification_settings()
-	if not settings["enabled"]:
+	if not settings["enabled"] or not settings.get("notify_on_payment_follow_up"):
 		return []
 
 	payment_reminder_days = cint_or_default(settings.get("payment_reminder_days"), 3)
