@@ -22,7 +22,8 @@ def test_one_canonical_billing_modal_is_shared_across_services():
     assert "VetEdgeEdgeModalPresenter" in shared
     assert "new frappe.ui.Dialog" not in shared
     assert 'type: "select"' in shared
-    assert 'type: "link"' in shared
+    assert 'doctype: "Account"' not in shared
+    assert "Paid To Account" not in shared
     assert "must never replace window.vetedgeBillingModal" in compatibility
     assert "window.vetedgeBillingModal =" not in compatibility
 
@@ -55,6 +56,9 @@ def test_shared_billing_server_supports_all_billable_sources_and_security_layers
     assert 'frappe.has_permission("Sales Invoice", "submit", doc=invoice)' in security
     assert 'frappe.has_permission("Payment Entry", "create")' in security
     assert 'frappe.has_permission("Payment Entry", "submit")' in security
+    assert "can_initiate_payment" in security
+    assert "can_initiate_payment(" in service
+    assert "resolve_modal_payment_destination_account" in service
     assert "_normalize_result_state" in security
 
 
