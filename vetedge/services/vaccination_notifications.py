@@ -174,6 +174,9 @@ def build_vaccination_notification_message(event_key: str, doc, **kwargs) -> str
 
 
 def run_vaccination_notification_checks() -> dict:
+	settings = get_notification_settings()
+	if not settings or not settings.get("enabled") or not settings.get("notify_on_vaccination_reminders"):
+		return {"vaccination_due": [], "vaccination_overdue": []}
 	return {
 		"vaccination_due": send_due_vaccination_notifications(),
 		"vaccination_overdue": send_overdue_vaccination_notifications(),
@@ -185,7 +188,7 @@ def send_due_vaccination_notifications(limit: int = VACCINATION_NOTIFICATION_PAG
 		return []
 
 	settings = get_notification_settings()
-	if not settings or not settings.get("enabled"):
+	if not settings or not settings.get("enabled") or not settings.get("notify_on_vaccination_reminders"):
 		return []
 
 	due_soon_days = max(int(settings.get("vaccination_due_reminder_days") or 7), 0)
@@ -206,7 +209,7 @@ def send_overdue_vaccination_notifications(limit: int = VACCINATION_NOTIFICATION
 		return []
 
 	settings = get_notification_settings()
-	if not settings or not settings.get("enabled"):
+	if not settings or not settings.get("enabled") or not settings.get("notify_on_vaccination_reminders"):
 		return []
 
 	today = getdate()
