@@ -265,3 +265,17 @@ This slice does not:
 - remove appointment in-app notification idempotency
 - force-overwrite client-edited email templates
 - merge or deploy automatically
+
+
+## Patient Name Mapping
+
+Notification templates use `{{ patient_name }}` for human-readable patient identity. Context enrichment now replaces blank values and raw Veterinary Patient IDs with `Veterinary Patient.patient_name`.
+
+For Sales Invoice based events, patient resolution is read-only and uses this order:
+
+1. explicit patient/animal/VetEdge patient markers on the invoice or invoice items;
+2. Veterinary Billing Session current/latest invoice links;
+3. Veterinary Billing Session Charge invoice links;
+4. linked consultation, lab, vaccination, hospitalisation, grooming, boarding, or registration source records.
+
+The notification layer does not mutate Sales Invoice or any submitted accounting record.
