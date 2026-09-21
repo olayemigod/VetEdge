@@ -42,15 +42,6 @@
 		window.location.assign(`/desk/sales-invoice/${encodeURIComponent(name)}`);
 	}
 
-	function accountSearch(query) {
-		return frappe.call("frappe.desk.search.search_link", {
-			doctype: "Account",
-			txt: String(query || ""),
-			page_length: 20,
-			ignore_user_permissions: 0,
-		}).then((response) => response.message || []);
-	}
-
 	function invoiceRows(state) {
 		const history = state.invoice_history || state.billing_group_invoice_history || state.billing_session?.invoices || state.billing_session?.invoice_ledger?.invoices || [];
 		return history;
@@ -197,19 +188,18 @@
 				title: __("Record Payment"),
 				subtitle: invoiceName(invoice),
 				size: "md",
-				message: __("Payment will be allocated to the selected invoice. The server rechecks Payment Entry permission and invoice outstanding balance before submission."),
+				message: __("Payment will be allocated to the selected invoice. The payment destination is resolved from the selected Mode of Payment and company configuration."),
 				fields: [
 					{ fieldname: "invoice", label: __("Invoice"), type: "text", readOnly: true, default: invoiceName(invoice) },
 					{ fieldname: "amount", label: __("Amount"), type: "number", min: 0.01, step: "0.01", required: true, default: Number(invoice.outstanding_amount || 0) },
 					{ fieldname: "mode_of_payment", label: __("Mode of Payment"), type: "select", options: modes, required: true, default: modes[0]?.value || "" },
-					{ fieldname: "paid_to", label: __("Paid To Account"), type: "link", searcher: accountSearch, placeholder: __("Search Account") },
 					{ fieldname: "posting_date", label: __("Posting Date"), type: "date", required: true, default: frappe.datetime.now_date() },
 					{ fieldname: "reference_no", label: __("Reference Number"), type: "text", default: "" },
 					{ fieldname: "reference_date", label: __("Reference Date"), type: "date", default: "" },
 					{ fieldname: "remarks", label: __("Remarks"), type: "textarea", rows: 3, default: "" },
 				],
 				values: {
-					invoice: invoiceName(invoice), amount: Number(invoice.outstanding_amount || 0), mode_of_payment: modes[0]?.value || "", paid_to: "", posting_date: frappe.datetime.now_date(), reference_no: "", reference_date: "", remarks: "",
+					invoice: invoiceName(invoice), amount: Number(invoice.outstanding_amount || 0), mode_of_payment: modes[0]?.value || "", posting_date: frappe.datetime.now_date(), reference_no: "", reference_date: "", remarks: "",
 				},
 				actions: [{
 					label: __("Submit Payment"), primary: true, closeOnSuccess: false,
@@ -220,7 +210,7 @@
 						}
 						payment.update({ busy: true, error: "" });
 						try {
-							const result = await call(API.payment, { ...ctx, invoice: invoiceName(invoice), amount: values.amount, mode_of_payment: values.mode_of_payment, paid_to: values.paid_to, posting_date: values.posting_date, reference_no: values.reference_no, reference_date: values.reference_date, remarks: values.remarks });
+							const result = await call(API.payment, { ...ctx, invoice: invoiceName(invoice), amount: values.amount, mode_of_payment: values.mode_of_payment, posting_date: values.posting_date, reference_no: values.reference_no, reference_date: values.reference_date, remarks: values.remarks });
 							state = result.state || state;
 							await reloadSource();
 							payment.update({ busy: false });
