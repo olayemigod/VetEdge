@@ -87,8 +87,10 @@ def test_native_frappe_date_controls_receive_the_same_display_format():
 	patches = read(APP / "patches.txt")
 	install = read(APP / "install/__init__.py")
 	assert 'VETEDGE_DATE_FORMAT = "dd-mm-yyyy"' in setup
-	assert 'frappe.get_single("System Settings")' in setup
-	assert "settings.save(ignore_permissions=True)" in setup
+	assert 'frappe.db.get_single_value("System Settings", "date_format")' in setup
+	assert "frappe.db.set_single_value(" in setup
+	assert '"date_format",' in setup
+	assert "settings.save(ignore_permissions=True)" not in setup
 	assert "vetedge.patches.set_vetedge_date_format" in patches
 	assert "ensure_vetedge_date_format()" in install
 
