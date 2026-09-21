@@ -83,6 +83,22 @@
 		return `${pad(parts.day)}-${pad(parts.month)}-${parts.year} ${pad(parts.hour)}:${pad(parts.minute)}`;
 	}
 
+	function formatInputDateTime(value, fallback) {
+		if (value === null || value === undefined || value === "") {
+			return fallback !== undefined ? fallback : "";
+		}
+		const text = String(value).trim();
+		const iso = text.match(ISO_PARTS);
+		if (iso) {
+			return `${pad(Number(iso[3]))}-${pad(Number(iso[2]))}-${Number(iso[1])} ${pad(Number(iso[4] || 0))}:${pad(Number(iso[5] || 0))}`;
+		}
+		const display = text.match(DISPLAY_PARTS);
+		if (display) {
+			return `${pad(Number(display[1]))}-${pad(Number(display[2]))}-${Number(display[3])} ${pad(Number(display[4] || 0))}:${pad(Number(display[5] || 0))}`;
+		}
+		return fallback !== undefined ? fallback : text;
+	}
+
 	function formatByFieldtype(value, fieldtype, fallback) {
 		const type = String(fieldtype || "").toLowerCase();
 		if (type === "datetime") return formatDateTime(value, fallback);
@@ -128,6 +144,7 @@
 		DISPLAY_DATETIME_FORMAT,
 		formatDate,
 		formatDateTime,
+		formatInputDateTime,
 		formatByFieldtype,
 		inferredFieldtype,
 		formatCell,
