@@ -48,6 +48,18 @@ class TestNotificationEmailHardeningContract(TestCase):
 		self.assertNotIn("emit_appointment_status_notification", owner_portal)
 		self.assertNotIn("emit_appointment_status_notification", front_desk)
 
+	def test_reschedule_resets_appointment_reminder_state(self):
+		controller = (
+			ROOT
+			/ "veterinary"
+			/ "doctype"
+			/ "veterinary_appointment"
+			/ "veterinary_appointment.py"
+		).read_text()
+		self.assertIn('"reminder_sent": 0', controller)
+		self.assertIn('"reminder_sent_on": None', controller)
+		self.assertIn("if datetime_changed", controller)
+
 	def test_checked_in_is_supported_and_idempotent_but_not_owner_facing(self):
 		self.assertIn("appointment_checked_in", APPOINTMENT_EVENTS)
 		self.assertIn("appointment_checked_in", APPOINTMENT_LIFECYCLE_DELIVERY_EVENTS)
@@ -94,6 +106,8 @@ class TestNotificationEmailHardeningContract(TestCase):
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_initiated"], "notify_on_payment_follow_up")
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_pending"], "notify_on_payment_follow_up")
 		self.assertEqual(EVENT_SETTING_FIELDS["payment_reminder"], "notify_on_payment_follow_up")
+		self.assertEqual(EVENT_SETTING_FIELDS["vaccination_due_soon"], "notify_on_vaccination_reminders")
+		self.assertEqual(EVENT_SETTING_FIELDS["vaccination_overdue"], "notify_on_vaccination_reminders")
 		self.assertEqual(
 			EVENT_SETTING_FIELDS["consultation_sent_to_dispensary"],
 			"notify_on_clinical_workflow_updates",
@@ -121,9 +135,12 @@ class TestNotificationEmailHardeningContract(TestCase):
 		for fieldname in (
 			"notify_on_payment_follow_up",
 			"notify_on_clinical_workflow_updates",
+			"notify_on_vaccination_reminders",
 		):
 			self.assertIn(fieldname, fields)
 			self.assertEqual(fields[fieldname].get("default"), "0")
+
+		self.assertEqual(fields["vaccination_reminder_repeat_days"].get("default"), "3")
 
 	def test_registered_email_templates_exist_in_fixture(self):
 		fixture = json.loads((ROOT.parent / "fixtures" / "vetedge_email_templates.json").read_text())
