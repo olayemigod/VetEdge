@@ -29,12 +29,16 @@ class TestVetEdgeHomeContract(TestCase):
 		self.assertIn("window.mountVetEdgeHome", loader)
 		self.assertIn("refreshMountedVetEdgeHome", loader)
 		self.assertIn('"EdgeDataTable"', loader)
+		self.assertIn('"EdgeInput"', loader)
 		self.assertNotIn('const target = "/desk/vetedge-resource-center"', loader)
 		self.assertNotIn('frappe.set_route("vetedge-resource-center")', loader)
 
 		self.assertIn("applyWorkspaceSafety(VetEdgeHome)", bundle)
 		self.assertIn("window.mountVetEdgeHome", bundle)
 		self.assertIn('active-route="/desk/vetedge"', component)
+		self.assertIn('<EdgeInput', component)
+		self.assertIn('label="Operational date"', component)
+		self.assertNotIn('type="date" :disabled="loading"', component)
 
 	def test_warm_navigation_refresh_age_only_moves_after_real_refresh(self):
 		loader = self.read(HOME_LOADER)
