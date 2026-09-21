@@ -394,6 +394,9 @@ def ensure_grooming_invoice_item(invoice, item_code: str, cost_center: str, rate
 		existing_row.cost_center = item_payload["cost_center"]
 	else:
 		invoice.append("items", item_payload)
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.save(ignore_permissions=True)
 	return invoice.name
 
