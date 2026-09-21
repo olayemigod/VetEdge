@@ -234,6 +234,10 @@ class TestVaccinationNotifications(TestCase):
 		overdue_called = []
 		
 		with (
+			patch(
+				"vetedge.services.vaccination_notifications.get_notification_settings",
+				return_value={"enabled": True, "notify_on_vaccination_reminders": True},
+			),
 			patch("vetedge.services.vaccination_notifications.send_due_vaccination_notifications", side_effect=lambda: due_called.append(True)),
 			patch("vetedge.services.vaccination_notifications.send_overdue_vaccination_notifications", side_effect=lambda: overdue_called.append(True))
 		):
