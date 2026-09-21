@@ -222,7 +222,8 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 		self.assertIn("grid-template-columns: repeat(2, minmax(10rem, 1fr))", stock)
 		self.assertIn("grid-template-columns: minmax(0, 1fr)", stock)
 		self.assertIn("edge-select edge-control", content)
-		self.assertIn("edge-input edge-control", content)
+		self.assertIn("<EdgeInput", content)
+		self.assertIn('type="date"', content)
 		self.assertIn("edge-button edge-button--primary", content)
 
 	def test_existing_api_report_chart_and_currency_workflows_are_preserved(self):

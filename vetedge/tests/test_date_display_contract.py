@@ -130,7 +130,10 @@ def test_edgesuite_date_inputs_use_vetedge_display_wrapper():
 
 def test_custom_desk_vue_surfaces_do_not_render_raw_native_date_inputs():
 	offenders = []
-	pattern = re.compile(r'<input\\b[^>]*\\btype=["\\\'](?:date|datetime-local)["\\\']', re.IGNORECASE | re.DOTALL)
+	pattern = re.compile(
+		r"""<input\b[^>]*\btype=["'](?:date|datetime-local)["']""",
+		re.IGNORECASE | re.DOTALL,
+	)
 	for path in (APP / "public/js").rglob("*.vue"):
 		if pattern.search(read(path)):
 			offenders.append(path.relative_to(APP).as_posix())
