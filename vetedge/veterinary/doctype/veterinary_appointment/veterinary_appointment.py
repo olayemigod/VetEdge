@@ -64,6 +64,15 @@ class VeterinaryAppointment(Document):
 			get_datetime(current_datetime) if current_datetime else None
 		)
 		is_repeated_reschedule = self.status == "Rescheduled" and datetime_changed
+		if datetime_changed and self.status in {"Awaiting Registration", "Owner Requested", "Scheduled", "Confirmed", "Rescheduled"}:
+			frappe.db.set_value(
+				"Veterinary Appointment",
+				self.name,
+				{"reminder_sent": 0, "reminder_sent_on": None},
+				update_modified=False,
+			)
+			self.reminder_sent = 0
+			self.reminder_sent_on = None
 		if not status_changed and not is_repeated_reschedule:
 			return
 
