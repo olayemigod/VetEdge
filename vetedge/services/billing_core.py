@@ -381,7 +381,7 @@ def sync_session_charges_to_invoice(session, confirm: bool = False, confirmation
 
 	_prepare_sales_invoice_totals(invoice)
 	normalize_billing_session_invoice_dates(invoice)
-	run_with_billing_core_sync_flag(invoice.save)
+	run_with_billing_core_sync_flag(lambda: invoice.save(ignore_permissions=True))
 	session = update_session_after_invoice_sync(session.name, invoice.name, [row.get("charge_key") for row in pending])
 	return {"session": session.name, "invoice": invoice.name, "created": created, "added_count": added, "updated_count": updated, "removed_count": removed_count}
 
@@ -415,7 +415,7 @@ def create_or_update_draft_invoice_for_session(session, pending_charges=None, ac
 		append_invoice_item_from_charge(invoice, charge)
 	_prepare_sales_invoice_totals(invoice)
 	normalize_billing_session_invoice_dates(invoice)
-	run_with_billing_core_sync_flag(invoice.insert)
+	run_with_billing_core_sync_flag(lambda: invoice.insert(ignore_permissions=True))
 	session.current_draft_invoice = invoice.name
 	session.latest_invoice = invoice.name
 	return invoice, True
@@ -3094,12 +3094,89 @@ def get_unbilled_source_payloads(session, source_doctype: str, source_name: str)
 	return [payload for payload in payloads if not is_source_detail_already_billed(session, payload.get("charge_key") or build_charge_key(payload))]
 
 
+def resolve_trusted_customer_receivable_account(customer: str | None, company: str | None) -> str:
+	"""Resolve ERPNext's customer receivable account without user-facing Account permission checks.
+
+	VetEdge calls this only after source, branch and platform access have already
+	been validated. The resolved account is still validated for company,
+	Receivable type, Balance Sheet classification, non-group and enabled status.
+	"""
+	if not customer:
+		frappe.throw("Customer is required before creating a VetEdge Sales Invoice.", frappe.ValidationError)
+	if not company:
+		frappe.throw("Company is required before creating a VetEdge Sales Invoice.", frappe.ValidationError)
+
+	account = frappe.db.get_value(
+		"Party Account",
+		{"parenttype": "Customer", "parent": customer, "company": company},
+		"account",
+	)
+
+	if not account:
+		customer_group = frappe.get_cached_value("Customer", customer, "customer_group")
+		if customer_group:
+			account = frappe.db.get_value(
+				"Party Account",
+				{"parenttype": "Customer Group", "parent": customer_group, "company": company},
+				"account",
+			)
+
+	if not account:
+		account = frappe.get_cached_value("Company", company, "default_receivable_account")
+
+	from erpnext.accounts.party import get_party_gle_account, get_party_gle_currency
+
+	existing_gle_currency = get_party_gle_currency("Customer", customer, company)
+	if existing_gle_currency:
+		account_currency = frappe.get_cached_value("Account", account, "account_currency") if account else None
+		if not account or account_currency != existing_gle_currency:
+			account = get_party_gle_account("Customer", customer, company)
+
+	if not account:
+		frappe.throw(
+			f"No receivable account is configured for Customer {customer} in Company {company}.",
+			frappe.ValidationError,
+		)
+
+	account_details = frappe.get_cached_value(
+		"Account",
+		account,
+		["company", "account_type", "report_type", "account_currency", "is_group", "disabled"],
+		as_dict=True,
+	)
+	if not account_details:
+		frappe.throw("The configured receivable account could not be found.", frappe.ValidationError)
+	if account_details.company != company:
+		frappe.throw("The configured receivable account belongs to a different Company.", frappe.ValidationError)
+	if account_details.account_type != "Receivable" or account_details.report_type != "Balance Sheet":
+		frappe.throw("The configured customer account must be a Balance Sheet Receivable account.", frappe.ValidationError)
+	if cint(account_details.is_group):
+		frappe.throw("The configured customer receivable account cannot be a group account.", frappe.ValidationError)
+	if cint(account_details.disabled):
+		frappe.throw("The configured customer receivable account is disabled.", frappe.ValidationError)
+
+	return account
+
+
+def apply_trusted_customer_receivable_account(invoice) -> str | None:
+	if cint(invoice.get("docstatus")) != 0:
+		return invoice.get("debit_to")
+	if invoice.get("debit_to"):
+		return invoice.get("debit_to")
+
+	account = resolve_trusted_customer_receivable_account(invoice.get("customer"), invoice.get("company"))
+	invoice.debit_to = account
+	invoice.party_account_currency = frappe.get_cached_value("Account", account, "account_currency")
+	return account
+
+
 def apply_invoice_session_defaults(invoice, session) -> None:
 	if cint(invoice.get("docstatus")) != 0:
 		return
 	invoice.customer = session.customer
 	invoice.company = session.company or get_default_company()
 	invoice.posting_date = nowdate()
+	apply_trusted_customer_receivable_account(invoice)
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("branch"):
 		invoice.branch = session.branch
 	if session.get("branch") and frappe.get_meta("Sales Invoice").has_field("cost_center"):
