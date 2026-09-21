@@ -59,6 +59,8 @@ def test_shared_billing_server_supports_all_billable_sources_and_security_layers
     assert "can_initiate_payment" in security
     assert "can_initiate_payment(" in service
     assert "resolve_modal_payment_destination_account" in service
+    payment_method = service.split("def record_modal_invoice_payment", 1)[1].split("def resolve_modal_invoice_name", 1)[0]
+    assert payment_method.index("can_initiate_payment(") < payment_method.index("get_payment_entry(")
     assert "_normalize_result_state" in security
 
 
