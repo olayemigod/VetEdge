@@ -63,6 +63,7 @@ jobs:
         run: |
           python -m pytest -q \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
+            vetedge/tests/test_date_display_contract.py \
             vetedge/tests/test_hospitalisation_same_page_navigation_contract.py \
             vetedge/tests/test_owner_register_efficiency_contract.py \
             vetedge/tests/test_resource_center_loading_regression.py \
