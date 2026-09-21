@@ -137,6 +137,7 @@ frappe.pages["vetedge"].on_page_show = function (wrapper) {
 			"EdgeDashboardLayout",
 			"EdgeStatCard",
 			"EdgeDataTable",
+			"EdgeInput",
 			"EdgeLoadingState",
 			"EdgeErrorState",
 		];
