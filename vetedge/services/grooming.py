@@ -438,6 +438,9 @@ def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 			invoice.branch = session_doc.service_branch
 		if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 			invoice.cost_center = cost_center
+		from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+		apply_trusted_customer_receivable_account(invoice)
 		return ensure_grooming_invoice_item(invoice, item_code, cost_center, default_rate), False
 	if session_doc.linked_invoice and is_active_sales_invoice(session_doc.linked_invoice):
 		return session_doc.linked_invoice, False
@@ -464,6 +467,9 @@ def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 		invoice.branch = session_doc.service_branch
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = cost_center
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.insert(ignore_permissions=True)
 	return invoice.name, True
 
