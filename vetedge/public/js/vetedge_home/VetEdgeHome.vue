@@ -38,10 +38,15 @@
 							</option>
 						</select>
 					</div>
-					<div class="vetedge-home-control">
-						<label for="vetedge-home-date">Operational date</label>
-						<input id="vetedge-home-date" v-model="selectedDate" class="form-control input-sm" type="date" :disabled="loading" @change="applyContext" />
-					</div>
+					<EdgeInput
+						id="vetedge-home-date"
+						v-model="selectedDate"
+						class="vetedge-home-control"
+						type="date"
+						label="Operational date"
+						:disabled="loading"
+						@change="applyContext"
+					/>
 					<div class="vetedge-home-context-note">
 						<strong>{{ branchName }}</strong>
 						<span>Date-specific cards use {{ formatDate(selectedDate || payload.context?.operational_date) }}. Current/open-work cards remain live backlog.</span>
