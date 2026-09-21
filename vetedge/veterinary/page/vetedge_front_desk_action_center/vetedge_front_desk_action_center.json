@@ -16,6 +16,8 @@
   {"role": "VetEdge Administrator"},
   {"role": "VetEdge Front Desk"},
   {"role": "VetEdge Doctor"},
+  {"role": "Veterinary Nurse"},
+  {"role": "Dispensary User"},
   {"role": "Branch Manager"},
   {"role": "VetEdge Branch Manager"}
  ],

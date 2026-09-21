@@ -65,8 +65,12 @@
 				</div>
 			</div>
 			<div class="col-md-6 mb-3 vetedge-appointment-field" style="display: none;">
-				<label class="form-label">Preferred Date/Time</label>
-				<input class="form-control" name="preferred_datetime" type="datetime-local">
+				<label class="form-label" for="vetedge-guest-preferred-datetime">Preferred Date/Time</label>
+				<div style="position: relative;">
+					<input class="form-control" id="vetedge-guest-preferred-datetime-display" type="text" placeholder="DD-MM-YYYY HH:mm" readonly aria-hidden="true">
+					<input id="vetedge-guest-preferred-datetime" name="preferred_datetime" type="datetime-local" aria-label="Preferred Date/Time" style="cursor: pointer; height: 100%; inset: 0; opacity: 0; position: absolute; width: 100%;">
+				</div>
+				<small class="text-muted">DD-MM-YYYY HH:mm</small>
 			</div>
 			<div class="col-md-6 mb-3">
 				<label class="form-label">Reason for Visit</label>
@@ -99,7 +103,20 @@
 	</div>
 </div>
 
+<script src="/assets/vetedge/js/vetedge_datetime.js?v=20260921-2"></script>
 <script>
+const guestPreferredDatetime = document.getElementById("vetedge-guest-preferred-datetime");
+const guestPreferredDatetimeDisplay = document.getElementById("vetedge-guest-preferred-datetime-display");
+function syncGuestPreferredDatetimeDisplay() {
+	guestPreferredDatetimeDisplay.value = window.VetEdgeDateTime?.formatInputDateTime?.(guestPreferredDatetime.value, "") || "";
+}
+guestPreferredDatetime.addEventListener("input", syncGuestPreferredDatetimeDisplay);
+guestPreferredDatetime.addEventListener("change", syncGuestPreferredDatetimeDisplay);
+guestPreferredDatetime.addEventListener("click", () => {
+	try { guestPreferredDatetime.showPicker?.(); } catch (_error) {}
+});
+syncGuestPreferredDatetimeDisplay();
+
 const appointmentRequested = document.getElementById("appointment-requested");
 const appointmentFields = document.querySelectorAll(".vetedge-appointment-field");
 appointmentRequested.addEventListener("change", () => {
@@ -126,6 +143,7 @@ document.getElementById("vetedge-guest-booking-form").addEventListener("submit",
 				document.getElementById("registration-payment-request").value = response.name;
 			}
 			form.reset();
+			syncGuestPreferredDatetimeDisplay();
 			appointmentFields.forEach((field) => {
 				field.style.display = "none";
 			});

@@ -1,5 +1,5 @@
 // VetEdge Product Menu: consume the standalone EdgeSuite UI renderer first,
-// while retaining the restored VetEdge launcher as an emergency Desk fallback.
+// while retaining the restored VetEdge launcher as an EdgeSuite-shell-only emergency fallback.
 (function () {
 	"use strict";
 
@@ -11,17 +11,9 @@
 	const FALLBACK_TRIGGER = "vetedge-product-menu-trigger";
 	const FALLBACK_PANEL = "vetedge-product-menu-panel";
 	const MAX_RUNTIME_ATTEMPTS = 40;
-	const NAVBAR_TARGET_SELECTORS = [
-		".page-head .page-actions",
-		".page-head-content .page-actions",
-		".page-actions",
-		"header .navbar .navbar-right",
-		".navbar .navbar-right",
-		"header .navbar .navbar-nav.ms-auto",
-		"header .navbar .navbar-nav.ml-auto",
-		"header .navbar .navbar-collapse .navbar-nav",
-		"header .navbar .navbar-collapse",
-		"header .navbar .container",
+	const EDGE_SHELL_TARGET_SELECTORS = [
+		".edge-app-shell[data-edge-product] .edge-topbar__brand",
+		".edge-app-shell[data-edge-product] .edge-topbar-actions",
 	];
 	const LIFECYCLE_EVENTS = ["toolbar_setup", "page-change", "desktop_screen", "sidebar_setup"];
 	const FALLBACK_ROUTES = [
@@ -60,6 +52,10 @@
 
 	function edgeRuntime() {
 		return window.EdgeSuiteUI || window.EdgeUI || null;
+	}
+
+	function edgeShellPresent() {
+		return Boolean(document.querySelector(".edge-app-shell[data-edge-product]"));
 	}
 
 	function debugEnabled() {
@@ -148,7 +144,7 @@
 	}
 
 	function inspectTargets() {
-		return NAVBAR_TARGET_SELECTORS.map((selector) => {
+		return EDGE_SHELL_TARGET_SELECTORS.map((selector) => {
 			const nodes = Array.from(document.querySelectorAll(selector));
 			return {
 				selector,
@@ -165,6 +161,10 @@
 	}
 
 	function findNavbarTarget() {
+		if (!edgeShellPresent()) {
+			state.lastTarget = null;
+			return null;
+		}
 		const inspected = inspectTargets();
 		for (const requireVisible of [true, false]) {
 			for (const target of inspected) {
@@ -182,8 +182,8 @@
 				}
 			}
 		}
-		state.lastTarget = { selector: "body", visible: true, floating: true };
-		return { node: document.body, selector: "body", visible: true, floating: true };
+		state.lastTarget = null;
+		return null;
 	}
 
 	function routeTo(item) {
@@ -277,6 +277,11 @@
 	}
 
 	function mountFallback() {
+		if (!edgeShellPresent()) {
+			removeFallback();
+			state.mode = "native-desk-hidden";
+			return result(false, "edge-shell-unavailable", null);
+		}
 		const existing = document.getElementById(FALLBACK_TRIGGER);
 		if (existing?.isConnected) {
 			removeDuplicates(FALLBACK_TRIGGER, existing);
@@ -288,12 +293,10 @@
 		document.getElementById(FALLBACK_PANEL)?.remove();
 
 		const target = findNavbarTarget();
-		if (!target) return result(false, "no-navbar-target", null);
+		if (!target) return result(false, "no-edge-shell-target", null);
 		const slot = document.createElement(target.node.tagName === "UL" ? "li" : "div");
 		slot.id = FALLBACK_SLOT;
-		slot.className = target.floating
-			? "vetedge-product-menu-slot vetedge-product-menu-slot--floating"
-			: "vetedge-product-menu-slot";
+		slot.className = "vetedge-product-menu-slot";
 		const trigger = document.createElement("button");
 		trigger.id = FALLBACK_TRIGGER;
 		trigger.type = "button";
@@ -303,7 +306,7 @@
 		trigger.setAttribute("aria-expanded", "false");
 		trigger.innerHTML = '<svg class="vetedge-product-menu-waffle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4" cy="4" r="1.6"></circle><circle cx="10" cy="4" r="1.6"></circle><circle cx="16" cy="4" r="1.6"></circle><circle cx="4" cy="10" r="1.6"></circle><circle cx="10" cy="10" r="1.6"></circle><circle cx="16" cy="10" r="1.6"></circle><circle cx="4" cy="16" r="1.6"></circle><circle cx="10" cy="16" r="1.6"></circle><circle cx="16" cy="16" r="1.6"></circle></svg>';
 		slot.appendChild(trigger);
-		target.node.prepend(slot);
+		target.node.appendChild(slot);
 
 		const panel = document.createElement("aside");
 		panel.id = FALLBACK_PANEL;
@@ -342,6 +345,12 @@
 	function mount(attempt = 0) {
 		window.clearTimeout(scheduledMount);
 		state.lastError = null;
+		if (!edgeShellPresent()) {
+			removeFallback();
+			edgeRuntime()?.closeProductMenu?.();
+			state.mode = "native-desk-hidden";
+			return result(false, "native-desk-hidden", null);
+		}
 		try {
 			const shared = registerEdgeUI();
 			if (shared.mounted) return shared;
@@ -377,6 +386,12 @@
 	function scheduleMount(reason = "lifecycle", delay = 0) {
 		window.clearTimeout(scheduledMount);
 		scheduledMount = window.setTimeout(() => {
+			if (!edgeShellPresent()) {
+				removeFallback();
+				edgeRuntime()?.closeProductMenu?.();
+				state.mode = "native-desk-hidden";
+				return;
+			}
 			const sharedTrigger = document.getElementById(EDGE_TRIGGER);
 			const fallbackTrigger = document.getElementById(FALLBACK_TRIGGER);
 			if (!sharedTrigger?.isConnected && !fallbackTrigger?.isConnected) {
@@ -406,12 +421,17 @@
 		}
 		if (window.MutationObserver && document.body) {
 			observer = new MutationObserver(() => {
+				if (!edgeShellPresent()) {
+					removeFallback();
+					state.mode = "native-desk-hidden";
+					return;
+				}
 				const sharedTrigger = document.getElementById(EDGE_TRIGGER);
 				const fallbackTrigger = document.getElementById(FALLBACK_TRIGGER);
-				const floating = document.getElementById(FALLBACK_SLOT)?.classList.contains("vetedge-product-menu-slot--floating");
-				const visibleNavbarReady = inspectTargets().some((target) => target.visible > 0);
-				if (!sharedTrigger?.isConnected && !fallbackTrigger?.isConnected) scheduleMount("navbar-mutation", 75);
-				else if (floating && visibleNavbarReady) scheduleMount("navbar-became-visible", 75);
+				const visibleShellTargetReady = inspectTargets().some((target) => target.visible > 0);
+				if (!sharedTrigger?.isConnected && !fallbackTrigger?.isConnected && visibleShellTargetReady) {
+					scheduleMount("edge-shell-mutation", 75);
+				}
 			});
 			observer.observe(document.body, { childList: true, subtree: true });
 			state.observerActive = true;
@@ -447,7 +467,7 @@
 			edgeRuntime()?.closeProductMenu?.();
 		},
 		diagnose,
-		selectors: NAVBAR_TARGET_SELECTORS.slice(),
+		selectors: EDGE_SHELL_TARGET_SELECTORS.slice(),
 	});
 
 	if (document.readyState === "loading") {

@@ -1,0 +1,223 @@
+campaign:
+  id: VE-QA-2026-08-28-001
+  product: VetEdge
+  type: full_release_qa
+  status: draft
+  qa_branch: qa/vetedge-full-implementation-2026-08-29
+  source_branch: qa/vetedge-release-candidate-2026-08-28
+  purpose: Consolidated browser, permission, workflow, reporting, accounting-safety, stock-safety, responsive and performance QA for the reconciled post-PR36 VetEdge implementation.
+  source_refs:
+    main_baseline: e08a9278c2c975a5e5d4221481a760a90e21a8ea
+    reporting_operations_pr47: 6e273352fdaacd2bbf478aa4caa5ce975a481a31
+    vcn_nadis_pr50: fa11960760fd85def526f5d0582a3bc15ff5b1a7
+    hospitalisation_episode_pr51: ffd054023297f29074e6945837a267b17ec150d5
+    reconciliation: 324114962b7f2225f169163173758f1298219035
+    consolidation_audit: docs/qa/vetedge_full_implementation_audit_2026-08-29.md
+
+release_rules:
+  answers: [PASS, FAIL, BLOCKED, NOT_APPLICABLE, NOT_TESTED]
+  critical_failure_blocks_release: true
+  save_progress_continuously: true
+  require_failure_comment: true
+  require_blocker_reason: true
+  freeze_on_submit: true
+  regression_policy: Retest failed, blocked, directly affected and critical-smoke cases only after fixes.
+
+tracks:
+  - id: NAV
+    module: Navigation and EdgeSuite Shell
+    priority: high
+    checks:
+      - canonical VetEdge routes and sidebar navigation
+      - browser back/forward and repeat navigation
+      - Product App launcher and active-state behaviour
+      - shared EdgeSuite shell ownership
+      - dark/light appearance
+      - responsive/mobile behaviour
+
+  - id: HOSP-OPS
+    module: Hospitalisation Operations
+    priority: critical
+    checks:
+      - branch-scoped list visibility
+      - filters and bounded searches
+      - pagination and summary parity
+      - drill-through to Hospitalisation Episode
+      - zero-branch fail-closed behaviour
+      - direct URL/API branch isolation
+
+  - id: HOSP-EP
+    module: Hospitalisation Episode
+    priority: critical
+    checks:
+      - overview and admission context
+      - clinical care actions
+      - care location workflow
+      - medication and stock posting
+      - vaccination and lab actions
+      - daily and manual charges
+      - invoice/payment-gate behaviour
+      - discharge readiness and discharge
+      - duplicate/idempotency protection
+      - submitted accounting document immutability
+      - practitioner/branch permission boundaries
+
+  - id: REPORT-STD
+    module: Reporting Standard
+    priority: high
+    checks:
+      - Stock Expiry
+      - Planned Treatment
+      - Consultation Register
+      - Laboratory/Lab Order
+      - Vaccination
+      - Owner Register
+      - Patient Register
+      - server pagination
+      - smart/cascading filters
+      - sorting
+      - drill-through
+      - branch and permission scope
+
+  - id: REPORT-ADV
+    module: Advanced Reporting
+    priority: high
+    checks:
+      - column chooser and shareable view state
+      - saved views
+      - previous-period comparison
+      - grouping and subtotals
+      - conditional highlighting
+      - exception reporting
+      - scheduled report management
+      - advanced entitlement gating
+
+  - id: EXPORT
+    module: Export Print PDF
+    priority: high
+    checks:
+      - CSV current page
+      - CSV all filtered
+      - XLSX current page
+      - XLSX all filtered
+      - PDF
+      - print
+      - raw versus presentation mode
+      - summary/filter/chart/letterhead options
+      - selected column order
+      - valid MIME/signature/file opening
+
+  - id: VCN
+    module: VCN NADIS Regulatory Reporting
+    priority: critical
+    checks:
+      - vaccination regulatory mappings
+      - distinct-animal aggregation
+      - disease outbreak workflow
+      - report readiness validation
+      - generated workbook fidelity
+      - private saved Report Run
+      - frozen attachment email send
+      - report lifecycle status controls
+      - administrator-only outbreak mutation boundary
+      - branch/company permissions
+
+  - id: ADMIN
+    module: Administration and Configuration
+    priority: high
+    checks:
+      - EdgeSuite administration workspaces
+      - branch access management
+      - practitioner coverage
+      - care locations
+      - role bundles
+      - notification preferences/items/logs
+      - settings navigation and contextual filtering
+
+  - id: TRAIN
+    module: Training Centre Regression
+    priority: medium
+    checks:
+      - shared shell regression smoke
+      - module search and refresh
+      - guide rendering
+      - Mermaid light/dark rendering
+      - tabs and deep links
+      - role security
+      - published module integrity
+
+  - id: PERM
+    module: Permissions Branch and Company Isolation
+    priority: critical
+    checks:
+      - Veterinary Administrator
+      - Veterinary Doctor
+      - Veterinary Nurse
+      - Front Desk
+      - Accountant
+      - branch-restricted user
+      - zero-assigned-branch user
+      - direct URL access
+      - direct API access
+      - cross-company isolation
+
+  - id: SAFETY
+    module: Accounting Stock and Clinical Safety
+    priority: critical
+    checks:
+      - submitted Sales Invoice immutability
+      - payment gate enforcement
+      - duplicate Stock Entry prevention
+      - batch and expiry enforcement
+      - vaccination stock posting
+      - hospitalisation charge idempotency
+      - discharge payment-gate behaviour
+      - no permission bypass
+
+  - id: PERF
+    module: Performance and Data Usage
+    priority: high
+    checks:
+      - cold navigation request count
+      - warm navigation request count
+      - repeat-navigation request count
+      - transferred bytes
+      - API payload size
+      - duplicate requests
+      - slowest APIs
+      - no unnecessary polling
+      - bounded remote searches
+
+excluded_tracks:
+  - id: COREDGE-REMOTE
+    reason: PR #11 and PR #12 remain a separate platform-integration campaign requiring central CoreEdge service provisioning and cutover-specific QA.
+
+issue_capture:
+  severity: [CRITICAL, HIGH, MEDIUM, LOW]
+  types:
+    - FUNCTIONALITY
+    - PERMISSION
+    - UI
+    - DATA
+    - ACCOUNTING
+    - STOCK
+    - PERFORMANCE
+    - MOBILE
+    - NAVIGATION
+    - REPORTING
+    - ENVIRONMENT
+  blocker_reasons:
+    - MISSING_TEST_DATA
+    - MISSING_CONFIGURATION
+    - DEPENDENCY_FAILURE
+    - PERMISSION_OR_SETUP_UNAVAILABLE
+    - PREVIOUS_STEP_FAILED
+    - ENVIRONMENT_PROBLEM
+    - OTHER
+
+next_platform_step:
+  repository: processedge-qa
+  hosting: Vercel
+  database: Supabase/PostgreSQL
+  first_product: VetEdge
+  import_source: this campaign manifest

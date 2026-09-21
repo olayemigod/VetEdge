@@ -63,26 +63,20 @@
 								</option>
 							</select>
 						</div>
-						<div class="edge-field">
-							<label class="edge-field-label">From Date</label>
-							<input
-								v-model="filters.from_date"
-								class="edge-input edge-control"
-								type="date"
-								:disabled="filters.date_preset !== 'custom'"
-								@change="applyCustomPeriod"
-							/>
-						</div>
-						<div class="edge-field">
-							<label class="edge-field-label">To Date</label>
-							<input
-								v-model="filters.to_date"
-								class="edge-input edge-control"
-								type="date"
-								:disabled="filters.date_preset !== 'custom'"
-								@change="applyCustomPeriod"
-							/>
-						</div>
+						<EdgeInput
+							v-model="filters.from_date"
+							type="date"
+							label="From Date"
+							:disabled="filters.date_preset !== 'custom'"
+							@change="applyCustomPeriod"
+						/>
+						<EdgeInput
+							v-model="filters.to_date"
+							type="date"
+							label="To Date"
+							:disabled="filters.date_preset !== 'custom'"
+							@change="applyCustomPeriod"
+						/>
 					</div>
 					<template #actions>
 						<button class="edge-button edge-button--primary edge-primary-button" :disabled="loading" @click="refresh">
@@ -327,6 +321,8 @@ export default {
 			const type = String(card.value_type || card.fieldtype || '').toLowerCase();
 			if (type === 'currency') return this.formatCurrency(card.value);
 			if (type === 'percent' && typeof card.value === 'number') return `${card.value.toFixed(1)}%`;
+			if (type === 'date') return window.VetEdgeDateTime?.formatDate?.(card.value, card.value) ?? card.value;
+			if (type === 'datetime') return window.VetEdgeDateTime?.formatDateTime?.(card.value, card.value) ?? card.value;
 			return card.value ?? 0;
 		},
 		cardTone(index) {
@@ -349,7 +345,7 @@ export default {
 				try {
 					const instance = new frappe.Chart(target, {
 						title: '',
-						data: chart.data,
+						data: window.VetEdgeDateTime?.formatChartData?.(chart.data) || chart.data,
 						type: chart.type || 'bar',
 						colors: chart.colors || ['#1677ff', '#16a34a', '#8b5cf6', '#f59e0b'],
 						barOptions: chart.barOptions || { stacked: 0 },
@@ -367,7 +363,7 @@ export default {
 			const labels = chart.data?.labels || [];
 			const values = chart.data?.datasets?.[0]?.values || [];
 			target.innerHTML = '<div class="table-responsive"><table class="edge-dashboard-table"><tbody>' +
-				labels.map((label, index) => `<tr><td>${frappe.utils.escape_html(label)}</td><td class="text-right">${frappe.utils.escape_html(this.formatValue({ value: values[index], ...chart }))}</td></tr>`).join('') +
+				labels.map((label, index) => `<tr><td>${frappe.utils.escape_html(window.VetEdgeDateTime?.formatChartLabel?.(label) ?? label)}</td><td class="text-right">${frappe.utils.escape_html(this.formatValue({ value: values[index], ...chart }))}</td></tr>`).join('') +
 				'</tbody></table></div>';
 		},
 		openReport(report) {

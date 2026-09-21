@@ -1,0 +1,23 @@
+{
+ "actions": [],
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["species", "nadis_species", "age_group", "sex", "number_susceptible", "number_cases", "number_deaths", "number_slaughtered", "number_destroyed", "number_vaccinated_around_outbreak"],
+ "fields": [
+  {"fieldname": "species", "fieldtype": "Link", "in_list_view": 1, "label": "Species", "options": "Veterinary Species", "reqd": 1},
+  {"description": "Snapshot of the official NADIS species wording mapped from Species.", "fieldname": "nadis_species", "fieldtype": "Data", "in_list_view": 1, "label": "NADIS Species", "read_only": 1},
+  {"description": "Use the age-group wording required by the official NADIS template.", "fieldname": "age_group", "fieldtype": "Data", "in_list_view": 1, "label": "Age Group"},
+  {"fieldname": "sex", "fieldtype": "Select", "in_list_view": 1, "label": "Sex", "options": "\nAll\nFemale\nMale\nUnknown"},
+  {"fieldname": "number_susceptible", "fieldtype": "Int", "label": "Number Susceptible"},
+  {"fieldname": "number_cases", "fieldtype": "Int", "in_list_view": 1, "label": "Number of Cases", "reqd": 1},
+  {"fieldname": "number_deaths", "fieldtype": "Int", "label": "Number of Deaths"},
+  {"fieldname": "number_slaughtered", "fieldtype": "Int", "label": "Number Slaughtered"},
+  {"fieldname": "number_destroyed", "fieldtype": "Int", "label": "Number Destroyed"},
+  {"fieldname": "number_vaccinated_around_outbreak", "fieldtype": "Int", "label": "Number Vaccinated Around Outbreak"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Outbreak Animal Group"
+}

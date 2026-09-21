@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from vetedge.services.billing import validate_consultation_billing_settings
@@ -161,6 +162,16 @@ class VeterinarySettings(Document):
 			set_if_field_exists(self, "portal_show_consultation_summary_only", 1)
 		if self.meta.has_field("payment_backend_mode") and not self.get("payment_backend_mode"):
 			self.set("payment_backend_mode", "stub")
+
+		if (
+			self.meta.has_field("enable_hospitalisation_daily_charges")
+			and not self.get("enable_hospitalisation_daily_charges")
+			and self.get("hospitalisation_initial_billing_source") == "Day 1 Daily Charge"
+		):
+			frappe.throw(
+				_("Day 1 Daily Charge cannot be used as the Hospitalisation Initial Billing Source while Hospitalisation Daily Charges are disabled."),
+				frappe.ValidationError,
+			)
 
 		validate_registration_settings(self)
 		validate_consultation_billing_settings(self)

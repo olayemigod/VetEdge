@@ -38,7 +38,7 @@ flowchart TD
 5. Confirm the primary owner before discussing or recording care decisions.
 6. Review prior consultations for complaint, assessment, diagnosis, treatment plan, and follow-up.
 7. Review Veterinary Vital Signs for trends such as weight, temperature, heart rate, respiratory rate, pain score, hydration, appetite, and mucous membrane.
-8. Review vaccination, lab, and Hospitalisation history.
+8. Review vaccination, lab, and Hospitalisation history. Confirm that Lab Orders appear only at `Completed` and Vaccination Records only at `Administered`; unfinished work remains in its source queue.
 9. Open the current appointment or consultation when ready to continue the visit.
 
 ## Trainer Notes
@@ -46,6 +46,8 @@ flowchart TD
 > Trainer Note: Pause here and explain that doctors should not create duplicate patient records. If the patient cannot be found, Front Desk should confirm registration before a new record is created.
 
 > Trainer Note: Explain that owner/customer records are shared with ERPNext. Doctors should update clinical information, not accounting details.
+
+> Trainer Note: Billing does not create clinical history. It may gate the clinical completion or administration action that later makes a Lab or Vaccination event visible.
 
 ## Practice Exercise
 
@@ -96,6 +98,7 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Consultation Workflow](training-module:consultation)
 - [Glossary](training-module:glossary)

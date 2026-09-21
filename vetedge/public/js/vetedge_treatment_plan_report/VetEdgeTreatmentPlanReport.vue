@@ -50,6 +50,7 @@
 				v-else
 				:columns="page.columns || []"
 				:rows="page.rows || []"
+				:formatter="formatCell"
 				row-key="name"
 				empty-title="No planned treatments"
 				empty-description="No treatment-plan rows match the selected filters."
@@ -121,6 +122,7 @@ export default {
 	},
 	mounted() { this.load(); },
 	methods: {
+		formatCell(value, column) { return window.VetEdgeDateTime?.formatCell?.(value, column) ?? value; },
 		async load() {
 			if (this.loading) return;
 			this.loading = true;

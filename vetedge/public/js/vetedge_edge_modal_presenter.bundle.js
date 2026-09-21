@@ -197,13 +197,14 @@ function createPresenter(edge) {
 				const columns = Array.isArray(section.columns) ? section.columns : [];
 				const groups = Array.isArray(section.rowActions) ? section.rowActions : [];
 				if (!groups.length) {
-					return h(EdgeDataTable, { columns, rows, rowKey: section.rowKey || "name", onRowClick: section.onRowClick });
+					return h(EdgeDataTable, { columns, rows, rowKey: section.rowKey || "name", formatter: window.VetEdgeDateTime?.formatCell, onRowClick: section.onRowClick });
 				}
 				const rowKey = section.rowKey || "name";
 				const groupMap = new Map(groups.map((group) => [String(group.key ?? group.row?.[rowKey] ?? ""), group]));
 				const renderCell = (column, row) => {
 					const value = row?.[column.fieldname] ?? "";
 					if (column.fieldtype === "Status") return h(EdgeStatusBadge, { label: String(value || __("Unknown")), status: String(value || "") });
+					if (["Date", "Datetime"].includes(column.fieldtype)) return window.VetEdgeDateTime?.formatByFieldtype?.(value, column.fieldtype, value) || value;
 					return String(value);
 				};
 				return h("div", { class: "vetedge-edge-inline-table-wrap" }, [
@@ -254,7 +255,7 @@ function createPresenter(edge) {
 					const fields = spec.fields.filter((field) => field && field.visible !== false);
 					blocks.push(h("div", { class: "vetedge-edge-modal-form", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,16rem),1fr))", gap: ".9rem 1rem" } }, fields.map((field, index) => this.renderField(field, index))));
 				}
-				if (spec.columns?.length) blocks.push(spec.rows?.length ? h(EdgeDataTable, { columns: spec.columns, rows: spec.rows, rowKey: spec.rowKey || "name", onRowClick: spec.onRowClick }) : h(EdgeEmptyState, { title: spec.emptyTitle || __("No records"), description: spec.emptyDescription || __("No matching records were found.") }));
+				if (spec.columns?.length) blocks.push(spec.rows?.length ? h(EdgeDataTable, { columns: spec.columns, rows: spec.rows, rowKey: spec.rowKey || "name", formatter: window.VetEdgeDateTime?.formatCell, onRowClick: spec.onRowClick }) : h(EdgeEmptyState, { title: spec.emptyTitle || __("No records"), description: spec.emptyDescription || __("No matching records were found.") }));
 				if (spec.sections?.length) {
 					for (const section of spec.sections) {
 						const sectionBlocks = [h("h3", { style: { margin: "0" } }, section.title || "")];

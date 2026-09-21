@@ -141,15 +141,12 @@
 						@search-error="handleFieldError"
 					/>
 
-					<label class="vetedge-appointment-flow-field">
-						<span class="vetedge-appointment-flow-label">Appointment Date/Time <b>*</b></span>
-						<input
-							v-model="form.appointment_datetime"
-							type="datetime-local"
-							class="vetedge-appointment-flow-control"
-							required
-						/>
-					</label>
+					<EdgeInput
+						v-model="form.appointment_datetime"
+						type="datetime-local"
+						label="Appointment Date/Time"
+						required
+					/>
 				</div>
 
 				<label class="vetedge-appointment-flow-field vetedge-appointment-flow-field--wide">

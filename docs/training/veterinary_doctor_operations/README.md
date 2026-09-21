@@ -1,12 +1,27 @@
-# Veterinary Doctor Training Documentation Pack
+# VetEdge Role-Based Training Documentation Pack
 
-This folder contains the doctor-facing VetEdge training documentation pack. It is written for practical clinic use: onboarding new veterinary doctors, running live staff training, supporting client handover, displaying content in the Veterinary Training Centre, and preparing for future PDF export.
+This folder contains the role-based VetEdge training documentation pack. It supports onboarding, supervised practice, refresher training, client handover and Veterinary Training Centre display for every current VetEdge starter role bundle.
 
 The same Markdown guides are available inside Desk through the Veterinary Training Centre page. Markdown remains the source of truth; the Desk page reads the module manifest and renders the approved guide files without copying them into database records.
 
-Start with the main manual:
+Every operational user begins with:
+
+- [Veterinary Home and EdgeSuite Daily Start](training-module:shared-veterinary-home)
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Safe Workflow Handoffs](training-module:shared-safe-handoffs)
+
+Role learning paths include:
 
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
+- [Owner and Administrator Operations](training-module:owner-administrator-operations)
+- [Branch Manager Operations](training-module:branch-manager-operations)
+- [Veterinary Nursing Operations](training-module:nursing-operations)
+- [Front Desk Operations and Billing Center](training-module:front-desk-operations)
+- [Accounts, Cashier and Billing Operations](training-module:accounts-billing-operations)
+- [Dispensary and Stock Operations](training-module:dispensary-stock-operations)
+- [Laboratory Operations](training-module:laboratory-operations)
+- [Grooming Operations](training-module:grooming-operations)
+- [Boarding Operations](training-module:boarding-operations)
 
 Use the module guides when a trainer or doctor needs more detail for a specific workflow:
 
@@ -30,13 +45,13 @@ Use the module guides when a trainer or doctor needs more detail for a specific 
 
 ## How to Use This Pack
 
-1. Open the main training manual and use it as the live training agenda.
-2. Open each module guide when trainees need a deeper walkthrough.
+1. Complete the three Shared Operations modules.
+2. Open the learning path visible for the trainee's assigned role bundle.
 3. Use the practical exercises during supervised practice.
-4. Use the checklist and assessment sections before allowing independent doctor use.
+4. Use the checklist and assessment sections before allowing independent production use.
 5. Use the screenshot manifest to track which images are captured or still pending.
 6. In Desk, open `Training Centre` from the Veterinary workspace/sidebar to read the same modules.
-7. Use the manual QA checklist before handing the Training Centre to clinic trainers or doctors.
+7. Use the manual QA checklist before handing the Training Centre to clinic trainers or users.
 
 ## Desk Training Centre
 
@@ -75,4 +90,4 @@ Screenshots are currently placeholders. See [screenshot_manifest.md](training-mo
 
 ## Folder Scope
 
-This folder is documentation only. It does not change DocTypes, permissions, business logic, reports, dashboards, fixtures, patches, hooks, migrations, or live data.
+The Markdown files are documentation only. The Training Centre service enforces role visibility from the module role group; it does not grant DocType, report, page, branch, stock or accounting permission.

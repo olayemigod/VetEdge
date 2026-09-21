@@ -29,6 +29,8 @@
 		const valueType = String(card.value_type || card.fieldtype || card.format || "").toLowerCase();
 		if (valueType === "currency") return "currency";
 		if (valueType === "percent") return "percent";
+		if (valueType === "date") return "date";
+		if (valueType === "datetime") return "datetime";
 		return fallback;
 	}
 
@@ -43,6 +45,10 @@
 			formattedValue = formatCurrency(card.value);
 		} else if (formatterType === "percent" && typeof card.value === "number") {
 			formattedValue = `${roundValue(card.value, 1)}%`;
+		} else if (formatterType === "date") {
+			formattedValue = window.VetEdgeDateTime?.formatDate?.(card.value, card.value) ?? card.value;
+		} else if (formatterType === "datetime") {
+			formattedValue = window.VetEdgeDateTime?.formatDateTime?.(card.value, card.value) ?? card.value;
 		}
 		
 		const trendHtml = renderTrend(card.trend);
@@ -410,7 +416,7 @@
 			try {
 				container.empty();
 				const instance = new frappe.Chart(element, {
-					title: chart.title || "", data: chart.data, type: chart.type || "bar",
+					title: chart.title || "", data: window.VetEdgeDateTime?.formatChartData?.(chart.data) || chart.data, type: chart.type || "bar",
 					colors: chart.colors || ["#5b8def"], barOptions: chart.barOptions || { stacked: 0 }, height: 260,
 					tooltipOptions: { formatTooltipY: (value) => formatChartValue(value, chart) },
 				});
@@ -428,6 +434,7 @@
 		chartArea.empty();
 		if (!charts || !charts.length) { chartArea.html('<div class="text-muted small">No chart data available for the current filters.</div>'); return; }
 		charts.forEach((chart, index) => {
+			chart = { ...chart, data: window.VetEdgeDateTime?.formatChartData?.(chart.data) || chart.data };
 			const chartId = `vetedge-dashboard-chart-${index}`;
 			chartArea.append(`<div class="col-md-6 mb-4"><div class="border rounded p-3 bg-white h-100"><div class="mb-2" style="font-weight: 600;">${escapeHtml(chart.title || "Chart")}</div><div id="${chartId}" style="min-height: 280px;"></div></div></div>`);
 			const container = chartArea.find(`#${chartId}`);

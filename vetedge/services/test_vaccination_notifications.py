@@ -41,7 +41,12 @@ def _install_stub_modules() -> None:
 			"create_notification_item": lambda *args, **kwargs: {"created": True, "name": "VNI-001"},
 			"get_role_recipients": lambda *args, **kwargs: [],
 			"get_user_recipient": lambda user, **kwargs: {"user": user} if user else None,
-			"get_notification_settings": lambda: {"enabled": True, "vaccination_due_reminder_days": 7},
+			"get_notification_settings": lambda: {
+			"enabled": True,
+			"notify_on_vaccination_reminders": True,
+			"vaccination_due_reminder_days": 7,
+			"vaccination_reminder_repeat_days": 3,
+		},
 		}
 	}
 	for name, attrs in stubs.items():
@@ -209,11 +214,30 @@ class TestVaccinationNotifications(TestCase):
 		self.assertEqual(created_items[0]["recipient_user"], "doctor@example.com")
 		self.assertEqual(created_items[0]["idempotency_key"], "vaccination_overdue::VVAC-002::2026-06-20::doctor@example.com")
 
+	def test_run_vaccination_notification_checks_respects_disabled_setting(self):
+		with (
+			patch(
+				"vetedge.services.vaccination_notifications.get_notification_settings",
+				return_value={"enabled": True, "notify_on_vaccination_reminders": False},
+			),
+			patch("vetedge.services.vaccination_notifications.send_due_vaccination_notifications") as due,
+			patch("vetedge.services.vaccination_notifications.send_overdue_vaccination_notifications") as overdue,
+		):
+			result = vaccination_notifications.run_vaccination_notification_checks()
+
+		self.assertEqual(result, {"vaccination_due": [], "vaccination_overdue": []})
+		due.assert_not_called()
+		overdue.assert_not_called()
+
 	def test_run_vaccination_notification_checks_triggers_both_runs(self):
 		due_called = []
 		overdue_called = []
 		
 		with (
+			patch(
+				"vetedge.services.vaccination_notifications.get_notification_settings",
+				return_value={"enabled": True, "notify_on_vaccination_reminders": True},
+			),
 			patch("vetedge.services.vaccination_notifications.send_due_vaccination_notifications", side_effect=lambda: due_called.append(True)),
 			patch("vetedge.services.vaccination_notifications.send_overdue_vaccination_notifications", side_effect=lambda: overdue_called.append(True))
 		):

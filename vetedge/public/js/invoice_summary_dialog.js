@@ -85,8 +85,8 @@ function renderInvoiceSummary(invoice) {
 	const currency = invoice.currency || frappe.defaults.get_default("currency");
 	const total = format_currency(invoice.grand_total || 0, currency);
 	const outstanding = format_currency(invoice.outstanding_amount || 0, currency);
-	const postingDate = invoice.posting_date ? frappe.datetime.str_to_user(invoice.posting_date) : __("Unknown");
-	const dueDate = invoice.due_date ? frappe.datetime.str_to_user(invoice.due_date) : __("Unknown");
+	const postingDate = invoice.posting_date ? window.VetEdgeDateTime.formatDate(invoice.posting_date) : __("Unknown");
+	const dueDate = invoice.due_date ? window.VetEdgeDateTime.formatDate(invoice.due_date) : __("Unknown");
 	const invoiceUrl = invoice.name ? buildInvoiceUrl(invoice.name) : "";
 
 	return `
@@ -162,7 +162,7 @@ function renderInvoiceHistory(invoices) {
 					const currency = invoice.currency || frappe.defaults.get_default("currency");
 					const total = format_currency(invoice.grand_total || 0, currency);
 					const outstanding = format_currency(invoice.outstanding_amount || 0, currency);
-					const postingDate = invoice.posting_date ? frappe.datetime.str_to_user(invoice.posting_date) : __("Unknown");
+					const postingDate = invoice.posting_date ? window.VetEdgeDateTime.formatDate(invoice.posting_date) : __("Unknown");
 
 					return `
 						<div class="frappe-card p-3 mb-3" data-invoice-name="${frappe.utils.escape_html(invoice.name)}" style="cursor: pointer;">

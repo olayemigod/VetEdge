@@ -18,6 +18,7 @@ from vetedge.services.permissions import (
 	can_apply_role_bundle,
 	can_manage_role_bundles,
 )
+from vetedge.services.role_bundle_security import validate_role_bundle_document
 
 
 STARTER_ROLE_BUNDLES = {
@@ -135,6 +136,21 @@ def ensure_existing_internal_users_have_starter_bundle_roles() -> None:
 			ensure_user_has_roles(user, bundle_roles)
 
 
+def _ensure_vetedge_default_app(user_doc) -> bool:
+	"""Make Veterinary Home the default only when the user has no explicit app preference.
+
+	This is intentionally user-scoped rather than a global Role.home_page override so
+	mixed ERPNext/ProcessEdge users keep any default app they already selected.
+	"""
+	if not user_doc or not getattr(user_doc, "name", None):
+		return False
+	if getattr(user_doc, "default_app", None):
+		return False
+	user_doc.db_set("default_app", "vetedge", update_modified=False)
+	user_doc.default_app = "vetedge"
+	return True
+
+
 def ensure_user_has_roles(user: str, roles: list[str]) -> list[str]:
 	user_doc = frappe.get_doc("User", user)
 	existing_roles = {row.role for row in user_doc.get("roles") or []}
@@ -147,6 +163,7 @@ def ensure_user_has_roles(user: str, roles: list[str]) -> list[str]:
 		existing_roles.add(role)
 		added_roles.append(role)
 
+	_ensure_vetedge_default_app(user_doc)
 	return added_roles
 
 
@@ -166,6 +183,11 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 	if cint(getattr(bundle, "is_active", 1)) != 1:
 		frappe.throw("Only active role bundles can be applied.", frappe.ValidationError)
 
+	# Revalidate at application time as well as on bundle save. This blocks a
+	# Veterinary administrator from applying any historical or externally-created
+	# bundle containing a role that only System Manager may delegate.
+	validate_role_bundle_document(bundle, user=acting_user)
+
 	user_doc = frappe.get_doc("User", target_user)
 	existing_roles = {row.role for row in user_doc.get("roles") or []}
 	bundle_roles = []
@@ -182,6 +204,8 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 		added_roles.append(row.role)
 		existing_roles.add(row.role)
 
+	default_app_set = _ensure_vetedge_default_app(user_doc)
+
 	log_operational_event(
 		"role_bundle_applied",
 		"allowed",
@@ -192,6 +216,7 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 			"bundle": bundle_name,
 			"bundle_roles": bundle_roles,
 			"added_roles": added_roles,
+			"default_app_set": default_app_set,
 		},
 	)
 
@@ -201,6 +226,7 @@ def apply_role_bundle(bundle_name: str, target_user: str, acting_user: str | Non
 		"bundle_roles": bundle_roles,
 		"added_roles": added_roles,
 		"already_present_roles": [role for role in bundle_roles if role not in added_roles],
+		"default_app_set": default_app_set,
 	}
 
 

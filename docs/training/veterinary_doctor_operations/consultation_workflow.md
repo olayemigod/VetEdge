@@ -138,6 +138,8 @@ See [Screenshot Manifest](training-module:screenshot-manifest) for capture instr
 
 ## Related Guides
 
+- [Medical History Completion and Clinical Truth](training-module:shared-medical-history)
+- [Safe Workflow Handoffs](training-module:shared-safe-handoffs)
 - [Veterinary Doctor Training Manual](training-module:doctor-overview)
 - [Lab Order Workflow](training-module:lab-order)
 - [Vaccination and Preventive Care Workflow](training-module:vaccination)

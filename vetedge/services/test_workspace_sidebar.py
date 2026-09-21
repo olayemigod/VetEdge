@@ -429,9 +429,9 @@ class TestWorkspaceSidebar(TestCase):
 
 		from vetedge.services.branding import get_branding
 		branding = get_branding()
-		expected_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+		expected_label = branding.get("module_label") or "Veterinary"
 
-		# Desktop icon/app launcher label remains VetEdge
+		# Desktop icon/app launcher label uses the operational module identity.
 		self.assertEqual(doc.label, expected_label)
 		# Desktop icon route points to the intended Veterinary operational landing route
 		self.assertEqual(doc.link_type, "Workspace Sidebar")

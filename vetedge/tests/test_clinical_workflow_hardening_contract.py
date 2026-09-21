@@ -17,7 +17,8 @@ def test_shared_billing_uses_edgesuite_and_owner_patient_context():
     assert "VetEdgeEdgeModalPresenter" in billing
     assert "new frappe.ui.Dialog" not in billing
     assert 'type: "select"' in billing
-    assert 'type: "link"' in billing
+    assert 'doctype: "Account"' not in billing
+    assert "Paid To Account" not in billing
     assert "Other Outstanding Invoices for this Owner" in billing
     assert 'fieldname: "patient_name"' in billing
     assert "outstanding_context_scope" in backend

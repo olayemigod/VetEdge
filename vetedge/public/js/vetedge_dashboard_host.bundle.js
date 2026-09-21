@@ -138,6 +138,8 @@ function formatMetric(card = {}) {
 	if (type === "percent" && Number.isFinite(Number(value))) return `${Number(value).toFixed(1)}%`;
 	if (type === "float" && Number.isFinite(Number(value))) return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 	if (type === "int" || type === "integer") return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+	if (type === "date") return window.VetEdgeDateTime?.formatDate?.(value, value) ?? value;
+	if (type === "datetime") return window.VetEdgeDateTime?.formatDateTime?.(value, value) ?? value;
 	return value ?? 0;
 }
 
@@ -269,7 +271,7 @@ function createDashboardComponent(page, config, runtime) {
 				try {
 					const instance = new frappe.Chart(target, {
 						title: "",
-						data: chart.data,
+						data: window.VetEdgeDateTime?.formatChartData?.(chart.data) || chart.data,
 						type: chart.type || "bar",
 						colors,
 						barOptions: chart.barOptions || { stacked: 0 },
@@ -507,14 +509,18 @@ function createDashboardComponent(page, config, runtime) {
 				if (!tables.length) return null;
 				return tables.map((table) => {
 					const currencyFields = new Set((table.columns || []).filter((column) => String(column.fieldtype).toLowerCase() === "currency").map((column) => column.fieldname));
+					const dateFields = new Map((table.columns || []).filter((column) => ["date", "datetime"].includes(String(column.fieldtype).toLowerCase())).map((column) => [column.fieldname, column.fieldtype]));
 					const rows = (table.rows || []).map((row) => {
 						const next = { ...row };
 						currencyFields.forEach((fieldname) => {
 							next[fieldname] = formatCurrency(row[fieldname]);
 						});
+						dateFields.forEach((fieldtype, fieldname) => {
+							next[fieldname] = window.VetEdgeDateTime?.formatByFieldtype?.(row[fieldname], fieldtype, row[fieldname]) ?? row[fieldname];
+						});
 						return next;
 					});
-					const columns = (table.columns || []).map((column) => ({ ...column, fieldtype: currencyFields.has(column.fieldname) ? "Data" : column.fieldtype }));
+					const columns = (table.columns || []).map((column) => ({ ...column, fieldtype: currencyFields.has(column.fieldname) || dateFields.has(column.fieldname) ? "Data" : column.fieldtype }));
 					return h("section", { class: "vetedge-edge-dashboard-section", key: table.title }, [
 						h("header", { class: "vetedge-edge-dashboard-section__heading" }, [
 							h("div", [

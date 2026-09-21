@@ -34,8 +34,21 @@
 		}
 
 		init() {
+			this.setupDisplayFormatter();
 			this.setupDatePresets();
 			this.hookSummaryRender();
+		}
+
+		setupDisplayFormatter() {
+			const formatter = window.VetEdgeDateTime?.reportFormatter;
+			if (!formatter) return;
+			// Frappe reads this setting again whenever the report DataTable renders.
+			// Assign it only to VetEdge reports using this enhancer.
+			this.report.report_settings = this.report.report_settings || {};
+			this.report.report_settings.formatter = formatter;
+			if (frappe.query_reports?.[this.reportName]) {
+				frappe.query_reports[this.reportName].formatter = formatter;
+			}
 		}
 
 		setupDatePresets() {

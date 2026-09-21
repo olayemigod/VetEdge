@@ -220,6 +220,9 @@ def create_registration_invoice(doc, rule: RegistrationBillingRule):
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = cost_center
 
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.insert(ignore_permissions=True)
 	return invoice
 

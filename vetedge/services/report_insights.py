@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from collections import Counter
+
 import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt, getdate, nowdate
+
 from vetedge.services.report_metadata import get_report_definition
 
 MONEY_REPORTS = {"Revenue Summary", "Unpaid Invoice Report", "Hospitalisation Charge Summary"}
@@ -55,6 +57,16 @@ def normalize_iterable_value(value):
 	if isinstance(value, (list, tuple, set)):
 		return value
 	return [value]
+
+
+def display_filter_value(key, value):
+	name = cstr(key).lower()
+	if name.endswith("_date") or name in {"date", "from_date", "to_date"}:
+		try:
+			return getdate(value).strftime("%d-%m-%Y")
+		except (TypeError, ValueError):
+			pass
+	return value
 
 
 def build_report_summary(report_name, rows, filters=None, existing_summary=None, prev_rows=None):
@@ -262,8 +274,8 @@ def _build_metadata_insights(report_name, rows, prev_rows, definition, filters) 
 			"message": _("No data matching filters."),
 			"suggestions": [_("Check the filter inputs.")]
 		}),
-		"last_refresh": nowdate(),
-		"filter_summary": ", ".join(f"{k}: {v}" for k, v in filters.items() if v)
+		"last_refresh": getdate(nowdate()).strftime("%d-%m-%Y"),
+		"filter_summary": ", ".join(f"{k}: {display_filter_value(k, v)}" for k, v in filters.items() if v)
 	}
 
 	# Append metadata dict to the cards list

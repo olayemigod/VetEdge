@@ -12,8 +12,50 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 TRAINING_DOCS_ROOT = APP_ROOT / "docs" / "training" / "veterinary_doctor_operations"
 TRAINING_MODULES_PATH = TRAINING_DOCS_ROOT / "training_modules.json"
 
-ADMIN_TRAINING_ROLES = {"System Manager", "VetEdge Administrator", "Branch Manager", "VetEdge Branch Manager"}
-DOCTOR_TRAINING_ROLES = {"VetEdge Doctor", "Veterinary Doctor"}
+ADMIN_TRAINING_ROLES = {"System Manager", "VetEdge Administrator"}
+ROLE_GROUP_ORDER = {
+	"Shared Operations": 0,
+	"Owner & Administration": 10,
+	"Branch Management": 20,
+	"Doctor Operations": 30,
+	"Nursing Operations": 40,
+	"Front Desk Operations": 50,
+	"Accounts & Billing": 60,
+	"Dispensary & Stock": 70,
+	"Laboratory Operations": 80,
+	"Grooming Operations": 90,
+	"Boarding Operations": 100,
+}
+ROLE_GROUP_ROLES = {
+	"Shared Operations": {
+		"VetEdge Administrator",
+		"Branch Manager",
+		"VetEdge Branch Manager",
+		"VetEdge Doctor",
+		"Veterinary Doctor",
+		"Veterinary Nurse",
+		"VetEdge Nurse",
+		"VetEdge Front Desk",
+		"Accounts/Cashier",
+		"VetEdge Accounts/Cashier",
+		"Accounts Manager",
+		"Dispensary User",
+		"VetEdge Dispensary User",
+		"Lab Technician",
+		"VetEdge Lab Technician",
+		"VetEdge Groomer",
+	},
+	"Owner & Administration": ADMIN_TRAINING_ROLES,
+	"Branch Management": {"Branch Manager", "VetEdge Branch Manager"},
+	"Doctor Operations": {"VetEdge Doctor", "Veterinary Doctor"},
+	"Nursing Operations": {"Veterinary Nurse", "VetEdge Nurse"},
+	"Front Desk Operations": {"VetEdge Front Desk"},
+	"Accounts & Billing": {"Accounts/Cashier", "VetEdge Accounts/Cashier", "Accounts Manager"},
+	"Dispensary & Stock": {"Dispensary User", "VetEdge Dispensary User"},
+	"Laboratory Operations": {"Lab Technician", "VetEdge Lab Technician"},
+	"Grooming Operations": {"VetEdge Groomer"},
+	"Boarding Operations": {"VetEdge Front Desk", "Branch Manager", "VetEdge Branch Manager"},
+}
 ALLOWED_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com"}
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,}$")
 VIDEO_STATUSES = {"Not Recorded", "Recorded", "Published", "Needs Review"}
@@ -43,7 +85,14 @@ def load_training_manifest() -> list[dict]:
 		_training_error("Training module setup must contain a list of modules.")
 
 	modules = [normalize_manifest_row(row) for row in raw_modules]
-	return sorted(modules, key=lambda row: (int(row.get("order") or 0), row.get("title") or ""))
+	return sorted(
+		modules,
+		key=lambda row: (
+			ROLE_GROUP_ORDER.get(row.get("role_group") or "", 999),
+			int(row.get("order") or 0),
+			row.get("title") or "",
+		),
+	)
 
 
 def normalize_manifest_row(row: dict) -> dict:
@@ -58,11 +107,14 @@ def normalize_manifest_row(row: dict) -> dict:
 	video_status = str(row.get("video_status") or "").strip()
 	if video_status not in VIDEO_STATUSES:
 		_training_error("Training video status needs review.")
+	role_group = str(row.get("role_group") or "").strip()
+	if role_group not in ROLE_GROUP_ROLES:
+		_training_error("Training module role group is not approved.")
 
 	module = {
 		"module_id": str(row["module_id"]).strip(),
 		"title": str(row["title"]).strip(),
-		"role_group": str(row["role_group"]).strip(),
+		"role_group": role_group,
 		"short_description": str(row.get("short_description") or row.get("description") or "").strip(),
 		"markdown_path": str(row["markdown_path"]).strip(),
 		"youtube_url": str(row.get("youtube_url") or "").strip(),
@@ -81,9 +133,8 @@ def can_view_training_module(module: dict, user: str | None = None) -> bool:
 	roles = get_user_training_roles(user)
 	if roles & ADMIN_TRAINING_ROLES:
 		return True
-	if module.get("role_group") == "Doctor Operations" and roles & DOCTOR_TRAINING_ROLES:
-		return True
-	return False
+	allowed_roles = ROLE_GROUP_ROLES.get(module.get("role_group") or "", set())
+	return bool(roles & allowed_roles)
 
 
 def get_visible_training_modules(user: str | None = None) -> list[dict]:

@@ -297,8 +297,8 @@
 					${item.category ? `<span>${escapeHtml(item.category)}</span>` : ""}
 					${item.priority ? `<span>${escapeHtml(item.priority)}</span>` : ""}
 					<span>${escapeHtml(status)}</span>
-					${item.creation ? `<span>${escapeHtml(item.creation)}</span>` : ""}
-					${item.due_datetime ? `<span>${__("Due")}: ${escapeHtml(item.due_datetime)}</span>` : ""}
+					${item.creation ? `<span>${escapeHtml(window.VetEdgeDateTime?.formatDateTime?.(item.creation, item.creation) || item.creation)}</span>` : ""}
+					${item.due_datetime ? `<span>${__("Due")}: ${escapeHtml(window.VetEdgeDateTime?.formatDateTime?.(item.due_datetime, item.due_datetime) || item.due_datetime)}</span>` : ""}
 				</div>
 				<div class="veterinary-unread-badge-drawer-actions">
 					${actions.map((action) => renderAction(action)).join("")}

@@ -11,7 +11,6 @@ from vetedge.services.appointment_flow import (
 	APPOINTMENT_STATUSES,
 	cancel_missed_appointment,
 	create_consultation_from_appointment,
-	emit_appointment_status_notification,
 	ensure_appointments_enabled,
 	mark_missed_appointment_contacted,
 	reopen_missed_appointment,
@@ -114,7 +113,7 @@ def _cancel_guest_request(doc) -> None:
 	if doc.linked_appointment and frappe.db.exists("Veterinary Appointment", doc.linked_appointment):
 		appointment = frappe.get_doc("Veterinary Appointment", doc.linked_appointment); appointment.check_permission("write")
 		if appointment.status != "Awaiting Registration": frappe.throw(_("The linked appointment has already progressed and must be handled from Appointments."), frappe.ValidationError)
-		previous_status = appointment.status; appointment.status = "Cancelled"; appointment.save(); emit_appointment_status_notification(appointment, previous_status, appointment.status)
+		appointment.status = "Cancelled"; appointment.save()
 	doc.status = "Cancelled"; doc.save()
 
 @frappe.whitelist()

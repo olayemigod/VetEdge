@@ -346,7 +346,11 @@ def _apply_branch_default_and_restriction(filters, user: str | None) -> None:
 
 	assigned_branches = _allowed_branches_for_user(user)
 	if not assigned_branches:
-		return
+		frappe.throw(
+			_("No Veterinary Branch is assigned to this user. Reporting access is blocked until a branch is assigned."),
+			frappe.PermissionError,
+			title=_("Branch Assignment Required"),
+		)
 
 	selected_branch = cstr(filters.get("branch") or "").strip()
 	if selected_branch:
@@ -421,4 +425,3 @@ def get_earliest_transaction_date():
 	except Exception:
 		pass
 	return earliest_date
-

@@ -21,12 +21,7 @@ def test_operational_edgesuite_pages_reuse_mounted_surfaces_before_reset_and_ass
             "if (wrapper.vue_app?.view)",
             "VETEDGE_CLINICAL_REFRESH_MAX_AGE_MS = 15000",
         ),
-        "front_desk": (
-            "vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js",
-            "if (wrapper.vue_app?.view)",
-            "VETEDGE_FRONT_DESK_REFRESH_MAX_AGE_MS = 15000",
-        ),
-        "service_operations": (
+		"service_operations": (
             "vetedge/veterinary/page/vetedge_service_operations/vetedge_service_operations.js",
             "if (wrapper.vue_app?.view)",
             "VETEDGE_SERVICE_OPERATIONS_REFRESH_MAX_AGE_MS = 15000",
@@ -79,19 +74,36 @@ def test_clinical_warm_navigation_is_route_aware_and_preserves_dirty_work():
         assert contract in content
 
 
-def test_front_desk_warm_navigation_refreshes_only_route_changes_or_stale_data():
-    content = read("vetedge/veterinary/page/vetedge_front_desk_action_center/vetedge_front_desk_action_center.js")
+def test_dedicated_front_desk_pages_share_warm_navigation_host():
+	host = read("vetedge/public/js/vetedge_front_desk_page_host.js")
+	reuse_index = host.index("if (wrapper.vue_app?.view)")
+	reset_index = host.index("$(page.body).empty()")
+	asset_index = host.index('frappe.require("edgeui.bundle.js"')
 
-    for contract in (
-        "frontDeskRouteState()",
-        "routeChanged || stale",
-        "view.refreshAll?.()",
-        "view.openGuestDetail?.({ name: requested.name })",
-        "view.openMissedDetail?.({ name: requested.name })",
-        "view.openQueueDetail?.({ name: requested.name })",
-        "front_desk_last_refresh_at",
-    ):
-        assert contract in content
+	assert reuse_index < reset_index
+	assert reuse_index < asset_index
+	assert "const REFRESH_MAX_AGE_MS = 15000;" in host
+	assert "setInterval(" not in host
+
+	for contract in (
+		"const routeKey = `${fixedTab}:${name}`;",
+		"wrapper.front_desk_route_key !== routeKey || stale",
+		"view.refreshAll?.()",
+		"view.openGuestDetail?.({ name })",
+		"view.openMissedDetail?.({ name })",
+		"view.openQueueDetail?.({ name })",
+		"front_desk_last_refresh_at",
+	):
+		assert contract in host
+
+	for page, fixed_tab in (
+		("vetedge_front_desk_queue", "queue"),
+		("vetedge_front_desk_guest_bookings", "guest"),
+		("vetedge_front_desk_missed_appointments", "missed"),
+	):
+		loader = read(f"vetedge/veterinary/page/{page}/{page}.js")
+		assert "vetedge_front_desk_page_host.js" in loader
+		assert f"fixedTab: '{fixed_tab}'" in loader
 
 
 def test_service_operations_warm_navigation_syncs_resource_without_remounting():
@@ -234,12 +246,19 @@ def test_shared_navigation_adapter_uses_frappe_spa_router_before_full_navigation
     assert "window.location.assign(deskRoute(route));" not in block
 
 
-def test_veterinary_home_redirect_guard_is_transient_for_repeated_spa_visits():
-    content = read("vetedge/veterinary/page/vetedge/vetedge.js")
+def test_veterinary_home_is_a_warm_reusable_dashboard_not_a_redirect():
+	content = read("vetedge/veterinary/page/vetedge/vetedge.js")
 
-    assert "if (wrapper.__vetedge_home_redirecting) return;" in content
-    assert "wrapper.__vetedge_home_redirecting = true;" in content
-    assert "const finishRedirect = () => {" in content
-    assert "wrapper.__vetedge_home_redirecting = false;" in content
-    assert 'Promise.resolve(frappe.set_route("vetedge-resource-center")).finally(finishRedirect);' in content
-    assert content.index("wrapper.__vetedge_home_redirecting = false;") > content.index("wrapper.__vetedge_home_redirecting = true;")
+	reuse_index = content.index("if (wrapper.vue_app?.view)")
+	reset_index = content.index("$(page.body).empty()")
+	asset_index = content.index('frappe.require("edgeui.bundle.js"')
+
+	assert reuse_index < reset_index
+	assert reuse_index < asset_index
+	assert "VETEDGE_HOME_REFRESH_MAX_AGE_MS = 30000" in content
+	assert "await view.loadHome?.();" in content
+	assert "vetedge_home_last_refresh_at" in content
+	assert "window.mountVetEdgeHome" in content
+	assert "__vetedge_home_redirecting" not in content
+	assert 'frappe.set_route("vetedge-resource-center")' not in content
+	assert "setInterval(" not in content

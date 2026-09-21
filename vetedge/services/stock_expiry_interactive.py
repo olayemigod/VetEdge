@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import add_days, cint, flt, getdate, nowdate
+from frappe.utils import add_days, cint, cstr, flt, getdate, nowdate
 
 from vetedge.services.stock import get_branch_dispensary_warehouse
 from vetedge.services.stock_expiry_monitor import (
+	_batch_stock_ledger_source,
 	_expiry_bucket_label,
 	_get_warehouse_branch_map,
 	_has_stock_expiry_source,
@@ -14,6 +15,46 @@ from vetedge.services.stock_expiry_monitor import (
 
 MAX_INTERACTIVE_PAGE_LENGTH = 500
 DEFAULT_INTERACTIVE_PAGE_LENGTH = 50
+SORT_FIELDS = {
+	"item_code": "item_code",
+	"item_name": "item_name",
+	"batch_no": "batch_no",
+	"warehouse": "warehouse",
+	"qty": "qty",
+	"stock_uom": "stock_uom",
+	"expiry_date": "expiry_date",
+	"days_to_expiry": "DATEDIFF(expiry_date, %(today)s)",
+	"expiry_status": "expiry_status",
+}
+DEFAULT_SORT = {"field": "expiry_date", "direction": "asc"}
+
+
+def _normalize_sort(value) -> dict:
+	if not value:
+		return dict(DEFAULT_SORT)
+	parsed = value if isinstance(value, dict) else frappe.parse_json(value)
+	if not isinstance(parsed, dict):
+		frappe.throw("Expected Stock Expiry sort as a JSON object.", frappe.ValidationError)
+	field = cstr(parsed.get("field") or parsed.get("fieldname") or parsed.get("key")).strip()
+	direction = cstr(parsed.get("direction") or parsed.get("order")).strip().lower()
+	if field not in SORT_FIELDS or direction not in {"asc", "desc"}:
+		return dict(DEFAULT_SORT)
+	return {"field": field, "direction": direction}
+
+
+def _order_by(sort: dict) -> str:
+	field = sort.get("field") if sort.get("field") in SORT_FIELDS else DEFAULT_SORT["field"]
+	direction = "ASC" if sort.get("direction") == "asc" else "DESC"
+	source = SORT_FIELDS[field]
+	parts = []
+	if field in {"item_name", "warehouse", "stock_uom", "expiry_date", "days_to_expiry"}:
+		parts.append(f"CASE WHEN {source} IS NULL THEN 1 ELSE 0 END ASC")
+	parts.append(f"{source} {direction}")
+	if field != "item_code":
+		parts.append("item_code ASC")
+	if field != "batch_no":
+		parts.append("batch_no ASC")
+	return ", ".join(parts)
 
 
 def get_stock_expiry_interactive_data(
@@ -22,6 +63,7 @@ def get_stock_expiry_interactive_data(
 	expiry_window: str = "all",
 	limit: int = DEFAULT_INTERACTIVE_PAGE_LENGTH,
 	offset: int = 0,
+	sort=None,
 ) -> dict:
 	"""Return summary plus one database-paginated Stock Expiry window.
 
@@ -31,6 +73,7 @@ def get_stock_expiry_interactive_data(
 	filters = frappe._dict(filters or {})
 	limit = min(max(cint(limit) or DEFAULT_INTERACTIVE_PAGE_LENGTH, 1), MAX_INTERACTIVE_PAGE_LENGTH)
 	offset = max(cint(offset), 0)
+	normalized_sort = _normalize_sort(sort or filters.get("sort"))
 
 	if not _has_stock_expiry_source():
 		return {
@@ -39,6 +82,8 @@ def get_stock_expiry_interactive_data(
 			"total_count": 0,
 			"limit": limit,
 			"offset": offset,
+			"sort": normalized_sort,
+			"metadata": {"sorting_mode": "server-allowlist"},
 		}
 
 	buckets = parse_expiry_buckets(filters.get("expiry_buckets") or _settings_bucket_value())
@@ -61,8 +106,10 @@ def get_stock_expiry_interactive_data(
 	summary_rows = frappe.db.sql(
 		f"""
 		SELECT
+			COUNT(*) AS total_items,
 			COALESCE(SUM(CASE WHEN expiry_status = 'Expired' THEN 1 ELSE 0 END), 0) AS expired_items,
 			COALESCE(SUM(CASE WHEN expiry_status = 'Expiring Soon' THEN 1 ELSE 0 END), 0) AS expiring_soon,
+			COALESCE(SUM(CASE WHEN expiry_status = 'Safe' THEN 1 ELSE 0 END), 0) AS safe_items,
 			COALESCE(
 				SUM(
 					CASE
@@ -90,13 +137,12 @@ def get_stock_expiry_interactive_data(
 		as_dict=True,
 	)
 	summary = dict(summary_rows[0]) if summary_rows else _empty_summary()
-	summary["expired_items"] = cint(summary.get("expired_items"))
-	summary["expiring_soon"] = cint(summary.get("expiring_soon"))
+	for key in ("total_items", "expired_items", "expiring_soon", "safe_items", "affected_warehouses", "highest_risk_items"):
+		summary[key] = cint(summary.get(key))
 	summary["affected_qty"] = flt(summary.get("affected_qty"))
-	summary["affected_warehouses"] = cint(summary.get("affected_warehouses"))
-	summary["highest_risk_items"] = cint(summary.get("highest_risk_items"))
 
 	window_condition = _window_condition(expiry_window)
+	order_by = _order_by(normalized_sort)
 	rows = frappe.db.sql(
 		f"""
 		SELECT
@@ -114,11 +160,7 @@ def get_stock_expiry_interactive_data(
 			COUNT(*) OVER() AS total_count
 		FROM ({classified_sql}) classified
 		{window_condition}
-		ORDER BY
-			CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC,
-			expiry_date ASC,
-			item_code ASC,
-			batch_no ASC
+		ORDER BY {order_by}
 		LIMIT %(limit)s OFFSET %(offset)s
 		""",
 		values,
@@ -158,6 +200,8 @@ def get_stock_expiry_interactive_data(
 		"total_count": total_count,
 		"limit": limit,
 		"offset": offset,
+		"sort": normalized_sort,
+		"metadata": {"sorting_mode": "server-allowlist"},
 	}
 
 
@@ -165,12 +209,13 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 	conditions = ["b.disabled = 0"]
 	values = {}
 	join_type = "LEFT JOIN" if cint(filters.get("include_zero_qty")) else "INNER JOIN"
+	ledger_source = _batch_stock_ledger_source()
 
 	if filters.get("company"):
 		conditions.append("w.company = %(company)s")
 		values["company"] = filters.get("company")
 	if filters.get("warehouse"):
-		conditions.append("sle.warehouse = %(warehouse)s")
+		conditions.append("batch_stock.warehouse = %(warehouse)s")
 		values["warehouse"] = filters.get("warehouse")
 	if filters.get("item_group"):
 		conditions.append("i.item_group = %(item_group)s")
@@ -185,7 +230,7 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			required=False,
 		)
 		if warehouse:
-			conditions.append("sle.warehouse = %(branch_warehouse)s")
+			conditions.append("batch_stock.warehouse = %(branch_warehouse)s")
 			values["branch_warehouse"] = warehouse
 
 	having = "" if cint(filters.get("include_zero_qty")) else "HAVING qty > 0"
@@ -195,17 +240,16 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			i.item_name,
 			i.item_group,
 			b.name AS batch_no,
-			sle.warehouse,
+			batch_stock.warehouse,
 			w.company,
-			COALESCE(SUM(sle.actual_qty), 0) AS qty,
+			COALESCE(SUM(batch_stock.actual_qty), 0) AS qty,
 			i.stock_uom,
 			b.expiry_date
 		FROM `tabBatch` b
-		{join_type} `tabStock Ledger Entry` sle
-			ON sle.batch_no = b.name
-			AND sle.item_code = b.item
-			AND sle.is_cancelled = 0
-		LEFT JOIN `tabWarehouse` w ON w.name = sle.warehouse
+		{join_type} {ledger_source} batch_stock
+			ON batch_stock.batch_no = b.name
+			AND batch_stock.item_code = b.item
+		LEFT JOIN `tabWarehouse` w ON w.name = batch_stock.warehouse
 		LEFT JOIN `tabItem` i ON i.name = b.item
 		WHERE {" AND ".join(conditions)}
 		GROUP BY
@@ -213,7 +257,7 @@ def _build_batch_stock_source(filters) -> tuple[str, dict]:
 			b.item,
 			i.item_name,
 			i.item_group,
-			sle.warehouse,
+			batch_stock.warehouse,
 			w.company,
 			i.stock_uom,
 			b.expiry_date
@@ -251,8 +295,10 @@ def _window_condition(expiry_window: str) -> str:
 
 def _empty_summary() -> dict:
 	return {
+		"total_items": 0,
 		"expired_items": 0,
 		"expiring_soon": 0,
+		"safe_items": 0,
 		"affected_qty": 0.0,
 		"affected_warehouses": 0,
 		"highest_risk_items": 0,

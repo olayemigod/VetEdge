@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
 from vetedge.services import vaccination as vaccination_service
+from vetedge.services.permissions import get_current_user
 from vetedge.services.vaccination_payment_workflow import (
 	enforce_vaccination_payment_before_administration,
 )
@@ -21,6 +23,23 @@ validate_vaccination_record = vaccination_service.validate_vaccination_record
 def sync_next_vaccination_appointment_from_record(*args, **kwargs):
 	from vetedge.services.appointment_flow import sync_next_vaccination_appointment_from_record as _sync_next_vaccination_appointment_from_record
 	return _sync_next_vaccination_appointment_from_record(*args, **kwargs)
+
+
+def _stamp_administration_audit_fields(doc) -> None:
+	"""Stamp the actual clinical actor and server time on first administration.
+
+	These values are audit evidence. Any values entered on a Draft/Awaiting Payment/
+	Pending Administration record are replaced when the record first transitions to
+	Administered. Existing administered records retain their original attribution.
+	"""
+	previous = doc.get_doc_before_save() if getattr(doc, "get_doc_before_save", None) else None
+	if doc.get("status") != "Administered":
+		return
+	if previous and previous.get("status") == "Administered":
+		return
+
+	doc.administered_by = get_current_user()
+	doc.administered_on = now_datetime()
 
 
 def _session_has_vaccination_charge(session, record_name: str) -> bool:
@@ -80,6 +99,7 @@ def _sync_existing_vaccination_billing_session(doc) -> None:
 
 class VeterinaryVaccinationRecord(Document):
 	def validate(self) -> None:
+		_stamp_administration_audit_fields(self)
 		validate_vaccination_record(self)
 		from vetedge.services.appointment_vaccination_bridge import validate_vaccination_record_appointment_link
 

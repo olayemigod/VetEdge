@@ -237,8 +237,9 @@ class TestCoreEdgeAdapter(unittest.TestCase):
 		# 3. Navbar settings logo overridden
 		self.assertEqual(bootinfo.navbar_settings.app_logo, "/branded-logo.png")
 
-		# 4. App data title and logo overridden
-		self.assertEqual(bootinfo.app_data[0]["app_title"], "Branded Desk App")
+		# 4. Launchers use the module label; product/browser identity keeps app_title.
+		self.assertEqual(bootinfo.desktop_icons[0]["label"], "Branded Veterinary")
+		self.assertEqual(bootinfo.app_data[0]["app_title"], "Branded Veterinary")
 		self.assertEqual(bootinfo.app_data[0]["app_logo_url"], "/branded-logo.png")
 
 		# 5. Desktop icon link overridden to supported Desk route

@@ -1,6 +1,6 @@
 # Veterinary Training Centre Manual QA Checklist
 
-Use this checklist before handing the Veterinary Training Centre to clinic trainers or doctors.
+Use this checklist before handing the Veterinary Training Centre to clinic trainers or any VetEdge operational role.
 
 This QA pass must not create, edit, submit, cancel, or delete clinical, billing, stock, accounting, lab, vaccination, Hospitalisation, grooming, boarding, notification, or other live business records.
 
@@ -17,9 +17,12 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 
 ## Role Visibility
 
-- [ ] Sign in as a doctor role user, such as `VetEdge Doctor` or `Veterinary Doctor`, and confirm Doctor Operations modules are visible.
-- [ ] Sign in as Branch Manager or Administrator and confirm available modules are visible.
-- [ ] Sign in as a non-relevant role, where a safe test user exists, and confirm access is limited.
+- [ ] Confirm every operational role sees Shared Operations modules.
+- [ ] Sign in as `VetEdge Doctor` and confirm only Shared Operations and Doctor Operations are visible.
+- [ ] Sign in separately as Veterinary Nurse, Front Desk, Accounts/Cashier, Dispensary User, Lab Technician, Groomer and Branch Manager; confirm each sees Shared Operations plus its authorised specialist area.
+- [ ] Confirm Front Desk and Branch Manager can see Boarding Operations.
+- [ ] Sign in as VetEdge Administrator or System Manager and confirm every published training group is visible.
+- [ ] Sign in with a supplemental ERPNext role only, such as `Accounts User`, and confirm that role alone does not expose VetEdge training.
 - [ ] If role behaviour differs from the expected result, verify roles in Role Permission Manager before changing documentation or code.
 
 ## Module List
@@ -31,6 +34,7 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 - [ ] Confirm `Watch Video` is disabled or clearly shows `Video coming soon` when no video URL exists.
 - [ ] Use search to find modules by title, workflow wording, and role group.
 - [ ] Confirm search results update without refreshing the page.
+- [ ] Filter by Training area and confirm only the selected available role group remains.
 
 ## Guide Reader
 
@@ -89,7 +93,7 @@ This QA pass must not create, edit, submit, cancel, or delete clinical, billing,
 
 - [ ] Training Centre opens from the Veterinary workspace/sidebar.
 - [ ] Training Centre appears as a standalone section, not under Veterinary Records.
-- [ ] Doctor Operations modules are visible to the intended roles.
+- [ ] Shared and specialist modules are visible only to the intended roles.
 - [ ] All modules open and render.
 - [ ] Mermaid diagrams still render visually.
 - [ ] Video placeholders still work.

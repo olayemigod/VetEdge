@@ -5,10 +5,11 @@
  "doctype": "DocType",
  "document_type": "Setup",
  "engine": "InnoDB",
- "field_order": ["diagnosis_name", "category", "description", "disabled"],
+ "field_order": ["diagnosis_name", "category", "nadis_disease", "description", "disabled"],
  "fields": [
   {"fieldname": "diagnosis_name", "fieldtype": "Data", "in_list_view": 1, "label": "Diagnosis Name", "reqd": 1, "unique": 1},
   {"fieldname": "category", "fieldtype": "Link", "in_list_view": 1, "label": "Diagnosis Category", "options": "Veterinary Diagnosis Category"},
+  {"description": "Exact disease wording required by the official NADIS/VCN Disease Outbreak template. Leave blank until the approved mapping is known.", "fieldname": "nadis_disease", "fieldtype": "Data", "label": "NADIS Disease"},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
   {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "label": "Disabled"}
  ],

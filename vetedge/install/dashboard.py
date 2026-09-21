@@ -9,6 +9,26 @@ from frappe.modules.import_file import import_file_by_path
 
 SIDEBAR_SYNC_IGNORED_FIELDS = {"name", "doctype", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
 VETEDGE_DESK_ROUTE = "/desk/vetedge"
+HOSPITALISATION_OPERATIONS_PAGE = "vetedge-hospitalisation-operations"
+RETIRED_HOSPITALISATION_DASHBOARD_PAGE = "veterinary-hospitalisation-dashboard"
+FRONT_DESK_PAGE_ROUTES = {
+	"Appointment Queue": "vetedge-front-desk-queue",
+	"Guest Booking Requests": "vetedge-front-desk-guest-bookings",
+	"Missed Appointments": "vetedge-front-desk-missed-appointments",
+}
+BILLING_CENTER_SECTION_VISIBILITY = (
+	"eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || "
+	"frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('VetEdge Doctor') || "
+	"frappe.user.has_role('Veterinary Nurse') || frappe.user.has_role('Dispensary User') || "
+	"frappe.user.has_role('Branch Manager') || frappe.user.has_role('Accounts/Cashier') || "
+	"frappe.user.has_role('Accounts User') || frappe.user.has_role('Accounts Manager') || "
+	"frappe.user.has_role('Sales Manager')"
+)
+BILLING_CENTER_WORKSPACE_VISIBILITY = (
+	"eval: frappe.user.has_role('System Manager') || frappe.user.has_role('VetEdge Administrator') || "
+	"frappe.user.has_role('VetEdge Front Desk') || frappe.user.has_role('Branch Manager') || "
+	"frappe.user.has_role('Accounts/Cashier') || frappe.user.has_role('Accounts User')"
+)
 
 OPTIONAL_COREDGE_WORKSPACE_DOCTYPE_LINKS = {
 	"CoreEdge Settings",
@@ -26,14 +46,14 @@ SIDEBAR_TARGET_DOCTYPES = {
 }
 
 REMOVED_STANDARD_PAGES = {
-	"veterinary-hospitalisation-dashboard",
+	RETIRED_HOSPITALISATION_DASHBOARD_PAGE,
 }
 
 # The obsolete Hospitalisation Dashboard must not reappear during recurring
-# standard sidebar synchronization. Operational Hospital & Services links and
-# Veterinary Vital Signs remain valid Veterinary navigation destinations.
+# standard sidebar synchronization. Its position is reused by the Operations
+# workbench when the new standard Page is available.
 REMOVED_SIDEBAR_LINKS = {
-	("Page", "veterinary-hospitalisation-dashboard"),
+	("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE),
 }
 
 
@@ -89,6 +109,255 @@ def _should_keep_sidebar_item(item) -> bool:
 	return _sidebar_target_exists(link_type, link_to)
 
 
+def _replace_retired_hospitalisation_dashboard(items: list[dict]) -> list[dict]:
+	"""Keep the old dashboard retired while preserving its sidebar position.
+
+	The checked-in sidebar still contains the historical dashboard item for
+	backward-compatible standard-file history. At runtime/migrate we replace that
+	item with the EdgeSuite Hospitalisation Operations Page once the Page exists.
+	"""
+	result = []
+	operations_available = _sidebar_target_exists("Page", HOSPITALISATION_OPERATIONS_PAGE)
+	for item in items:
+		link_type = str(item.get("link_type") or "")
+		link_to = str(item.get("link_to") or "")
+		if (link_type, link_to) != ("Page", RETIRED_HOSPITALISATION_DASHBOARD_PAGE):
+			result.append(item)
+			continue
+		if not operations_available:
+			continue
+		replacement = dict(item)
+		replacement.update(
+			{
+				"label": "Hospitalisation Operations",
+				"link_to": HOSPITALISATION_OPERATIONS_PAGE,
+				"link_type": "Page",
+				"icon": "hospital",
+			}
+		)
+		result.append(replacement)
+	return result
+
+
+def _front_desk_boarding_item(template: dict | None = None) -> dict:
+	item = dict(template or {})
+	item.update(
+		{
+			"child": 1,
+			"collapsible": 0,
+			"icon": "hotel",
+			"indent": 0,
+			"keep_closed": 0,
+			"label": "Pet Boarding Booking",
+			"link_to": "Pet Boarding Booking",
+			"link_type": "DocType",
+			"show_arrow": 0,
+			"type": "Link",
+		}
+	)
+	return item
+
+
+def _billing_link(
+	label: str,
+	link_to: str,
+	link_type: str,
+	icon: str,
+	*,
+	template: dict | None = None,
+	display_depends_on: str | None = None,
+) -> dict:
+	item = dict(template or {})
+	item.update(
+		{
+			"child": 1,
+			"collapsible": 0,
+			"icon": icon,
+			"indent": 0,
+			"keep_closed": 0,
+			"label": label,
+			"link_to": link_to,
+			"link_type": link_type,
+			"show_arrow": 0,
+			"type": "Link",
+		}
+	)
+	if display_depends_on:
+		item["display_depends_on"] = display_depends_on
+	return item
+
+
+def _billing_center_items(templates: dict[str, dict] | None = None) -> list[dict]:
+	templates = templates or {}
+	section = {
+		"child": 0,
+		"collapsible": 1,
+		"indent": 1,
+		"keep_closed": 1,
+		"label": "Billing Center",
+		"link_type": "DocType",
+		"show_arrow": 0,
+		"type": "Section Break",
+		"display_depends_on": BILLING_CENTER_SECTION_VISIBILITY,
+	}
+	return [
+		section,
+		_billing_link("Customers", "Customer", "DocType", "customer", template=templates.get("Customer")),
+		_billing_link("Sales Invoice", "Sales Invoice", "DocType", "receipt-text", template=templates.get("Sales Invoice")),
+		_billing_link("Payment Entry", "Payment Entry", "DocType", "money-coins-1", template=templates.get("Payment Entry")),
+		_billing_link(
+			"Billing Session",
+			"Veterinary Billing Session",
+			"DocType",
+			"file-text",
+			template=templates.get("Billing Session"),
+			display_depends_on=BILLING_CENTER_WORKSPACE_VISIBILITY,
+		),
+		_billing_link(
+			"Billing Center",
+			"vetedge-billing-center",
+			"Page",
+			"landmark",
+			template=templates.get("Billing Center"),
+			display_depends_on=BILLING_CENTER_WORKSPACE_VISIBILITY,
+		),
+	]
+
+
+def _navigation_templates(items: list[dict]) -> tuple[dict[str, dict], dict | None]:
+	billing_templates: dict[str, dict] = {}
+	boarding_template = None
+	for original in items:
+		if original.get("type") != "Link":
+			continue
+		label = str(original.get("label") or "").strip()
+		if label in {"Customer", "Customers"}:
+			billing_templates["Customer"] = dict(original)
+		elif label in {"Sales Invoice", "Payment Entry", "Billing Session", "Billing Center"}:
+			billing_templates[label] = dict(original)
+		if label == "Pet Boarding Booking":
+			boarding_template = dict(original)
+	return billing_templates, boarding_template
+
+
+def _organize_veterinary_navigation(items: list[dict]) -> list[dict]:
+	"""Apply the VFD-BILL-01 menu contract without disturbing unrelated sections.
+
+	The checked-in sidebar is still useful as the long-lived standard source, but
+	this transformation is authoritative at install/migrate time. It is deliberately
+	idempotent because recurring sidebar synchronization must never recreate the old
+	Front Desk accounting links, duplicate Boarding, or restore Grooming Appointment.
+	Existing link visibility rules are preserved when links move sections.
+	"""
+	billing_templates, boarding_template = _navigation_templates(items)
+	result: list[dict] = []
+	current_section = ""
+	front_desk_seen = False
+	billing_inserted = False
+	boarding_inserted = False
+	skip_billing_children = False
+
+	def insert_billing_center() -> None:
+		nonlocal billing_inserted
+		if billing_inserted:
+			return
+		result.extend(_billing_center_items(billing_templates))
+		billing_inserted = True
+
+	for original in items:
+		item = dict(original)
+		label = str(item.get("label") or "").strip()
+		is_section = item.get("type") == "Section Break" and not int(item.get("child") or 0)
+
+		if is_section:
+			if current_section == "Front Desk" and label != "Front Desk":
+				insert_billing_center()
+			if label == "Billing Center":
+				current_section = "Billing Center"
+				skip_billing_children = True
+				continue
+			current_section = label
+			skip_billing_children = False
+			if label == "Front Desk":
+				front_desk_seen = True
+			result.append(item)
+			continue
+
+		if skip_billing_children or current_section == "Billing Center":
+			continue
+
+		# Grooming appointment is an implementation detail of the appointment flow;
+		# keep its DocType/history intact but remove the duplicate product-menu entry.
+		if label == "Pet Grooming Appointment":
+			continue
+
+		# Boarding Booking is a Front Desk booking activity. Remove any historical
+		# copy first, then add exactly one copy immediately after Appointments.
+		if label == "Pet Boarding Booking":
+			continue
+
+		if current_section == "Front Desk":
+			if label in {"Customer", "Customers", "Sales Invoice", "Payment Entry"}:
+				continue
+			if label in FRONT_DESK_PAGE_ROUTES:
+				item["link_type"] = "Page"
+				item["link_to"] = FRONT_DESK_PAGE_ROUTES[label]
+			if label == "Appointments":
+				result.append(item)
+				result.append(_front_desk_boarding_item(boarding_template))
+				boarding_inserted = True
+				continue
+
+		result.append(item)
+
+	if front_desk_seen and not billing_inserted:
+		insert_billing_center()
+
+	# Defensive fallback for unusually customized source files that lost the
+	# Appointments row but still contain Front Desk. This keeps Boarding visible
+	# without duplicating it in another section.
+	if front_desk_seen and not boarding_inserted:
+		front_index = next((index for index, row in enumerate(result) if str(row.get("label") or "").strip() == "Front Desk"), -1)
+		if front_index >= 0:
+			insert_at = front_index + 1
+			while insert_at < len(result) and int(result[insert_at].get("child") or 0):
+				insert_at += 1
+			result.insert(insert_at, _front_desk_boarding_item(boarding_template))
+
+	return result
+
+
+def _prepend_veterinary_home_link(items: list[dict]) -> list[dict]:
+	"""Make Veterinary Home the first navigable sidebar item.
+
+	Frappe's legacy Desktop Icons screen resolves a Workspace Sidebar launcher to
+	the sidebar's first Link. A relative URL is intentionally used here: Frappe
+	keeps relative routes in the current tab, while External Desktop Icon routes
+	are expanded to an absolute URL and opened in a new tab.
+	"""
+	home = {
+		"child": 0,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"label": "Veterinary Home",
+		"link_type": "URL",
+		"show_arrow": 0,
+		"type": "Link",
+		"url": VETEDGE_DESK_ROUTE,
+		"icon": "home",
+	}
+	remaining = []
+	for item in items:
+		label = str(item.get("label") or "").strip()
+		url = str(item.get("url") or "").strip()
+		link_to = str(item.get("link_to") or "").strip()
+		if label == "Veterinary Home" or url == VETEDGE_DESK_ROUTE or link_to == "vetedge":
+			continue
+		remaining.append(item)
+	return [home, *remaining]
+
+
 def _prepare_standard_sidebar_update_payload(standard_doc: dict) -> dict:
 	return {key: value for key, value in standard_doc.items() if key not in SIDEBAR_SYNC_IGNORED_FIELDS}
 
@@ -113,6 +382,11 @@ FINANCIAL_DASHBOARD_FILES = (
 
 SIDEBAR_PAGE_FILES = (
 	("veterinary", "page", "veterinary_financial_dashboard", "veterinary_financial_dashboard.json"),
+	("veterinary", "page", "vetedge_hospitalisation_operations", "vetedge_hospitalisation_operations.json"),
+	("veterinary", "page", "vetedge_front_desk_queue", "vetedge_front_desk_queue.json"),
+	("veterinary", "page", "vetedge_front_desk_guest_bookings", "vetedge_front_desk_guest_bookings.json"),
+	("veterinary", "page", "vetedge_front_desk_missed_appointments", "vetedge_front_desk_missed_appointments.json"),
+	("veterinary", "page", "vetedge_billing_center", "vetedge_billing_center.json"),
 )
 
 
@@ -164,7 +438,9 @@ def ensure_vetedge_workspace_sidebar() -> None:
 	standard_doc = _load_standard_doc("workspace_sidebar", "vetedge.json")
 	standard_doc["title"] = "Veterinary"
 
-	standard_items = standard_doc.get("items") or []
+	standard_items = _replace_retired_hospitalisation_dashboard(standard_doc.get("items") or [])
+	standard_items = _organize_veterinary_navigation(standard_items)
+	standard_items = _prepend_veterinary_home_link(standard_items)
 	kept_items = [item for item in standard_items if _should_keep_sidebar_item(item)]
 
 	if frappe.db.exists("Workspace Sidebar", "VetEdge"):
@@ -203,7 +479,7 @@ def ensure_vetedge_desktop_icon() -> None:
 	from vetedge.services.branding import get_branding
 
 	branding = get_branding()
-	default_label = branding.get("app_title") or branding.get("brand_name") or "VetEdge"
+	default_label = branding.get("module_label") or "Veterinary"
 
 	if not frappe.db.exists("Desktop Icon", "VetEdge"):
 		icon = frappe.get_doc(_load_standard_doc("desktop_icon", "vetedge.json"))

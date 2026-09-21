@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, get_datetime, getdate
 
 from vetedge.services.owner_portal import get_owner_portal_dashboard
 from vetedge.services.portal_access import get_portal_settings
-
 
 no_cache = 1
 
@@ -21,7 +20,27 @@ def get_context(context):
 	context.owner_portal_page = "overview"
 	context.portal_subtitle = "A quick view of pets, appointments, billing, and clinical summaries."
 	context.dashboard = get_owner_portal_dashboard(build_page_context())
+	context.vetedge_date = format_vetedge_date
+	context.vetedge_datetime = format_vetedge_datetime
 	return context
+
+
+def format_vetedge_date(value) -> str:
+	if not value:
+		return ""
+	try:
+		return getdate(value).strftime("%d-%m-%Y")
+	except (TypeError, ValueError):
+		return str(value)
+
+
+def format_vetedge_datetime(value) -> str:
+	if not value:
+		return ""
+	try:
+		return get_datetime(value).strftime("%d-%m-%Y %H:%M")
+	except (TypeError, ValueError):
+		return str(value)
 
 
 def build_page_context() -> dict:

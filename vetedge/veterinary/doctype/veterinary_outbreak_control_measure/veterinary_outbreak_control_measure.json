@@ -1,0 +1,17 @@
+{
+ "actions": [],
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["control_measure", "flag", "date_applied", "notes"],
+ "fields": [
+  {"description": "Use the disease-control wording expected by NADIS. The supplied template includes Control of wildlife reservoirs, Destruction of infected material & disinfection, General surveillance, Modified stamping out and Zoning.", "fieldname": "control_measure", "fieldtype": "Data", "in_list_view": 1, "label": "Disease Control Measure", "reqd": 1},
+  {"fieldname": "flag", "fieldtype": "Select", "in_list_view": 1, "label": "Flag", "options": "Applied\nNot Applicable\nPlanned", "reqd": 1},
+  {"fieldname": "date_applied", "fieldtype": "Date", "label": "Date Applied"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Outbreak Control Measure"
+}

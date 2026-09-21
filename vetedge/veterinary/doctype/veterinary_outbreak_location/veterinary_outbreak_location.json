@@ -1,0 +1,18 @@
+{
+ "actions": [],
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["locality_name", "epidemiological_unit_type", "production_system", "latitude", "longitude"],
+ "fields": [
+  {"fieldname": "locality_name", "fieldtype": "Data", "in_list_view": 1, "label": "Name of Locality", "reqd": 1},
+  {"fieldname": "epidemiological_unit_type", "fieldtype": "Select", "in_list_view": 1, "label": "Epidemiological Unit Type", "options": "\nFarm\nNot Applicable\nQuarantine facility\nVillage"},
+  {"fieldname": "production_system", "fieldtype": "Select", "in_list_view": 1, "label": "Production System", "options": "\nAll\nExtensive (Pastoralist & Transhumance)\nIntensive\nMixed / semi-extensive / semi-intensive"},
+  {"fieldname": "latitude", "fieldtype": "Float", "label": "Latitude", "precision": "6"},
+  {"fieldname": "longitude", "fieldtype": "Float", "label": "Longitude", "precision": "6"}
+ ],
+ "istable": 1,
+ "module": "Veterinary",
+ "name": "Veterinary Outbreak Location"
+}

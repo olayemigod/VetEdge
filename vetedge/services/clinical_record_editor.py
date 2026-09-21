@@ -238,6 +238,68 @@ def _billing_edit_state(doc, config: dict[str, Any]) -> dict[str, Any]:
     return state
 
 
+
+@frappe.whitelist()
+def search_vaccination_staff(
+    txt: str = "",
+    service_branch: str = "",
+    start: int = 0,
+    page_length: int = 20,
+) -> list[dict[str, Any]]:
+    """Return only users who may administer vaccination for the branch."""
+    require_internal_user()
+
+    service_branch = str(service_branch or "").strip()
+    if not service_branch:
+        return []
+
+    start = max(cint(start), 0)
+    page_length = min(max(cint(page_length) or 20, 1), 50)
+
+    from vetedge.services.permissions import get_vaccination_staff_users
+    from vetedge.services.vaccination import can_administer_vaccine
+
+    context = frappe._dict(service_branch=service_branch)
+    options: list[dict[str, Any]] = []
+
+    # Scan permission-filtered staff in bounded chunks so branch filtering
+    # does not incorrectly truncate the requested result page.
+    scan_start = 0
+    chunk_size = 50
+    required = start + page_length
+
+    while len(options) < required:
+        rows = get_vaccination_staff_users(
+            "User",
+            str(txt or ""),
+            "name",
+            scan_start,
+            chunk_size,
+            {},
+        )
+        if not rows:
+            break
+
+        for row in rows:
+            user = row[0]
+            label = row[1] if len(row) > 1 else user
+            if not can_administer_vaccine(user, context, raise_exception=False):
+                continue
+            options.append(
+                {
+                    "value": user,
+                    "label": label or user,
+                    "description": "Vaccination Staff",
+                }
+            )
+
+        scan_start += len(rows)
+        if len(rows) < chunk_size:
+            break
+
+    return options[start : start + page_length]
+
+
 def _field_schema(
     doc,
     fieldname: str,
@@ -269,6 +331,13 @@ def _field_schema(
     }
     if field.fieldtype == "Link" and value:
         schema["selected_label"] = _link_display_value(field.options, str(value))
+
+    if doc.doctype == "Veterinary Vaccination Record" and fieldname == "administered_by":
+        schema["link_search_method"] = (
+            "vetedge.services.clinical_record_editor.search_vaccination_staff"
+        )
+        schema["link_search_context_field"] = "service_branch"
+
     return schema
 
 

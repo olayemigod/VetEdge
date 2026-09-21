@@ -6,7 +6,11 @@ import frappe
 from frappe.utils import cint, flt, getdate, nowdate
 
 from vetedge.services.billing import get_invoice_access_summary, get_invoice_payment_status
-from vetedge.services.permissions import can_access_branch_data
+from vetedge.services.permissions import (
+	can_access_branch_data,
+	can_initiate_payment,
+	can_override_payment_account,
+)
 from vetedge.services.portal_access import require_internal_user
 
 
@@ -571,6 +575,48 @@ def get_payment_modes() -> list[str]:
 	)
 
 
+def resolve_modal_payment_destination_account(
+	company: str,
+	mode_of_payment: str | None,
+	requested_account: str | None = None,
+) -> str | None:
+	"""Resolve the company cash/bank account for a controlled VetEdge payment."""
+	if requested_account:
+		if not can_override_payment_account(frappe.session.user):
+			frappe.throw(
+				"Only authorised accounting staff can override the payment destination account.",
+				frappe.PermissionError,
+			)
+		account = requested_account
+	elif mode_of_payment:
+		from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
+
+		account = (get_bank_cash_account(mode_of_payment, company) or {}).get("account")
+	else:
+		account = None
+
+	if not account:
+		return None
+
+	details = frappe.get_cached_value(
+		"Account",
+		account,
+		["company", "account_type", "is_group", "disabled"],
+		as_dict=True,
+	)
+	if not details:
+		frappe.throw("The payment destination account could not be found.", frappe.ValidationError)
+	if details.company != company:
+		frappe.throw("The payment destination account belongs to a different Company.", frappe.ValidationError)
+	if details.account_type not in {"Bank", "Cash"}:
+		frappe.throw("Payment destination must be a Bank or Cash account.", frappe.ValidationError)
+	if cint(details.is_group):
+		frappe.throw("Payment destination cannot be a group account.", frappe.ValidationError)
+	if cint(details.disabled):
+		frappe.throw("Payment destination account is disabled.", frappe.ValidationError)
+	return account
+
+
 @frappe.whitelist()
 def get_billing_modal_state(source_doctype: str, source_name: str) -> dict:
 	require_internal_user()
@@ -866,6 +912,12 @@ def record_modal_invoice_payment(
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice_name)
 	assert_invoice_is_linked_to_source_or_session(invoice_doc.name, doc, config)
 	can_access_branch_data(frappe.session.user, invoice_doc.get("branch") or doc.get(config.branch_field), raise_exception=True)
+	can_initiate_payment(
+		frappe.session.user,
+		invoice_doc.name,
+		mode="internal",
+		raise_exception=True,
+	)
 	if cint(invoice_doc.docstatus) != 1:
 		frappe.throw("Submit the Sales Invoice before recording payment.", frappe.ValidationError)
 	outstanding = flt(invoice_doc.get("outstanding_amount"))
@@ -882,12 +934,19 @@ def record_modal_invoice_payment(
 
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
-	payment_entry = get_payment_entry("Sales Invoice", invoice_doc.name)
+	payment_destination = resolve_modal_payment_destination_account(
+		invoice_doc.company,
+		mode_of_payment,
+		requested_account=paid_to,
+	)
+	payment_entry = get_payment_entry(
+		"Sales Invoice",
+		invoice_doc.name,
+		bank_account=payment_destination,
+	)
 	payment_entry.posting_date = getdate(posting_date or nowdate())
 	if mode_of_payment:
 		payment_entry.mode_of_payment = mode_of_payment
-	if paid_to:
-		payment_entry.paid_to = paid_to
 	if reference_no:
 		payment_entry.reference_no = reference_no
 	if reference_date:

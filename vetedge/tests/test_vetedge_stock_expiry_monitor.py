@@ -107,14 +107,9 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 
 		for component in (
 			"EdgeAppShell",
-			"EdgePageLayout",
-			"EdgePageHeader",
-			"EdgeFilterBar",
-			"EdgeStatCard",
-			"EdgeStatusBadge",
-			"EdgeLoadingState",
-			"EdgeEmptyState",
-			"EdgeErrorState",
+			"EdgeReportShell",
+			"EdgeLinkField",
+			"EdgeDropdown",
 			"EdgeNotificationBell",
 			"EdgeNotificationDrawer",
 		):
@@ -122,6 +117,7 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 
 		self.assertIn('product="vetedge"', content)
 		self.assertIn('data-edge-product="vetedge"', content)
+		self.assertIn("requiredEdgeUIComponents", content)
 		self.assertNotIn("coreedge/coreedge/public/js/edgeui", content)
 		self.assertNotIn("../../../../../coreedge", content)
 
@@ -130,14 +126,16 @@ class TestVetedgeStockExpiryMonitor(FrappeTestCase):
 			"public", "js", "vetedge_stock_expiry_monitor", "VetedgeStockExpiryMonitor.vue"
 		)
 		self.assertNotIn(':menuItems="menuItems"', content)
-		self.assertIn("vetedge-notification-icon", content)
+		self.assertIn("<template #notifications>", content)
+		self.assertIn("<EdgeNotificationBell", content)
+		self.assertIn("<EdgeNotificationDrawer", content)
 		self.assertIn("syncShellContext", content)
 		self.assertIn("'All Branches'", content)
 		self.assertIn("tenantName", content)
 		self.assertIn("branchName", content)
 		self.assertIn("userName", content)
-		self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", content)
-		self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", content)
+		self.assertIn("grid-template-columns: repeat(3, minmax(12rem, 1fr))", content)
+		self.assertIn("grid-template-columns: repeat(2, minmax(10rem, 1fr))", content)
 		self.assertIn("grid-template-columns: minmax(0, 1fr)", content)
 		self.assertNotIn("frappe.realtime", content)
 		self.assertNotIn("coreedge/", content.lower())

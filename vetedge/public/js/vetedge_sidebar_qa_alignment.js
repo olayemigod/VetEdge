@@ -3,6 +3,59 @@
 	if (window.__vetedgeSidebarQaAlignmentInstalled) return;
 	window.__vetedgeSidebarQaAlignmentInstalled = true;
 
+	const MIGRATED_REPORTS = Object.freeze({
+		"Consultation Register": "Consultation Register",
+		"Patient Register": "Patient Register",
+		"Owner Register": "Owner Register",
+		"Lab Order Report": "Lab Order Report",
+		"Laboratory Report": "Lab Order Report",
+		"Vaccination Report": "Vaccination Report",
+		"Active Hospitalisations": "Active Hospitalisations",
+		"Hospitalisation Charge Summary": "Hospitalisation Charge Summary",
+		"Care Location Occupancy": "Care Location Occupancy",
+		"Hospitalisation Discharge Watch": "Hospitalisation Discharge Watch",
+		"Pending Hospitalisation Actions": "Pending Hospitalisation Actions",
+		"Grooming Report": "Grooming Report",
+		"Boarding Report": "Boarding Report",
+		"Kennel Availability Report": "Kennel Availability Report",
+		"Practitioner Performance Report": "Practitioner Performance Report",
+		"Branch Performance Report": "Branch Performance Report",
+		"Unpaid Invoice Report": "Unpaid Invoice Report",
+		"Revenue Summary": "Revenue Summary",
+		"Stock Usage Summary": "Stock Usage Summary",
+		"Stock Expiry Status": "Stock Expiry Status",
+		"Dispensary Activity Report": "Dispensary Activity Report",
+		"Veterinary Notification Event Registry": "Notification Event Registry",
+	});
+	const CARE_LOCATION_DOCTYPE = "Veterinary Care Location";
+	const CARE_LOCATION_ROUTE = "/desk/vetedge-care-locations";
+	const HOSPITALISATION_DOCTYPE = "Veterinary Hospitalisation";
+	const HOSPITALISATION_OPERATIONS_ROUTE = "/desk/vetedge-hospitalisation-operations";
+	const LEGACY_HOSPITALISATION_EPISODE_ROUTE = "/desk/vetedge-hospitalisation-episode";
+	const BRANCH_ACCESS_ROUTES = Object.freeze({
+		"Branch User Assignment": "/desk/vetedge-branch-access?resource=user-assignments",
+		"Branch Practitioner Assignment": "/desk/vetedge-branch-access?resource=practitioner-assignments",
+	});
+	const SAME_TAB_PRODUCT_PAGES = Object.freeze({
+		"Training Centre": "/desk/veterinary-training-centre",
+		"Settings": "/desk/veterinary-settings-center",
+		"VCN / NADIS Reports": "/desk/vetedge-regulatory-reporting",
+	});
+
+	function normalizeDeskPath(pathname) {
+		let path = String(pathname || "").replace(/\/$/, "") || "/";
+		if (path === "/app" || path.startsWith("/app/")) path = `/desk${path.slice(4)}`;
+		return path;
+	}
+
+	function slug(value) {
+		return String(value || "")
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "");
+	}
+
 	function sectionLabel(section) {
 		const toggle = section?.querySelector?.(".edge-sidebar__section-toggle");
 		return String(toggle?.textContent || "").replace(/[▾▸]/g, "").trim();
@@ -21,6 +74,7 @@
 	}
 
 	function expandOnly(shell, activeSection, activeItem) {
+		if (!activeSection || !activeItem) return;
 		shell.querySelectorAll(".edge-sidebar-item").forEach((item) => {
 			const active = item === activeItem;
 			item.classList.toggle("active", active);
@@ -48,33 +102,392 @@
 		planned.dataset.vetedgeTreatmentReport = "1";
 	}
 
+	function suppressNativeHospitalisationSidebarSource() {
+		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
+		if (!sidebars) return false;
+		let changed = false;
+		for (const key of ["vetedge", "veterinary"]) {
+			const sidebar = sidebars[key];
+			if (!Array.isArray(sidebar?.items)) continue;
+			const filtered = sidebar.items.filter((item) => !(
+				item?.type === "Link" &&
+				String(item?.link_type || "") === "DocType" &&
+				String(item?.link_to || "") === HOSPITALISATION_DOCTYPE
+			));
+			if (filtered.length !== sidebar.items.length) {
+				sidebar.items = filtered;
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	function removeNativeHospitalisationSidebarItems(shell) {
+		const hospital = section(shell, "Hospital & Services");
+		if (!hospital) return;
+		hospital.querySelectorAll(".edge-sidebar-item").forEach((item) => {
+			const label = itemLabel(item);
+			const explicit = String(item?.dataset?.linkTo || item?.getAttribute?.("data-link-to") || "").trim();
+			if (label === "Hospitalisations" || explicit === HOSPITALISATION_DOCTYPE) item.remove();
+		});
+	}
+
+	function sourceRoute() {
+		const path = normalizeDeskPath(window.location.pathname);
+		if (path.startsWith("/desk/query-report/") || path === "/desk/vetedge-report-center") return "/desk/vetedge";
+		return `${path}${window.location.search || ""}`;
+	}
+
+	function reportCenterTarget(reportName, source = sourceRoute(), preserveSearch = false) {
+		const params = preserveSearch ? new URLSearchParams(window.location.search || "") : new URLSearchParams();
+		params.set("report", reportName);
+		params.set("source", source || "/desk/vetedge");
+		return `/desk/vetedge-report-center?${params.toString()}`;
+	}
+
+	function sameTab(target, { replace = false } = {}) {
+		if (!target) return false;
+		const url = new URL(target, window.location.origin);
+		if (url.origin !== window.location.origin) return false;
+		const next = `${url.pathname}${url.search}${url.hash}`;
+		const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+		if (current === next) return true;
+		if (window.history && typeof frappe?.router?.route === "function") {
+			window.history[replace ? "replaceState" : "pushState"](window.history.state, "", next);
+			Promise.resolve(frappe.router.route()).catch(() => {
+				if (replace) window.location.replace(next);
+				else window.location.assign(next);
+			});
+			return true;
+		}
+		if (replace) window.location.replace(next);
+		else window.location.assign(next);
+		return true;
+	}
+
+	function reportFromNativePath(path) {
+		const match = normalizeDeskPath(path).match(/^\/desk\/query-report\/(.+)$/);
+		if (!match) return "";
+		let name = "";
+		try { name = decodeURIComponent(match[1]); } catch (_error) { name = match[1]; }
+		return MIGRATED_REPORTS[name] ? name : "";
+	}
+
+	function careLocationTargetFromNativePath(path) {
+		const normalized = normalizeDeskPath(path);
+		const base = "/desk/veterinary-care-location";
+		if (normalized === base) return CARE_LOCATION_ROUTE;
+		if (!normalized.startsWith(`${base}/`)) return "";
+		let name = normalized.slice(base.length + 1);
+		try { name = decodeURIComponent(name); } catch (_error) { /* keep route text */ }
+		if (!name || name === "new" || name.toLowerCase().startsWith("new-veterinary-care-location")) return `${CARE_LOCATION_ROUTE}?new=1`;
+		return `${CARE_LOCATION_ROUTE}?name=${encodeURIComponent(name)}`;
+	}
+
+	function branchAccessTargetFromNativePath(path) {
+		const normalized = normalizeDeskPath(path);
+		for (const [doctype, target] of Object.entries(BRANCH_ACCESS_ROUTES)) {
+			const base = `/desk/${slug(doctype)}`;
+			if (normalized === base) return target;
+			if (!normalized.startsWith(`${base}/`)) continue;
+			let name = normalized.slice(base.length + 1);
+			try { name = decodeURIComponent(name); } catch (_error) { /* keep route text */ }
+			if (!name || name === "new" || name.toLowerCase().startsWith(`new-${slug(doctype)}`)) return `${target}&new=1`;
+			return `${target}&name=${encodeURIComponent(name)}`;
+		}
+		return "";
+	}
+
+	function hospitalisationTargetFromLegacyRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		const url = new URL(raw, window.location.origin);
+		const path = normalizeDeskPath(url.pathname);
+		const nativeListPath = `/desk/${slug(HOSPITALISATION_DOCTYPE)}`;
+
+		// The native list is retired from normal operations. Specific native Form
+		// routes remain untouched so the explicit "Open Native Form" fallback works.
+		if (path === nativeListPath) return HOSPITALISATION_OPERATIONS_ROUTE;
+		if (path !== LEGACY_HOSPITALISATION_EPISODE_ROUTE && !path.startsWith(`${LEGACY_HOSPITALISATION_EPISODE_ROUTE}/`)) return "";
+
+		let name = path.startsWith(`${LEGACY_HOSPITALISATION_EPISODE_ROUTE}/`)
+			? path.slice(LEGACY_HOSPITALISATION_EPISODE_ROUTE.length + 1)
+			: "";
+		try { name = decodeURIComponent(name); } catch (_error) { /* keep route text */ }
+		name = String(name || url.searchParams.get("name") || url.searchParams.get("hospitalisation") || "").trim();
+		return name
+			? `${HOSPITALISATION_OPERATIONS_ROUTE}/${encodeURIComponent(name)}`
+			: HOSPITALISATION_OPERATIONS_ROUTE;
+	}
+
+	function migratedTargetFromRoute(route) {
+		const raw = String(route || "").trim();
+		if (!raw) return "";
+		const url = new URL(raw, window.location.origin);
+		const hospitalisation = hospitalisationTargetFromLegacyRoute(raw);
+		if (hospitalisation) return hospitalisation;
+		const report = reportFromNativePath(url.pathname);
+		if (report) return reportCenterTarget(report, sourceRoute());
+		const care = careLocationTargetFromNativePath(url.pathname);
+		if (care) return care;
+		const branchAccess = branchAccessTargetFromNativePath(url.pathname);
+		if (branchAccess) return branchAccess;
+		return "";
+	}
+
+	function redirectCurrentLegacyRoute() {
+		const currentRoute = `${window.location.pathname}${window.location.search || ""}`;
+		const hospitalisation = hospitalisationTargetFromLegacyRoute(currentRoute);
+		if (hospitalisation) {
+			sameTab(hospitalisation, { replace: true });
+			return true;
+		}
+
+		const path = window.location.pathname;
+		const report = reportFromNativePath(path);
+		if (report) {
+			sameTab(reportCenterTarget(report, "/desk/vetedge", true), { replace: true });
+			return true;
+		}
+		for (const target of [careLocationTargetFromNativePath(path), branchAccessTargetFromNativePath(path)]) {
+			if (!target) continue;
+			const url = new URL(target, window.location.origin);
+			for (const [key, value] of new URLSearchParams(window.location.search || "")) {
+				if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+			}
+			sameTab(`${url.pathname}${url.search}`, { replace: true });
+			return true;
+		}
+		return false;
+	}
+
+	function navigationCandidate(event) {
+		return event.target?.closest?.([
+			".edge-sidebar-item",
+			".vetedge-product-menu-link",
+			".edge-product-menu-item",
+			".edge-product-menu__item",
+			"[data-edge-product-menu] button",
+			"[data-edge-product-menu] a",
+			"[class*='product-menu'] button",
+			"[class*='product-menu'] a",
+			"[role='menuitem']",
+		].join(", ")) || null;
+	}
+
+	function explicitTarget(candidate) {
+		return String(candidate?.dataset?.linkTo || candidate?.getAttribute?.("data-link-to") || candidate?.getAttribute?.("href") || "").trim();
+	}
+
+	function isNativeHospitalisationCandidate(candidate) {
+		const explicit = explicitTarget(candidate);
+		const text = itemLabel(candidate);
+		if (explicit === HOSPITALISATION_DOCTYPE) return true;
+		if (normalizeDeskPath(explicit) === `/desk/${slug(HOSPITALISATION_DOCTYPE)}`) return true;
+		return text === "Hospitalisations" || text.startsWith("Hospitalisations\n");
+	}
+
+	function reportNameFromCandidate(candidate) {
+		const explicit = explicitTarget(candidate);
+		if (MIGRATED_REPORTS[explicit]) return explicit;
+		const text = itemLabel(candidate);
+		for (const [reportName, label] of Object.entries(MIGRATED_REPORTS)) {
+			if (text === reportName || text === label || text.startsWith(`${reportName}\n`) || text.startsWith(`${label}\n`) || text.includes(reportName) || text.includes(label)) return reportName;
+		}
+		return "";
+	}
+
+	function isCareLocationCandidate(candidate) {
+		const explicit = explicitTarget(candidate);
+		if (explicit === CARE_LOCATION_DOCTYPE || explicit === "vetedge-care-locations" || explicit.includes("veterinary-care-location")) return true;
+		const text = itemLabel(candidate);
+		return text === "Care Locations" || text.startsWith("Care Locations\n") || text.includes("Care Locations");
+	}
+
+	function branchAccessCandidateTarget(candidate) {
+		const explicit = explicitTarget(candidate);
+		const text = itemLabel(candidate);
+		for (const [doctype, target] of Object.entries(BRANCH_ACCESS_ROUTES)) {
+			if (explicit === doctype || explicit.includes(slug(doctype)) || text === doctype || text.includes(doctype)) return target;
+		}
+		return "";
+	}
+
+	function sameTabProductPageTarget(candidate) {
+		const explicit = explicitTarget(candidate);
+		const text = itemLabel(candidate);
+		for (const [label, target] of Object.entries(SAME_TAB_PRODUCT_PAGES)) {
+			if (text === label || text.includes(label)) return target;
+			const targetPath = normalizeDeskPath(target);
+			if (explicit && (normalizeDeskPath(explicit) === targetPath || explicit.includes(targetPath.split("/").pop()))) return target;
+		}
+		return "";
+	}
+
+	function targetForMenuItem(item) {
+		const linkType = String(item?.link_type || item?.linkType || "Page");
+		const linkTo = String(item?.link_to || item?.linkTo || "").trim();
+		const label = String(item?.label || "").trim();
+		if (linkType === "DocType" && linkTo === HOSPITALISATION_DOCTYPE) return HOSPITALISATION_OPERATIONS_ROUTE;
+		if (linkType === "Report" && MIGRATED_REPORTS[linkTo]) return reportCenterTarget(linkTo);
+		if (linkType === "DocType" && linkTo === CARE_LOCATION_DOCTYPE) return CARE_LOCATION_ROUTE;
+		if (linkType === "DocType" && BRANCH_ACCESS_ROUTES[linkTo]) return BRANCH_ACCESS_ROUTES[linkTo];
+		if (linkTo === "Veterinary Settings" || label === "Settings") return SAME_TAB_PRODUCT_PAGES.Settings;
+		if (linkTo === "veterinary-training-centre" || label === "Training Centre") return SAME_TAB_PRODUCT_PAGES["Training Centre"];
+		return "";
+	}
+
+	function patchSharedProductMenuNavigation() {
+		const runtime = window.EdgeSuiteUI || window.EdgeUI;
+		if (!runtime?.registerProductMenu || !runtime?.getProductMenuConfig || runtime.__vetedgeDestinationCoveragePatched) return false;
+		const config = runtime.getProductMenuConfig();
+		const product = String(config?.product || "").trim().toLowerCase();
+		if (!config || !["vetedge", "veterinary"].includes(product)) return false;
+		const previousNavigate = typeof config.navigate === "function" ? config.navigate : null;
+		const sections = (config.sections || [])
+			.map((section) => ({
+				...section,
+				items: (section.items || []).filter((item) => !(
+					String(item?.link_type || item?.linkType || "") === "DocType" &&
+					String(item?.link_to || item?.linkTo || "") === HOSPITALISATION_DOCTYPE
+				)),
+			}))
+			.filter((section) => section.items.length);
+		runtime.registerProductMenu({
+			...config,
+			sections,
+			navigate(item) {
+				const target = targetForMenuItem(item);
+				if (target && sameTab(target)) return;
+				previousNavigate?.(item);
+			},
+		});
+		runtime.__vetedgeDestinationCoveragePatched = true;
+		runtime.refreshProductMenu?.();
+		return true;
+	}
+
+	function focusForCurrentRoute() {
+		const path = normalizeDeskPath(window.location.pathname);
+		const params = new URLSearchParams(window.location.search || "");
+		if (path === HOSPITALISATION_OPERATIONS_ROUTE || path.startsWith(`${HOSPITALISATION_OPERATIONS_ROUTE}/`)) {
+			return { section: "Hospital & Services", label: "Hospitalisation Operations" };
+		}
+		if (path === "/desk/vetedge-report-center") {
+			const report = params.get("report") || "";
+			const label = MIGRATED_REPORTS[report] || report;
+			if (label) return { section: "Reports", label };
+		}
+		if (path === CARE_LOCATION_ROUTE) return { section: "Configuration", label: "Care Locations" };
+		if (path === "/desk/vetedge-branch-access") {
+			const resource = params.get("resource") || "user-assignments";
+			return {
+				section: "Configuration",
+				label: resource === "practitioner-assignments" ? "Branch Practitioner Assignment" : "Branch User Assignment",
+			};
+		}
+		if (path === "/desk/veterinary-settings-center") return { section: "Configuration", label: "Settings" };
+		if (path === "/desk/vetedge-regulatory-reporting") return { section: "Regulatory Reporting", label: "VCN / NADIS Reports" };
+		if (path === "/desk/veterinary-training-centre") return { section: "Help & Training", label: "Training Centre" };
+		if (path === "/desk/vetedge-vitals-center") return { section: "Clinical", label: "Vital Signs" };
+		if (path === "/desk/vetedge-treatment-plan-report") return { section: "Reports", label: "Planned Treatment" };
+		return null;
+	}
+
 	function sync() {
-		const path = window.location.pathname.replace(/\/$/, "");
+		suppressNativeHospitalisationSidebarSource();
+		if (redirectCurrentLegacyRoute()) return;
+		patchSharedProductMenuNavigation();
+		const focus = focusForCurrentRoute();
 		document.querySelectorAll(".edge-app-shell[data-edge-product='vetedge'], .edge-app-shell[data-edge-product='veterinary']").forEach((shell) => {
 			movePlannedTreatmentToReports(shell);
-			if (path === "/desk/vetedge-vitals-center" || path === "/app/vetedge-vitals-center") {
-				const clinical = section(shell, "Clinical");
-				const vitalSigns = itemIn(clinical, "Vital Signs");
-				if (clinical && vitalSigns) expandOnly(shell, clinical, vitalSigns);
-			}
-			if (path === "/desk/vetedge-treatment-plan-report" || path === "/app/vetedge-treatment-plan-report") {
-				const reports = section(shell, "Reports");
-				const planned = itemIn(reports, "Planned Treatment");
-				if (reports && planned) expandOnly(shell, reports, planned);
-			}
+			removeNativeHospitalisationSidebarItems(shell);
+			if (!focus) return;
+			const activeSection = section(shell, focus.section);
+			const activeItem = itemIn(activeSection, focus.label);
+			if (activeSection && activeItem) expandOnly(shell, activeSection, activeItem);
 		});
 	}
 
 	document.addEventListener("click", (event) => {
-		const item = event.target?.closest?.(".edge-sidebar-item");
-		if (!item || itemLabel(item) !== "Planned Treatment") return;
-		event.preventDefault();
-		event.stopPropagation();
-		event.stopImmediatePropagation?.();
-		window.location.assign("/desk/vetedge-treatment-plan-report");
+		const candidate = navigationCandidate(event);
+		if (!candidate) return;
+
+		if (isNativeHospitalisationCandidate(candidate)) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(HOSPITALISATION_OPERATIONS_ROUTE);
+			return;
+		}
+
+		if (candidate.matches?.(".edge-sidebar-item") && itemLabel(candidate) === "Planned Treatment") {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab("/desk/vetedge-treatment-plan-report");
+			return;
+		}
+
+		const reportName = reportNameFromCandidate(candidate);
+		if (reportName) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(reportCenterTarget(reportName));
+			return;
+		}
+
+		if (isCareLocationCandidate(candidate)) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(CARE_LOCATION_ROUTE);
+			return;
+		}
+
+		const branchAccessTarget = branchAccessCandidateTarget(candidate);
+		if (branchAccessTarget) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(branchAccessTarget);
+			return;
+		}
+
+		const productPageTarget = sameTabProductPageTarget(candidate);
+		if (productPageTarget) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+			sameTab(productPageTarget);
+		}
 	}, true);
 
-	for (const eventName of ["page-change", "desktop_screen", "sidebar_setup", "toolbar_setup"]) document.addEventListener(eventName, () => window.setTimeout(sync, 0));
+	window.VetEdgeNavigationCoverage = Object.freeze({
+		migratedReports: MIGRATED_REPORTS,
+		careLocationRoute: CARE_LOCATION_ROUTE,
+		hospitalisationDoctype: HOSPITALISATION_DOCTYPE,
+		hospitalisationOperationsRoute: HOSPITALISATION_OPERATIONS_ROUTE,
+		legacyHospitalisationEpisodeRoute: LEGACY_HOSPITALISATION_EPISODE_ROUTE,
+		branchAccessRoutes: BRANCH_ACCESS_ROUTES,
+		sameTabProductPages: SAME_TAB_PRODUCT_PAGES,
+		resolveMigratedRoute: migratedTargetFromRoute,
+		navigateMigratedRoute(route) {
+			const target = migratedTargetFromRoute(route);
+			return target ? sameTab(target) : false;
+		},
+		resolveMenuItem: targetForMenuItem,
+		navigateMenuItem(item) {
+			const target = targetForMenuItem(item);
+			return target ? sameTab(target) : false;
+		},
+		sync,
+	});
+
+	for (const eventName of ["page-change", "desktop_screen", "sidebar_setup", "toolbar_setup"]) {
+		document.addEventListener(eventName, () => window.setTimeout(sync, 0));
+	}
 	const observer = new MutationObserver(() => window.requestAnimationFrame(sync));
 	if (document.body) observer.observe(document.body, { childList: true, subtree: true });
 	window.addEventListener("popstate", sync);
