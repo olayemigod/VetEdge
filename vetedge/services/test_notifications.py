@@ -544,11 +544,61 @@ class TestNotifications(TestCase):
 		self.assertEqual(result[0]["due_state"], "Due Soon")
 		self.assertEqual(result[1]["due_state"], "Overdue")
 
-	def test_payment_reminder_outstanding_invoice_logic(self):
+	def test_vaccination_reminders_respect_toggle_and_repeat_interval(self):
+		with patch(
+			"vetedge.services.notifications.get_notification_settings",
+			return_value={
+				"enabled": True,
+				"notify_on_vaccination_reminders": False,
+				"vaccination_due_reminder_days": 7,
+				"vaccination_reminder_repeat_days": 3,
+			},
+		):
+			self.assertEqual(send_due_vaccination_notifications(), [])
+
+		lookbacks = []
 		with (
 			patch(
 				"vetedge.services.notifications.get_notification_settings",
-				return_value={"enabled": True, "payment_reminder_days": 3, "channels": ["Email"], "notify_on_payment_received": True},
+				return_value={
+					"enabled": True,
+					"notify_on_vaccination_reminders": True,
+					"vaccination_due_reminder_days": 7,
+					"vaccination_reminder_repeat_days": 3,
+				},
+			),
+			patch(
+				"vetedge.services.vaccination_notifications.run_vaccination_notification_checks",
+				return_value={"vaccination_due": [], "vaccination_overdue": []},
+			),
+			patch(
+				"vetedge.services.notifications.query_due_vaccination_notifications",
+				return_value=[
+					{
+						"name": "VACC-1",
+						"due_state": "Due Soon",
+						"patient": "VP-1",
+						"primary_owner": "CUST-1",
+						"service_branch": "Main",
+						"next_due_date": "2026-04-20",
+					}
+				],
+			),
+			patch(
+				"vetedge.services.notifications.already_notified_recently",
+				side_effect=lambda *args, **kwargs: lookbacks.append(kwargs.get("lookback_days")) or True,
+			),
+		):
+			self.assertEqual(send_due_vaccination_notifications(), [])
+
+		self.assertEqual(lookbacks, [3])
+
+	def test_payment_reminder_outstanding_invoice_logic(self):
+		emitted = []
+		with (
+			patch(
+				"vetedge.services.notifications.get_notification_settings",
+				return_value={"enabled": True, "payment_reminder_days": 3, "channels": ["Email"], "notify_on_payment_follow_up": True},
 			),
 			patch(
 				"vetedge.services.notifications.frappe.get_all",
@@ -559,10 +609,15 @@ class TestNotifications(TestCase):
 			),
 			patch("vetedge.services.notifications.frappe.get_meta", return_value=SimpleNamespace(has_field=lambda fieldname: fieldname == "branch")),
 			patch("vetedge.services.notifications.already_notified_recently", return_value=False),
-			patch("vetedge.services.notifications.emit_notification_event", side_effect=lambda **kwargs: {"queued": True, "reference_name": kwargs["reference_name"]}),
+			patch(
+				"vetedge.services.notifications.emit_notification_event",
+				side_effect=lambda **kwargs: emitted.append(kwargs) or {"queued": True, "reference_name": kwargs["reference_name"]},
+			),
 			patch("vetedge.services.notifications.getdate", side_effect=lambda value=None: frappe.utils.getdate("2026-04-19" if value is None else value)),
 			patch("vetedge.services.notifications.add_days", side_effect=lambda date_obj, days: frappe.utils.add_days(date_obj, days)),
 		):
 			result = send_payment_pending_reminders()
 
 		self.assertEqual(len(result), 1)
+		self.assertEqual(len(emitted), 1)
+		self.assertEqual(emitted[0]["event_key"], "payment_reminder")
