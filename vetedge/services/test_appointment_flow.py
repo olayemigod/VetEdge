@@ -274,7 +274,6 @@ class TestAppointmentFlow(TestCase):
 		with (
 			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
 			patch("vetedge.services.appointment_flow.can_access_consultation"),
-			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			from vetedge.services.appointment_flow import create_follow_up_from_consultation
 
@@ -285,7 +284,6 @@ class TestAppointmentFlow(TestCase):
 		self.assertIsNone(inserted[0].get("linked_consultation"))
 		self.assertEqual(set_values[0][2], "follow_up_appointment")
 		self.assertNotIn("planned_treatments", {args[2] for args in set_values})
-		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_created")
 
 	def test_normalize_clears_old_follow_up_link_bug(self):
 		doc = make_appointment_doc(
@@ -339,7 +337,6 @@ class TestAppointmentFlow(TestCase):
 			patch("vetedge.services.appointment_flow.now_datetime", return_value="2026-04-20 10:00:00"),
 			patch("vetedge.services.appointment_flow.validate_registration_payment_before_first_consultation"),
 			patch("vetedge.services.appointment_flow.assert_consultation_can_proceed") as payment_gate,
-			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
 		):
 			result = create_consultation_from_appointment("VAPT-001")
 
@@ -350,7 +347,6 @@ class TestAppointmentFlow(TestCase):
 		self.assertEqual(appointment.status, "In Consultation")
 		self.assertEqual(saved, [appointment])
 		payment_gate.assert_called_once_with(inserted[0], "In Progress")
-		self.assertEqual(emit.call_args.kwargs["event_key"], "appointment_started")
 
 	def test_consultation_creation_from_appointment_rejects_duplicate_link(self):
 		appointment = make_appointment_doc(
@@ -392,15 +388,11 @@ class TestAppointmentFlow(TestCase):
 
 		frappe_stub = make_frappe_stub(get_doc=lambda *args, **kwargs: appointment)
 
-		with (
-			patch("vetedge.services.appointment_flow.frappe", frappe_stub),
-			patch("vetedge.services.appointment_flow.emit_notification_event", return_value={"queued": False}) as emit,
-		):
+		with patch("vetedge.services.appointment_flow.frappe", frappe_stub):
 			result = transition_appointment_status("VAPT-001", "Confirmed")
 
 		self.assertEqual(result["status"], "Confirmed")
 		self.assertEqual(saved, [appointment])
-		self.assertEqual(emit.call_args.kwargs.get("event_key") or emit.call_args.kwargs.get("event"), "appointment_confirmed")
 
 
 def make_appointment_doc(**overrides):

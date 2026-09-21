@@ -560,8 +560,6 @@ def get_owner_invoice_pdf_url(invoice_name: str) -> str:
 
 @frappe.whitelist()
 def request_owner_appointment_change(appointment: str, action: str, appointment_datetime: str | None = None) -> dict:
-	from vetedge.services.appointment_flow import emit_appointment_status_notification
-
 	owner_context = get_owner_context()
 	settings = get_portal_settings()
 	validate_owner_appointment_access(appointment, owner_context)
@@ -570,10 +568,8 @@ def request_owner_appointment_change(appointment: str, action: str, appointment_
 	if action == "cancel":
 		if not settings["allow_owner_cancel_appointment"]:
 			frappe.throw("Owner appointment cancellation is not enabled.", frappe.PermissionError)
-		previous_status = appointment_doc.status
 		appointment_doc.status = "Cancelled"
 		appointment_doc.save(ignore_permissions=True)
-		emit_appointment_status_notification(appointment_doc, previous_status, appointment_doc.status)
 		return {"name": appointment_doc.name, "status": appointment_doc.status}
 
 	if action == "reschedule":
@@ -581,26 +577,9 @@ def request_owner_appointment_change(appointment: str, action: str, appointment_
 			frappe.throw("Owner appointment reschedule is not enabled.", frappe.PermissionError)
 		if not appointment_datetime:
 			frappe.throw("A new appointment date/time is required.", frappe.ValidationError)
-		previous_datetime = appointment_doc.appointment_datetime
-		previous_status = appointment_doc.status
 		appointment_doc.appointment_datetime = appointment_datetime
 		appointment_doc.status = "Rescheduled"
 		appointment_doc.save(ignore_permissions=True)
-		emit_notification_event(
-			event_key="appointment_rescheduled",
-			reference_doctype=appointment_doc.doctype,
-			reference_name=appointment_doc.name,
-			payload={
-				"owner_user": owner_context.get("user"),
-				"customer": appointment_doc.primary_owner,
-				"patient": appointment_doc.patient,
-				"branch": appointment_doc.branch,
-				"previous_datetime": previous_datetime,
-				"appointment_datetime": appointment_doc.appointment_datetime,
-				"previous_status": previous_status,
-				"status": appointment_doc.status,
-			},
-		)
 		return {"name": appointment_doc.name, "status": appointment_doc.status}
 
 	frappe.throw(f"Unsupported appointment action: {action}", frappe.ValidationError)

@@ -8,6 +8,7 @@
  "field_order": [
   "event_section",
   "event_key",
+  "idempotency_key",
   "channel",
   "status",
   "backend_mode",
@@ -27,8 +28,9 @@
  "fields": [
   {"fieldname": "event_section", "fieldtype": "Section Break", "label": "Event"},
   {"fieldname": "event_key", "fieldtype": "Data", "in_list_view": 1, "label": "Event Key", "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "unique": 1},
   {"fieldname": "channel", "fieldtype": "Select", "in_list_view": 1, "label": "Channel", "options": "\nEmail\nSMS\nWhatsApp", "reqd": 1},
-  {"default": "Queued", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Queued\nSent\nFailed\nSkipped", "reqd": 1},
+  {"default": "Queued", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Reserved\nQueued\nSent\nFailed\nSkipped", "reqd": 1},
   {"default": "local", "fieldname": "backend_mode", "fieldtype": "Select", "label": "Backend Mode", "options": "local\nprocessedge_core", "reqd": 1},
   {"fieldname": "audience_section", "fieldtype": "Section Break", "label": "Audience"},
   {"fieldname": "recipient", "fieldtype": "Data", "in_list_view": 1, "label": "Recipient"},

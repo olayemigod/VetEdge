@@ -11,11 +11,14 @@ from vetedge.services.notification_backends.processedge_core_backend import (
 	ProcessEdgeCoreNotificationBackend,
 )
 from vetedge.services.notifications import (
+	apply_notification_aliases,
+	build_delivery_idempotency_key,
 	dispatch_notification_event,
 	emit_notification_event,
 	parse_notification_channels,
 	query_due_vaccination_notifications,
 	resolve_notification_recipients,
+	resolve_sales_invoice_patient,
 	send_due_vaccination_notifications,
 	send_due_appointment_reminders,
 	send_payment_pending_reminders,
@@ -23,6 +26,71 @@ from vetedge.services.notifications import (
 
 
 class TestNotifications(TestCase):
+	def test_patient_name_alias_replaces_blank_or_raw_patient_identifier(self):
+		def get_value(doctype, name=None, fieldname=None, as_dict=False, **kwargs):
+			if doctype == "Veterinary Patient" and name == "VP-001":
+				return frappe._dict(
+					patient_name="Buddy",
+					primary_owner="CUST-001",
+					default_branch="Main Branch",
+				)
+			return None
+
+		with patch("vetedge.services.notifications.frappe.db.get_value", side_effect=get_value):
+			blank = apply_notification_aliases(
+				{"patient": "VP-001", "patient_name": None},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+			raw = apply_notification_aliases(
+				{"patient": "VP-001", "patient_name": "VP-001"},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+
+		self.assertEqual(blank["patient_name"], "Buddy")
+		self.assertEqual(raw["patient_name"], "Buddy")
+		self.assertEqual(blank["primary_owner"], "CUST-001")
+		self.assertEqual(blank["branch"], "Main Branch")
+
+	def test_sales_invoice_patient_resolves_from_billing_session(self):
+		def exists(doctype, name=None):
+			return doctype in {"Veterinary Billing Session", "Veterinary Billing Session Charge"}
+
+		def get_value(doctype, name=None, fieldname=None, **kwargs):
+			if (
+				doctype == "Veterinary Billing Session"
+				and isinstance(name, dict)
+				and name.get("current_draft_invoice") == "SINV-001"
+				and fieldname == "animal"
+			):
+				return "VP-001"
+			return None
+
+		with (
+			patch("vetedge.services.billing_core.get_invoice_patient_marker", return_value=None),
+			patch("vetedge.services.notifications.frappe.db.exists", side_effect=exists),
+			patch("vetedge.services.notifications.frappe.db.get_value", side_effect=get_value),
+		):
+			self.assertEqual(resolve_sales_invoice_patient("SINV-001"), "VP-001")
+
+	def test_practitioner_name_alias_is_human_readable(self):
+		with (
+			patch(
+				"vetedge.services.notifications.frappe.db.get_value",
+				return_value=frappe._dict(patient_name="Buddy", primary_owner="CUST-001", default_branch="Main"),
+			),
+			patch("vetedge.services.notifications.get_user_display_name", return_value="Dr Jane Doe"),
+		):
+			context = apply_notification_aliases(
+				{"patient": "VP-001", "practitioner": "doctor@example.com", "practitioner_name": ""},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+
+		self.assertEqual(context["practitioner"], "Dr Jane Doe")
+		self.assertEqual(context["practitioner_name"], "Dr Jane Doe")
+
 	def test_transaction_routing_does_not_broadcast_to_doctor_role(self):
 		def exists(doctype, name=None):
 			if doctype == "User":
@@ -331,7 +399,7 @@ class TestNotifications(TestCase):
 		self.assertEqual(sent[0]["subject"], "Payment Received")
 		self.assertTrue(sent[0]["raw_html"])
 
-	def test_missing_template_fallback_works(self):
+	def test_missing_configured_template_skips_email(self):
 		sent = []
 		backend = LocalNotificationBackend()
 		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
@@ -346,16 +414,17 @@ class TestNotifications(TestCase):
 				event_definition=event_definition,
 				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
 				channels=["Email"],
-				context={"clinic_name": "VetEdge", "notes": "sensitive"},
+				context={"clinic_name": "Clinic", "notes": "sensitive"},
 				settings={},
 				reference_doctype="Sales Invoice",
 				reference_name="SINV-001",
 			)
 
-		self.assertIsNone(result[0]["provider_reference"])
-		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
+		self.assertEqual(result[0]["status"], "Skipped")
+		self.assertEqual(result[0]["provider_reference"], "VetEdge - Payment Received")
+		self.assertEqual(sent, [])
 
-	def test_blank_rendered_template_falls_back_to_generated_email(self):
+	def test_blank_configured_template_skips_email(self):
 		sent = []
 		backend = LocalNotificationBackend()
 		event_definition = SimpleNamespace(event_key="payment_received", event_label="Payment Received", email_template="VetEdge - Payment Received")
@@ -377,15 +446,96 @@ class TestNotifications(TestCase):
 				event_definition=event_definition,
 				recipient={"identifier": "CUST-001", "address": "owner@example.com", "audience_type": "Owner"},
 				channels=["Email"],
-				context={"clinic_name": "VetEdge", "invoice": "SINV-001"},
+				context={"clinic_name": "Clinic", "invoice": "SINV-001"},
 				settings={},
 				reference_doctype="Sales Invoice",
 				reference_name="SINV-001",
 			)
 
-		self.assertIsNone(result[0]["provider_reference"])
-		self.assertIn("VetEdge: Payment Received", sent[0]["subject"])
-		self.assertIn("SINV-001", sent[0]["message"])
+		self.assertEqual(result[0]["status"], "Skipped")
+		self.assertEqual(sent, [])
+
+	def test_unmapped_fallback_filters_clinical_sensitive_fields(self):
+		backend = LocalNotificationBackend()
+		event_definition = SimpleNamespace(event_key="internal_update", event_label="Internal Update", email_template=None)
+		subject, message, template = backend._build_fallback_email(
+			event_definition,
+			{"clinic_name": "Clinic", "invoice": "SINV-001", "diagnosis": "Sensitive", "medical_notes": "Sensitive"},
+		)
+
+		self.assertEqual(subject, "Clinic: Internal Update")
+		self.assertIsNone(template)
+		self.assertIn("SINV-001", message)
+		self.assertNotIn("Sensitive", message)
+
+	def test_appointment_delivery_idempotency_key_changes_with_occurrence(self):
+		base = {
+			"event_key": "appointment_rescheduled",
+			"reference_doctype": "Veterinary Appointment",
+			"reference_name": "VAPT-001",
+			"recipient": "owner@example.com",
+			"channel": "Email",
+		}
+		first = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-20 10:00:00"},
+		)
+		duplicate = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-20 10:00:00"},
+		)
+		later = build_delivery_idempotency_key(
+			**base,
+			context={"previous_status": "Confirmed", "status": "Rescheduled", "appointment_datetime": "2026-09-21 10:00:00"},
+		)
+
+		self.assertEqual(first, duplicate)
+		self.assertNotEqual(first, later)
+
+	def test_duplicate_lifecycle_reservation_does_not_call_backend(self):
+		backend = SimpleNamespace(
+			dispatch=lambda **kwargs: (_ for _ in ()).throw(
+				AssertionError("Duplicate lifecycle delivery must not call backend.dispatch")
+			)
+		)
+		with (
+			patch("vetedge.services.notifications.get_notification_backend", return_value=backend),
+			patch("vetedge.services.notifications.resolve_recipient_channels", return_value=["Email"]),
+			patch(
+				"vetedge.services.notifications.reserve_notification_delivery",
+				return_value={
+					"reserved": False,
+					"duplicate": True,
+					"name": "VNL-EXISTING",
+					"idempotency_key": "delivery::abc",
+				},
+			),
+		):
+			result = dispatch_notification_event(
+				{
+					"event_key": "appointment_confirmed",
+					"reference_doctype": "Veterinary Appointment",
+					"reference_name": "VAPT-001",
+					"context": {
+						"previous_status": "Scheduled",
+						"status": "Confirmed",
+						"appointment_datetime": "2026-09-20 10:00:00",
+					},
+					"recipients": [
+						{
+							"identifier": "CUST-001",
+							"address": "owner@example.com",
+							"audience_type": "Owner",
+						}
+					],
+				},
+				settings={"notification_backend_mode": "local"},
+			)
+
+		self.assertEqual(len(result["attempts"]), 1)
+		self.assertEqual(result["attempts"][0]["status"], "Skipped")
+		self.assertEqual(result["attempts"][0]["error_message"], "duplicate_delivery_suppressed")
+		self.assertEqual(result["attempts"][0]["idempotency_key"], "delivery::abc")
 
 	def test_processedge_core_mode_returns_pending_safely(self):
 		backend = ProcessEdgeCoreNotificationBackend()
@@ -461,11 +611,61 @@ class TestNotifications(TestCase):
 		self.assertEqual(result[0]["due_state"], "Due Soon")
 		self.assertEqual(result[1]["due_state"], "Overdue")
 
-	def test_payment_reminder_outstanding_invoice_logic(self):
+	def test_vaccination_reminders_respect_toggle_and_repeat_interval(self):
+		with patch(
+			"vetedge.services.notifications.get_notification_settings",
+			return_value={
+				"enabled": True,
+				"notify_on_vaccination_reminders": False,
+				"vaccination_due_reminder_days": 7,
+				"vaccination_reminder_repeat_days": 3,
+			},
+		):
+			self.assertEqual(send_due_vaccination_notifications(), [])
+
+		lookbacks = []
 		with (
 			patch(
 				"vetedge.services.notifications.get_notification_settings",
-				return_value={"enabled": True, "payment_reminder_days": 3, "channels": ["Email"], "notify_on_payment_received": True},
+				return_value={
+					"enabled": True,
+					"notify_on_vaccination_reminders": True,
+					"vaccination_due_reminder_days": 7,
+					"vaccination_reminder_repeat_days": 3,
+				},
+			),
+			patch(
+				"vetedge.services.vaccination_notifications.run_vaccination_notification_checks",
+				return_value={"vaccination_due": [], "vaccination_overdue": []},
+			),
+			patch(
+				"vetedge.services.notifications.query_due_vaccination_notifications",
+				return_value=[
+					{
+						"name": "VACC-1",
+						"due_state": "Due Soon",
+						"patient": "VP-1",
+						"primary_owner": "CUST-1",
+						"service_branch": "Main",
+						"next_due_date": "2026-04-20",
+					}
+				],
+			),
+			patch(
+				"vetedge.services.notifications.already_notified_recently",
+				side_effect=lambda *args, **kwargs: lookbacks.append(kwargs.get("lookback_days")) or True,
+			),
+		):
+			self.assertEqual(send_due_vaccination_notifications(), [])
+
+		self.assertEqual(lookbacks, [3])
+
+	def test_payment_reminder_outstanding_invoice_logic(self):
+		emitted = []
+		with (
+			patch(
+				"vetedge.services.notifications.get_notification_settings",
+				return_value={"enabled": True, "payment_reminder_days": 3, "channels": ["Email"], "notify_on_payment_follow_up": True},
 			),
 			patch(
 				"vetedge.services.notifications.frappe.get_all",
@@ -476,10 +676,15 @@ class TestNotifications(TestCase):
 			),
 			patch("vetedge.services.notifications.frappe.get_meta", return_value=SimpleNamespace(has_field=lambda fieldname: fieldname == "branch")),
 			patch("vetedge.services.notifications.already_notified_recently", return_value=False),
-			patch("vetedge.services.notifications.emit_notification_event", side_effect=lambda **kwargs: {"queued": True, "reference_name": kwargs["reference_name"]}),
+			patch(
+				"vetedge.services.notifications.emit_notification_event",
+				side_effect=lambda **kwargs: emitted.append(kwargs) or {"queued": True, "reference_name": kwargs["reference_name"]},
+			),
 			patch("vetedge.services.notifications.getdate", side_effect=lambda value=None: frappe.utils.getdate("2026-04-19" if value is None else value)),
 			patch("vetedge.services.notifications.add_days", side_effect=lambda date_obj, days: frappe.utils.add_days(date_obj, days)),
 		):
 			result = send_payment_pending_reminders()
 
 		self.assertEqual(len(result), 1)
+		self.assertEqual(len(emitted), 1)
+		self.assertEqual(emitted[0]["event_key"], "payment_reminder")

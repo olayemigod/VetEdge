@@ -92,8 +92,9 @@ def create_guest_booking_request(**values) -> dict:
 		appointment = create_awaiting_registration_appointment(doc)
 		doc.db_set("linked_appointment", appointment.name, update_modified=False)
 
+	event_key = "guest_appointment_request_received" if doc.appointment_requested else "registration_request_received"
 	emit_notification_event(
-		event_key="registration_request_received",
+		event_key=event_key,
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
 		payload={
@@ -104,23 +105,9 @@ def create_guest_booking_request(**values) -> dict:
 			"preferred_branch": doc.preferred_branch,
 			"preferred_datetime": doc.preferred_datetime,
 			"appointment_requested": doc.appointment_requested,
+			"linked_appointment": doc.linked_appointment,
 		},
 	)
-	if doc.appointment_requested:
-		emit_notification_event(
-			event_key="guest_appointment_request_received",
-			reference_doctype=doc.doctype,
-			reference_name=doc.name,
-			payload={
-				"guest_name": doc.guest_name,
-				"guest_email": doc.guest_email,
-				"guest_phone": doc.guest_phone,
-				"pet_name": doc.pet_name,
-				"preferred_branch": doc.preferred_branch,
-				"preferred_datetime": doc.preferred_datetime,
-				"linked_appointment": doc.linked_appointment,
-			},
-		)
 
 	return {
 		"name": doc.name,
@@ -235,14 +222,16 @@ def create_appointment_from_booking_request(booking_request: str) -> dict:
 	request.save()
 
 	emit_notification_event(
-		event_key="appointment_booked",
+		event_key="guest_appointment_ready_for_approval",
 		reference_doctype=appointment.doctype,
 		reference_name=appointment.name,
 		payload={
 			"booking_request": request.name,
+			"customer": request.linked_customer,
 			"patient": appointment.patient,
 			"branch": appointment.branch,
 			"appointment_datetime": appointment.appointment_datetime,
+			"status": appointment.status,
 		},
 	)
 
