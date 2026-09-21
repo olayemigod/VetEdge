@@ -1605,7 +1605,103 @@ def hydrate_reference_context(
 		if context.get(fieldname) in (None, "") and values.get(fieldname) not in (None, ""):
 			context[fieldname] = values.get(fieldname)
 
+	if reference_doctype == "Sales Invoice" and context.get("patient") in (None, ""):
+		patient = resolve_sales_invoice_patient(reference_name)
+		if patient:
+			context["patient"] = patient
+
 	return context
+
+
+def resolve_sales_invoice_patient(invoice_name: str | None) -> str | None:
+	"""Resolve the veterinary patient behind a Sales Invoice without mutating accounting records."""
+	if not invoice_name:
+		return None
+
+	# Prefer any explicit patient marker already present on the invoice or its items.
+	try:
+		from vetedge.services.billing_core import get_invoice_patient_marker
+
+		patient = get_invoice_patient_marker(invoice_name)
+		if patient:
+			return patient
+	except Exception:
+		pass
+
+	# Billing Session is the strongest VetEdge-owned invoice-to-patient relationship.
+	if frappe.db.exists("DocType", "Veterinary Billing Session"):
+		for fieldname in ("current_draft_invoice", "latest_invoice"):
+			try:
+				patient = frappe.db.get_value(
+					"Veterinary Billing Session",
+					{fieldname: invoice_name},
+					"animal",
+				)
+				if patient:
+					return patient
+			except Exception:
+				pass
+
+	if (
+		frappe.db.exists("DocType", "Veterinary Billing Session Charge")
+		and frappe.db.exists("DocType", "Veterinary Billing Session")
+	):
+		try:
+			session_name = frappe.db.get_value(
+				"Veterinary Billing Session Charge",
+				{"invoice": invoice_name},
+				"parent",
+			)
+			if session_name:
+				patient = frappe.db.get_value("Veterinary Billing Session", session_name, "animal")
+				if patient:
+					return patient
+		except Exception:
+			pass
+
+	# Compatibility fallback for standalone/legacy service invoices not yet represented by a session.
+	for doctype, invoice_fields in (
+		("Veterinary Consultation", ("linked_invoice",)),
+		("Veterinary Lab Order", ("linked_invoice", "invoice")),
+		("Veterinary Vaccination Record", ("linked_invoice",)),
+		("Veterinary Hospitalisation", ("sales_invoice",)),
+		("Pet Grooming Session", ("linked_invoice",)),
+		("Pet Grooming Appointment", ("linked_invoice",)),
+		("Pet Boarding Booking", ("linked_invoice",)),
+		("Veterinary Patient", ("registration_invoice",)),
+	):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		try:
+			meta = frappe.get_meta(doctype)
+		except Exception:
+			continue
+
+		patient_field = None
+		for candidate in ("patient", "animal"):
+			if meta.has_field(candidate):
+				patient_field = candidate
+				break
+		if doctype == "Veterinary Patient":
+			patient_field = "name"
+		if not patient_field:
+			continue
+
+		for invoice_field in invoice_fields:
+			if not meta.has_field(invoice_field):
+				continue
+			try:
+				patient = frappe.db.get_value(
+					doctype,
+					{invoice_field: invoice_name},
+					patient_field,
+				)
+				if patient:
+					return patient
+			except Exception:
+				continue
+
+	return None
 
 
 def apply_notification_aliases(
@@ -1618,17 +1714,27 @@ def apply_notification_aliases(
 	context.setdefault("service_branch", context.get("branch"))
 	context.setdefault("branch", context.get("service_branch"))
 
-	if context.get("patient") and not context.get("patient_name"):
+	patient = context.get("patient")
+	if patient:
 		patient_data = frappe.db.get_value(
 			"Veterinary Patient",
-			context["patient"],
+			patient,
 			["patient_name", "primary_owner", "default_branch"],
 			as_dict=True,
 		) or {}
-		context.setdefault("patient_name", patient_data.get("patient_name"))
-		context.setdefault("primary_owner", patient_data.get("primary_owner"))
-		context.setdefault("service_branch", patient_data.get("default_branch"))
-		context.setdefault("branch", patient_data.get("default_branch"))
+		resolved_patient_name = patient_data.get("patient_name") or get_link_display_name(
+			"Veterinary Patient",
+			patient,
+			("patient_name",),
+		)
+		if context.get("patient_name") in (None, "", patient) and resolved_patient_name:
+			context["patient_name"] = resolved_patient_name
+		if context.get("primary_owner") in (None, "") and patient_data.get("primary_owner"):
+			context["primary_owner"] = patient_data.get("primary_owner")
+		if context.get("service_branch") in (None, "") and patient_data.get("default_branch"):
+			context["service_branch"] = patient_data.get("default_branch")
+		if context.get("branch") in (None, "") and patient_data.get("default_branch"):
+			context["branch"] = patient_data.get("default_branch")
 
 	customer = context.get("customer") or context.get("primary_owner")
 	if customer:
@@ -1645,7 +1751,10 @@ def apply_notification_aliases(
 	)
 	if practitioner_user:
 		context.setdefault("practitioner_user", practitioner_user)
-		context["practitioner"] = get_user_display_name(practitioner_user)
+		practitioner_name = get_user_display_name(practitioner_user)
+		context["practitioner"] = practitioner_name
+		if context.get("practitioner_name") in (None, "", practitioner_user):
+			context["practitioner_name"] = practitioner_name
 
 	staff_user = (
 		context.get("requested_by")
