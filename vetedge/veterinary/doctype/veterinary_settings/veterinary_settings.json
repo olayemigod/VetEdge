@@ -137,7 +137,9 @@
   "notify_on_invoice_created",
   "notify_on_payment_received",
   "notify_on_payment_follow_up",
+  "notify_on_vaccination_reminders",
   "vaccination_due_reminder_days",
+  "vaccination_reminder_repeat_days",
   "payment_reminder_days",
   "column_break_notifications",
   "notify_on_reschedule",
@@ -1111,11 +1113,29 @@
    "permlevel": 1
   },
   {
-   "default": "7",
+   "default": "0",
    "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications",
+   "description": "Enable scheduled vaccination due-soon and overdue reminders. When disabled, the vaccination reminder scheduler does not create reminder notifications or external reminder deliveries.",
+   "fieldname": "notify_on_vaccination_reminders",
+   "fieldtype": "Check",
+   "label": "Notify on Vaccination Reminders",
+   "permlevel": 1
+  },
+  {
+   "default": "7",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_vaccination_reminders",
    "fieldname": "vaccination_due_reminder_days",
    "fieldtype": "Int",
    "label": "Vaccination Due Reminder Days",
+   "permlevel": 1
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.enable_vetedge && doc.enable_notifications && doc.notify_on_vaccination_reminders",
+   "description": "Minimum number of days between external vaccination reminder deliveries for the same vaccination record and reminder state. Default is 3 days.",
+   "fieldname": "vaccination_reminder_repeat_days",
+   "fieldtype": "Int",
+   "label": "Vaccination Reminder Repeat Days",
    "permlevel": 1
   },
   {
