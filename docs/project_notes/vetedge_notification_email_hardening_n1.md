@@ -124,6 +124,39 @@ VetEdge no longer silently sends a generic context dump when a configured templa
 
 Unmapped/internal events may still use the privacy-filtered fallback. Fallback content excludes keys containing note, diagnosis, symptom, or medical markers.
 
+## Reminder Hardening
+
+### Appointment reminders
+
+When an appointment date/time changes while the appointment is still reminder-eligible, VetEdge resets:
+
+- `reminder_sent = 0`
+- `reminder_sent_on = None`
+
+This allows the hourly reminder scheduler to send the reminder again for the new legitimate appointment time.
+
+### Payment reminders
+
+The daily outstanding-invoice scheduler emits the dedicated `payment_reminder` event, not `payment_pending`.
+
+Payment reminders are controlled by **Notify on Payment Follow-up** and use the dedicated Payment Reminder template.
+
+When the setting is disabled, the scheduler exits before scanning invoices.
+
+### Vaccination reminders
+
+Vaccination reminders now have explicit governance:
+
+- **Notify on Vaccination Reminders** — default OFF
+- **Vaccination Due Reminder Days** — default 7
+- **Vaccination Reminder Repeat Days** — default 3
+
+The reminder switch governs both persistent vaccination due/overdue notification checks and external reminder delivery.
+
+External Email/SMS/WhatsApp vaccination reminders are suppressed for the configured repeat interval for the same vaccination record and reminder state. Due Soon and Overdue are separate states, so an overdue reminder may still be sent when a record crosses from due-soon to overdue.
+
+Persistent in-app vaccination notifications retain their existing due-date/recipient idempotency and are not duplicated on each scheduler run.
+
 ## Upgrade / Migration
 
 No destructive data migration is required.
