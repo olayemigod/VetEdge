@@ -11,12 +11,14 @@ from vetedge.services.notification_backends.processedge_core_backend import (
 	ProcessEdgeCoreNotificationBackend,
 )
 from vetedge.services.notifications import (
+	apply_notification_aliases,
 	build_delivery_idempotency_key,
 	dispatch_notification_event,
 	emit_notification_event,
 	parse_notification_channels,
 	query_due_vaccination_notifications,
 	resolve_notification_recipients,
+	resolve_sales_invoice_patient,
 	send_due_vaccination_notifications,
 	send_due_appointment_reminders,
 	send_payment_pending_reminders,
@@ -24,6 +26,71 @@ from vetedge.services.notifications import (
 
 
 class TestNotifications(TestCase):
+	def test_patient_name_alias_replaces_blank_or_raw_patient_identifier(self):
+		def get_value(doctype, name=None, fieldname=None, as_dict=False, **kwargs):
+			if doctype == "Veterinary Patient" and name == "VP-001":
+				return frappe._dict(
+					patient_name="Buddy",
+					primary_owner="CUST-001",
+					default_branch="Main Branch",
+				)
+			return None
+
+		with patch("vetedge.services.notifications.frappe.db.get_value", side_effect=get_value):
+			blank = apply_notification_aliases(
+				{"patient": "VP-001", "patient_name": None},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+			raw = apply_notification_aliases(
+				{"patient": "VP-001", "patient_name": "VP-001"},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+
+		self.assertEqual(blank["patient_name"], "Buddy")
+		self.assertEqual(raw["patient_name"], "Buddy")
+		self.assertEqual(blank["primary_owner"], "CUST-001")
+		self.assertEqual(blank["branch"], "Main Branch")
+
+	def test_sales_invoice_patient_resolves_from_billing_session(self):
+		def exists(doctype, name=None):
+			return doctype in {"Veterinary Billing Session", "Veterinary Billing Session Charge"}
+
+		def get_value(doctype, name=None, fieldname=None, **kwargs):
+			if (
+				doctype == "Veterinary Billing Session"
+				and isinstance(name, dict)
+				and name.get("current_draft_invoice") == "SINV-001"
+				and fieldname == "animal"
+			):
+				return "VP-001"
+			return None
+
+		with (
+			patch("vetedge.services.billing_core.get_invoice_patient_marker", return_value=None),
+			patch("vetedge.services.notifications.frappe.db.exists", side_effect=exists),
+			patch("vetedge.services.notifications.frappe.db.get_value", side_effect=get_value),
+		):
+			self.assertEqual(resolve_sales_invoice_patient("SINV-001"), "VP-001")
+
+	def test_practitioner_name_alias_is_human_readable(self):
+		with (
+			patch(
+				"vetedge.services.notifications.frappe.db.get_value",
+				return_value=frappe._dict(patient_name="Buddy", primary_owner="CUST-001", default_branch="Main"),
+			),
+			patch("vetedge.services.notifications.get_user_display_name", return_value="Dr Jane Doe"),
+		):
+			context = apply_notification_aliases(
+				{"patient": "VP-001", "practitioner": "doctor@example.com", "practitioner_name": ""},
+				"Veterinary Appointment",
+				"VAPT-001",
+			)
+
+		self.assertEqual(context["practitioner"], "Dr Jane Doe")
+		self.assertEqual(context["practitioner_name"], "Dr Jane Doe")
+
 	def test_transaction_routing_does_not_broadcast_to_doctor_role(self):
 		def exists(doctype, name=None):
 			if doctype == "User":
