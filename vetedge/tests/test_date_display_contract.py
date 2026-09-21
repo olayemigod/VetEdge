@@ -113,3 +113,14 @@ def test_direct_home_and_history_dates_use_explicit_display_helpers():
 	assert "formatDate(payload.context?.operational_date)" in home
 	assert "formatDate(filters.from_date)" in history
 	assert "formatDate(filters.to_date)" in history
+
+def test_clinical_workspace_editable_datetimes_use_explicit_vetedge_display_format():
+	clinical = read(APP / "public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue")
+	assert 'type="datetime-local" label="Consultation Date/Time"' not in clinical
+	assert 'type="datetime-local" label="Follow-up Date/Time"' not in clinical
+	assert "displayEditableDateTime(form.consultation_datetime)" in clinical
+	assert "displayEditableDateTime(form.follow_up_date)" in clinical
+	assert "VetEdgeDateTime?.formatDateTime" in clinical
+	assert 'class="clinical-datetime-native"' in clinical
+	assert "DD-MM-YYYY HH:mm" in clinical
+
