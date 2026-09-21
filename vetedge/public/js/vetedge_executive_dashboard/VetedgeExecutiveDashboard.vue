@@ -63,26 +63,20 @@
 								</option>
 							</select>
 						</div>
-						<div class="edge-field">
-							<label class="edge-field-label">From Date</label>
-							<input
-								v-model="filters.from_date"
-								class="edge-input edge-control"
-								type="date"
-								:disabled="filters.date_preset !== 'custom'"
-								@change="applyCustomPeriod"
-							/>
-						</div>
-						<div class="edge-field">
-							<label class="edge-field-label">To Date</label>
-							<input
-								v-model="filters.to_date"
-								class="edge-input edge-control"
-								type="date"
-								:disabled="filters.date_preset !== 'custom'"
-								@change="applyCustomPeriod"
-							/>
-						</div>
+						<EdgeInput
+							v-model="filters.from_date"
+							type="date"
+							label="From Date"
+							:disabled="filters.date_preset !== 'custom'"
+							@change="applyCustomPeriod"
+						/>
+						<EdgeInput
+							v-model="filters.to_date"
+							type="date"
+							label="To Date"
+							:disabled="filters.date_preset !== 'custom'"
+							@change="applyCustomPeriod"
+						/>
 					</div>
 					<template #actions>
 						<button class="edge-button edge-button--primary edge-primary-button" :disabled="loading" @click="refresh">

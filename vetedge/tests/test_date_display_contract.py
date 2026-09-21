@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,6 +23,7 @@ def test_shared_date_formatter_outputs_vetedge_display_contract():
 		process.stdout.write(JSON.stringify({{
 			date: dates.formatDate('2026-09-07'),
 			datetime: dates.formatDateTime('2026-09-07 14:05:59'),
+			inputDatetime: dates.formatInputDateTime('2026-09-07T14:05'),
 			alreadyFormatted: dates.formatDate('07-09-2026'),
 			unknown: dates.formatDate('not-a-date'),
 			inferredDatetime: dates.formatCell('2026-09-07 14:05:59', {{ key: 'consultation_datetime' }}),
@@ -33,6 +35,7 @@ def test_shared_date_formatter_outputs_vetedge_display_contract():
 	assert json.loads(result.stdout) == {
 		"date": "07-09-2026",
 		"datetime": "07-09-2026 14:05",
+		"inputDatetime": "07-09-2026 14:05",
 		"alreadyFormatted": "07-09-2026",
 		"unknown": "not-a-date",
 		"inferredDatetime": "07-09-2026 14:05",
@@ -44,7 +47,7 @@ def test_formatter_loads_before_vetedge_pages_and_report_enhancer_uses_it():
 	hooks = read(APP / "hooks.py")
 	reports = read(APP / "public/js/report_visibility.js")
 	assert hooks.index("vetedge_datetime.js") < hooks.index("dashboard_shell.js")
-	assert "vetedge_datetime.js?v=20260908-1" in hooks
+	assert "vetedge_datetime.js?v=20260921-2" in hooks
 	assert hooks.index("vetedge_datetime.js") < hooks.index("billing_modal.js")
 	assert "VetEdgeDateTime?.reportFormatter" in reports
 	assert "report_settings.formatter = formatter" in reports
@@ -103,7 +106,7 @@ def test_edgesuite_tables_apply_vetedge_date_format_before_rendering():
 	assert 'window.VetEdgeDateTime?.formatCell?.(value, column)' in bridge
 	assert 'formatter(value, column, row)' in bridge
 	assert 'this.$emit("row-click", this.sourceRow(row))' in bridge
-	assert "vetedge_ui_bridge.js?v=20260908-1" in hooks
+	assert "vetedge_ui_bridge.js?v=20260921-2" in hooks
 
 
 def test_direct_home_and_history_dates_use_explicit_display_helpers():
@@ -113,3 +116,53 @@ def test_direct_home_and_history_dates_use_explicit_display_helpers():
 	assert "formatDate(payload.context?.operational_date)" in home
 	assert "formatDate(filters.from_date)" in history
 	assert "formatDate(filters.to_date)" in history
+
+def test_edgesuite_date_inputs_use_vetedge_display_wrapper():
+	bridge = read(APP / "public/js/vetedge_ui_bridge.js")
+	assert "installDateInputFormatting(edgeUI)" in bridge
+	assert 'edgeUI.registerComponent("EdgeInput", VetEdgeInput, { replace: true })' in bridge
+	assert '["date", "datetime-local"].includes(type)' in bridge
+	assert "VetEdgeDateTime?.formatInputDateTime" in bridge
+	assert "VetEdgeDateTime?.formatDate" in bridge
+	assert 'const hint = type === "datetime-local" ? "DD-MM-YYYY HH:mm" : "DD-MM-YYYY"' in bridge
+	assert "state.dateInputPatched = true" in bridge
+
+
+def test_custom_desk_vue_surfaces_do_not_render_raw_native_date_inputs():
+	offenders = []
+	pattern = re.compile(r'<input\\b[^>]*\\btype=["\\\'](?:date|datetime-local)["\\\']', re.IGNORECASE | re.DOTALL)
+	for path in (APP / "public/js").rglob("*.vue"):
+		if pattern.search(read(path)):
+			offenders.append(path.relative_to(APP).as_posix())
+	assert offenders == []
+
+
+def test_key_operational_date_fields_flow_through_edgesuite_input():
+	clinical = read(APP / "public/js/vetedge_clinical_workspace/VetEdgeClinicalWorkspace.vue")
+	appointments = read(APP / "public/js/vetedge_resource_center/VetEdgeAppointmentFlow.vue")
+	executive = read(APP / "public/js/vetedge_executive_dashboard/VetedgeExecutiveDashboard.vue")
+	service_ops = read(APP / "public/js/vetedge_service_operations/VetEdgeServiceOperations.vue")
+	front_desk = read(APP / "public/js/vetedge_front_desk_action_center/VetEdgeFrontDeskActionCenter.vue")
+
+	assert '<EdgeInput :model-value="form.consultation_datetime" type="datetime-local" label="Consultation Date/Time"' in clinical
+	assert '<EdgeInput :model-value="form.follow_up_date" type="datetime-local" label="Follow-up Date/Time"' in clinical
+	assert 'v-model="form.appointment_datetime"' in appointments and 'type="datetime-local"' in appointments
+	assert 'v-model="filters.from_date"' in executive and '<EdgeInput' in executive
+	assert 'v-model="careDialog.values.care_datetime" type="datetime-local"' in service_ops
+	assert 'v-model="actionDialog.values.new_date" type="date"' in front_desk
+
+
+def test_public_appointment_datetime_inputs_show_explicit_vetedge_format():
+	guest = read(APP / "www/vetedge_guest_booking.html")
+	owner = read(APP / "templates/includes/owner_portal_shell.html")
+
+	for surface in (guest, owner):
+		assert "DD-MM-YYYY HH:mm" in surface
+		assert "VetEdgeDateTime?.formatInputDateTime" in surface
+		assert 'vetedge_datetime.js?v=20260921-2' in surface
+
+	assert 'id="vetedge-guest-preferred-datetime-display"' in guest
+	assert 'id="vetedge-guest-preferred-datetime" name="preferred_datetime" type="datetime-local"' in guest
+	assert 'id="vetedge-request-datetime-display"' in owner
+	assert 'id="vetedge-request-datetime" type="datetime-local"' in owner
+
