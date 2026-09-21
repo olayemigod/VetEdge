@@ -103,6 +103,7 @@
 		runtimeVersion: "",
 		productMenuPatched: false,
 		dataTablePatched: false,
+		dateInputPatched: false,
 		sidebarFocusInstalled: false,
 		sidebarFocusTarget: "",
 		sidebarFocusObserver: null,
@@ -112,6 +113,122 @@
 
 	function runtime() {
 		return window.EdgeSuiteUI || window.EdgeUI || null;
+	}
+
+	function installDateInputFormatting(edgeUI) {
+		if (state.dateInputPatched) return true;
+		const BaseInput = edgeUI?.components?.EdgeInput;
+		const Vue = edgeUI?.Vue;
+		if (!BaseInput || !Vue?.defineComponent || !Vue?.h || !edgeUI?.registerComponent) return false;
+
+		const { defineComponent, h } = Vue;
+		const baseProps = BaseInput.props || {};
+		const emits = ["update:modelValue", "input", "change", "blur", "focus"];
+		const VetEdgeInput = defineComponent({
+			name: "VetEdgeInput",
+			inheritAttrs: false,
+			props: { ...baseProps },
+			emits,
+			setup(props, { attrs, emit, slots }) {
+				const generatedId = `vetedge-date-${Math.random().toString(36).slice(2, 10)}`;
+				const forward = () => ({
+					...attrs,
+					...props,
+					"onUpdate:modelValue": (value) => emit("update:modelValue", value),
+					onInput: (value) => emit("input", value),
+					onChange: (value) => emit("change", value),
+					onBlur: (event) => emit("blur", event),
+					onFocus: (event) => emit("focus", event),
+				});
+				return () => {
+					const type = String(props.type || "text").toLowerCase();
+					if (!["date", "datetime-local"].includes(type)) {
+						return h(BaseInput, forward(), slots);
+					}
+
+					const id = props.id || generatedId;
+					const rawValue = props.modelValue == null ? "" : String(props.modelValue);
+					const nativeValue = type === "datetime-local"
+						? rawValue.replace(" ", "T").slice(0, 16)
+						: rawValue.slice(0, 10);
+					const displayValue = type === "datetime-local"
+						? window.VetEdgeDateTime?.formatInputDateTime?.(nativeValue, nativeValue)
+						: window.VetEdgeDateTime?.formatDate?.(nativeValue, nativeValue);
+					const hint = type === "datetime-local" ? "DD-MM-YYYY HH:mm" : "DD-MM-YYYY";
+					const disabled = Boolean(props.disabled);
+					const readonly = Boolean(props.readonly);
+					const setValue = (event, eventName) => {
+						if (disabled || readonly) return;
+						const value = event?.target?.value || "";
+						emit("update:modelValue", value);
+						emit(eventName, value);
+					};
+
+					return h("div", {
+						class: ["edge-input", "vetedge-date-input", attrs.class, {
+							"has-error": Boolean(props.error),
+							"is-readonly": readonly,
+						}],
+					}, [
+						props.label ? h("label", { class: "edge-input__label", for: id }, [
+							props.label,
+							props.required ? h("span", { class: "edge-input__required" }, " *") : null,
+						]) : null,
+						h("div", { class: "vetedge-date-input__surface", style: { position: "relative" } }, [
+							h("input", {
+								type: "text",
+								class: "edge-input__control",
+								value: displayValue || "",
+								placeholder: props.placeholder || hint,
+								readonly: true,
+								disabled,
+								"aria-hidden": "true",
+								tabindex: -1,
+							}),
+							h("input", {
+								...attrs,
+								id,
+								name: props.name || undefined,
+								type,
+								value: nativeValue,
+								required: props.required,
+								disabled,
+								readonly,
+								min: props.min,
+								max: props.max,
+								step: props.step,
+								"aria-invalid": props.error ? "true" : "false",
+								"aria-label": props.label || hint,
+								class: "vetedge-date-input__native",
+								style: {
+									cursor: disabled || readonly ? "default" : "pointer",
+									height: "100%",
+									inset: "0",
+									opacity: "0",
+									position: "absolute",
+									width: "100%",
+								},
+								onInput: (event) => setValue(event, "input"),
+								onChange: (event) => setValue(event, "change"),
+								onBlur: (event) => emit("blur", event),
+								onFocus: (event) => emit("focus", event),
+								onClick: (event) => {
+									if (disabled || readonly) return;
+									try { event.currentTarget?.showPicker?.(); } catch (_error) {}
+								},
+							}),
+						]),
+						props.error
+							? h("p", { class: ["edge-input__helper", "is-error"] }, props.error)
+							: h("p", { class: "edge-input__helper" }, props.description || hint),
+					]);
+				};
+			},
+		});
+
+		edgeUI.registerComponent("EdgeInput", VetEdgeInput, { replace: true });
+		state.dateInputPatched = true;
+		return true;
 	}
 
 	function installDataTableFormatting(edgeUI) {
@@ -641,6 +758,7 @@
 		}
 
 		try {
+			installDateInputFormatting(edgeUI);
 			installDataTableFormatting(edgeUI);
 			const navigation = navigationAdapter();
 			edgeUI.registerAdapter("navigation:vetedge", navigation, { replace: true });
@@ -666,6 +784,7 @@
 			lastError: state.lastError,
 			productMenuPatched: state.productMenuPatched,
 			dataTablePatched: state.dataTablePatched,
+			dateInputPatched: state.dateInputPatched,
 			sidebarFocusInstalled: state.sidebarFocusInstalled,
 			sidebarFocusTarget: state.sidebarFocusTarget,
 			resourceRouteCount: Object.keys(RESOURCE_ROUTES).length,
