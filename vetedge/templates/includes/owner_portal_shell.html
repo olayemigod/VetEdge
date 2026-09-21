@@ -116,7 +116,11 @@
 						</div>
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-datetime">Preferred Date/Time</label>
-							<input class="form-control vetedge-portal-input" id="vetedge-request-datetime" type="datetime-local">
+							<div style="position: relative;">
+								<input class="form-control vetedge-portal-input" id="vetedge-request-datetime-display" type="text" placeholder="DD-MM-YYYY HH:mm" readonly aria-hidden="true">
+								<input id="vetedge-request-datetime" type="datetime-local" aria-label="Preferred Date/Time" style="cursor: pointer; height: 100%; inset: 0; opacity: 0; position: absolute; width: 100%;">
+							</div>
+							<small class="text-muted">DD-MM-YYYY HH:mm</small>
 						</div>
 						<div class="col-md-6 mb-3">
 							<label class="form-label" for="vetedge-request-reason">Reason</label>
@@ -301,7 +305,22 @@
 	</div>
 </div>
 
+<script src="/assets/vetedge/js/vetedge_datetime.js?v=20260921-2"></script>
 <script>
+const ownerRequestDatetime = document.getElementById("vetedge-request-datetime");
+const ownerRequestDatetimeDisplay = document.getElementById("vetedge-request-datetime-display");
+if (ownerRequestDatetime && ownerRequestDatetimeDisplay) {
+	const syncOwnerRequestDatetimeDisplay = () => {
+		ownerRequestDatetimeDisplay.value = window.VetEdgeDateTime?.formatInputDateTime?.(ownerRequestDatetime.value, "") || "";
+	};
+	ownerRequestDatetime.addEventListener("input", syncOwnerRequestDatetimeDisplay);
+	ownerRequestDatetime.addEventListener("change", syncOwnerRequestDatetimeDisplay);
+	ownerRequestDatetime.addEventListener("click", () => {
+		try { ownerRequestDatetime.showPicker?.(); } catch (_error) {}
+	});
+	syncOwnerRequestDatetimeDisplay();
+}
+
 document.querySelectorAll(".vetedge-pay-invoice").forEach((button) => {
 	button.addEventListener("click", () => {
 		frappe.call({
