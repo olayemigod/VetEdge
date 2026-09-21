@@ -219,6 +219,8 @@ EVENT_SETTING_FIELDS = {
 	"payment_initiated": "notify_on_payment_follow_up",
 	"payment_pending": "notify_on_payment_follow_up",
 	"payment_reminder": "notify_on_payment_follow_up",
+	"vaccination_due_soon": "notify_on_vaccination_reminders",
+	"vaccination_overdue": "notify_on_vaccination_reminders",
 	"accounts_action_required": "notify_on_accounts_action_required",
 	"consultation_awaiting_payment": "notify_on_accounts_action_required",
 	"consultation_sent_to_dispensary": "notify_on_clinical_workflow_updates",
@@ -1737,6 +1739,9 @@ def get_notification_settings() -> dict:
 		"vaccination_due_reminder_days": settings.get("vaccination_due_reminder_days")
 		if meta.has_field("vaccination_due_reminder_days")
 		else 7,
+		"vaccination_reminder_repeat_days": settings.get("vaccination_reminder_repeat_days")
+		if meta.has_field("vaccination_reminder_repeat_days")
+		else 3,
 		"payment_reminder_days": settings.get("payment_reminder_days")
 		if meta.has_field("payment_reminder_days")
 		else 3,
@@ -1752,6 +1757,7 @@ def get_notification_settings() -> dict:
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
 		"notify_on_payment_follow_up": False,
+		"notify_on_vaccination_reminders": False,
 		"notify_on_accounts_action_required": False,
 		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
@@ -1783,6 +1789,7 @@ def default_notification_settings() -> dict:
 		"appointment_reminder_hours": 24,
 		"appointment_reminder_hours_before": 24,
 		"vaccination_due_reminder_days": 7,
+		"vaccination_reminder_repeat_days": 3,
 		"payment_reminder_days": 3,
 		"notify_on_appointment_create": False,
 		"notify_on_appointment_status_change": False,
@@ -1796,6 +1803,7 @@ def default_notification_settings() -> dict:
 		"notify_on_invoice_created": False,
 		"notify_on_payment_received": False,
 		"notify_on_payment_follow_up": False,
+		"notify_on_vaccination_reminders": False,
 		"notify_on_accounts_action_required": False,
 		"notify_on_clinical_workflow_updates": False,
 		"notify_on_lab_updates": False,
@@ -1992,9 +2000,10 @@ def _notify_appointment_reminder_failed_safely(appointment, reason: str | None =
 
 def send_due_vaccination_notifications() -> list[dict]:
 	settings = get_notification_settings()
-	if not settings["enabled"]:
+	if not settings["enabled"] or not settings.get("notify_on_vaccination_reminders"):
 		return []
 
+	repeat_days = max(cint_or_default(settings.get("vaccination_reminder_repeat_days"), 3), 1)
 	results = []
 
 	# Daily: generate the persistent in-app notifications (Veterinary Notification Items)
@@ -2014,7 +2023,12 @@ def send_due_vaccination_notifications() -> list[dict]:
 	)
 	for row in records:
 		event_key = "vaccination_overdue" if row["due_state"] == "Overdue" else "vaccination_due_soon"
-		if already_notified_recently(event_key, "Veterinary Vaccination Record", row["name"]):
+		if already_notified_recently(
+			event_key,
+			"Veterinary Vaccination Record",
+			row["name"],
+			lookback_days=repeat_days,
+		):
 			continue
 		results.append(
 			emit_notification_event(
@@ -2091,15 +2105,17 @@ def already_notified_recently(
 	reference_doctype: str,
 	reference_name: str,
 	preference_key: str | None = None,
+	lookback_days: int = 1,
 ) -> bool:
 	if not frappe.db.exists("DocType", "Veterinary Notification Log"):
 		return False
+	lookback_days = max(cint_or_default(lookback_days, 1), 1)
 	filters = {
 		"event_key": event_key,
 		"reference_doctype": reference_doctype,
 		"reference_name": reference_name,
 		"status": ["in", ["Queued", "Sent"]],
-		"created_on": [">=", f"{nowdate()} 00:00:00"],
+		"created_on": [">=", add_to_date(now_datetime(), days=-lookback_days)],
 	}
 	if preference_key:
 		filters["recipient"] = preference_key
