@@ -178,6 +178,11 @@ class TestNotificationEmailHardeningContract(TestCase):
 				expected_template,
 			)
 
+	def test_patient_templates_use_resolved_patient_name_alias(self):
+		fixture_text = (ROOT.parent / "fixtures" / "vetedge_email_templates.json").read_text()
+		self.assertIn("{{ patient_name }}", fixture_text)
+		self.assertNotIn("{{ patient }}", fixture_text)
+
 	def test_managed_email_templates_do_not_leak_product_brand_footer(self):
 		fixture_text = (ROOT.parent / "fixtures" / "vetedge_email_templates.json").read_text()
 		self.assertNotIn("Powered by VetEdge", fixture_text)
