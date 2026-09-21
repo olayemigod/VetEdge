@@ -394,6 +394,9 @@ def ensure_grooming_invoice_item(invoice, item_code: str, cost_center: str, rate
 		existing_row.cost_center = item_payload["cost_center"]
 	else:
 		invoice.append("items", item_payload)
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.save(ignore_permissions=True)
 	return invoice.name
 
@@ -438,6 +441,9 @@ def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 			invoice.branch = session_doc.service_branch
 		if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 			invoice.cost_center = cost_center
+		from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+		apply_trusted_customer_receivable_account(invoice)
 		return ensure_grooming_invoice_item(invoice, item_code, cost_center, default_rate), False
 	if session_doc.linked_invoice and is_active_sales_invoice(session_doc.linked_invoice):
 		return session_doc.linked_invoice, False
@@ -464,6 +470,9 @@ def create_grooming_invoice(session_doc) -> tuple[str | None, bool]:
 		invoice.branch = session_doc.service_branch
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = cost_center
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.insert(ignore_permissions=True)
 	return invoice.name, True
 

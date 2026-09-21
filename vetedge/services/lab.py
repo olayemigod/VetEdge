@@ -1004,6 +1004,9 @@ def create_lab_order_sales_invoice(order, items: list[dict], cost_center: str):
 		invoice.branch = order.service_branch
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):
 		invoice.cost_center = cost_center
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.insert(ignore_permissions=True)
 	return invoice
 
@@ -1022,6 +1025,9 @@ def update_draft_lab_order_invoice(invoice, order, items: list[dict], cost_cente
 	invoice.set("items", [])
 	for item in items:
 		invoice.append("items", item)
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.save(ignore_permissions=True)
 
 

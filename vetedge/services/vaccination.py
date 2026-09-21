@@ -786,6 +786,9 @@ def create_vaccination_invoice(doc) -> str | None:
 		)
 		if frappe.get_meta("Sales Invoice").has_field("branch"):
 			invoice.branch = doc.service_branch
+		from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+		apply_trusted_customer_receivable_account(invoice)
 		invoice.insert(ignore_permissions=True)
 		invoice_name = invoice.name
 	return invoice_name
@@ -822,6 +825,9 @@ def ensure_vaccination_invoice_item(invoice, item_code: str, cost_center: str, r
 	else:
 		invoice.append("items", item_payload)
 
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	invoice.save(ignore_permissions=True)
 	return invoice.name
 

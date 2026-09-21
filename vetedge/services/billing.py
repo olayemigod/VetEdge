@@ -698,6 +698,9 @@ def update_existing_consultation_invoice(consultation_doc, invoice_name: str, it
 
 
 def apply_consultation_invoice_defaults(consultation_doc, invoice, cost_center: str) -> None:
+	from vetedge.services.billing_core import apply_trusted_customer_receivable_account
+
+	apply_trusted_customer_receivable_account(invoice)
 	if consultation_doc.service_branch and frappe.get_meta("Sales Invoice").has_field("branch"):
 		invoice.branch = consultation_doc.service_branch
 	if cost_center and frappe.get_meta("Sales Invoice").has_field("cost_center"):

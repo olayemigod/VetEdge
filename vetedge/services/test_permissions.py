@@ -818,6 +818,47 @@ class TestPermissions(TestCase):
 				raise_exception=True,
 			)
 
+	def test_doctor_accounts_user_bundle_still_respects_collection_setting(self):
+		settings = SimpleNamespace(allow_doctor_collect_payment=False)
+
+		with (
+			patch("vetedge.services.permissions.can_view_invoice", return_value=True),
+			patch(
+				"vetedge.services.permissions.get_user_roles",
+				return_value={"VetEdge Doctor", "Accounts User", "Sales User"},
+			),
+			patch("vetedge.services.permissions.frappe.throw", side_effect=frappe.PermissionError),
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+		):
+			self.assertRaises(
+				frappe.PermissionError,
+				can_initiate_payment,
+				"doctor@example.com",
+				"SINV-001",
+				mode="internal",
+				raise_exception=True,
+			)
+
+	def test_accounts_cashier_can_collect_when_doctor_setting_is_disabled(self):
+		settings = SimpleNamespace(allow_doctor_collect_payment=False)
+
+		with (
+			patch("vetedge.services.permissions.can_view_invoice", return_value=True),
+			patch(
+				"vetedge.services.permissions.get_user_roles",
+				return_value={"Accounts/Cashier", "Accounts User"},
+			),
+			patch("vetedge.services.billing.get_consultation_billing_settings", return_value=settings),
+		):
+			self.assertTrue(
+				can_initiate_payment(
+					"cashier@example.com",
+					"SINV-001",
+					mode="internal",
+					raise_exception=True,
+				)
+			)
+
 	def test_doctor_can_collect_payment_when_setting_allows_it(self):
 		settings = SimpleNamespace(allow_doctor_collect_payment=True)
 

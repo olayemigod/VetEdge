@@ -57,7 +57,11 @@ GROOMING_SESSION_PROGRESS_ROLES = {*GROOMER_ROLES, *GROOMING_MANAGER_ROLES}
 GROOMING_BILLING_ROLES = {*FRONT_DESK_ROLES, *GROOMING_MANAGER_ROLES}
 ACCOUNTS_COLLECTION_ROLES = {
 	ROLE_ACCOUNTS_MANAGER,
-	ROLE_ACCOUNTS_USER,
+	*_role_group(ROLE_ACCOUNTS_CASHIER),
+	*ELEVATED_ROLES,
+}
+PAYMENT_ACCOUNT_OVERRIDE_ROLES = {
+	ROLE_ACCOUNTS_MANAGER,
 	*_role_group(ROLE_ACCOUNTS_CASHIER),
 	*ELEVATED_ROLES,
 }
@@ -422,6 +426,17 @@ def get_invoice_access_diagnostic(user: str | None, invoice_name: str) -> dict:
 		"message": None,
 		"can_open_full_form": True,
 	}
+
+
+def can_override_payment_account(user: str | None = None) -> bool:
+	"""Allow only explicit accounting operators to override the resolved cash/bank account.
+
+	Generic Accounts User is intentionally insufficient because VetEdge starter
+	bundles may include it for invoice visibility while the user's operational
+	role remains clinical.
+	"""
+	user = user or get_current_user()
+	return bool(user and user_has_any_role(user, PAYMENT_ACCOUNT_OVERRIDE_ROLES))
 
 
 def can_initiate_payment(

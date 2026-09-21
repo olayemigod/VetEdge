@@ -12,23 +12,31 @@ def _can_submit_invoice(invoice_name: str | None) -> bool:
     return bool(frappe.has_permission("Sales Invoice", "submit", doc=invoice))
 
 
-def _can_record_payment() -> bool:
-    # The final Payment Entry is still checked again with its populated document
-    # by record_modal_invoice_payment. These role-level checks keep the UI from
-    # advertising an action that the user cannot normally create/submit at all.
+def _can_record_payment(invoice_name: str | None) -> bool:
+    if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
+        return False
+
+    from vetedge.services.permissions import can_initiate_payment
+
     return bool(
-        frappe.has_permission("Payment Entry", "create")
+        can_initiate_payment(
+            frappe.session.user,
+            invoice_name,
+            mode="internal",
+            raise_exception=False,
+        )
+        and frappe.has_permission("Payment Entry", "create")
         and frappe.has_permission("Payment Entry", "submit")
     )
 
 
-def _apply_row_permissions(rows: list[dict] | None, can_pay: bool) -> None:
+def _apply_row_permissions(rows: list[dict] | None) -> None:
     for row in rows or []:
         invoice_name = row.get("name") or row.get("invoice")
         if row.get("can_submit_invoice"):
             row["can_submit_invoice"] = _can_submit_invoice(invoice_name)
         if row.get("can_pay_outstanding") or row.get("can_pay"):
-            allowed = bool(can_pay and invoice_name)
+            allowed = _can_record_payment(invoice_name)
             row["can_pay_outstanding"] = allowed
             row["can_pay"] = allowed
             if not allowed and row.get("action_label") == "Pay Outstanding":
@@ -50,17 +58,16 @@ def _permission_aware_state(source_doctype: str, source_name: str) -> dict:
 
     state = original(source_doctype=source_doctype, source_name=source_name)
     actions = state.get("actions") or {}
-    can_pay = _can_record_payment()
     invoice_name = _primary_invoice_name(state)
 
     if actions.get("can_submit_invoice"):
         actions["can_submit_invoice"] = _can_submit_invoice(invoice_name)
     if actions.get("can_record_payment"):
-        actions["can_record_payment"] = can_pay
+        actions["can_record_payment"] = _can_record_payment(invoice_name)
 
-    _apply_row_permissions(state.get("invoice_history"), can_pay)
-    _apply_row_permissions(state.get("billing_group_invoice_history"), can_pay)
-    _apply_row_permissions(state.get("patient_outstanding_context"), can_pay)
+    _apply_row_permissions(state.get("invoice_history"))
+    _apply_row_permissions(state.get("billing_group_invoice_history"))
+    _apply_row_permissions(state.get("patient_outstanding_context"))
 
     state["actions"] = actions
     return state
