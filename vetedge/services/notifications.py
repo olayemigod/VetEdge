@@ -2067,11 +2067,11 @@ def send_payment_pending_reminders() -> list[dict]:
 		due_date = getdate(row.get("due_date") or today)
 		if due_date > add_days(today, payment_reminder_days):
 			continue
-		if already_notified_recently("payment_pending", "Sales Invoice", row["name"]):
+		if already_notified_recently("payment_reminder", "Sales Invoice", row["name"]):
 			continue
 		results.append(
 			emit_notification_event(
-				event_key="payment_pending",
+				event_key="payment_reminder",
 				reference_doctype="Sales Invoice",
 				reference_name=row["name"],
 				context={
