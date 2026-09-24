@@ -104,6 +104,13 @@ has_permission = {
 	"Veterinary Notification Item": "vetedge.services.permissions.has_veterinary_notification_item_permission",
 }
 
+# Billing Core creates draft Sales Invoices from trusted Veterinary workflows.
+# Extend ERPNext rather than replacing its controller so standard accounting
+# validation and other installed-app extensions remain intact.
+extend_doctype_class = {
+	"Sales Invoice": ["vetedge.services.sales_invoice_accounting.VetEdgeSalesInvoiceBillingMixin"],
+}
+
 override_whitelisted_methods = {
 	"vetedge.services.reporting_logic_v4.get_dashboard_payload": "vetedge.services.reporting_logic_v5.get_dashboard_payload",
 	"vetedge.services.reporting_logic_v5.get_dashboard_payload": "vetedge.services.dashboard_host_payload.get_dashboard_payload",
