@@ -967,10 +967,13 @@ def _get_sales_invoice_rows(filters, unpaid_only=False):
     doctype = "Sales Invoice"
     if not frappe.db.exists("DocType", doctype):
         return []
+    filters = frappe._dict(filters or {})
     branch_field = _existing_field(doctype, ["branch", "service_branch"])
     cost_center_field = _existing_field(doctype, ["cost_center"])
     status_field = _existing_field(doctype, ["status"]) or "status"
     query_filters = _date_filter_dict("posting_date", filters, 30)
+    if filters.get("company"):
+        query_filters["company"] = filters.get("company")
     if filters.get("cost_center") and cost_center_field:
         query_filters[cost_center_field] = filters.get("cost_center")
     if filters.get("status") and status_field:
@@ -982,11 +985,37 @@ def _get_sales_invoice_rows(filters, unpaid_only=False):
         query_filters["outstanding_amount"] = (">", 0)
     else:
         query_filters["docstatus"] = ("<", 2)
-    fields = ["name", "posting_date", "customer", "grand_total", "outstanding_amount", "docstatus", "due_date"]
+    fields = [
+        "name",
+        "posting_date",
+        "company",
+        "customer",
+        "currency",
+        "conversion_rate",
+        "grand_total",
+        "base_grand_total",
+        "outstanding_amount",
+        "docstatus",
+        "due_date",
+    ]
     for fieldname in [branch_field, cost_center_field, status_field]:
         if fieldname and fieldname not in fields:
             fields.append(fieldname)
-    return frappe.get_all(doctype, filters=query_filters, fields=fields, order_by="posting_date desc")
+
+    max_rows = cint(filters.get("_max_invoice_rows") or 0)
+    rows = frappe.get_all(
+        doctype,
+        filters=query_filters,
+        fields=fields,
+        order_by="posting_date desc",
+        limit_page_length=max_rows + 1 if max_rows else 0,
+    )
+    if max_rows and len(rows) > max_rows:
+        frappe.throw(
+            _("More than {0} Sales Invoices match this financial scope. Narrow the date range or Branch.").format(max_rows),
+            frappe.ValidationError,
+        )
+    return rows
 
 
 def _build_revenue_summary_rows(filters):
