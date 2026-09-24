@@ -5,6 +5,22 @@ from frappe import _
 from frappe.utils import add_days, cint, cstr, flt, getdate, nowdate
 
 
+def _outstanding_is_company_currency() -> bool:
+	try:
+		field = frappe.get_meta("Sales Invoice").get_field("outstanding_amount")
+		options = cstr(getattr(field, "options", "") or "")
+		return options.startswith("Company:") or "company:default_currency" in options.lower()
+	except Exception:
+		return False
+
+
+def _company_currency_outstanding(invoice) -> float:
+	outstanding = flt(invoice.get("outstanding_amount"))
+	if _outstanding_is_company_currency():
+		return outstanding
+	return outstanding * (flt(invoice.get("conversion_rate")) or 1.0)
+
+
 def build_financial_dataset(filters=None) -> list[dict]:
 	"""
 	Returns a unified, normalized dataset of financial records (Sales Invoices)
@@ -153,7 +169,8 @@ def build_financial_dataset(filters=None) -> list[dict]:
 	dataset = []
 	for inv in invoices:
 		name = inv.get("name")
-		context = invoice_context.get(name, {})
+		context = frappe._dict(invoice_context.get(name) or {})
+		context["payment_branch"] = payment_branch_map.get(name)
 
 		c_doc = consultation_map.get(name)
 		v_doc = vaccination_map.get(name)
@@ -181,10 +198,17 @@ def build_financial_dataset(filters=None) -> list[dict]:
 		grand_total = flt(inv.get("grand_total"))
 		outstanding = flt(inv.get("outstanding_amount"))
 		paid_amount = grand_total - outstanding
+		company_grand_total = flt(inv.get("base_grand_total"))
+		if not company_grand_total and grand_total:
+			company_grand_total = grand_total * (flt(inv.get("conversion_rate")) or 1.0)
+		company_outstanding = _company_currency_outstanding(inv)
+		company_paid_amount = company_grand_total - company_outstanding
 
 		if cint(inv.get("docstatus")) == 0:
 			outstanding = grand_total
 			paid_amount = 0.0
+			company_outstanding = company_grand_total
+			company_paid_amount = 0.0
 
 		status_val = inv.get("status") or _invoice_status_from_row(inv)
 		service_source = context.get("service_category") or "General"
@@ -194,6 +218,7 @@ def build_financial_dataset(filters=None) -> list[dict]:
 			"posting_date": inv.get("posting_date"),
 			"due_date": inv.get("due_date"),
 			"company": inv.get("company"),
+			"currency": inv.get("currency"),
 			"branch": resolved_branch,
 			"customer": inv.get("customer"),
 			"patient": patient,
@@ -209,6 +234,9 @@ def build_financial_dataset(filters=None) -> list[dict]:
 			"outstanding_amount": outstanding,
 			"paid_amount": paid_amount,
 			"grand_total": grand_total,
+			"company_grand_total": company_grand_total,
+			"company_outstanding_amount": company_outstanding,
+			"company_paid_amount": company_paid_amount,
 			"docstatus": cint(inv.get("docstatus")),
 		})
 
