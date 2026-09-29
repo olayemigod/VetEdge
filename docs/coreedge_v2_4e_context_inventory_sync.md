@@ -67,3 +67,7 @@ The sync does not:
 ## Rollout
 
 Do not schedule automatic submissions yet. First validate manual submission against a non-production CoreEdge Service Client and confirm the resulting immutable CoreEdge inventory snapshot. Automated periodic sync can be added only after the operator reconciliation workflow is accepted.
+
+## Validation
+
+This adapter remains intentionally manual until the CoreEdge-side authenticated inventory service and operator review flow are validated together. The branch is also used for standalone compatibility CI to prove no CoreEdge installed-app dependency is introduced.
