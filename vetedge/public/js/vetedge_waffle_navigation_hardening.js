@@ -40,8 +40,10 @@
 	}
 
 	function sidebarItems() {
-		const sidebar = global.frappe?.boot?.workspace_sidebar_item;
-		const source = sidebar && (sidebar.vetedge || sidebar.veterinary);
+		const boot = global.frappe?.boot;
+		const sidebar = boot?.module_sidebars || boot?.workspace_sidebar_item;
+		const source = sidebar &&
+			(sidebar.Veterinary || sidebar.VetEdge || sidebar.vetedge || sidebar.veterinary);
 		return (source?.items || [])
 			.filter((item) => item?.type === "Link" && item?.hidden !== 1)
 			.map((item) => ({

@@ -25,4 +25,4 @@ def test_stock_expiry_quantity_formatter_is_available_to_both_render_paths():
 def test_optional_raw_assets_supply_the_frappe_v16_loader_callback():
 	patch = read(PDF_PATCH)
 
-	assert "frappe.require(path, function vetedgeOptionalAssetLoaded() {})" in patch
+	assert "const pending = frappe.require(path);" in patch

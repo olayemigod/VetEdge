@@ -414,6 +414,8 @@ def cleanup_legacy_financial_workspace() -> None:
 
 
 def cleanup_legacy_workspace_sidebars() -> None:
+	if frappe.db.exists("DocType", "Sidebar"):
+		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 	for sidebar in ("Veterinary Hospitalisation Dashboard", "Veterinary Financial Dashboard"):
@@ -422,10 +424,14 @@ def cleanup_legacy_workspace_sidebars() -> None:
 
 
 def ensure_vetedge_workspace_sidebar() -> None:
+	_import_standard_files(SIDEBAR_PAGE_FILES)
+
+	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. The
+	# Workspace Sidebar rows left by an upgraded site are read-only archives.
+	if frappe.db.exists("DocType", "Sidebar"):
+		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
-
-	_import_standard_files(SIDEBAR_PAGE_FILES)
 
 	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
 	if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):
