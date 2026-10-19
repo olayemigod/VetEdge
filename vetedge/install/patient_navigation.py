@@ -277,12 +277,13 @@ def _ensure_billing_sessions_page() -> None:
 
 def ensure_direct_patient_navigation() -> bool:
 	"""Apply direct Patients, billing navigation reconciliation and primary order."""
+	_ensure_billing_sessions_page()
+	if frappe.db.exists("DocType", "Sidebar"):
+		return False
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists(
 		"Workspace Sidebar", SIDEBAR_NAME
 	):
 		return False
-
-	_ensure_billing_sessions_page()
 	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 	current = [_clean_item(item) for item in (sidebar.get("items") or [])]
 	updated = organize_direct_patient_navigation(current)

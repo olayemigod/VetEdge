@@ -103,10 +103,11 @@
 	}
 
 	function suppressNativeHospitalisationSidebarSource() {
-		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
+		const boot = window.frappe?.boot;
+		const sidebars = boot?.module_sidebars || boot?.workspace_sidebar_item;
 		if (!sidebars) return false;
 		let changed = false;
-		for (const key of ["vetedge", "veterinary"]) {
+		for (const key of ["Veterinary", "VetEdge", "vetedge", "veterinary"]) {
 			const sidebar = sidebars[key];
 			if (!Array.isArray(sidebar?.items)) continue;
 			const filtered = sidebar.items.filter((item) => !(
