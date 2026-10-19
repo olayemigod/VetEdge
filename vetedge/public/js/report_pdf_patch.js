@@ -100,10 +100,9 @@ frappe.render_pdf = function (html, opts = {}) {
 
 function vetedgeSafeRequire(path) {
 	try {
-		// Frappe v16's raw-asset loader still invokes the callback internally.
-		// Always provide one so optional scripts do not fail with
-		// `TypeError: s is not a function` after loading successfully.
-		const pending = frappe.require(path, function vetedgeOptionalAssetLoaded() {});
+		// Let Frappe add its own cache-busting version. Its v16.52 raw-asset
+		// loader determines the handler from the path and cannot parse a query here.
+		const pending = frappe.require(path);
 		if (pending && typeof pending.catch === "function") {
 			pending.catch((error) => console.error(`VetEdge optional asset failed to load: ${path}`, error));
 		}
@@ -112,7 +111,7 @@ function vetedgeSafeRequire(path) {
 	}
 }
 
-vetedgeSafeRequire("/assets/vetedge/js/vetedge_waffle_navigation_hardening.js?v=20260907-1");
-vetedgeSafeRequire("/assets/vetedge/js/vetedge_product_menu_native_guard.js?v=20260831-1");
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_waffle_navigation_hardening.js");
+vetedgeSafeRequire("/assets/vetedge/js/vetedge_product_menu_native_guard.js");
 vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_ui.js");
 vetedgeSafeRequire("/assets/vetedge/js/vetedge_report_scheduling_management_ui.js");

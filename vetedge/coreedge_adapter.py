@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from copy import deepcopy
+
 import frappe
 from frappe import _
 
@@ -471,7 +473,34 @@ def _build_sidebar_item_for_boot(item) -> dict:
 		boot_item["report"] = {"report_type": report_type, "ref_doctype": ref_doctype}
 	return boot_item
 
+def _get_module_sidebar_for_boot(bootinfo) -> dict | None:
+	"""Return Frappe v16.50+'s resolved, permission-filtered VetEdge sidebar."""
+	module_sidebars = bootinfo.get("module_sidebars") or {}
+	for key in ("Veterinary", "VetEdge"):
+		if sidebar := module_sidebars.get(key):
+			return deepcopy(dict(sidebar))
+
+	for sidebar in module_sidebars.values():
+		if not isinstance(sidebar, dict):
+			continue
+		if sidebar.get("app") == "vetedge" or sidebar.get("module") == "Veterinary":
+			return deepcopy(dict(sidebar))
+
+	return None
+
+
 def get_canonical_vetedge_sidebar_for_boot(bootinfo) -> dict | None:
+	if sidebar := _get_module_sidebar_for_boot(bootinfo):
+		return sidebar
+
+	legacy_sidebars = bootinfo.get("workspace_sidebar_item") or {}
+	if sidebar := legacy_sidebars.get("vetedge") or legacy_sidebars.get("veterinary"):
+		return deepcopy(dict(sidebar))
+
+	# Compatibility for earlier Frappe v16 releases. Workspace Sidebar is inert in
+	# v16.50+, so never read it when the replacement Sidebar doctype is installed.
+	if frappe.db.exists("DocType", "Sidebar"):
+		return None
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists("Workspace Sidebar", "VetEdge"):
 		return None
 
@@ -518,32 +547,44 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 		"show_coreedge_controls": bootinfo.should_show_coreedge_controls
 	})
 
-	# Always map the sidebar under both "vetedge" and "veterinary" to ensure both route and desktop icon resolve correctly
-	sidebar_items = bootinfo.get("workspace_sidebar_item")
-	if sidebar_items:
-		source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
-		if source_sidebar:
-			source_sidebar["label"] = launcher_label
-			sidebar_items["veterinary"] = source_sidebar
-			sidebar_items["vetedge"] = source_sidebar
+	# Frappe v16.50+ resolves permission-aware navigation into module_sidebars.
+	# Keep legacy aliases during the transition for installed EdgeSuite bundles
+	# and for earlier supported v16 sites.
+	source_sidebar = get_canonical_vetedge_sidebar_for_boot(bootinfo)
+	module_sidebars = bootinfo.get("module_sidebars")
+	legacy_sidebars = bootinfo.get("workspace_sidebar_item")
+	if source_sidebar:
+		source_sidebar["label"] = launcher_label
+		if module_sidebars is not None:
+			shell = source_sidebar.get("name") or "Veterinary"
+			module_sidebars[shell] = source_sidebar
+			bootinfo.module_sidebars = module_sidebars
+		legacy_sidebars = legacy_sidebars or {}
+		legacy_sidebars["veterinary"] = source_sidebar
+		legacy_sidebars["vetedge"] = source_sidebar
+		bootinfo.workspace_sidebar_item = legacy_sidebars
 
 	# Keep the visible launcher aligned with the Veterinary module label. The
-	# canonical document/link identity remains VetEdge for route stability.
+	# v16.50+ client resolves its route through module_sidebars, so the stored
+	# desktop-icon link identity must remain untouched.
 	desktop_icons = bootinfo.get("desktop_icons")
 	if desktop_icons:
 		for icon in desktop_icons:
 			if icon.get("app") == "vetedge" and icon.get("name") in ("VetEdge", "Veterinary"):
 				icon["label"] = launcher_label
-				icon["link_type"] = "Workspace Sidebar"
-				icon["link"] = ""
-				icon["link_to"] = "VetEdge"
+				if module_sidebars is None:
+					icon["link_type"] = "Workspace Sidebar"
+					icon["link"] = ""
+					icon["link_to"] = "VetEdge"
 
 	# app_data is rendered as an app launcher, so it uses the same module label.
 	if bootinfo.get("app_data"):
 		for app in bootinfo.app_data:
 			if app.get("app_name") == "vetedge":
 				app["app_title"] = launcher_label
-				app["route"] = get_vetedge_desk_route()
+				route = get_vetedge_desk_route()
+				app["app_route"] = route
+				app["route"] = route  # compatibility with earlier v16 boot payloads
 				if branding.get("logo"):
 					app["app_logo_url"] = branding.get("logo")
 
@@ -565,13 +606,8 @@ def filter_bootinfo_for_coreedge_platform(bootinfo):
 			except Exception:
 				pass
 
-	if not bootinfo.should_show_coreedge_controls:
-		if sidebar_items and "vetedge" in sidebar_items:
-			items = sidebar_items["vetedge"].get("items") or []
-			sidebar_items["vetedge"]["items"] = get_visible_vetedge_sidebar_items(items)
-		if sidebar_items and "veterinary" in sidebar_items:
-			items = sidebar_items["veterinary"].get("items") or []
-			sidebar_items["veterinary"]["items"] = get_visible_vetedge_sidebar_items(items)
+	if source_sidebar and not bootinfo.should_show_coreedge_controls:
+		source_sidebar["items"] = get_visible_vetedge_sidebar_items(source_sidebar.get("items") or [])
 		
 		workspaces_data = bootinfo.get("workspaces")
 		if workspaces_data and "pages" in workspaces_data:
