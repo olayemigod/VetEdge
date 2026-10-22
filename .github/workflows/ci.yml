@@ -36,6 +36,9 @@ jobs:
       - name: Ruff
         run: |
           ruff check \
+            vetedge/platform_client.py \
+            vetedge/services/platform_access.py \
+            vetedge/tests/test_remote_platform_client.py \
             vetedge/tests/test_edgesuite_ui_dependency_contract.py \
             vetedge/tests/test_date_display_contract.py \
             vetedge/tests/test_invoice_cancellation_recovery.py \
@@ -242,6 +245,14 @@ jobs:
       - name: Run invoice cancellation recovery tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_invoice_cancellation_recovery
+
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.tests.test_remote_platform_client
+
+          bench --site ci.localhost run-tests \
+            --app vetedge \
+            --module vetedge.services.test_platform_access
 
       - name: Run professional EdgeSuite UI contract tests
         working-directory: frappe-bench
