@@ -58,7 +58,7 @@
 			.text(__("Loading {0}...", [config.title || "Front Desk"]))
 			.appendTo(page.body);
 
-		frappe.require("edgeui.bundle.js", () => {
+		frappe.require("edgesuite_ui.bundle.js", () => {
 			if (wrapper.current_visit_id !== visitId) return;
 			const runtime = window.EdgeSuiteUI || window.EdgeUI;
 			const required = ["EdgeAppShell", "EdgePageLayout", "EdgePageHeader", "EdgeFilterBar", "EdgeStatCard", "EdgeDataTable", "EdgeStatusBadge", "EdgeLinkField", "EdgeDropdown", "EdgeInput", "EdgeTextarea", "EdgeModal", "EdgeLoadingState", "EdgeErrorState"];

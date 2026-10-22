@@ -473,7 +473,7 @@ function install() {
 		installed = true;
 	}
 	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", () => {
+		window.frappe.require("edgesuite_ui.bundle.js", () => {
 			patchNavigationAdapter();
 			installDashboardShellAdapter();
 			schedule();

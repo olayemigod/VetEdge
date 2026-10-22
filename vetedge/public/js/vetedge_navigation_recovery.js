@@ -579,7 +579,7 @@
 
 	bindLifecycle();
 	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", scheduleInstall);
+		window.frappe.require("edgesuite_ui.bundle.js", scheduleInstall);
 	} else if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", scheduleInstall, { once: true });
 	} else {

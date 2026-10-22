@@ -22,7 +22,7 @@ frappe.pages['vetedge-vitals-center'].on_page_show = function(wrapper) {
 		$('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Vital Signs failed to load.')).appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ['EdgeAppShell','EdgePageLayout','EdgePageHeader','EdgeFilterBar','EdgeLinkField','EdgeInput','EdgeStatCard','EdgeDataTable','EdgeLoadingState','EdgeErrorState','EdgeEmptyState','EdgeModal','EdgeDropdown','EdgeTextarea'];

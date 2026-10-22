@@ -7,7 +7,7 @@ def test_regulatory_workbench_is_edgesuite_native_and_uses_dedicated_regulatory_
     page = (ROOT / "veterinary/page/vetedge_regulatory_reporting/vetedge_regulatory_reporting.js").read_text(encoding="utf-8")
 
     for expected in (
-        'frappe.require("edgeui.bundle.js"',
+        'frappe.require("edgesuite_ui.bundle.js"',
         '"EdgeAppShell"',
         '"EdgePageLayout"',
         '"EdgePageHeader"',
