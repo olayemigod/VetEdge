@@ -263,6 +263,10 @@ jobs:
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_ui_identity_resource_center
 
+      - name: Run doctor registration account permission regression tests
+        working-directory: frappe-bench
+        run: bench --site ci.localhost run-tests --app vetedge --module vetedge.services.test_sales_invoice_accounting
+
       - name: Run appointment EdgeSuite UI tests
         working-directory: frappe-bench
         run: bench --site ci.localhost run-tests --app vetedge --module vetedge.tests.test_vetedge_appointment_edgeui
