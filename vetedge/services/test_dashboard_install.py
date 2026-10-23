@@ -228,8 +228,8 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		# CoreEdge links remain alongside the mandatory Veterinary home link.
-		self.assertEqual(len(sidebar.items), 3)
+		# The native v16 Sidebar keeps both links; the locked legacy archive is untouched.
+		self.assertEqual(len(sidebar.items), 2)
 
 	def test_v16_sidebar_prunes_missing_coreedge_targets(self):
 		coreedge_item = SimpleNamespace(

@@ -449,9 +449,19 @@ def ensure_vetedge_workspace_sidebar() -> None:
 
 	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. Keep
 	# both its native Sidebar and the legacy Workspace Sidebar transition record
-	# free of unavailable or retired targets.
-	if frappe.db.exists("DocType", "Sidebar"):
+	# free of unavailable or retired targets. Frappe locks the legacy archive
+	# outside install/migrate/patch, so normal runtime calls stop after pruning
+	# the native Sidebar.
+	has_native_sidebar = bool(frappe.db.exists("DocType", "Sidebar"))
+	if has_native_sidebar:
 		_prune_v16_sidebar_targets()
+		flags = getattr(frappe, "flags", None)
+		can_sync_legacy_archive = any(
+			bool(getattr(flags, flag, False))
+			for flag in ("in_migrate", "in_patch", "in_install")
+		)
+		if not can_sync_legacy_archive:
+			return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 
