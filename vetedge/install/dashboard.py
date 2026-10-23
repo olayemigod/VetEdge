@@ -447,11 +447,11 @@ def _prune_v16_sidebar_targets() -> None:
 def ensure_vetedge_workspace_sidebar() -> None:
 	_import_standard_files(SIDEBAR_PAGE_FILES)
 
-	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. The
-	# Workspace Sidebar rows left by an upgraded site are read-only archives.
+	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. Keep
+	# both its native Sidebar and the legacy Workspace Sidebar transition record
+	# free of unavailable or retired targets.
 	if frappe.db.exists("DocType", "Sidebar"):
 		_prune_v16_sidebar_targets()
-		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 

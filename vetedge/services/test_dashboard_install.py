@@ -228,8 +228,8 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		# CoreEdge links must NOT be pruned because CoreEdge is installed and doctype exists
-		self.assertEqual(len(sidebar.items), 2)
+		# CoreEdge links remain alongside the mandatory Veterinary home link.
+		self.assertEqual(len(sidebar.items), 3)
 
 	def test_v16_sidebar_prunes_missing_coreedge_targets(self):
 		coreedge_item = SimpleNamespace(
@@ -286,8 +286,16 @@ class TestDashboardInstall(TestCase):
 			link_to="CoreEdge Settings",
 		)
 		sidebar = SimpleNamespace(items=[coreedge_item], save=Mock(), remove=Mock())
+		exists = Mock(
+			side_effect=lambda doctype, name=None: (doctype, name)
+			in {
+				("DocType", "Sidebar"),
+				("Sidebar", "Veterinary"),
+				("DocType", "CoreEdge Settings"),
+			}
+		)
 		frappe_stub = SimpleNamespace(
-			db=SimpleNamespace(exists=Mock(return_value=True)),
+			db=SimpleNamespace(exists=exists),
 			get_installed_apps=Mock(return_value=["frappe", "erpnext", "vetedge", "coreedge"]),
 			get_doc=Mock(return_value=sidebar),
 			cache=SimpleNamespace(delete_key=Mock()),
