@@ -9,7 +9,7 @@ def test_training_centre_page_is_thin_edgesuite_mount_loader():
     ).read_text(encoding="utf-8")
 
     for expected in (
-        "edgeui.bundle.js",
+        "edgesuite_ui.bundle.js",
         "vetedge_training_centre.bundle.js",
         "mountVetEdgeTrainingCentre",
         "EdgeAppShell",

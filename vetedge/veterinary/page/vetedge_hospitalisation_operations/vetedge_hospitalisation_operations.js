@@ -395,7 +395,7 @@ frappe.pages['vetedge-hospitalisation-operations'].on_page_show = function(wrapp
 			.appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = requested.name

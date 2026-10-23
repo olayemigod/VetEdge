@@ -182,6 +182,8 @@ def ensure_regulatory_reporting_navigation() -> None:
 	_ensure_standard_page(OUTBREAK_PAGE, "vetedge_disease_outbreak_register")
 	if not frappe.db.exists("Page", REGULATORY_PAGE):
 		return
+	if frappe.db.exists("DocType", "Sidebar"):
+		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar") or not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
 		return
 

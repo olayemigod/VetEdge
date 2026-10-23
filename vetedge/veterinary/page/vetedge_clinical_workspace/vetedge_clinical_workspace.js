@@ -179,7 +179,7 @@ frappe.pages['vetedge-clinical-workspace'].on_page_show = function(wrapper) {
 	const $loading = $('<div class="p-6 text-center text-muted"></div>').text(__('Loading Veterinary Clinical Workspace...')).appendTo(page.body);
 	const showFailure = (message) => { $loading.remove(); $('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Veterinary Clinical Workspace failed to load.')).appendTo(page.body); };
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ['EdgeAppShell','EdgePageLayout','EdgePageHeader','EdgeFilterBar','EdgeStatCard','EdgeDataTable','EdgeStatusBadge','EdgeLinkField','EdgeDropdown','EdgeInput','EdgeTextarea','EdgeModal','EdgeLoadingState','EdgeErrorState'];

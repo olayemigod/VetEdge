@@ -96,10 +96,10 @@ def test_typescript_config_aliases_vue_to_edgesuite_ui_not_coreedge():
 def test_stock_expiry_loader_uses_standalone_edgesuite_ui_runtime():
 	content = STOCK_EXPIRY_LOADER.read_text(encoding="utf-8")
 
-	assert "edgeui.bundle.js" in content
+	assert "edgesuite_ui.bundle.js" in content
 	assert "window.EdgeSuiteUI || window.EdgeUI" in content
 	assert "vetedge_stock_expiry_monitor.bundle.js" in content
-	assert content.index("edgeui.bundle.js") < content.index(
+	assert content.index("edgesuite_ui.bundle.js") < content.index(
 		"vetedge_stock_expiry_monitor.bundle.js"
 	)
 	assert "coreedge" not in content.lower()

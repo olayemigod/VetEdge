@@ -109,8 +109,10 @@
 	}
 
 	function canonicalSidebar() {
-		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
-		return sidebars && (sidebars.vetedge || sidebars.veterinary);
+		const boot = window.frappe?.boot;
+		const sidebars = boot?.module_sidebars || boot?.workspace_sidebar_item;
+		return sidebars &&
+			(sidebars.Veterinary || sidebars.VetEdge || sidebars.vetedge || sidebars.veterinary);
 	}
 
 	function slug(value) {
@@ -577,7 +579,7 @@
 
 	bindLifecycle();
 	if (window.frappe?.require) {
-		window.frappe.require("edgeui.bundle.js", scheduleInstall);
+		window.frappe.require("edgesuite_ui.bundle.js", scheduleInstall);
 	} else if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", scheduleInstall, { once: true });
 	} else {

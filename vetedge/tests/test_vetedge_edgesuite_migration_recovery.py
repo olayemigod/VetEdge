@@ -69,8 +69,8 @@ def test_recovered_edgesuite_pages_are_source_controlled_and_use_runtime_063():
 		loader = read(paths["loader"])
 		component = read(paths["component"])
 		bundle = read(paths["bundle"])
-		assert "edgeui.bundle.js" in loader
-		assert "edgesuite_ui.bundle.js" not in loader
+		assert "edgesuite_ui.bundle.js" in loader
+		assert "/assets/edgesuite_ui/dist/js/edgeui.bundle.js" not in loader
 		assert "window.EdgeSuiteUI || window.EdgeUI" in loader
 		assert "0.6.3" in loader
 		assert "EdgeAppShell" in component

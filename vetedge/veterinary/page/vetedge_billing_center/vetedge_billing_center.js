@@ -18,7 +18,7 @@ frappe.pages['vetedge-billing-center'].on_page_show = function(wrapper) {
 		$('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Billing Center failed to load.')).appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ['EdgeAppShell', 'EdgePageLayout', 'EdgePageHeader', 'EdgeFilterBar', 'EdgeStatCard', 'EdgeDataTable', 'EdgeLinkField', 'EdgeDropdown', 'EdgeInput', 'EdgeLoadingState', 'EdgeErrorState'];
 		const missing = required.filter((name) => !runtime?.components?.[name]);
