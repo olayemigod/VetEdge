@@ -423,12 +423,34 @@ def cleanup_legacy_workspace_sidebars() -> None:
 			frappe.delete_doc("Workspace Sidebar", sidebar, force=True)
 
 
+def _prune_v16_sidebar_targets() -> None:
+	"""Remove optional targets that are unavailable on this standalone site."""
+	for sidebar_name in ("Veterinary", "VetEdge"):
+		if not frappe.db.exists("Sidebar", sidebar_name):
+			continue
+
+		sidebar = frappe.get_doc("Sidebar", sidebar_name)
+		removed = False
+		for item in list(sidebar.items):
+			if _should_keep_sidebar_item(item):
+				continue
+			sidebar.remove(item)
+			removed = True
+
+		if removed:
+			sidebar.save(ignore_permissions=True)
+
+	if hasattr(frappe, "cache"):
+		frappe.cache.delete_key("bootinfo")
+
+
 def ensure_vetedge_workspace_sidebar() -> None:
 	_import_standard_files(SIDEBAR_PAGE_FILES)
 
 	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. The
 	# Workspace Sidebar rows left by an upgraded site are read-only archives.
 	if frappe.db.exists("DocType", "Sidebar"):
+		_prune_v16_sidebar_targets()
 		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return

@@ -39,7 +39,9 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		frappe_stub.get_doc.assert_called_once_with({"doctype": "Workspace Sidebar", "name": "VetEdge", "title": "Veterinary", "items": []})
+		created_sidebar = frappe_stub.get_doc.call_args.args[0]
+		self.assertEqual(created_sidebar["title"], "Veterinary")
+		self.assertEqual(created_sidebar["items"][0]["label"], "Veterinary Home")
 		insert.assert_called_once_with(ignore_permissions=True)
 		db_set.assert_called_once_with("title", "Veterinary")
 
@@ -65,7 +67,7 @@ class TestDashboardInstall(TestCase):
 
 		frappe_stub.get_doc.assert_called_once_with({"doctype": "Desktop Icon", "name": "VetEdge"})
 		insert.assert_called_once_with(ignore_permissions=True)
-		db_set.assert_called_once_with("label", "VetEdge")
+		db_set.assert_called_once_with("label", "Veterinary")
 		frappe_stub.db.set_value.assert_not_called()
 
 	def test_ensure_vetedge_desktop_icon_updates_existing_icon(self):
@@ -169,9 +171,12 @@ class TestDashboardInstall(TestCase):
 		):
 			dashboard.ensure_vetedge_workspace_sidebar()
 
-		# CoreEdge links must be pruned, only Veterinary Patient should remain
-		self.assertEqual(len(sidebar.items), 1)
-		self.assertEqual(sidebar.items[0]["link_to"], "Veterinary Patient")
+		# CoreEdge links must be pruned; the home link and patient link remain.
+		self.assertEqual(len(sidebar.items), 2)
+		self.assertEqual(
+			[item.get("link_to") for item in sidebar.items if item.get("link_to")],
+			["Veterinary Patient"],
+		)
 
 	def test_workspace_sidebar_preserves_coreedge_links_when_coreedge_available(self):
 		# Simulate CoreEdge installed and DocTypes exist
@@ -225,6 +230,76 @@ class TestDashboardInstall(TestCase):
 
 		# CoreEdge links must NOT be pruned because CoreEdge is installed and doctype exists
 		self.assertEqual(len(sidebar.items), 2)
+
+	def test_v16_sidebar_prunes_missing_coreedge_targets(self):
+		coreedge_item = SimpleNamespace(
+			label="Platform Settings",
+			link_type="DocType",
+			link_to="CoreEdge Settings",
+		)
+		patient_item = SimpleNamespace(
+			label="Patients",
+			link_type="DocType",
+			link_to="Veterinary Patient",
+		)
+
+		class MockSidebar:
+			def __init__(self):
+				self.items = [patient_item, coreedge_item]
+				self.save = Mock()
+
+			def remove(self, item):
+				self.items.remove(item)
+
+		sidebar = MockSidebar()
+		exists = Mock(
+			side_effect=lambda doctype, name=None: (
+				True
+				if (doctype, name) in {
+					("DocType", "Sidebar"),
+					("Sidebar", "Veterinary"),
+					("DocType", "Veterinary Patient"),
+				}
+				else False
+			)
+		)
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=exists),
+			get_installed_apps=Mock(return_value=["frappe", "erpnext", "vetedge"]),
+			get_doc=Mock(return_value=sidebar),
+			cache=SimpleNamespace(delete_key=Mock()),
+		)
+
+		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
+			dashboard, "_import_standard_files"
+		):
+			dashboard.ensure_vetedge_workspace_sidebar()
+
+		self.assertEqual(sidebar.items, [patient_item])
+		sidebar.save.assert_called_once_with(ignore_permissions=True)
+		frappe_stub.cache.delete_key.assert_called_once_with("bootinfo")
+
+	def test_v16_sidebar_keeps_available_coreedge_targets(self):
+		coreedge_item = SimpleNamespace(
+			label="Platform Settings",
+			link_type="DocType",
+			link_to="CoreEdge Settings",
+		)
+		sidebar = SimpleNamespace(items=[coreedge_item], save=Mock(), remove=Mock())
+		frappe_stub = SimpleNamespace(
+			db=SimpleNamespace(exists=Mock(return_value=True)),
+			get_installed_apps=Mock(return_value=["frappe", "erpnext", "vetedge", "coreedge"]),
+			get_doc=Mock(return_value=sidebar),
+			cache=SimpleNamespace(delete_key=Mock()),
+		)
+
+		with patch.object(dashboard, "frappe", frappe_stub), patch.object(
+			dashboard, "_import_standard_files"
+		):
+			dashboard.ensure_vetedge_workspace_sidebar()
+
+		sidebar.remove.assert_not_called()
+		sidebar.save.assert_not_called()
 
 	def test_cleanup_legacy_workspace_sidebars_removes_stale_dashboard_sidebars(self):
 		deleted = []
