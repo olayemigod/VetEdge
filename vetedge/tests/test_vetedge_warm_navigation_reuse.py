@@ -42,7 +42,7 @@ def test_operational_edgesuite_pages_reuse_mounted_surfaces_before_reset_and_ass
         content = read(path)
         reuse_index = content.index(marker)
         reset_index = content.index("$(page.body).empty()")
-        asset_index = content.index("frappe.require('edgeui.bundle.js'")
+        asset_index = content.index("frappe.require('edgesuite_ui.bundle.js'")
         assert reuse_index < reset_index, name
         assert reuse_index < asset_index, name
         assert freshness_contract in content, name
@@ -78,7 +78,7 @@ def test_dedicated_front_desk_pages_share_warm_navigation_host():
 	host = read("vetedge/public/js/vetedge_front_desk_page_host.js")
 	reuse_index = host.index("if (wrapper.vue_app?.view)")
 	reset_index = host.index("$(page.body).empty()")
-	asset_index = host.index('frappe.require("edgeui.bundle.js"')
+	asset_index = host.index('frappe.require("edgesuite_ui.bundle.js"')
 
 	assert reuse_index < reset_index
 	assert reuse_index < asset_index
@@ -214,7 +214,7 @@ def test_existing_resource_and_medical_history_reuse_remain_ahead_of_asset_loadi
         ("vetedge/veterinary/page/veterinary_medical_history/veterinary_medical_history.js", "if (wrapper.vue_app?.refresh)"),
     ):
         content = read(path)
-        assert content.index(marker) < content.index("frappe.require('edgeui.bundle.js'")
+        assert content.index(marker) < content.index("frappe.require('edgesuite_ui.bundle.js'")
         assert content.index(marker) < content.index("$(page.body).empty()")
         assert "setInterval(" not in content
 
@@ -251,7 +251,7 @@ def test_veterinary_home_is_a_warm_reusable_dashboard_not_a_redirect():
 
 	reuse_index = content.index("if (wrapper.vue_app?.view)")
 	reset_index = content.index("$(page.body).empty()")
-	asset_index = content.index('frappe.require("edgeui.bundle.js"')
+	asset_index = content.index('frappe.require("edgesuite_ui.bundle.js"')
 
 	assert reuse_index < reset_index
 	assert reuse_index < asset_index

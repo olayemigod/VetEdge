@@ -87,7 +87,7 @@ frappe.pages['vetedge-master-workspace'].on_page_show = function(wrapper) {
 	$(page.body).empty();
 	const $loading = $('<div class="p-6 text-center text-muted"></div>').text(__('Loading Veterinary masters...')).appendTo(page.body);
 	const showFailure = (message) => { $loading.remove(); $('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Veterinary masters failed to load.')).appendTo(page.body); };
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ['EdgeAppShell','EdgePageLayout','EdgePageHeader','EdgeFilterBar','EdgeDataTable','EdgeDocumentForm','EdgeWorkflowBar','EdgeLinkField','EdgeDropdown','EdgeInput','EdgeModal','EdgeLoadingState','EdgeEmptyState','EdgeErrorState'];

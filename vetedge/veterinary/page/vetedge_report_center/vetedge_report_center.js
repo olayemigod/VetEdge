@@ -131,7 +131,7 @@ frappe.pages["vetedge-report-center"].on_page_show = function (wrapper) {
 		$("<div class='alert alert-danger p-6 text-center'></div>").text(message || __("Quick report failed to load.")).appendTo(page.body);
 	};
 
-	frappe.require("edgeui.bundle.js", () => loadProviderAssets(() => {
+	frappe.require("edgesuite_ui.bundle.js", () => loadProviderAssets(() => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ["EdgeAppShell", "EdgeReportShell", "EdgeLinkField", "EdgeDropdown", "EdgeInput"];

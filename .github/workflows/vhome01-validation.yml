@@ -139,8 +139,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: olayemigod/processedge-edge-suite-ui
-          ref: 0bf105b9723138db8e6f508f2cb8fe1d30e549b2
-          token: ${{ secrets.EDGESUITE_UI_TOKEN }}
+          ref: d50920b005da8dcf1bd1e35c1c88be8afedecfbf
           path: edgesuite-ui-source
 
       - name: Fetch ERPNext, Payments and local applications
@@ -169,7 +168,7 @@ jobs:
       - name: Build and migrate exact PR head
         working-directory: frappe-bench
         run: |
-          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "0bf105b9723138db8e6f508f2cb8fe1d30e549b2"
+          test "$(git -C apps/edgesuite_ui rev-parse HEAD)" = "d50920b005da8dcf1bd1e35c1c88be8afedecfbf"
           bench build --app edgesuite_ui
           bench build --app vetedge
           bench --site ci.localhost migrate

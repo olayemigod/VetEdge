@@ -89,11 +89,11 @@
 		const originalRequire = currentRequire.bind(frappeRuntime);
 		const wrappedRequire = function (items, callback) {
 			const requested = typeof items === "string" ? [items] : Array.isArray(items) ? [...items] : null;
-			if (!requested || !requested.includes("edgeui.bundle.js")) {
+			if (!requested || !requested.includes("edgesuite_ui.bundle.js")) {
 				return originalRequire(items, callback);
 			}
 
-			const remaining = requested.filter((item) => item !== "edgeui.bundle.js");
+			const remaining = requested.filter((item) => item !== "edgesuite_ui.bundle.js");
 			if (!runtime()?.createEdgeApp && !remaining.includes("edgesuite_ui.bundle.js")) {
 				remaining.unshift("edgesuite_ui.bundle.js");
 			}
@@ -126,8 +126,10 @@
 	}
 
 	function canonicalSidebar() {
-		const sidebars = window.frappe?.boot?.workspace_sidebar_item;
-		return sidebars && (sidebars.vetedge || sidebars.veterinary);
+		const boot = window.frappe?.boot;
+		const sidebars = boot?.module_sidebars || boot?.workspace_sidebar_item;
+		return sidebars &&
+			(sidebars.Veterinary || sidebars.VetEdge || sidebars.vetedge || sidebars.veterinary);
 	}
 
 	function slug(value) {

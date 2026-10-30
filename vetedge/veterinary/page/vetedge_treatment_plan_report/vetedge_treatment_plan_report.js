@@ -15,7 +15,7 @@ frappe.pages['vetedge-treatment-plan-report'].on_page_show = function(wrapper) {
 		$('<div class="alert alert-danger p-6 text-center"></div>').text(message || __('Planned Treatment failed to load.')).appendTo(page.body);
 	};
 
-	frappe.require('edgeui.bundle.js', () => {
+	frappe.require('edgesuite_ui.bundle.js', () => {
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = ['EdgeAppShell', 'EdgePageLayout', 'EdgePageHeader', 'EdgeFilterBar', 'EdgeLinkField', 'EdgeInput', 'EdgeDropdown', 'EdgeDataTable', 'EdgeStatCard', 'EdgeLoadingState', 'EdgeErrorState'];
 		const missing = required.filter((name) => !runtime?.components?.[name]);

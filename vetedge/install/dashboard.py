@@ -414,6 +414,8 @@ def cleanup_legacy_financial_workspace() -> None:
 
 
 def cleanup_legacy_workspace_sidebars() -> None:
+	if frappe.db.exists("DocType", "Sidebar"):
+		return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
 	for sidebar in ("Veterinary Hospitalisation Dashboard", "Veterinary Financial Dashboard"):
@@ -421,11 +423,47 @@ def cleanup_legacy_workspace_sidebars() -> None:
 			frappe.delete_doc("Workspace Sidebar", sidebar, force=True)
 
 
+def _prune_v16_sidebar_targets() -> None:
+	"""Remove optional targets that are unavailable on this standalone site."""
+	for sidebar_name in ("Veterinary", "VetEdge"):
+		if not frappe.db.exists("Sidebar", sidebar_name):
+			continue
+
+		sidebar = frappe.get_doc("Sidebar", sidebar_name)
+		removed = False
+		for item in list(sidebar.items):
+			if _should_keep_sidebar_item(item):
+				continue
+			sidebar.remove(item)
+			removed = True
+
+		if removed:
+			sidebar.save(ignore_permissions=True)
+
+	if hasattr(frappe, "cache"):
+		frappe.cache.delete_key("bootinfo")
+
+
 def ensure_vetedge_workspace_sidebar() -> None:
+	_import_standard_files(SIDEBAR_PAGE_FILES)
+
+	# Frappe v16.50+ imports the app-owned Sidebar JSON during migrate. Keep
+	# both its native Sidebar and the legacy Workspace Sidebar transition record
+	# free of unavailable or retired targets. Frappe locks the legacy archive
+	# outside install/migrate/patch, so normal runtime calls stop after pruning
+	# the native Sidebar.
+	has_native_sidebar = bool(frappe.db.exists("DocType", "Sidebar"))
+	if has_native_sidebar:
+		_prune_v16_sidebar_targets()
+		flags = getattr(frappe, "flags", None)
+		can_sync_legacy_archive = any(
+			bool(getattr(flags, flag, False))
+			for flag in ("in_migrate", "in_patch", "in_install")
+		)
+		if not can_sync_legacy_archive:
+			return
 	if not frappe.db.exists("DocType", "Workspace Sidebar"):
 		return
-
-	_import_standard_files(SIDEBAR_PAGE_FILES)
 
 	# Migrate legacy Veterinary record back to VetEdge if Veterinary exists but VetEdge doesn't
 	if frappe.db.exists("Workspace Sidebar", "Veterinary") and not frappe.db.exists("Workspace Sidebar", "VetEdge"):

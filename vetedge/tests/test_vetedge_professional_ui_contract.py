@@ -101,7 +101,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 	def test_vetedge_home_stays_in_desk_and_mounts_role_aware_workspace(self):
 		content = self.read(VETEDGE_HOME)
 		self.assertIn('title: __("Veterinary Home")', content)
-		self.assertIn('frappe.require("edgeui.bundle.js"', content)
+		self.assertIn('frappe.require("edgesuite_ui.bundle.js"', content)
 		self.assertIn('frappe.require("vetedge_home.bundle.js"', content)
 		self.assertIn("window.mountVetEdgeHome", content)
 		self.assertIn("VETEDGE_HOME_REFRESH_MAX_AGE_MS", content)
@@ -153,7 +153,7 @@ class TestVetEdgeProfessionalUIContract(TestCase):
 			)
 			self.assertIn(f"\t\t\t{loader_function}();", content)
 			self.assertIn(product_bundle, content)
-			self.assertLess(content.index("edgeui.bundle.js"), content.index(f"const {loader_function}"))
+			self.assertLess(content.index("edgesuite_ui.bundle.js"), content.index(f"const {loader_function}"))
 			self.assertNotIn(
 				"frappe.require('/assets/vetedge/js/vetedge_professional_ui.js?v=",
 				content,

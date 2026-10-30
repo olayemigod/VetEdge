@@ -79,16 +79,27 @@ def _expose_medical_history_page(bootinfo) -> None:
 def _align_edge_sidebar_destinations(bootinfo) -> None:
 	"""Keep product navigation on EdgeSuite pages without changing stored DocType identity.
 
-	The canonical Workspace Sidebar remains the source of labels, roles and ordering. Only
+	Frappe's resolved sidebar remains the source of labels, roles and ordering. Only
 	the browser destination is adapted after permission filtering has already happened.
 	This also keeps the shared product/waffle menu aligned because it consumes the same
 	boot sidebar manifest.
 	"""
-	sidebars = bootinfo.get("workspace_sidebar_item") or {}
-	for key in ("vetedge", "veterinary"):
-		sidebar = sidebars.get(key)
+	module_sidebars = bootinfo.get("module_sidebars") or {}
+	legacy_sidebars = bootinfo.get("workspace_sidebar_item") or {}
+	candidates = [
+		*module_sidebars.values(),
+		legacy_sidebars.get("vetedge"),
+		legacy_sidebars.get("veterinary"),
+	]
+	seen = set()
+	for sidebar in candidates:
 		if not isinstance(sidebar, dict):
 			continue
+		if sidebar.get("app") != "vetedge" and sidebar.get("module") != "Veterinary":
+			continue
+		if id(sidebar) in seen:
+			continue
+		seen.add(id(sidebar))
 		for item in sidebar.get("items") or []:
 			if not isinstance(item, dict) or item.get("type") != "Link":
 				continue
@@ -98,7 +109,8 @@ def _align_edge_sidebar_destinations(bootinfo) -> None:
 			item["link_type"] = "Page"
 			item["link_to"] = page
 			item.pop("report", None)
-	bootinfo["workspace_sidebar_item"] = sidebars
+	bootinfo["module_sidebars"] = module_sidebars
+	bootinfo["workspace_sidebar_item"] = legacy_sidebars
 
 
 def build_vetedge_ui_identity() -> dict:

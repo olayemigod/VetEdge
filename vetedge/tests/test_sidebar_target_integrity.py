@@ -19,6 +19,17 @@ from vetedge.install.regulatory_reporting import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _runtime_sidebar_items():
+	if frappe.db.exists("DocType", "Sidebar"):
+		from frappe.desk.doctype.sidebar.sidebar import resolve_sidebar
+
+		resolved = resolve_sidebar("Veterinary", frappe.session.user)
+		return [frappe._dict(item) for item in (resolved.items if resolved else [])]
+
+	ensure_vetedge_workspace_sidebar()
+	return list(frappe.get_doc("Workspace Sidebar", "VetEdge").items)
+
+
 class TestVetEdgeSidebarTargetIntegrity(TestCase):
 	def test_missing_standard_targets_are_not_publishable(self):
 		missing = "VetEdge QA Target That Does Not Exist"
@@ -36,11 +47,10 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 				)
 
 	def test_runtime_sidebar_contains_only_existing_standard_targets(self):
-		ensure_vetedge_workspace_sidebar()
-		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
+		items = _runtime_sidebar_items()
 		checked = 0
 
-		for item in sidebar.items:
+		for item in items:
 			if item.type != "Link" or not item.link_to:
 				continue
 			target_doctype = SIDEBAR_TARGET_DOCTYPES.get(item.link_type)
@@ -59,15 +69,15 @@ class TestVetEdgeSidebarTargetIntegrity(TestCase):
 		ensure_regulatory_reporting_navigation()
 		self.assertTrue(frappe.db.exists("Page", OUTBREAK_PAGE))
 
-		sidebar = frappe.get_doc("Workspace Sidebar", "VetEdge")
-		matches = [item for item in sidebar.items if item.type == "Link" and item.label == "Disease Outbreak Register"]
+		items = _runtime_sidebar_items()
+		matches = [item for item in items if item.type == "Link" and item.label == "Disease Outbreak Register"]
 		self.assertEqual(len(matches), 1)
 		self.assertEqual(matches[0].link_type, "Page")
 		self.assertEqual(matches[0].link_to, OUTBREAK_PAGE)
 		self.assertFalse(
 			any(
 				item.type == "Link" and item.link_type == "DocType" and item.link_to == OUTBREAK_DOCTYPE
-				for item in sidebar.items
+				for item in items
 			)
 		)
 

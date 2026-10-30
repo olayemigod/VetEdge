@@ -665,7 +665,7 @@ function installDashboard(wrapper, config) {
 		"EdgeErrorState",
 		"EdgeEmptyState",
 	];
-	frappe.require("edgeui.bundle.js", () => {
+	frappe.require("edgesuite_ui.bundle.js", () => {
 		const runtime = getRuntime();
 		const components = runtime?.components || runtime;
 		const missing = requiredComponents.filter((name) => !components?.[name]);

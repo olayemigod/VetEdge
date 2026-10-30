@@ -91,7 +91,7 @@ frappe.pages["vetedge-disease-outbreak-register"].on_page_show = function (wrapp
 		.text(__("Loading Disease Outbreak Register..."))
 		.appendTo(wrapper.page.body);
 
-	frappe.require("edgeui.bundle.js", () => {
+	frappe.require("edgesuite_ui.bundle.js", () => {
 		if (wrapper.visit_id !== visitId) return;
 		const professional = window.VetEdgeProfessionalUI?.install?.();
 		if (!professional?.installed) {

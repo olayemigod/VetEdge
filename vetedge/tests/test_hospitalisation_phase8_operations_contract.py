@@ -75,7 +75,7 @@ def test_hospitalisation_operations_uses_edgesuite_report_shell_without_mutation
 
     assert "applyWorkspaceSafety" in bundle
     assert "mountVetEdgeHospitalisationOperations" in bundle
-    assert "edgeui.bundle.js" in page
+    assert "edgesuite_ui.bundle.js" in page
     assert "vetedge_hospitalisation_operations.bundle.js" in page
 
     for forbidden in (

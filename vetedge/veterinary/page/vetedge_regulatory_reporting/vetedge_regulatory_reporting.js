@@ -72,7 +72,7 @@ frappe.pages["vetedge-regulatory-reporting"].on_page_show = function (wrapper) {
 	ensureRegulatoryStyles();
 	const $loading = $("<div class='p-6 text-center text-muted'></div>").text(__("Loading Regulatory Reporting...")).appendTo(wrapper.page.body);
 
-	frappe.require("edgeui.bundle.js", () => {
+	frappe.require("edgesuite_ui.bundle.js", () => {
 		if (wrapper.visit_id !== visitId) return;
 		const professional = window.VetEdgeProfessionalUI?.install?.();
 		if (!professional?.installed) {

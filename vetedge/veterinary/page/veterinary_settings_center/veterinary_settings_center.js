@@ -62,7 +62,7 @@ function mountVeterinarySettings(wrapper) {
 		if (wrapper.current_visit_id === visitId) wrapper.settings_mounting = false;
 	};
 
-	frappe.require("edgeui.bundle.js", () => {
+	frappe.require("edgesuite_ui.bundle.js", () => {
 		if (wrapper.current_visit_id !== visitId) return;
 		const runtime = window.EdgeSuiteUI || window.EdgeUI;
 		const required = [

@@ -52,13 +52,13 @@ class TestVetedgeExecutiveDashboardEdgeUI(TestCase):
 			"EdgeDashboardLayout",
 			"EdgeNotificationBell",
 			"EdgeNotificationDrawer",
-			"edgeui.bundle.js",
+			"edgesuite_ui.bundle.js",
 			"vetedge_executive_dashboard.bundle.js",
 			"wrapper.current_visit_id",
 			"unmount()",
 		):
 			self.assertIn(required, content)
-		self.assertLess(content.index("edgeui.bundle.js"), content.index("vetedge_executive_dashboard.bundle.js"))
+		self.assertLess(content.index("edgesuite_ui.bundle.js"), content.index("vetedge_executive_dashboard.bundle.js"))
 		self.assertNotIn("dashboard_shell.js", content)
 		self.assertNotIn("coreedge", content.lower())
 
